@@ -1,0 +1,59 @@
+<app-auth-card [title]="'Panel de administración'" [subtitle]="'Gestión de accesos de la plataforma'">
+  <p class="auth-note">
+    Busca y gestiona los perfiles. Solo los administradores de plataforma pueden acceder a este panel.
+  </p>
+
+  <div class="invite-form">
+    <input
+      type="search"
+      class="input"
+      placeholder="Buscar por correo o nombre…"
+      [value]="query()"
+      (input)="onSearch($event)"
+      (keyup.enter)="load()"
+      autocomplete="off"
+    />
+    <button type="button" class="btn" (click)="load()">Buscar</button>
+  </div>
+
+  @if (loading()) {
+    <p class="auth-note">Cargando perfiles…</p>
+  } @else if (profiles().length === 0) {
+    <p class="auth-note">No se han encontrado perfiles {{ query() ? 'para «' + query() + '»' : '' }}.</p>
+  } @else {
+    @for (p of profiles(); track p.userId) {
+      <div class="card invite-row">
+        <div class="invite-main">
+          <strong>{{ p.displayName || p.emailNormalized }}</strong>
+          <span class="auth-note">
+            {{ p.emailNormalized }} · {{ statusLabel(p.status) }}
+            @if (me(p.userId)) { · tú }
+          </span>
+        </div>
+        <div class="admin-actions">
+          @if (p.status !== 'approved') {
+            <button type="button" class="btn btn-primary" [disabled]="busy(p.userId)" (click)="approve(p)">Aprobar</button>
+          }
+          @if (p.status === 'pending' || p.status === 'approved') {
+            <button type="button" class="btn btn-ghost btn-danger-text" [disabled]="busy(p.userId)" (click)="reject(p)">Rechazar</button>
+          }
+          @if (p.status === 'approved') {
+            <button type="button" class="btn btn-ghost btn-danger-text" [disabled]="busy(p.userId)" (click)="suspend(p)">Suspender</button>
+          }
+          @if (p.status === 'suspended' || p.status === 'rejected') {
+            <button type="button" class="btn" [disabled]="busy(p.userId)" (click)="reactivate(p)">Reactivar</button>
+          }
+        </div>
+      </div>
+    }
+  }
+
+  @if (error()) {
+    <p class="auth-msg err" role="alert">{{ error() }}</p>
+  }
+
+  <div class="auth-actions">
+    <button type="button" class="btn" (click)="load()">Actualizar</button>
+    <button type="button" class="btn btn-ghost" (click)="logout()">Cerrar sesión</button>
+  </div>
+</app-auth-card>

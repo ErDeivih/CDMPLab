@@ -1,0 +1,1076 @@
+import { CanvasElement, FieldType, F7Overlay } from './models';
+import { FIELD_RECT, fieldSvg, FIELD_LINE_WIDTH, fieldGeometry } from './field';
+import { f7Geometry } from './f7';
+import { materialBaseSize, materialHitFrac } from './tactic-assets';
+
+// =============================================================
+// EntrenoLab — Render de la pizarra a SVG (funciones PURAS).
+// La geometría del campo viaja EXPLÍCITAMENTE: no hay estado
+// mutable global. Editor, miniaturas, PNG y GIF comparten esto.
+// =============================================================
+
+const VB_W = 100;
+const VB_H = 80;
+const PITCH_LIGHT = '#31834a';
+
+/** Lado de la caja cuadrada de un material en `size=1` (unidades del viewBox canónico).
+ *  El `<image>` se dibuja en 5.2×5.2 y el contenido visible (bbox) ocupa una
+ *  fracción (TACTICAL_BBOX) que la caja respeta. */
+export const MATERIAL_BOX = 5.2;
+
+/** Tamaño efectivo de un material: `el.size` si está fijado; si no, el tamaño
+ *  base normalizado del tipo (TACTICAL_SIZE). Así los documentos antiguos sin
+ *  `size` también se normalizan y ya no hay materiales diminutos. */
+export function materialSize(el: CanvasElement): number {
+  return el.size ?? materialBaseSize(el.assetKind ?? el.t);
+}
+
+/** Semiejes (normalizados 0..1) de la hit-box de un material, en su espacio LOCAL
+ *  (sin rotación). Usa el recuadro de contenido (bbox) escalado por `size` y lo
+ *  eleva a un área táctil mínima de ~44 px CSS: los elementos largos/estrechos
+ *  escalan con `size`, y nunca quedan por debajo del mínimo táctil. */
+export function materialHitHalfExtents(el: CanvasElement, r: Geometry['rect'] = BOARD_CANON_RECT): { hw: number; hh: number } {
+  const s = materialSize(el);
+  const frac = materialHitFrac(el.assetKind ?? el.t);
+  const boxW = MATERIAL_BOX * s * frac.w;
+  const boxH = MATERIAL_BOX * s * frac.h;
+  // Mínimo táctil en norm que garantiza ~44 CSS px sobre un móvil típico
+  // (horiz, fit=height en 360×800 → ~10 px por unidad de viewBox).
+  const minX = 4.4 / r.w; // ≈0.048 → ~44 px en X
+  const minY = 4.4 / r.h; // ≈0.074 → ~44 px en Y
+  return { hw: Math.max(boxW / 2 / r.w, minX), hh: Math.max(boxH / 2 / r.h, minY) };
+}
+
+export interface Geometry {
+  vbW: number;
+  vbH: number;
+  rect: { x: number; y: number; w: number; h: number };
+  /** true si la orientación es vertical (el contenido se rota 90°). Nunca inferir
+   *  de `vbW < vbH`: el medio campo horizontal (52,5×68) es retrato y no es vertical. */
+  vertical: boolean;
+}
+
+// Proporción real de un campo 105×68 m. En horizontal, el largo va en X.
+const HORIZONTAL: Geometry = { vbW: VB_W, vbH: VB_H, rect: { x: 4, y: 10, w: 92, h: 92 / (105 / 68) }, vertical: false };
+
+/**
+ * Rect canónico del contenido (largo→X, ancho→Y). Campo + elementos + asas se
+ * dibujan SIEMPRE en este espacio y, en vertical, se rotan.
+ */
+export const BOARD_CANON_RECT = HORIZONTAL.rect;
+
+// =============================================================
+// Texto — métricas por defecto y ajuste de línea (funciones PURAS).
+// El texto NO usa <foreignObject> (no se rasteriza en SVG→PNG), así que el
+// ajuste de línea se estima por el ancho medio de un carácter y se RECORTA con
+// un clipPath al cuadro (w/h). El tamaño por defecto es legible y el cuadro
+// (w/h) es lo bastante grande para que "Texto" y un par de líneas no desborden.
+// =============================================================
+
+/** Tamaño de fuente por defecto de un texto nuevo (unidades del viewBox 100×80).
+ *  Fase 4: se redujo al 75 % del antiguo (3 → 2.25) para que los objetos de un
+ *  solo toque aparezcan ~75 % de su tamaño anterior. */
+export const DEFAULT_TEXT_SIZE = 2.25;
+/** Ancho (normalizado 0..1) por defecto del cuadro de texto. */
+export const DEFAULT_TEXT_W = 0.3;
+/** Alto (normalizado 0..1) por defecto del cuadro de texto. */
+export const DEFAULT_TEXT_H = 0.14;
+
+// =============================================================
+// FASE 3 — grosor de trazo de las herramientas TÁCTICAS de dibujo.
+// El dueño quiere la mitad del grosor anterior:
+//   - líneas/flechas/curvas/zigzag/mano alzada: 0.8 → 0.4
+//   - contornos de rect/elipse/zona: 0.6 → 0.3
+// Estos SON los valores por defecto del MODELO (no CSS): el elemento nuevo
+// nace con `strokeWidth` (o cae al default aquí), se persiste, se exporta y
+// aparece en las miniaturas. `FIELD_LINE_WIDTH` (0.3) NO se toca: es el campo.
+// =============================================================
+export const DEFAULT_STROKE_WIDTH = 0.4;
+/** Contorno por defecto de rect/elipse/zona (antes 0.6). */
+export const DEFAULT_SHAPE_STROKE = 0.3;
+/** Mínimo EDITABLE del grosor de trazo (nunca 0 ni negativo). */
+export const MIN_STROKE_WIDTH = 0.1;
+/** Máximo editable habitual del grosor de trazo (coherente con el inspector). */
+export const MAX_STROKE_WIDTH = 2.5;
+
+/** Relación punta-de-flecha ↔ grosor de trazo: con el default (0.4) la punta
+ *  mide 1.4 u de viewBox (antes 2.8 con 0.8). Así la punta es proporcional al
+ *  trazo y base reduce con él. */
+export const ARROW_HEAD_FACTOR = 3.5;
+
+/** Longitud (unidades del viewBox) de la punta de una flecha según el grosor. */
+export function arrowHeadSize(strokeWidth: number): number {
+  return strokeWidth * ARROW_HEAD_FACTOR;
+}
+
+// Fase 2 — los trazos AUXILIARES de selección se afinan al 25% del grosor que
+// tenían (0.8→0.2, 0.7→0.175, 0.4→0.1). No afecta al grosor real del elemento ni
+// al área táctil: la selección se ve fina y discreta pero sigue siendo manipulable.
+export const SEL_STROKE = 0.2;         // contornos punteados de líneas/figuras/curvas/mano alzada
+export const SEL_STROKE_POINT = 0.175; // círculo de selección de jugadores/materiales
+export const SEL_HANDLE_STROKE = 0.1;  // borde de las asas cuadradas de redimensionado
+
+/** Ancho estimado de un carácter como fracción del tamaño de fuente (proporcional). */
+const TEXT_CHAR_W = 0.58;
+/** Interlineado (paso vertical entre líneas) como fracción del tamaño de fuente. */
+const TEXT_LINE_H = 1.15;
+/** Fracción de la fuente que ocupa el descensor (margen bajo un glifo). */
+const TEXT_DESCENDER = 0.25;
+/** Línea base de la línea `i` respecto a la parte superior del cuadro (unidades). */
+function lineBaseline(i: number, size: number): number {
+  return size * 0.8 + i * size * TEXT_LINE_H;
+}
+
+/** Resultado del ajuste de un texto a su cuadro: qué líneas se pintan y si hay recorte. */
+export interface TextLayout {
+  /** Líneas a pintar (con “…” añadido a la última si hay contenido oculto). */
+  lines: string[];
+  /** Líneas envueltas totales (todo el contenido). */
+  totalLines: number;
+  /** Cuántas líneas caben Enteras dentro de la altura del cuadro. */
+  visibleCount: number;
+  /** Hay contenido (líneas) oculto porque el cuadro es más bajo que el texto. */
+  overflow: boolean;
+}
+
+/**
+ * Decide qué líneas de un texto envuelto se pintan dentro de un cuadro de altura
+ * `boxH` unidades. NUNCA pinta una línea a medio cortar: las líneas que no caben
+ * enteras se omiten y, si hay contenido oculto, se añade “…” a la última línea
+ * visible como indicador. Esto evita el corte silencioso del clipPath.
+ */
+export function textLayoutForBox(lines: string[], size: number, boxH: number): TextLayout {
+  let visibleCount = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (lineBaseline(i, size) + size * TEXT_DESCENDER > boxH) break;
+    visibleCount = i + 1;
+  }
+  const overflow = lines.length > visibleCount;
+  const out = overflow ? [...lines.slice(0, visibleCount)] : [...lines];
+  if (overflow && out.length) {
+    const last = out[out.length - 1];
+    out[out.length - 1] = last.length ? `${last} …` : '…';
+  }
+  return { lines: out, totalLines: lines.length, visibleCount, overflow };
+}
+
+/**
+ * Alto (normalizado 0..1) mínimo para que un texto con cuadro muestre TODAS sus
+ * líneas envueltas (auto-crecimiento). Se usa al editar el texto en vivo para que
+ * ninguna línea quede recortada por la altura del cuadro.
+ */
+export function autoTextBoxH(text: string, size: number, boxW: number): number {
+  const lines = wrapTextForBox(text, boxW, size);
+  const n = Math.max(1, lines.length);
+  const contentH = size + (n - 1) * size * TEXT_LINE_H + 0.4;
+  return contentH / BOARD_CANON_RECT.h;
+}
+
+/**
+ * Distribuye un texto en líneas que caben en un cuadro de `boxW` unidades de
+ * ancho con un tamaño de fuente `size`. Preserva los saltos `\n` explícitos y
+ * rompe palabras que solas desbordan. La anchura se ESTIMA (fuente variable),
+ * por lo que el clipPath del render sigue siendo la garantía de no desbordar.
+ */
+export function wrapTextForBox(text: string, boxW: number, size: number): string[] {
+  if (!text) return [];
+  const usefulW = Math.max(size * 0.5, boxW); // nunca un ancho absurdamente pequeño
+  const out: string[] = [];
+  for (const raw of text.split('\n')) {
+    if (raw === '') {
+      out.push('');
+      continue;
+    }
+    let cur = '';
+    for (const word of raw.split(' ')) {
+      const cand = cur ? cur + ' ' + word : word;
+      if (cand.length * size * TEXT_CHAR_W <= usefulW) {
+        cur = cand;
+        continue;
+      }
+      if (cur) out.push(cur);
+      // Palabra que sola no cabe: se parte por caracteres.
+      if (word.length * size * TEXT_CHAR_W > usefulW) {
+        let rest = word;
+        while (rest.length > 1 && rest.length * size * TEXT_CHAR_W > usefulW) {
+          const take = Math.max(1, Math.floor(usefulW / (size * TEXT_CHAR_W)));
+          out.push(rest.slice(0, take));
+          rest = rest.slice(take);
+        }
+        cur = rest;
+      } else {
+        cur = word;
+      }
+    }
+    if (cur) out.push(cur);
+  }
+  return out;
+}
+
+// =============================================================
+// FASE 2 — Unidades humanas en el inspector (funciones PURAS).
+// El modelo GUARDA el valor normalizado 0..1 (preciso) y la UI lo
+// presenta en porcentaje con UNA sola decimal (30 / 28,9). Estas
+// funciones convierten, redondean y recortan SIN tocar el documento:
+// a) mostrar = norma→% (1 decimal)  b) editar = %→norma con clamp.
+// =============================================================
+
+/** Redondea a UNA decimal (28.9). La UI nunca muestra más de una. */
+export function roundToOne(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/** Normalizado 0..1 → porcentaje con UNA decimal (0.3 → 30, 0.28868… → 28.9). */
+export function normalizedToPct(n: number): number {
+  return roundToOne(n * 100);
+}
+
+/** Porcentaje 0..100 → normalizado 0..1 (28.9 → 0.289). */
+export function pctToNormalized(pct: number): number {
+  return pct / 100;
+}
+
+/** Acepta coma o punto decimal ("28,9" / "28.9") y devuelve el número; NaN si no es válido. */
+export function parseLocalizedNumber(raw: string): number {
+  const s = String(raw ?? '').trim().replace(',', '.');
+  if (s === '') return NaN; // campo vacío → no editar (no un 0 destructivo)
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+/** Recorta un normalizado a [min, 1] (por defecto [0, 1]). */
+export function clampNorm(v: number, min = 0): number {
+  return Math.max(min, Math.min(1, v));
+}
+
+/** Ancho natural (unidades del viewBox) de la línea más larga del texto, sin envolver. */
+function naturalTextWidthUnits(v: string, size: number): number {
+  let mx = 0;
+  for (const ln of (v ?? '').split('\n')) {
+    mx = Math.max(mx, ln.length * size * TEXT_CHAR_W);
+  }
+  return mx;
+}
+
+/**
+ * Ajusta el cuadro EXACTAMENTE al contenido del texto: el ancho es el mínimo
+ * para que cada línea quepa sin envolver de más y el alto el que necesitan
+ * TODAS las líneas resultantes. Puede ENCOGER si el texto se acortó (el ancho
+ * se reduce y el alto baja hasta lo mínimo necesario).
+ *
+ * `maxWNorm` es el ancho normalizado máximo que puede ocupar (para no desbordar
+ * el campo por la derecha). Devuelve `w`/`h` normalizados 0..1.
+ */
+export function fitTextToContent(v: string, size: number, maxWNorm: number, r: Geometry['rect'] = BOARD_CANON_RECT): { w: number; h: number } {
+  const safeSize = size > 0 ? size : DEFAULT_TEXT_SIZE;
+  const maxWUnits = Math.max(safeSize * 0.5, maxWNorm * r.w);
+  const naturalWUnits = naturalTextWidthUnits(v, safeSize);
+  const boxWUnits = Math.min(Math.max(naturalWUnits, safeSize * 0.5), maxWUnits);
+  const lines = wrapTextForBox(v, boxWUnits, safeSize);
+  const n = Math.max(1, lines.length);
+  const contentHUnits = safeSize + (n - 1) * safeSize * TEXT_LINE_H + 0.4;
+  return {
+    w: clampNorm(boxWUnits / r.w, 0.02),
+    h: clampNorm(contentHUnits / r.h, 0.02),
+  };
+}
+
+export function boardGeometry(orientation: 'horizontal' | 'vertical'): Geometry {
+  // Geometría del campo COMPLETO (105×68) por orientación. Para la geometría del
+  // tipo de campo actual (p. ej. medio campo 52,5×68) usa fieldGeometry(field, orientation).
+  return fieldGeometry('full', orientation);
+}
+
+export interface HostRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** Cómo encaja el SVG (viewBox con `preserveAspectRatio="xMidYMid meet"`) dentro del
+ *  host. `contain` es el comportamiento clásico de letterboxing (ajusta al tamaño
+ *  que cabe ENTERO dentro del host). `height` escala el campo para LLENAR la altura
+ *  del host (la medida del modo "Llenar pantalla"): el campo puede entonces
+ *  desbordar el ancho (se recorta y puede panearse en horizontal) manteniendo la
+ *  proporción, sin deformar ni cambiar la orientación guardada. */
+export type FitMode = 'contain' | 'height';
+
+/** Convierte un punto de pantalla a coords normalizadas 0..1, teniendo en cuenta el
+ *  letterboxing (preserveAspectRatio meet), el zoom y el pan.
+ *
+ *  La inversa debe coincidir EXACTAMENTE con el render real:
+ *   1) El `.board-canvas` tiene en CSS
+ *      `transform: translate(panX,panY) scale(zoom)` con `transform-origin: 50% 50%`
+ *      (el ORIGEN es el CENTRO del host). Un punto local (cx,cy) del canvas se ve en
+ *      pantalla como  host.left + O.x + panX + zoom*(cx - O.x)  (O = centro del host).
+ *   2) El SVG (letterboxed con preserveAspectRatio meet) mapea un punto del viewBox
+ *      (vbX,vbY) a local (cx,cy) = (offX + vbX*s, offY + vbY*s).
+ *      - En `contain`, s = min(hostW/vbW, hostH/vbH) y offX/offY centran.
+ *      - En `height` (llenar pantalla), s = hostH / (dimensión vertical del rect de
+ *        contenido: rect.h en horizontal, rect.w en vertical porque el contenido se
+ *        rota). Así el CAMPO (su rect de contenido, con marcas y césped) LLENA la
+ *        altura del host; offY = (hostH - vbH*s)/2 es negativo (el viewBox desborda
+ *        verticalmente y sus márgenes se recortan) y offX = (hostW - vbW*s)/2 es
+ *        negativo (el campo se recorta horizontalmente y puede panearse).
+ *  Así el round-trip norm→pantalla→norm es la identidad para cualquier zoom/pan. */
+export function screenToNorm(clientX: number, clientY: number, host: HostRect, g: Geometry, panX: number, panY: number, zoom: number, fit: FitMode = 'contain'): { x: number; y: number } {
+  const fillExtent = g.vertical ? g.rect.w : g.rect.h;
+  const s = fit === 'height' ? host.height / fillExtent : Math.min(host.width / g.vbW, host.height / g.vbH);
+  const offX = (host.width - g.vbW * s) / 2;
+  const offY = (host.height - g.vbH * s) / 2;
+  // Inverse del transform `translate(pan) scale(zoom)` con origen en el centro del host.
+  const ox = host.width / 2;
+  const oy = host.height / 2;
+  const cx = ox + (clientX - host.left - panX - ox) / zoom;
+  const cy = oy + (clientY - host.top - panY - oy) / zoom;
+  const vbX = (cx - offX) / s;
+  const vbY = (cy - offY) / s;
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const r = g.rect; // rect canónico del contenido (largo→X, ancho→Y) del tipo de campo actual
+  if (g.vertical) {
+    // Invertir la rotación (x,y) → (Tx - y, x): xh = vbY, yh = Tx - vbX.
+    const Tx = g.vbW / 2 + (r.y + r.h / 2);
+    return {
+      x: clamp01((vbY - r.x) / r.w),
+      y: clamp01(((Tx - vbX) - r.y) / r.h),
+    };
+  }
+  return {
+    x: clamp01((vbX - r.x) / r.w),
+    y: clamp01((vbY - r.y) / r.h),
+  };
+}
+
+export function px(nx: number, r: Geometry['rect']): number {
+  return nx * r.w + r.x;
+}
+export function py(ny: number, r: Geometry['rect']): number {
+  return ny * r.h + r.y;
+}
+
+function shade(hex: string, amt: number): string {
+  const h = hex.replace('#', '');
+  const r = Math.max(0, Math.min(255, parseInt(h.slice(0, 2), 16) + amt));
+  const g = Math.max(0, Math.min(255, parseInt(h.slice(2, 4), 16) + amt));
+  const b = Math.max(0, Math.min(255, parseInt(h.slice(4, 6), 16) + amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+/** Convierte un color hex a rgba con alpha (para rellenos translúcidos del color elegido). */
+export function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function grassBg(base: string, vbW: number, vbH: number, mode: 'stripes' | 'plain' | 'checker' = 'stripes'): string {
+  if (mode === 'plain') {
+    return `<rect x="0" y="0" width="${vbW}" height="${vbH}" fill="${base}"/>`;
+  }
+  if (mode === 'checker') {
+    let s = '';
+    const n = 8;
+    const cw = vbW / n;
+    const ch = vbH / n;
+    const alt = shade(base, -14);
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        s += `<rect x="${(i * cw).toFixed(2)}" y="${(j * ch).toFixed(2)}" width="${cw.toFixed(2)}" height="${ch.toFixed(2)}" fill="${(i + j) % 2 ? alt : base}"/>`;
+      }
+    }
+    return s;
+  }
+  let s = '';
+  const bands = 10;
+  const bw = vbW / bands;
+  const dark = shade(base, -14);
+  for (let i = 0; i < bands; i++) {
+    s += `<rect x="${(i * bw).toFixed(2)}" y="0" width="${bw.toFixed(2)}" height="${vbH}" fill="${i % 2 ? dark : base}"/>`;
+  }
+  return s;
+}
+
+function distToSegment(
+  pxx: number,
+  pyy: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 === 0 ? 0 : ((pxx - x1) * dx + (pyy - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(pxx - (x1 + t * dx), pyy - (y1 + t * dy));
+}
+
+function nearQuad(p: { x: number; y: number }, x1: number, y1: number, cx: number, cy: number, x2: number, y2: number, tol: number): boolean {
+  let prev: [number, number] = [x1, y1];
+  const N = 24;
+  for (let i = 1; i <= N; i++) {
+    const t = i / N;
+    const mt = 1 - t;
+    const x = mt * mt * x1 + 2 * mt * t * cx + t * t * x2;
+    const y = mt * mt * y1 + 2 * mt * t * cy + t * t * y2;
+    if (distToSegment(p.x, p.y, prev[0], prev[1], x, y) < tol) return true;
+    prev = [x, y];
+  }
+  return false;
+}
+
+export function hitTestElement(p: { x: number; y: number }, elements: CanvasElement[], r: Geometry['rect'] = BOARD_CANON_RECT): string | null {
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const el = elements[i];
+    // Rotación: prueba en el espacio local del elemento (punto rotado por -rot alrededor de su centro).
+    const c = el.rot ? elementCenter(el) : null;
+    const lp = el.rot && c ? rotatePoint(p, c, -el.rot) : p;
+    if (
+      el.t === 'player' ||
+      el.t === 'ball' ||
+      el.t === 'cone' ||
+      el.t === 'mannequin' ||
+      el.t === 'minigoal' ||
+      el.t === 'pole' ||
+      el.t === 'marker' ||
+      el.t === 'hurdle' ||
+      el.t === 'ring' ||
+      el.t === 'ladder' ||
+      el.t === 'flag' ||
+      el.t === 'trampoline' ||
+      el.t === 'target' ||
+      el.t === 'net' ||
+      el.t === 'vball' ||
+      el.t === 'coachC' || el.t === 'peto' || el.t === 'chaleco' || el.t === 'bosu' || el.t === 'fitball' || el.t === 'pica'
+    ) {
+      // Hit-box del material/objeto puntual: caja del contenido visible (bbox),
+      // escalada por `size` y con un área táctil mínima. El punto ya está en el
+      // espacio LOCAL del elemento (rotado por -rot), así que la caja es
+      // axis-aligned: respeta `size` y `rot` y cubre las partes transparentes.
+      const { hw, hh } = materialHitHalfExtents(el, r);
+      if (Math.abs(lp.x - (el.x ?? 0)) <= hw && Math.abs(lp.y - (el.y ?? 0)) <= hh) return el.id;
+    } else if (el.t === 'text') {
+      if (Math.hypot(lp.x - (el.x ?? 0), lp.y - (el.y ?? 0)) < 0.09) return el.id;
+      if (el.w && el.h && lp.x >= (el.x ?? 0) && lp.x <= (el.x ?? 0) + el.w && lp.y >= (el.y ?? 0) && lp.y <= (el.y ?? 0) + el.h) return el.id;
+    } else if (el.t === 'arrow' || el.t === 'line' || el.t === 'dribble' || el.t === 'doubleArrow' || el.t === 'measure') {
+      if (distToSegment(lp.x, lp.y, el.x1 ?? 0, el.y1 ?? 0, el.x2 ?? 0, el.y2 ?? 0) < 0.03) return el.id;
+    } else if (el.t === 'curve') {
+      const cx = el.c1x ?? ((el.x1 ?? 0) + (el.x2 ?? 0)) / 2;
+      const cy = el.c1y ?? ((el.y1 ?? 0) + (el.y2 ?? 0)) / 2;
+      if (nearQuad(lp, el.x1 ?? 0, el.y1 ?? 0, cx, cy, el.x2 ?? 0, el.y2 ?? 0, 0.03)) return el.id;
+    } else if (el.t === 'freehand') {
+      const pts = el.points ?? [];
+      for (let i = 1; i < pts.length; i++) {
+        if (distToSegment(lp.x, lp.y, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]) < 0.03) return el.id;
+      }
+      if (pts.length === 1 && Math.hypot(lp.x - pts[0][0], lp.y - pts[0][1]) < 0.05) return el.id;
+    } else if (el.t === 'ellipse') {
+      const ex = (el.x ?? 0) + (el.w ?? 0) / 2;
+      const ey = (el.y ?? 0) + (el.h ?? 0) / 2;
+      const w2 = Math.max(0.001, (el.w ?? 0) / 2);
+      const h2 = Math.max(0.001, (el.h ?? 0) / 2);
+      const dx = (lp.x - ex) / w2;
+      const dy = (lp.y - ey) / h2;
+      if (dx * dx + dy * dy <= 1) return el.id;
+    } else if (el.t === 'zone' || el.t === 'rect') {
+      if (lp.x >= (el.x ?? 0) && lp.x <= (el.x ?? 0) + (el.w ?? 0) && lp.y >= (el.y ?? 0) && lp.y <= (el.y ?? 0) + (el.h ?? 0)) return el.id;
+    }
+  }
+  return null;
+}
+
+function rotatePoint(p: { x: number; y: number }, c: { x: number; y: number }, deg: number): { x: number; y: number } {
+  const a = (deg * Math.PI) / 180;
+  const dx = p.x - c.x;
+  const dy = p.y - c.y;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos };
+}
+
+export function textColor(bg: string): string {
+  const hex = bg.replace('#', '');
+  if (hex.length < 6) return '#fff';
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5 ? '#ffffff' : '#111111';
+}
+
+/** Centro geométrico (normalizado 0..1) de un elemento según su tipo. */
+export function elementCenter(el: CanvasElement): { x: number; y: number } {
+  const t = el.t;
+  if (t === 'rect' || t === 'ellipse' || t === 'zone' || t === 'text') {
+    return { x: (el.x ?? 0) + (el.w ?? 0) / 2, y: (el.y ?? 0) + (el.h ?? 0) / 2 };
+  }
+  if (t === 'arrow' || t === 'line' || t === 'dribble' || t === 'doubleArrow' || t === 'measure') {
+    return { x: ((el.x1 ?? 0) + (el.x2 ?? 0)) / 2, y: ((el.y1 ?? 0) + (el.y2 ?? 0)) / 2 };
+  }
+  if (t === 'curve') {
+    return {
+      x: ((el.x1 ?? 0) + (el.c1x ?? (el.x2 ?? 0)) + (el.x2 ?? 0)) / 3,
+      y: ((el.y1 ?? 0) + (el.c1y ?? (el.y2 ?? 0)) + (el.y2 ?? 0)) / 3,
+    };
+  }
+  if (t === 'freehand') {
+    const pts = el.points ?? [];
+    if (!pts.length) return { x: el.x ?? 0, y: el.y ?? 0 };
+    return {
+      x: pts.reduce((a, p) => a + p[0], 0) / pts.length,
+      y: pts.reduce((a, p) => a + p[1], 0) / pts.length,
+    };
+  }
+  return { x: el.x ?? 0, y: el.y ?? 0 };
+}
+
+function esc(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function rotWrap(inner: string, rot: number | undefined, cx: number, cy: number): string {
+  return rot ? `<g transform="rotate(${rot} ${cx} ${cy})">${inner}</g>` : inner;
+}
+
+function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect']): string {
+  const gx = (nx: number) => px(nx, r);
+  const gy = (ny: number) => py(ny, r);
+  // Material en PNG: se renderiza como imagen. El `size` escala la caja (5.2×size)
+  // y, en documentos sin `size`, se usa el tamaño base normalizado del tipo.
+  if (el.asset) {
+    const s = materialSize(el);
+    const x = gx(el.x ?? 0);
+    const y = gy(el.y ?? 0);
+    const w = MATERIAL_BOX * s;
+    const h = MATERIAL_BOX * s;
+    const img = `<image href="${el.asset}" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet" />`;
+    return rotWrap(img, el.rot, x, y);
+  }
+  switch (el.t) {
+    case 'player': {
+      const c = el.c ?? '#1a73e8';
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el);
+      const ring = selected ? ' stroke="#fff" stroke-width="0.5" stroke-dasharray="0.8,0.6"' : ' stroke="#ffffff" stroke-width="0.6"';
+      // Fase 8: el nombre y el número se CONTRARROTAN para permanecer derechos y
+      // legibles aunque el jugador esté girado (±90°). El círculo (invariante bajo
+      // rotación) conserva la transformación del elemento; el texto se compensa con
+      // -rot alrededor del centro para que la rotación de la marca no lo tumbe.
+      const nText = `<text text-anchor="middle" dominant-baseline="central" font-size="2" font-weight="700" fill="${textColor(c)}">${el.n ?? ''}</text>`;
+      const gkText = el.type === 'goalkeeper' ? `<text y="4.2" text-anchor="middle" font-size="1.5" fill="#ffffff" font-weight="700" font-family="Inter, system-ui, sans-serif">POR</text>` : '';
+      // Fase 1 (usabilidad): el NOMBRE va en BLANCO (alto contraste sobre el césped verde),
+      // un poco más grande y en negrita para ser legible; SIN caja, fondo ni borde alrededor
+      // del texto. Se contrarrota (textGroup) para quedar horizontal al girar ±90°.
+      const labelText = el.label ? `<text y="-4" text-anchor="middle" font-size="1.8" fill="#ffffff" font-weight="700" font-family="Inter, system-ui, sans-serif">${esc(el.label)}</text>` : '';
+      const text = nText + gkText + labelText;
+      const textGroup = el.rot ? `<g transform="rotate(${-el.rot} 0 0)">${text}</g>` : text;
+      const g =
+        `<g transform="translate(${x} ${y}) scale(${s})">` +
+        `<circle r="2.5" fill="${c}"${ring}/>` +
+        textGroup +
+        `</g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'ball': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el);
+      const g = `<g transform="translate(${x} ${y}) scale(${s})"><circle r="1.3" fill="#ffffff" stroke="#111111" stroke-width="0.4"/><circle cx="-0.4" cy="0.4" r="0.35" fill="#111111"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'cone': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el);
+      const g = `<g transform="translate(${x} ${y}) scale(${s})"><path d="M-1.4 1.7 L0 -1.7 L1.4 1.7 Z" fill="${el.c ?? '#f9ab00'}" stroke="#00000033" stroke-width="0.2"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'coachC': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el);
+      const g = `<g transform="translate(${x} ${y}) scale(${s})"><circle r="1.7" fill="${el.c ?? '#e6b800'}" stroke="#20242a" stroke-width="0.25"/><text text-anchor="middle" dominant-baseline="central" font-size="1.8" font-weight="800" fill="#111111">C</text></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'peto': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el);
+      const g = `<g transform="translate(${x} ${y}) scale(${s})"><path d="M-2 1.6 L-2.4 -1.4 L-1.2 -2.2 L-0.4 -1.2 L0.4 -1.2 L1.2 -2.2 L2.4 -1.4 L2 1.6 Z" fill="${el.c ?? '#f6c945'}" stroke="#20242a" stroke-width="0.2"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'chaleco': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el);
+      const g = `<g transform="translate(${x} ${y}) scale(${s})"><path d="M-1.6 2 L-1.2 -1.8 L-0.2 -1.2 L0.2 -1.2 L1.2 -1.8 L1.6 2 Z" fill="${el.c ?? '#e74c3c'}" stroke="#20242a" stroke-width="0.2"/><rect x="-0.7" y="-0.4" width="1.4" height="1" fill="#ffffff" opacity="0.3"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'bosu': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el);
+      const g = `<g transform="translate(${x} ${y}) scale(${s})"><path d="M-1.6 0 A1.6 1.6 0 0 1 1.6 0 Z" fill="${el.c ?? '#3056d3'}" stroke="#20242a" stroke-width="0.2"/><ellipse cx="0" cy="0" rx="1.6" ry="0.5" fill="#10151a" opacity="0.55"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'fitball': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el);
+      const g = `<g transform="translate(${x} ${y}) scale(${s})"><circle r="1.8" fill="${el.c ?? '#e67e22'}" stroke="#20242a" stroke-width="0.2"/><path d="M-1.27 -1.27 A1.8 1.8 0 0 1 1.27 -1.27" fill="none" stroke="#ffffff" stroke-width="0.4" opacity="0.5"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'pica': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el);
+      const g = `<g transform="translate(${x} ${y}) scale(${s})"><rect x="-0.25" y="-2.4" width="0.5" height="4.8" rx="0.25" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'marker': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})"><rect x="-0.8" y="-0.8" width="1.6" height="1.6" rx="0.2" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'hurdle': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2">` +
+        `<rect x="-2.4" y="-1.9" width="4.8" height="0.55"/>` +
+        `<rect x="-2.2" y="-1.4" width="0.5" height="2.6"/>` +
+        `<rect x="1.7" y="-1.4" width="0.5" height="2.6"/>` +
+        `</g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'ring': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})" fill="none" stroke="${el.c ?? '#ffffff'}" stroke-width="0.5">` +
+        `<ellipse cx="0" cy="0" rx="1.8" ry="0.9"/>` +
+        `<ellipse cx="0" cy="0.6" rx="1.1" ry="0.45"/>` +
+        `</g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'ladder': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      let rungs = '';
+      for (let i = -2; i <= 2; i++) rungs += `<rect x="-2" y="${i * 1.1}" width="4" height="0.35"/>`;
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.15">` +
+        `<rect x="-2.1" y="-3" width="0.5" height="6"/>` +
+        `<rect x="1.6" y="-3" width="0.5" height="6"/>` +
+        rungs +
+        `</g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'pole': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})"><rect x="-0.3" y="-3" width="0.6" height="5.4" rx="0.3" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2"/><ellipse cx="0" cy="2.7" rx="0.5" ry="0.22" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'mannequin': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const body = el.c ?? '#e8edf2';
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})"><circle cx="0" cy="-2" r="1.1" fill="${body}" stroke="#20242a" stroke-width="0.2"/><rect x="-1.1" y="-0.8" width="2.2" height="3.4" rx="0.9" fill="${body}" stroke="#20242a" stroke-width="0.2"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'minigoal': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const g =
+        `<g transform="translate(${x} ${y}) scale(${materialSize(el)})">` +
+        `<rect x="-2.6" y="-1.5" width="5.2" height="3" fill="none" stroke="#ffffff" stroke-width="0.5"/>` +
+        `<path d="M-2.6 -1.5 L2.6 1.5 M-2.6 1.5 L2.6 -1.5" stroke="#ffffff66" stroke-width="0.2"/>` +
+        `<path d="M-2.6 -0.5 L2.6 -0.5 M-2.6 0.5 L2.6 0.5 M-1.3 -1.5 L-1.3 1.5 M0 -1.5 L0 1.5 M1.3 -1.5 L1.3 1.5" stroke="#ffffff55" stroke-width="0.2"/>` +
+        `</g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'text': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const size = el.size ?? DEFAULT_TEXT_SIZE;
+      const hasBox = !!(el.w && el.h);
+      // El ancho del cuadro NO desborda el campo: como mucho hasta su borde derecho.
+      const maxW = Math.max(size * 0.5, r.w - (el.x ?? 0) * r.w);
+      const boxW = Math.min((el.w ?? 1) * r.w, maxW);
+      const boxH = (el.h ?? 1) * r.h;
+      // Con cuadro: se ajusta el texto a su ancho y SOLO se pinta cada línea que
+      // cabe entera (nunca una a medio cortar); si hay sobrante se añade “…”.
+      // Sin cuadro (documentos antiguos): cada `\n` es una línea, sin recorte.
+      const allLines = hasBox ? wrapTextForBox(el.v ?? '', boxW, size) : (el.v ?? '').split('\n');
+      const layout = hasBox
+        ? textLayoutForBox(allLines, size, boxH)
+        : { lines: allLines, totalLines: allLines.length, visibleCount: allLines.length, overflow: false };
+      const ts = layout.lines
+        .map((ln, i) => {
+          const yPos = i === 0 ? `y="${y + size * 0.8}"` : `dy="${(size * TEXT_LINE_H).toFixed(3)}"`;
+          // x ligeramente dentro del cuadro para que la primera letra no roce el borde.
+          return `<tspan x="${x + Math.min(1.2, size * 0.15)}" ${yPos}>${esc(ln)}</tspan>`;
+        })
+        .join('');
+      const t = `<text font-size="${size}" fill="${el.c ?? '#1f2933'}" font-weight="700" font-family="Inter, system-ui, sans-serif">${ts}</text>`;
+      let body = t;
+      if (hasBox) {
+        // El clip es una red de seguridad (el layout ya no deja líneas cortadas).
+        const cid = 'txtclip-' + String(el.id).replace(/[^a-zA-Z0-9]/g, '');
+        body =
+          `<defs><clipPath id="${cid}"><rect x="${x}" y="${y}" width="${boxW}" height="${boxH}"/></clipPath></defs>` +
+          `<g class="board-text" clip-path="url(#${cid})">${t}</g>`;
+        // El cuadro punteado es SOLO una ayuda de edición: aparece únicamente con el
+        // texto seleccionado. En una pizarra limpia/miniatura/PNG no se dibuja.
+        if (selected) {
+          body += `<rect class="text-edit-rect" x="${x}" y="${y}" width="${boxW}" height="${boxH}" fill="rgba(255,255,255,0.06)" stroke="#ffffff44" stroke-width="0.6" stroke-dasharray="1,0.7"/>`;
+        }
+      }
+      const cc = elementCenter(el);
+      return rotWrap(body, el.rot, gx(cc.x), gy(cc.y));
+    }
+    case 'arrow': {
+      const x1 = el.x1 ?? 0;
+      const y1 = el.y1 ?? 0;
+      const x2 = el.x2 ?? 0;
+      const y2 = el.y2 ?? 0;
+      const cx = gx((x1 + x2) / 2);
+      const cy = gy((y1 + y2) / 2);
+      const ls = el.lineStyle ?? el.style ?? 'solid';
+      return rotWrap(svgLine(x1, y1, x2, y2, 'end', el.c ?? '#1f2933', selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r), el.rot, cx, cy);
+    }
+    case 'line': {
+      const x1 = el.x1 ?? 0;
+      const y1 = el.y1 ?? 0;
+      const x2 = el.x2 ?? 0;
+      const y2 = el.y2 ?? 0;
+      const cx = gx((x1 + x2) / 2);
+      const cy = gy((y1 + y2) / 2);
+      const ls = el.lineStyle ?? el.style ?? 'solid';
+      return rotWrap(svgLine(x1, y1, x2, y2, 'none', el.c ?? '#1f2933', selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r), el.rot, cx, cy);
+    }
+    case 'doubleArrow': {
+      const x1 = el.x1 ?? 0;
+      const y1 = el.y1 ?? 0;
+      const x2 = el.x2 ?? 0;
+      const y2 = el.y2 ?? 0;
+      const cx = gx((x1 + x2) / 2);
+      const cy = gy((y1 + y2) / 2);
+      const ls = el.lineStyle ?? el.style ?? 'solid';
+      const col = el.c ?? '#1f2933';
+      const w = el.strokeWidth ?? DEFAULT_STROKE_WIDTH;
+      // Doble sentido: una punta en CADA extremo (svgLine con 'both'), simétricas y
+      // proporcionales al grosor. Ya no se superpone una segunda línea sin punta.
+      const s = svgLine(x1, y1, x2, y2, 'both', col, selected, w, ls, r);
+      return rotWrap(s, el.rot, cx, cy);
+    }
+    case 'measure': {
+      const x1 = el.x1 ?? 0;
+      const y1 = el.y1 ?? 0;
+      const x2 = el.x2 ?? 0;
+      const y2 = el.y2 ?? 0;
+      const cx = gx((x1 + x2) / 2);
+      const cy = gy((y1 + y2) / 2);
+      const ls = el.lineStyle ?? el.style ?? 'solid';
+      const col = el.c ?? '#1f2933';
+      const s = svgLine(x1, y1, x2, y2, 'none', col, selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r);
+      const label = el.v ?? '15 m';
+      const mx = gx((x1 + x2) / 2);
+      const my = gy((y1 + y2) / 2);
+      const txt = `<g transform="translate(${mx} ${my - 0.4})"><rect x="-2" y="-0.8" width="4" height="1.6" rx="0.3" fill="#ffffff" stroke="${col}" stroke-width="0.2"/><text text-anchor="middle" dominant-baseline="central" font-size="1.1" fill="#111111" font-weight="600">${esc(label)}</text></g>`;
+      return rotWrap(s + txt, el.rot, cx, cy);
+    }
+    case 'dribble': {
+      const x1 = el.x1 ?? 0;
+      const y1 = el.y1 ?? 0;
+      const x2 = el.x2 ?? 0;
+      const y2 = el.y2 ?? 0;
+      const cx = gx((x1 + x2) / 2);
+      const cy = gy((y1 + y2) / 2);
+      return rotWrap(svgZigzag(x1, y1, x2, y2, el.c ?? '#1f2933', selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, el.lineStyle ?? 'solid', r), el.rot, cx, cy);
+    }
+    case 'zone':
+    case 'rect':
+    case 'ellipse': {
+      // Dimensiones en la geometría ACTIVA (horizontal o vertical).
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const w = (el.w ?? 0) * r.w;
+      const h = (el.h ?? 0) * r.h;
+      const cxx = x + w / 2;
+      const cyy = y + h / 2;
+      const contour = el.fill === false;
+      const stroke = el.c ?? '#ffffff';
+      // Fase 2: perímetro (c) y relleno (fillColor + fillOpacity) independientes.
+      // Compatibilidad: fill:true sin fillColor/fillOpacity → c con opacidad 0.16.
+      // Fase 10: el relleno usa EXACTAMENTE el mismo color que el perímetro (se ignora
+      // un posible fillColor previo de forma compatible, sin romper documentos antiguos).
+      let fill = 'none';
+      if (!contour) {
+        const fc = stroke;
+        const fo = el.fillOpacity ?? 0.16;
+        fill = withAlpha(fc, fo);
+      }
+      const body =
+        el.t === 'ellipse'
+          ? `<ellipse cx="${cxx}" cy="${cyy}" rx="${w / 2}" ry="${h / 2}" fill="${fill}" stroke="${stroke}" stroke-width="${DEFAULT_SHAPE_STROKE}"/>`
+          : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" stroke="${stroke}" stroke-width="${DEFAULT_SHAPE_STROKE}"/>`;
+      return rotWrap(body, el.rot, cxx, cyy);
+    }
+    case 'freehand': {
+      const pts = (el.points ?? []).map(([px, py]) => `${gx(px)},${gy(py)}`).join(' ');
+      const c = el.c ?? '#1f2933';
+      const poly = `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${el.strokeWidth ?? DEFAULT_STROKE_WIDTH}" stroke-linejoin="round" stroke-linecap="round" opacity="${el.opacity ?? 1}"/>`;
+      const cc = elementCenter(el);
+      return rotWrap(poly, el.rot, gx(cc.x), gy(cc.y));
+    }
+    case 'curve': {
+      const x1 = gx(el.x1 ?? 0);
+      const y1 = gy(el.y1 ?? 0);
+      const cxd = ((el.x1 ?? 0) + (el.x2 ?? 0)) / 2;
+      const cyd = ((el.y1 ?? 0) + (el.y2 ?? 0)) / 2;
+      const cx = gx(el.c1x ?? cxd);
+      const cy = gy(el.c1y ?? cyd);
+      const x2 = gx(el.x2 ?? 0);
+      const y2 = gy(el.y2 ?? 0);
+      const c = el.c ?? '#1f2933';
+      const width = el.strokeWidth ?? DEFAULT_STROKE_WIDTH;
+      let s = `<path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${c}" stroke-width="${width}" stroke-linecap="round"/>`;
+      const ang = Math.atan2(y2 - cy, x2 - cx);
+      const size = arrowHeadSize(width);
+      s += `<polygon points="${x2},${y2} ${x2 - size * Math.cos(ang - 0.5)},${y2 - size * Math.sin(ang - 0.5)} ${x2 - size * Math.cos(ang + 0.5)},${y2 - size * Math.sin(ang + 0.5)}" fill="${c}"/>`;
+      const cc = elementCenter(el);
+      return rotWrap(s, el.rot, gx(cc.x), gy(cc.y));
+    }
+    default:
+      return '';
+  }
+}
+
+/** Polígono SVG de una punta de flecha en (x,y), apuntando en la dirección `ang`,
+ *  con longitud `size` (proporcional al grosor del trazo). Las dos alas retroceden
+ *  `size` desde la punta formando ±0.5 rad. Se usa para flechas normales (una punta)
+ *  y dobles (dos puntas), y para el zigzag (punta orientada a su último tramo). */
+function arrowHeadPoly(x: number, y: number, ang: number, size: number, c: string): string {
+  const p1 = `${x - size * Math.cos(ang - 0.5)},${y - size * Math.sin(ang - 0.5)}`;
+  const p2 = `${x - size * Math.cos(ang + 0.5)},${y - size * Math.sin(ang + 0.5)}`;
+  return `<polygon points="${x},${y} ${p1} ${p2}" fill="${c}"/>`;
+}
+
+function svgLine(x1: number, y1: number, x2: number, y2: number, arrow: 'none' | 'end' | 'both', color: string, sel = false, width = DEFAULT_STROKE_WIDTH, lineStyle: string = 'solid', r: Geometry['rect']): string {
+  const ax1 = px(x1, r);
+  const ay1 = py(y1, r);
+  const ax2 = px(x2, r);
+  const ay2 = py(y2, r);
+  const c = sel ? '#2563eb' : color;
+  const dash =
+    lineStyle === 'dashed'
+      ? ' stroke-dasharray="2,1.3"'
+      : lineStyle === 'dotted'
+        ? ' stroke-dasharray="0.6,1.4"'
+        : '';
+  let s = `<line x1="${ax1}" y1="${ay1}" x2="${ax2}" y2="${ay2}" stroke="${c}" stroke-width="${width}"${dash}/>`;
+  const size = arrowHeadSize(width);
+  if (arrow === 'end' || arrow === 'both') {
+    s += arrowHeadPoly(ax2, ay2, Math.atan2(ay2 - ay1, ax2 - ax1), size, c);
+  }
+  if (arrow === 'both') {
+    s += arrowHeadPoly(ax1, ay1, Math.atan2(ay1 - ay2, ax1 - ax2), size, c);
+  }
+  return s;
+}
+
+export function svgZigzag(x1: number, y1: number, x2: number, y2: number, color: string, sel = false, width = DEFAULT_STROKE_WIDTH, lineStyle: string = 'solid', r: Geometry['rect']): string {
+  const ax1 = px(x1, r);
+  const ay1 = py(y1, r);
+  const ax2 = px(x2, r);
+  const ay2 = py(y2, r);
+  const c = sel ? '#2563eb' : color;
+  const dx = ax2 - ax1;
+  const dy = ay2 - ay1;
+  const len = Math.hypot(dx, dy) || 1;
+  const pxp = -dy / len;
+  const pyp = dx / len;
+  const amp = Math.min(3, len * 0.08);
+  // Nº de picos adaptado a la longitud: trazos cortos reducen picos y amplitud.
+  const n = Math.max(2, Math.min(8, Math.round(len / 6)));
+  const dash = lineStyle === 'dashed' ? ' stroke-dasharray="2,1.3"' : lineStyle === 'dotted' ? ' stroke-dasharray="0.6,1.4"' : '';
+  // Picos intermedios (i = 1..n-1); el path termina EXACTAMENTE en (ax2,ay2).
+  let d = `M ${ax1} ${ay1}`;
+  let lx = ax1;
+  let ly = ay1;
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const off = (i % 2 === 0 ? -1 : 1) * amp;
+    lx = ax1 + dx * t + pxp * off;
+    ly = ay1 + dy * t + pyp * off;
+    d += ` L ${lx} ${ly}`;
+  }
+  d += ` L ${ax2} ${ay2}`;
+  // La punta se orienta por la tangente del ÚLTIMO segmento real (pico previo → x2/y2),
+  // no por el ángulo general inicio→fin. Así queda unida y mirando en la dirección del final.
+  const ang = Math.atan2(ay2 - ly, ax2 - lx);
+  const size = arrowHeadSize(width);
+  const p1 = `${ax2 - size * Math.cos(ang - 0.5)},${ay2 - size * Math.sin(ang - 0.5)}`;
+  const p2 = `${ax2 - size * Math.cos(ang + 0.5)},${ay2 - size * Math.sin(ang + 0.5)}`;
+  return `<path d="${d}" fill="none" stroke="${c}" stroke-width="${width}"${dash} stroke-linejoin="round"/><polygon points="${ax2},${ay2} ${p1} ${p2}" fill="${c}"/>`;
+}
+
+export interface RenderOptions {
+  selectedId?: string | null;
+  preview?: string;
+  /** [Deprecado] La cuadrícula (Rejilla) fue retirada por el dueño: se IGNORA.
+   *  Se conserva en la interfaz para no romper a los llamadores (board/export),
+   *  pero ya no dibuja nada. Los documentos con `grid=true` se migran a `false`
+   *  al cargar (ver normalizeCanvas / BoardComponent). */
+  grid?: boolean;
+  backgroundColor?: string;
+  lineColor?: string;
+  orientation?: 'horizontal' | 'vertical';
+  guide?: 'none' | '2x2' | '3x3' | 'thirds' | 'lanes';
+  grass?: 'stripes' | 'plain' | 'checker';
+  /** Sin fondo (transparente): no se pinta la textura de césped. */
+  transparent?: boolean;
+  /** Manijas de selección/rotación/asas (fragmentos SVG) DENTRO del <svg>. */
+  handles?: string;
+  /** Overlay de Fútbol 7 transversal parametrizable. */
+  f7?: F7Overlay | null;
+}
+
+/** Overlay de Fútbol 7 transversal (parametrizable y calibrable por preset). Se dibuja en el
+ *  rect canónico de contenido, de modo que rota con el campo en vertical. Las
+ *  proporciones vienen de f7Geometry (única fuente); este wrapper aporta el color/
+ *  grosor/opacidad editables, el clip al campo y el punto central. */
+function f7Svg(f7: F7Overlay, r: Geometry['rect']): string {
+  const g = f7Geometry(r);
+  const stroke = `stroke="${f7.color}" stroke-width="${f7.thickness}" stroke-opacity="${f7.opacity}" fill="none"`;
+  let s = '';
+  s += `<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" ${stroke}/>`;
+  for (const x of g.offsideX) s += `<line x1="${x}" y1="${g.y}" x2="${x}" y2="${g.y + g.h}" ${stroke}/>`;
+  s += `<circle cx="${g.center.x}" cy="${g.center.y}" r="0.35" fill="${f7.color}" fill-opacity="${f7.opacity}" stroke="none"/>`;
+  for (const b of g.big) s += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" ${stroke}/>`;
+  for (const b of g.small) s += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" ${stroke}/>`;
+  const clip = `<clipPath id="f7clip-${f7.color.replace('#', '')}"><rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}"/></clipPath>`;
+  return `<defs>${clip}</defs><g clip-path="url(#f7clip-${f7.color.replace('#', '')})">${s}</g>`;
+}
+
+function guideSvg(guide: NonNullable<RenderOptions['guide']>, lc: string, r: Geometry['rect']): string {
+  const lines: string[] = [];
+  const push = (a: [number, number], b: [number, number]) =>
+    lines.push(`<line x1="${px(a[0], r)}" y1="${py(a[1], r)}" x2="${px(b[0], r)}" y2="${py(b[1], r)}"/>`);
+  if (guide === '2x2') {
+    push([0.5, 0], [0.5, 1]);
+    push([0, 0.5], [1, 0.5]);
+  } else if (guide === '3x3') {
+    for (const f of [1 / 3, 2 / 3]) {
+      push([f, 0], [f, 1]);
+      push([0, f], [1, f]);
+    }
+  } else if (guide === 'thirds') {
+    for (const f of [1 / 3, 2 / 3]) push([0, f], [1, f]);
+  } else if (guide === 'lanes') {
+    for (const f of [0.5]) push([f, 0], [f, 1]);
+  }
+  return `<g class="zone-guide" stroke="${lc}" stroke-width="0.5" stroke-dasharray="1.4,1.1" opacity="0.55">${lines.join('')}</g>`;
+}
+
+/** SVG completo de un frame (función pura: la geometría viaja explícita). */
+export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts: RenderOptions = {}): string {
+  const orientation = opts.orientation ?? 'horizontal';
+  const geo = fieldGeometry(field, orientation);
+  const vbW = geo.vbW;
+  const vbH = geo.vbH;
+  const bg = opts.backgroundColor ?? PITCH_LIGHT;
+  // Fase 11: las marcas reglamentarias del campo son SIEMPRE blancas. Se ignora el
+  // lineColor del documento (un antiguo con lineColor negro se ve en blanco, sin
+  // romper el dato). El F7 transversal conserva su color de contraste (f7Svg).
+  const lc = '#ffffff';
+  // Un SOLO sistema de coordenadas para campo + elementos + asas:
+  // se dibuja siempre en el espacio canónico horizontal y, en vertical, se ROTA
+  // TODO el contenido. El rect canónico depende del TIPO de campo: así el medio
+  // campo (52,5×68) no se estira a la caja 105×68 del campo completo.
+  const contentRect = geo.rect; // rect canónico (largo→X, ancho→Y) del tipo + orientación
+  // El césped cubre EXACTAMENTE el rect de contenido (el "área usable" real), para que
+  // medir `.entrenolab-grass` en los e2e dé el rectángulo del campo con SUS proporciones.
+  const contentW = contentRect.w;
+  const contentH = contentRect.h;
+  // Transformación de orientación: en vertical, (x,y) → (Tx - y, x) con Tx para
+  // centrar el campo en el viewBox. En horizontal no hay transformación.
+  const isVertical = orientation === 'vertical';
+  const Tx = vbW / 2 + (contentRect.y + contentRect.h / 2);
+  const wrap = isVertical ? `<g transform="translate(${Tx} 0) rotate(90)">` : '<g>';
+
+  // Fase 9: un único césped, el de FRANJAS. Se ignora la textura del documento; los
+  // antiguos con 'plain'/'checker' se ven con franjas (no se rompe el dato).
+  const bgStr = `<g transform="translate(${contentRect.x} ${contentRect.y})">${grassBg(bg, contentW, contentH, 'stripes')}</g>`;
+  const fieldStr = fieldSvg(field, contentRect, 'horizontal').replace(/stroke="#ffffff"/g, `stroke="${lc}"`);
+  const els = elements
+    .map((el) => {
+      const s = elStr(el, el.id === opts.selectedId, contentRect);
+      const inner = el.opacity != null && el.opacity < 1 ? `<g opacity="${el.opacity}">${s}</g>` : s;
+      // Identificadores ESTABLES para las pruebas de cobertura E2E (no cambian la
+      // representación): tipo de elemento (modelo real `el.t`), y para jugadores
+      // lado/rol/plantilla; para materiales, el recurso PNG (`assetKind`).
+      const attrs =
+        `data-el-type="${el.t}"` +
+        ` data-color="${el.c ?? ''}"` +
+        (el.fillColor ? ` data-fill-color="${el.fillColor}"` : '') +
+        (el.fillOpacity != null ? ` data-fill-opacity="${el.fillOpacity}"` : '') +
+        (el.t === 'player' ? ` data-side="${el.side ?? ''}" data-kind="${el.type ?? ''}" data-player-id="${el.playerId ?? ''}"` : '') +
+        (el.assetKind ? ` data-asset-kind="${el.assetKind}"` : '');
+      return `<g ${attrs}>${inner}</g>`;
+    })
+    .join('');
+  const guide = opts.guide && opts.guide !== 'none' ? guideSvg(opts.guide, lc, contentRect) : '';
+  const f7Overlay = opts.f7?.enabled ? f7Svg(opts.f7, contentRect) : '';
+  const sel = opts.selectedId ? selectionStr(elements, opts.selectedId, contentRect) : '';
+  return (
+    `<svg class="entrenolab-board" viewBox="0 0 ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg">` +
+    wrap +
+    // El césped se agrupa con una clase estable para poder MEDIR en los e2e el
+    // rectángulo real del campo renderizado (el "área usable") frente al host.
+    (opts.transparent ? '' : `<g class="entrenolab-grass">${bgStr}</g>`) +
+    `<g fill="none" stroke="${lc}" stroke-width="${FIELD_LINE_WIDTH}" stroke-linecap="round">${fieldStr}</g>` +
+    f7Overlay +
+    guide +
+    `<g>${els}</g>` +
+    sel +
+    (opts.handles ?? '') +
+    (opts.preview ?? '') +
+    `</g>` +
+    `</svg>`
+  );
+}
+
+function selectionStr(elements: CanvasElement[], id: string, r: Geometry['rect']): string {
+  const el = elements.find((e) => e.id === id);
+  if (!el) return '';
+  if (el.t === 'player' || el.t === 'ball' || el.t === 'cone' || el.t === 'marker' || el.t === 'hurdle' || el.t === 'ring' || el.t === 'ladder' || el.t === 'mannequin' || el.t === 'minigoal' || el.t === 'pole' || el.t === 'flag' || el.t === 'trampoline' || el.t === 'target' || el.t === 'net' || el.t === 'vball' || el.t === 'coachC' || el.t === 'peto' || el.t === 'chaleco' || el.t === 'bosu' || el.t === 'fitball' || el.t === 'pica') {
+    const x = px(el.x ?? 0, r);
+    const y = py(el.y ?? 0, r);
+    return `<circle cx="${x}" cy="${y}" r="3.4" fill="none" stroke="#2563eb" stroke-width="${SEL_STROKE_POINT}" stroke-dasharray="1,0.7"/>`;
+  }
+  if (el.t === 'text') {
+    // La selección del texto la representan el cuadro punteado (.text-edit-rect),
+    // las manijas de redimensionado y la manija de rotación. Un círculo centrado
+    // en el origen taparía los primeros glifos, así que aquí no se pinta nada.
+    return '';
+  }
+  if (el.t === 'arrow' || el.t === 'line' || el.t === 'dribble' || el.t === 'doubleArrow' || el.t === 'measure') {
+    return svgLine(el.x1 ?? 0, el.y1 ?? 0, el.x2 ?? 0, el.y2 ?? 0, el.t === 'line' ? 'none' : el.t === 'doubleArrow' ? 'both' : 'end', '#2563eb', true, 0.8, 'solid', r);
+  }
+  if (el.t === 'zone' || el.t === 'rect') {
+    const x = px(el.x ?? 0, r);
+    const y = py(el.y ?? 0, r);
+    return `<rect x="${x}" y="${y}" width="${(el.w ?? 0) * r.w}" height="${(el.h ?? 0) * r.h}" fill="none" stroke="#2563eb" stroke-width="${SEL_STROKE}" stroke-dasharray="1,0.7"/>`;
+  }
+  return '';
+}

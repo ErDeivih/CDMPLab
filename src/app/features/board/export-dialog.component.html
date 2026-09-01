@@ -1,0 +1,63 @@
+<div class="export-backdrop" (click)="cancel()">
+  <div
+    class="export"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Exportar ejercicio"
+    (click)="keepOpen($event)"
+    (keydown.escape)="cancel()"
+  >
+    <div class="export-head">
+      <h3>Exportar</h3>
+      <button class="x" title="Cerrar" aria-label="Cerrar" (click)="close()">
+        <span class="msi">close</span>
+      </button>
+    </div>
+
+    <div class="export-body">
+      <div class="export-preview">
+        <div class="preview-canvas">
+          <div class="preview-svg" [innerHTML]="preview()"></div>
+        </div>
+        <div class="preview-meta tnum">{{ size().width }} × {{ size().height }} px</div>
+      </div>
+
+      <div class="export-opts">
+        <div class="field">
+          <label>Título</label>
+          <input [value]="name()" (input)="name.set($any($event.target).value)" autofocus aria-label="Nombre del archivo" />
+        </div>
+        <div class="field">
+          <label>Orientación</label>
+          <div class="chips">
+            <button class="chip" [class.chip-active]="orientation() === 'landscape'" (click)="orientation.set('landscape')">Horizontal</button>
+            <button class="chip" [class.chip-active]="orientation() === 'portrait'" (click)="orientation.set('portrait')">Vertical</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Resolución</label>
+          <div class="chips">
+            @for (r of [720, 1080, 2160]; track r) {
+              <button class="chip" [class.chip-active]="resolution() === r" (click)="resolution.set(r)">{{ r }}p{{ r === 2160 ? ' (4K)' : '' }}</button>
+            }
+          </div>
+        </div>
+        <div class="field">
+          <label>Fondo</label>
+          <div class="chips">
+            <button class="chip" [class.chip-active]="!transparent()" (click)="transparent.set(false)">Incluir</button>
+            <button class="chip" [class.chip-active]="transparent()" (click)="transparent.set(true)">Transparente</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="export-foot">
+      @if (error()) {
+        <span class="error">{{ error() }}</span>
+      }
+      <button class="btn" (click)="close()">Cancelar</button>
+      <button class="btn btn-primary" [disabled]="exporting()" (click)="doExport()">Exportar</button>
+    </div>
+  </div>
+</div>

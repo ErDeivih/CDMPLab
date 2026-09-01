@@ -1,0 +1,88 @@
+<app-auth-card [title]="'Miembros del equipo'" [subtitle]="'Invita y gestiona colaboradores'">
+  <p class="auth-note">
+    {{
+      isOwner()
+        ? 'Invita hasta ' + seatsLimit + ' colaboradores (activos + invitaciones pendientes).'
+        : 'Solo el propietario puede invitarte o revocarte el acceso.'
+    }}
+  </p>
+
+  @if (loading()) {
+    <p class="auth-note">Cargando miembros…</p>
+  } @else {
+    <div class="auth-row">
+      <span style="margin-right:auto">Plazas de colaboradores</span>
+      <strong>{{ seatsUsed() }} de {{ seatsLimit }} usadas</strong>
+    </div>
+
+    @for (m of members(); track m.userId) {
+      <div class="card invite-row">
+        <div class="invite-main">
+          <strong>{{ m.displayName || m.emailNormalized }}</strong>
+          <span class="auth-note">{{ m.role === 'owner' ? 'Propietario' : 'Editor' }}</span>
+        </div>
+        @if (isOwner() && m.role !== 'owner' && !me(m.userId)) {
+          <button type="button" class="btn btn-ghost btn-danger-text" [disabled]="busy(m.userId)" (click)="revoke(m)">
+            {{ busy(m.userId) ? '…' : 'Revocar' }}
+          </button>
+        }
+      </div>
+    }
+
+    @if (isOwner()) {
+      @for (inv of invitations(); track inv.id) {
+        <div class="card invite-row">
+          <div class="invite-main">
+            <strong>{{ inv.emailNormalized }}</strong>
+            <span class="auth-note">
+              Invitación pendiente@if (inv.teamName) { a {{ inv.teamName }} }
+            </span>
+          </div>
+          <button type="button" class="btn btn-ghost" [disabled]="busy(inv.id)" (click)="cancel(inv)">
+            {{ busy(inv.id) ? '…' : 'Cancelar' }}
+          </button>
+        </div>
+      }
+    }
+
+    @if (isOwner()) {
+      <div class="auth-stack">
+        <label class="field-label" for="invite-email">Invitar por correo</label>
+        <div class="invite-form">
+          <input
+            id="invite-email"
+            type="email"
+            class="input"
+            placeholder="colaborador@correo.com"
+            [value]="inviteEmail()"
+            (input)="onInviteEmailInput($event)"
+            autocomplete="off"
+          />
+          <button type="button" class="btn btn-primary" [disabled]="submitting()" (click)="invite()">
+            {{ submitting() ? 'Creando…' : 'Invitar' }}
+          </button>
+        </div>
+        <!-- Decisión de usabilidad (dueño): solo se CREA la invitación en la base,
+             no se envía un correo personalizado. Explicamos qué ocurre y qué debe
+             hacer la persona invitada, sin afirmar que se ha enviado un correo. -->
+        <p class="invite-note">
+          Se crea una invitación pendiente. Si la persona aún no tiene cuenta, debe
+          registrarse en CDMPLab con ese mismo correo; su cuenta tendrá que ser
+          aprobada por el administrador y después podrá aceptar la invitación.
+        </p>
+      </div>
+    }
+  }
+
+  @if (success()) {
+    <p class="auth-msg ok">{{ success() }}</p>
+  }
+  @if (error()) {
+    <p class="auth-msg err" role="alert">{{ error() }}</p>
+  }
+
+  <div class="auth-actions">
+    <button type="button" class="btn" (click)="load()">Actualizar</button>
+    <button type="button" class="btn btn-ghost" (click)="logout()">Cerrar sesión</button>
+  </div>
+</app-auth-card>

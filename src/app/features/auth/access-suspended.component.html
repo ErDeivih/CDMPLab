@@ -1,0 +1,10 @@
+<app-auth-card [title]="'Acceso suspendido'" [subtitle]="'Tu cuenta no está disponible ahora'">
+  <p class="auth-note">
+    La cuenta de <strong>{{ email() || 'tu correo' }}</strong> está suspendida. El equipo técnico debe
+    reactivarla antes de que puedas volver a entrar.
+  </p>
+
+  <div class="auth-actions">
+    <button type="button" class="btn" (click)="logout()">Cerrar sesión</button>
+  </div>
+</app-auth-card>

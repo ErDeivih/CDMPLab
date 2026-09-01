@@ -1,0 +1,374 @@
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+// ---------- Sidebar ----------
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4) var(--space-3);
+  gap: var(--space-5);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 var(--space-2);
+
+  .brand-shield {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .brand-name {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+  }
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-weight: 500;
+  transition: background 0.12s ease, color 0.12s ease;
+
+  .msi {
+    font-size: 20px;
+  }
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  &.nav-active {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+}
+
+.sidebar-foot {
+  margin-top: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  padding: 0 var(--space-2);
+}
+
+.sidebar-auth {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2);
+
+  .sidebar-auth-icon {
+    font-size: 26px;
+    color: var(--text-muted);
+  }
+
+  .auth-note {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .btn {
+    justify-content: flex-start;
+  }
+}
+
+.topbar-user {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// ---------- Main ----------
+.main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topbar {
+  height: var(--topbar-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-5);
+  flex-shrink: 0;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar-shield {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  // En escritorio el escudo vive en el sidebar; aquí solo aparece en móvil.
+  display: none;
+}
+
+.topbar-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.content {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-5);
+}
+
+.storage-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  border: 1px solid #e6b5af;
+  color: var(--danger);
+  font-size: 13px;
+  margin-bottom: var(--space-4);
+
+  .msi {
+    font-size: 20px;
+  }
+
+  .btn {
+    margin-left: auto;
+  }
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 25, 28, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 60;
+}
+
+.settings {
+  width: 460px;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+
+  h3 {
+    font-size: 16px;
+  }
+}
+
+.settings-body {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-note {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.settings-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.settings-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+.btn-icon {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+}
+
+.btn-danger {
+  color: var(--danger);
+  border-color: #e6b5af;
+
+  &:hover {
+    background: var(--danger-soft);
+  }
+}
+
+// ---------- Móvil: barra de navegación inferior ----------
+@media (max-width: 768px) {
+  .shell {
+    grid-template-columns: 1fr;
+    height: 100dvh;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    flex-direction: row;
+    align-items: center;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    padding: calc(var(--space-1)) var(--space-2);
+    gap: 0;
+    z-index: 60;
+    background: var(--surface);
+  }
+
+  // En autenticación no hay navegación: repetir "Iniciar sesión" en una
+  // segunda tarjeta inferior solo roba altura útil al formulario móvil.
+  .sidebar:has(.sidebar-auth) {
+    display: none;
+  }
+
+  .shell:has(.sidebar-auth) .main {
+    padding-bottom: 0;
+  }
+
+  .brand,
+  .sidebar-foot {
+    display: none;
+  }
+
+  .nav {
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-around;
+    gap: 2px;
+  }
+
+  .nav-item {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    height: 52px;
+    padding: 0 var(--space-1);
+    font-size: 11px;
+
+    .msi {
+      font-size: 20px;
+    }
+  }
+
+  .main {
+    padding-bottom: 56px;
+  }
+
+  .topbar {
+    padding: 0 var(--space-3);
+  }
+
+  .topbar-shield {
+    display: inline-block;
+  }
+
+  .content {
+    padding: var(--space-3) var(--space-3);
+  }
+
+  .settings {
+    width: 100%;
+    max-width: calc(100vw - 16px);
+  }
+
+  .settings-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+}

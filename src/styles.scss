@@ -1,0 +1,1180 @@
+// =============================================================
+// EntrenoLab — Estilos globales
+// =============================================================
+@use "./styles/tokens";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-base);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+// Accesibilidad: foco de teclado visible (AA) con el acento rojo.
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text);
+}
+
+// ---------- Botones ----------
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  transition: background 0.12s ease, border-color 0.12s ease;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+
+    &:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+  }
+
+  &.btn-danger {
+    color: var(--danger);
+    border-color: #e6b5af;
+
+    &:hover {
+      background: var(--danger-soft);
+    }
+  }
+
+  &.btn-ghost {
+    border-color: transparent;
+    background: transparent;
+
+    &:hover {
+      background: var(--surface-2);
+    }
+  }
+
+  &.btn-icon {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .msi {
+    font-size: 18px;
+  }
+}
+
+// ---------- Inputs ----------
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .input,
+  input,
+  select,
+  textarea {
+    height: 36px;
+    padding: 0 10px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    outline: none;
+    transition: border-color 0.12s ease;
+
+    &:focus {
+      border-color: var(--accent);
+    }
+  }
+
+  textarea {
+    height: auto;
+    padding: 8px 10px;
+    resize: vertical;
+    min-height: 64px;
+  }
+}
+
+// ---------- Tarjeta ----------
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+// ---------- Chip ----------
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+
+  &.chip-active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+}
+
+// ---------- Etiqueta de estado ----------
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+// ---------- Tabla / lista ----------
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.02em;
+  }
+
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+
+  tbody tr:hover {
+    background: var(--surface-2);
+  }
+}
+
+// ---------- Responsive: tablas como tarjetas apiladas en móvil ----------
+// Evita scroll horizontal (columnas fijas desbordaban el viewport de 390 px).
+@media (max-width: 768px) {
+  .data-table {
+    display: block;
+  }
+  .data-table thead {
+    display: none;
+  }
+  .data-table tbody,
+  .data-table tr,
+  .data-table td {
+    display: block;
+    width: 100%;
+  }
+  .data-table tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-3);
+    padding: var(--space-3);
+  }
+  .data-table td {
+    border: none;
+    padding: var(--space-1) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+}
+
+// Panel de la pizarra: sin desbordamiento horizontal (los controles encogen y
+// envuelven en lugar de empujar el ancho del panel). Se aplica en todos los
+// tamaños; en muy estrecho la rejilla pasa a una columna (ver media query).
+.studio-panel {
+  box-sizing: border-box;
+  min-width: 0;
+  overflow-x: hidden;
+}
+.studio-panel .inspector,
+.studio-panel .field,
+.studio-panel .field-row,
+.studio-panel .field-grid,
+.studio-panel .field-grid2,
+.studio-panel .field-inline,
+.studio-panel .chips,
+.studio-panel .inspector-actions {
+  min-width: 0;
+}
+.studio-panel .field-grid2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.studio-panel .field-row,
+.studio-panel .field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.studio-panel .field-inline {
+  flex-wrap: wrap;
+}
+.studio-panel .field-inline input,
+.studio-panel .field-inline .input {
+  flex: 1 1 60px;
+  min-width: 0;
+  width: auto;
+}
+.studio-panel input,
+.studio-panel select,
+.studio-panel textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.studio-panel .inspector-actions {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+// Panel de la pizarra: sin desbordamiento horizontal en móvil (controles envuelven y se ajustan).
+@media (max-width: 700px) {
+  .studio-panel .field-grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+// ---------- Estado vacío ----------
+.empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-muted);
+
+  .empty-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .empty-sub {
+    font-size: 13px;
+  }
+}
+
+// ---------- Scrollbar discreta ----------
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+// ---------- Pizarra: SVG inyectado (no recibe estilos de componente) ----------
+.entrenolab-board {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-md);
+}
+
+// Pizarra: grupos + búsqueda en la categoría Material.
+.studio-tools .tools-search {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  min-width: 120px;
+  flex: 0 1 160px;
+}
+.studio-tools .tools-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.studio-tools .tools-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.studio-tools .tools-group-items {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.studio-tools .rail-label {
+  font-size: 12px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.studio-tools .tools-list .rail-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  padding: 0 8px;
+  height: 34px;
+}
+
+// =============================================================
+// Pizarra — controles compartidos (tema oscuro "estudio")
+// =============================================================
+
+// Contenedores varios
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.edit-sep {
+  width: 1px;
+  height: 26px;
+  background: #2b3947;
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.btn-danger-row {
+  color: #ff8a80;
+
+  &:hover {
+    background: #b3261e33;
+  }
+}
+
+.panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a97a3;
+  margin: 0;
+}
+
+.panel-hint {
+  font-size: 12px;
+  color: #8a97a3;
+}
+
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #262e35;
+}
+
+.inspector-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+// Botones de acción del inspector (Bloquear, Traer adelante, Enviar atrás,
+// Duplicar, Eliminar) sobre el panel OSCURO de Propiedades. El `.btn-ghost`
+// base dejaría el texto casi negro (#17191c) sobre #171d23 → ilegible. Se
+// fuerza un botón con superficie visible y texto claro (contraste AA), un
+// estado normal/hover/active/disabled/focus-visible legibles, y el "Eliminar"
+// conserva un matiz claramente destructivo pero legible.
+.studio-panel .inspector-actions .btn {
+  background: #263038;
+  border-color: #3a454f;
+  color: #e8edf2;
+
+  &:hover {
+    background: #2f3b44;
+    border-color: #46525d;
+    color: #ffffff;
+  }
+
+  &:active {
+    background: #37434d;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .msi {
+    color: currentColor;
+  }
+}
+
+.studio-panel .inspector-actions .btn-danger {
+  background: #3a1f1c;
+  border-color: #7a2e26;
+  color: #ffb4a6;
+
+  &:hover {
+    background: #4d2721;
+    border-color: #8f3a30;
+    color: #ffd1c9;
+  }
+
+  &:active {
+    background: #5c2f28;
+  }
+}
+
+// Fase 1 (usabilidad): el botón "Lado" (Propio/Rival) y cualquier otro `.btn-ghost`
+// dentro del panel OSCURO de Propiedades también dejaría el texto casi negro
+// (#17191c) sobre el panel → ilegible. Se fuerza texto claro y borde visible.
+.studio-panel .btn-ghost {
+  background: #263038;
+  border-color: #3a454f;
+  color: #e8edf2;
+
+  &:hover {
+    background: #2f3b44;
+    border-color: #46525d;
+    color: #ffffff;
+  }
+}
+
+.swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+
+  &.swatch-active {
+    border-color: var(--accent);
+  }
+}
+
+// Botón de herramienta (raíl inferior y lista de paneles)
+.rail-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #8a97a3;
+  transition: background 0.12s ease, color 0.12s ease;
+  flex-shrink: 0;
+
+  .msi {
+    font-size: 20px;
+  }
+
+  &:hover {
+    background: #212930;
+    color: #fff;
+  }
+
+  &.rail-active {
+    background: var(--accent);
+    color: #fff;
+  }
+}
+
+.rail-btn.rail-row {
+  width: 100%;
+  height: auto;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  text-align: left;
+  color: #aab6c2;
+
+  .msi {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .rail-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &:hover {
+    background: #212930;
+    color: #fff;
+  }
+
+  &.rail-active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: transparent;
+    color: #8a97a3;
+  }
+}
+
+.tools-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tools-panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a97a3;
+  padding: 2px 4px;
+}
+
+// Botón del raíl inferior (Deshacer/Rehacer). El "transporte" de animación y el
+// timeline (.tl-group/.speed-btn/.tl-frame/.tl-add/.anim-toggle) quedaron DIFERIDOS
+// por decisión del dueño: la pizarra es solo estática.
+.tl-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #aab6c2;
+
+  &:hover {
+    background: #212930;
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .msi {
+    font-size: 19px;
+  }
+}
+
+// Rejilla de material (panel Propiedades ya no la usa; se conserva por compat de tests)
+.material-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.material-cell {
+  position: relative;
+}
+
+.material-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  background: #1c2329;
+  border: 1px solid #2b3947;
+  color: #aab6c2;
+  font-size: 10px;
+  width: 100%;
+
+  .msi {
+    font-size: 18px;
+  }
+
+  &:hover {
+    border-color: var(--accent);
+    color: #fff;
+    background: rgba(200, 16, 46, 0.14);
+  }
+}
+
+.material-label {
+  text-align: center;
+  line-height: 1.1;
+}
+
+.material-variant-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #8a97a3;
+  background: #1c2329;
+
+  .msi {
+    font-size: 12px;
+  }
+
+  &.variant-on {
+    color: #fff;
+    background: var(--accent);
+  }
+}
+
+.variant-pop {
+  position: absolute;
+  z-index: 40;
+  bottom: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  background: #1c2329;
+  border: 1px solid #2b3947;
+  border-radius: 8px;
+}
+
+.variant-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+
+  &.sel {
+    border-color: #fff;
+  }
+}
+
+// Plantilla / genéricos
+.roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.roster-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-align: left;
+  color: #e8edf2;
+  width: 100%;
+
+  &:hover {
+    background: #212930;
+  }
+}
+
+// Fase 12 — fila de jugador de plantilla con color rápido (sin abrir el inspector).
+.roster-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .roster-item {
+    flex: 1;
+  }
+
+  .roster-color {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover {
+      filter: brightness(1.1);
+    }
+  }
+
+  .roster-color-menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 30;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px;
+    background: #171d23;
+    border: 1px solid #2b3947;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    max-width: 180px;
+  }
+}
+
+.mini-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 11px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+// Fase 14 — miniatura real del material en el catálogo (en lugar del icono genérico).
+.mat-thumb {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+
+  img {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    display: block;
+  }
+}
+
+// Material vectorial sin PNG: miniatura SVG real (del mismo render del campo) en
+// lugar del icono genérico de Material Symbols.
+.mat-thumb-vector {
+  color: #8a97a3;
+  font-size: 20px;
+
+  .mat-thumb-svg {
+    width: 26px;
+    height: 26px;
+    display: block;
+  }
+}
+
+.mini-name {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-pos {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8a97a3;
+}
+
+.tray-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+// Fase 7 — formaciones rápidas.
+.formations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+
+  .panel-hint {
+    margin: 0;
+  }
+}
+
+.formations-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.formation-btn {
+  flex: 1 1 auto;
+  min-width: 72px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #1c2329;
+  border: 1px solid #2b3947;
+  color: #e8edf2;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s ease, border-color 0.12s ease;
+
+  &:hover {
+    background: #2b3947;
+    border-color: var(--accent);
+  }
+}
+
+.tray-seg {
+  display: flex;
+  border: 1px solid #2b3947;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.seg-btn {
+  height: 28px;
+  padding: 0 12px;
+  background: #1c2329;
+  color: #8a97a3;
+  font-size: 12px;
+  font-weight: 600;
+
+  &.seg-active {
+    background: var(--accent);
+    color: #fff;
+  }
+}
+
+.tray-player {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #1c2329;
+  border: 1px solid #2b3947;
+  color: #aab6c2;
+  font-size: 12px;
+  flex-shrink: 0;
+
+  &:hover {
+    border-color: var(--accent);
+    color: #fff;
+    background: rgba(200, 16, 46, 0.14);
+  }
+}
+
+.tray-name {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tray-player.tray-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+
+// Campo base en paneles (tema oscuro)
+.studio-panel,
+.side-panel {
+  .field {
+    label {
+      color: #8a97a3;
+    }
+  }
+
+  .field .input,
+  .field input,
+  .field select,
+  .field textarea {
+    background: #1c2329;
+    border-color: #2b3947;
+    color: #e8edf2;
+
+    &:focus {
+      border-color: var(--accent);
+    }
+  }
+}
+
+.field-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.field-inline {
+  display: flex;
+  gap: 8px;
+}
+
+// ---------- Pizarra (Fase 3): descubribilidad del campo oculto en "Llenar pantalla" ----------
+// Dos chevrones discretos en los bordes izquierdo/derecho del host, visibles solo
+// cuando queda campo oculto a ese lado (se desvanecen al alcanzar el extremo).
+// `pointer-events:none` para no bloquear el paneo ni la colocación de objetos.
+.edge-pan-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  width: 26px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: #ffffff;
+  opacity: 0.85;
+
+  .msi {
+    font-size: 24px;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  }
+
+  &.edge-pan-left {
+    left: 0;
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0) 100%);
+    border-radius: 0 8px 8px 0;
+  }
+
+  &.edge-pan-right {
+    right: 0;
+    background: linear-gradient(270deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0) 100%);
+    border-radius: 8px 0 0 8px;
+  }
+}
+
+// Pista única de recorrido del campo: toast absoluto (no desplaza el canvas ni ocupa
+// espacio en el layout), descartable y auto-ocultado. Solo aparece la primera vez
+// que se ve la pizarra en "Llenar pantalla". `pointer-events:none` para que NO bloquee
+// el paneo ni la colocación de objetos (solo el botón de cierre vuelve a ser interactivo).
+.fill-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 26;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(92%, 560px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(31, 41, 51, 0.96);
+  border: 1px solid var(--accent);
+  color: #e8edf2;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+
+  .msi {
+    color: var(--accent);
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .fill-hint-long {
+    flex: 1;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .fill-hint-short {
+    display: none;
+  }
+
+  .fill-hint-close {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    color: #aab6c2;
+    flex-shrink: 0;
+    pointer-events: auto;
+
+    &:hover {
+      background: #2b3947;
+      color: #fff;
+    }
+
+    .msi {
+      font-size: 18px;
+      color: currentColor;
+    }
+  }
+}
+
+// Variante corta de la pista en pantallas muy estrechas (≤360 px).
+@media (max-width: 360px) {
+  .fill-hint {
+    .fill-hint-long {
+      display: none;
+    }
+
+    .fill-hint-short {
+      display: inline;
+    }
+  }
+}
+
+// Fase 6 — aviso de orientación en móvil (portrait): banner NO interactivo (salvo el
+// botón de descarte) posicionado en la parte superior sin afectar el layout del campo.
+.orient-hint {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100% - 96px);
+  padding: 7px 11px;
+  border-radius: 12px;
+  background: rgba(31, 41, 51, 0.96);
+  border: 1px solid var(--accent);
+  color: #e8edf2;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+
+  .msi {
+    color: var(--accent);
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .orient-hint-text {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .orient-hint-btn {
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    padding: 4px 9px;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+    pointer-events: auto;
+
+    &:hover {
+      background: var(--accent-hover, var(--accent));
+    }
+  }
+}

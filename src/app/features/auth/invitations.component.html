@@ -1,0 +1,43 @@
+<app-auth-card [title]="'Invitaciones'" [subtitle]="'Te han invitado a estos equipos'">
+  <p class="auth-note">
+    Puedes aceptar una invitación para unirte a ese equipo, o crearlo tú mismo.
+  </p>
+
+  @if (loading()) {
+    <p class="auth-note">Cargando invitaciones…</p>
+  } @else if (invitations().length === 0) {
+    <p class="auth-note">No tienes invitaciones pendientes.</p>
+  } @else {
+    @for (inv of invitations(); track inv.id) {
+      <div class="card invite-row">
+        <div>
+          <strong>{{ inv.teamName }}</strong>
+          <div class="auth-note">
+            Invitación a <em>{{ inv.emailNormalized }}</em>@if (expired(inv)) {
+              <span class="inline-off"> (caducada)</span>
+            }
+          </div>
+        </div>
+        <div class="invite-actions">
+          @if (!expired(inv)) {
+            <button type="button" class="btn btn-primary" [disabled]="busy(inv)" (click)="accept(inv)">
+              {{ busy(inv) ? 'Aceptando…' : 'Aceptar' }}
+            </button>
+            <button type="button" class="btn btn-ghost" [disabled]="busy(inv)" (click)="reject(inv)">
+              Rechazar
+            </button>
+          }
+        </div>
+      </div>
+    }
+  }
+
+  @if (error()) {
+    <p class="auth-msg err" role="alert">{{ error() }}</p>
+  }
+
+  <div class="auth-actions">
+    <a class="auth-link" [routerLink]="['/onboarding/team']">Crear mi propio equipo →</a>
+    <button type="button" class="btn" (click)="load()">Actualizar</button>
+  </div>
+</app-auth-card>

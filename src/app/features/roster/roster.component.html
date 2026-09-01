@@ -1,0 +1,169 @@
+<section class="roster">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Plantilla</h1>
+      @if (team()) {
+        <p class="page-sub">
+          {{ players().length }} jugadores activos de {{ team()?.name }}
+        </p>
+      }
+    </div>
+    @if (team()) {
+      <button class="btn btn-primary" (click)="openAdd()">
+        <span class="msi">add</span> Añadir jugador
+      </button>
+    }
+  </div>
+
+  <!-- Sin equipo: crear el primero -->
+  @if (!team()) {
+    <div class="card create-team">
+      @if (!showCreateTeam()) {
+        <div class="empty">
+          <div class="empty-title">Empieza creando un equipo</div>
+          <div class="empty-sub">Añade tu equipo y, después, sus jugadores.</div>
+          <button class="btn btn-primary" (click)="openCreateTeam()" style="margin-top:16px">
+            <span class="msi">add</span> Crear equipo
+          </button>
+        </div>
+      }
+
+      @if (showCreateTeam()) {
+        <form (ngSubmit)="createTeam()">
+        <label class="page-sub" style="margin-bottom:8px;display:block;font-weight:600">Nombre del equipo</label>
+        <input
+          class="input-lg"
+          [(ngModel)]="newTeamName"
+          name="teamName"
+          placeholder="Primer Equipo"
+          autofocus
+        />
+        <div class="color-picker">
+          <span class="page-sub">Color</span>
+          <div class="swatches">
+            @for (c of palette; track c) {
+              <button
+                type="button"
+                class="swatch"
+                [style.background]="c"
+                [class.swatch-active]="newTeamColor() === c"
+                (click)="newTeamColor.set(c)"
+                [attr.aria-label]="'Color ' + colorName(c)"
+                [title]="'Color ' + colorName(c)"
+              ></button>
+            }
+          </div>
+        </div>
+        <div class="create-actions">
+          <button type="button" class="btn" (click)="showCreateTeam.set(false)">Cancelar</button>
+          <button type="submit" class="btn btn-primary" [disabled]="!newTeamName().trim()">Crear</button>
+        </div>
+      </form>
+      }
+    </div>
+  }
+
+  <!-- Tabla de jugadores -->
+  @if (team()) {
+    <div class="card table-card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:56px"></th>
+            <th>Jugador</th>
+            <th style="width:90px">Dorsal</th>
+            <th style="width:120px">Posición</th>
+            <th style="width:120px;text-align:right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of players(); track p.id) {
+            <tr>
+              <td>
+                <span
+                  class="player-avatar"
+                  [style.background]="p.color"
+                  [style.color]="isDark(p.color) ? '#fff' : '#111'"
+                >{{ p.number ?? '·' }}</span>
+              </td>
+              <td class="cell-name">{{ p.name }}</td>
+              <td class="tnum">{{ p.number ?? '—' }}</td>
+              <td><span class="tag">{{ positionLabel(p.position) }}</span></td>
+              <td style="text-align:right">
+                <button class="btn btn-ghost btn-icon" [attr.aria-label]="'Editar a ' + p.name" title="Editar" (click)="openEdit(p)">
+                  <span class="msi">edit</span>
+                </button>
+                <button class="btn btn-ghost btn-icon" [attr.aria-label]="'Desactivar a ' + p.name" title="Quitar" (click)="remove(p)">
+                  <span class="msi">person_remove</span>
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      @if (players().length === 0) {
+        <div class="empty">
+          <div class="empty-title">Aún no hay jugadores</div>
+          <div class="empty-sub">Añade el primer jugador de la plantilla.</div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Editor (modal) -->
+  @if (editorOpen()) {
+    <div class="modal-backdrop" (click)="closeEditor()">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <div class="modal-head">
+          <h3>{{ draft().id ? 'Editar jugador' : 'Añadir jugador' }}</h3>
+          <button class="btn btn-ghost btn-icon" (click)="closeEditor()" aria-label="Cerrar editor" title="Cerrar">
+            <span class="msi">close</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Nombre</label>
+            <input [(ngModel)]="draft().name" name="name" placeholder="Nombre del jugador" autofocus />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Dorsal</label>
+              <input type="number" min="0" max="99" [(ngModel)]="draft().number" name="number" />
+            </div>
+            <div class="field">
+              <label>Posición</label>
+              <select [(ngModel)]="draft().position" name="position">
+                <option value="">—</option>
+                @for (pos of positions; track pos) {
+                  <option [value]="pos">{{ positionLabel(pos) }}</option>
+                }
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Color</label>
+            <div class="swatches">
+              @for (c of palette; track c) {
+                <button
+                  type="button"
+                  class="swatch"
+                  [style.background]="c"
+                  [class.swatch-active]="draft().color === c"
+                  (click)="setDraftColor(c)"
+                  [attr.aria-label]="'Color ' + colorName(c)"
+                  [title]="'Color ' + colorName(c)"
+                ></button>
+              }
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn" (click)="closeEditor()">Cancelar</button>
+          <button class="btn btn-primary" [disabled]="!draft().name.trim()" (click)="save()">
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</section>

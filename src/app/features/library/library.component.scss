@@ -1,0 +1,805 @@
+.library {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 0;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: calc(100vh - var(--topbar-h) - 48px);
+}
+
+// ---------- Sidebar de carpetas ----------
+.lib-sidebar {
+  border-right: 1px solid var(--border);
+  padding: var(--space-4) var(--space-2);
+  overflow-y: auto;
+}
+
+.lib-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: left;
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  &.tree-active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .msi {
+    font-size: 18px;
+  }
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  position: relative;
+
+  .tree-item {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+}
+
+.tree-caret {
+  width: 22px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  flex-shrink: 0;
+
+  .msi {
+    font-size: 16px;
+  }
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tree-count {
+  font-size: 11px;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+// Menú contextual de cada fila de carpeta: SIEMPRE visible (táctil), no hover.
+.tree-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-right: 4px;
+}
+
+.tree-more-btn.icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.folder-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 60;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 28px rgba(23, 25, 28, 0.18);
+}
+
+.folder-more-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  color: var(--text);
+  width: 100%;
+
+  .msi {
+    font-size: 18px;
+    color: var(--text-muted);
+  }
+
+  &:hover {
+    background: var(--surface-2);
+  }
+
+  &.folder-more-item-danger {
+    color: var(--danger);
+
+    .msi {
+      color: var(--danger);
+    }
+
+    &:hover {
+      background: var(--danger-soft);
+    }
+  }
+}
+
+.tree-inline {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 8px;
+}
+
+.tree-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 4px;
+}
+
+.tree-add {
+  margin: 6px 4px;
+  justify-content: flex-start;
+}
+
+.folder-input {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  outline: none;
+  flex: 1;
+
+  &:focus {
+    border-color: var(--accent);
+  }
+}
+
+// ---------- Contenido ----------
+.lib-main {
+  padding: var(--space-5);
+  min-width: 0;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.page-title {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.page-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+
+  .msi {
+    color: var(--text-muted);
+    font-size: 18px;
+  }
+
+  input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+  }
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: var(--space-3);
+  font-size: 13px;
+}
+
+.crumb {
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: var(--radius);
+
+  &:hover {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+}
+
+.crumb-sep {
+  color: var(--text-faint);
+}
+
+// ---------- Grid ----------
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--space-4);
+}
+
+.ex-card {
+  padding: 0;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s ease;
+
+  &:hover {
+    box-shadow: 0 4px 14px rgba(23, 25, 28, 0.1);
+  }
+}
+
+.ex-thumb {
+  position: relative;
+  aspect-ratio: 5 / 4;
+  background: var(--pitch);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  overflow: hidden;
+}
+
+.diagram {
+  width: 100%;
+  height: 100%;
+
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.diagram.placeholder {
+  display: grid;
+  place-items: center;
+  color: #fff;
+
+  .msi {
+    font-size: 34px;
+    opacity: 0.8;
+  }
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+  background: rgba(23, 25, 28, 0.75);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  transition: background 0.12s ease;
+
+  .msi {
+    font-size: 16px;
+  }
+
+  &:hover {
+    background: var(--accent);
+  }
+
+  &.icon-btn-danger:hover {
+    background: var(--danger);
+  }
+}
+
+.ex-body {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+// Fila de título con el botón "Más" (menú contextual táctil, nunca hover).
+.ex-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  .ex-title {
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.ex-more-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ex-more-btn.icon-btn {
+  width: 30px;
+  height: 30px;
+}
+
+// Menú contextual de la tarjeta (táctil, aparece al tocar "Más").
+.ex-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 28px rgba(23, 25, 28, 0.18);
+}
+
+.ex-more-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  color: var(--text);
+  width: 100%;
+
+  .msi {
+    font-size: 18px;
+    color: var(--text-muted);
+  }
+
+  &:hover {
+    background: var(--surface-2);
+  }
+
+  &.ex-more-item-danger {
+    color: var(--danger);
+
+    .msi {
+      color: var(--danger);
+    }
+
+    &:hover {
+      background: var(--danger-soft);
+    }
+  }
+}
+
+// Acción primaria siempre visible de la tarjeta (no solo en hover).
+.ex-open-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: auto;
+}
+
+.ex-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 34px;
+}
+
+.ex-meta {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-2);
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  .msi {
+    font-size: 14px;
+  }
+}
+
+.meta-item .tag {
+  margin-left: auto;
+}
+
+// ---------- Modal ----------
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 25, 28, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+}
+
+.modal {
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  max-height: 92dvh;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-sm {
+  width: 360px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+
+  h3 {
+    font-size: 16px;
+  }
+}
+
+.modal-body {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow-y: auto;
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: left;
+  width: 100%;
+
+  &:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .msi {
+    font-size: 18px;
+    color: var(--text-muted);
+  }
+}
+
+// ---------- Botones pequeños ----------
+.btn-sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+
+  &:hover {
+    background: var(--accent-hover);
+  }
+}
+
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+.btn-icon {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  input,
+  select,
+  textarea {
+    height: 36px;
+    padding: 0 10px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    outline: none;
+
+    &:focus {
+      border-color: var(--accent);
+    }
+  }
+
+  textarea {
+    height: auto;
+    padding: 8px 10px;
+    resize: vertical;
+    min-height: 64px;
+  }
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.draft-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+
+  &.subtle {
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+}
+
+.form-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-muted);
+
+  .empty-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+// ---------- Acciones de cabecera + cajón de carpetas en móvil ----------
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sidebar-toggle {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .library {
+    grid-template-columns: 1fr;
+    min-height: calc(100dvh - var(--topbar-h) - 56px);
+  }
+
+  .lib-main {
+    padding: var(--space-3) var(--space-3);
+  }
+
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+
+  .page-actions {
+    flex-wrap: wrap;
+  }
+
+  .sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .lib-sidebar {
+    position: fixed;
+    top: var(--topbar-h);
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    max-width: 82vw;
+    z-index: 70;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+  }
+
+  .lib-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    z-index: 65;
+    background: rgba(23, 25, 28, 0.4);
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search {
+    width: 100%;
+  }
+
+  .modal {
+    max-height: 92dvh;
+  }
+
+  .modal-body {
+    padding: var(--space-4);
+  }
+
+  // ---------- Tarjeta de ejercicio compacta en móvil ----------
+  .ex-thumb {
+    aspect-ratio: 16 / 9;
+  }
+
+  .ex-body {
+    padding: var(--space-3);
+    gap: 6px;
+  }
+
+  .ex-meta {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .ex-open-btn {
+    height: 32px;
+  }
+}

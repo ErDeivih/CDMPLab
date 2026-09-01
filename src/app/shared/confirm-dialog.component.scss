@@ -1,0 +1,77 @@
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 18, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 80;
+}
+
+.confirm {
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  padding: 20px;
+}
+
+.confirm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .msi {
+    color: var(--accent);
+    font-size: 20px;
+  }
+}
+
+.confirm-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.confirm-message {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: 18px;
+}
+
+.btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+.btn-danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+
+  &:hover {
+    background: #a53125;
+  }
+}

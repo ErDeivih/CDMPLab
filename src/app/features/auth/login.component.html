@@ -1,0 +1,60 @@
+<app-auth-card [title]="'Iniciar sesión'" [subtitle]="'Accede con tu correo y contraseña'">
+  @if (message(); as msg) {
+    <p class="auth-msg" [class.ok]="msg.kind === 'ok'" [class.err]="msg.kind === 'err'" role="status">{{ msg.text }}</p>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <div class="auth-stack">
+      <div class="field">
+        <label for="login-email">Correo electrónico</label>
+        <input
+          id="login-email"
+          type="email"
+          formControlName="email"
+          autocomplete="email"
+          placeholder="tucorreo@ejemplo.com"
+          aria-describedby="login-email-hint"
+        />
+        @if (emailInvalid()) {
+          <div id="login-email-hint" class="auth-note">
+            @if (form.controls.email.hasError('required')) { El correo es obligatorio. }
+            @else { Introduce un correo válido. }
+          </div>
+        }
+      </div>
+
+      <div class="field">
+        <label for="login-password">Contraseña</label>
+        <input
+          id="login-password"
+          type="password"
+          formControlName="password"
+          autocomplete="current-password"
+          placeholder="Tu contraseña"
+          aria-describedby="login-password-hint"
+        />
+        @if (passwordInvalid()) {
+          <div id="login-password-hint" class="auth-note">
+            @if (form.controls.password.hasError('required')) { La contraseña es obligatoria. }
+            @else { Mínimo 8 caracteres. }
+          </div>
+        }
+      </div>
+
+      <div class="auth-actions">
+        <button type="submit" class="btn btn-primary" [disabled]="submitting() || form.invalid">
+          {{ submitting() ? 'Entrando…' : 'Entrar' }}
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <div class="auth-stack">
+    <div class="auth-row">
+      <a class="auth-link" routerLink="/auth/register">¿Aún no tienes cuenta? Regístrate</a>
+    </div>
+    <div class="auth-row">
+      <a class="auth-link" routerLink="/auth/forgot-password">¿Olvidaste tu contraseña?</a>
+    </div>
+  </div>
+</app-auth-card>

@@ -1,0 +1,41 @@
+<app-auth-card [title]="'Migra tus datos'" [subtitle]="'Lleva los datos locales a tu cuenta'">
+  @if (!detected()) {
+    <p class="auth-note">
+      No hemos encontrado datos locales antiguos. Todo lo nuevo ya se guarda en tu cuenta.
+    </p>
+    <div class="auth-actions">
+      <button type="button" class="btn btn-primary" (click)="skip()">Continuar</button>
+    </div>
+  } @else {
+    <p class="auth-note">
+      Hemos detectado datos guardados en este navegador de la versión anterior. Puedes
+      importarlos a tu equipo para no perder tus ejercicios, jugadores, carpetas y sesiones.
+    </p>
+
+    <div class="auth-stack">
+      <div class="auth-row"><span>Jugadores</span><strong>{{ counts().players }}</strong></div>
+      <div class="auth-row"><span>Carpetas</span><strong>{{ counts().folders }}</strong></div>
+      <div class="auth-row"><span>Ejercicios</span><strong>{{ counts().exercises }}</strong></div>
+      <div class="auth-row"><span>Sesiones</span><strong>{{ counts().sessions }}</strong></div>
+    </div>
+
+    @if (success()) {
+      <p class="auth-msg ok">{{ success() }}</p>
+    }
+    @if (error()) {
+      <p class="auth-msg err" role="alert">{{ error() }}</p>
+    }
+
+    <div class="auth-actions">
+      <button type="button" class="btn btn-primary" [disabled]="importing()" (click)="import()">
+        {{ importing() ? 'Importando…' : 'Importar a mi equipo' }}
+      </button>
+      <button type="button" class="btn" [disabled]="importing()" (click)="downloadBackup()">
+        Descargar copia de seguridad
+      </button>
+      <button type="button" class="btn btn-ghost" [disabled]="importing()" (click)="skip()">
+        Omitir por ahora
+      </button>
+    </div>
+  }
+</app-auth-card>

@@ -1,0 +1,24 @@
+@if (state()) {
+  <div class="confirm-backdrop" (click)="cancel()">
+    <div
+      class="confirm"
+      role="alertdialog"
+      aria-modal="true"
+      [attr.aria-label]="state()!.title"
+      (click)="$event.stopPropagation()"
+      (keydown.escape)="cancel()"
+    >
+      <div class="confirm-head">
+        <span class="msi">help</span>
+        <span class="confirm-title">{{ state()!.title }}</span>
+      </div>
+      <p class="confirm-message">{{ state()!.message }}</p>
+      <div class="confirm-actions">
+        <button class="btn" (click)="cancel()" autofocus>Cancelar</button>
+        <button class="btn btn-danger-solid" (click)="confirm()">
+          {{ state()!.confirmLabel }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

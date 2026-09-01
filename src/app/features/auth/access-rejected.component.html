@@ -1,0 +1,10 @@
+<app-auth-card [title]="'Acceso rechazado'" [subtitle]="'Tu solicitud no fue aprobada'">
+  <p class="auth-note">
+    La solicitud de acceso para <strong>{{ email() || 'tu correo' }}</strong> fue rechazada por un administrador.
+    Si crees que es un error, contacta con el responsable del club.
+  </p>
+
+  <div class="auth-actions">
+    <button type="button" class="btn" (click)="logout()">Cerrar sesión</button>
+  </div>
+</app-auth-card>

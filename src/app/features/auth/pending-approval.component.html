@@ -1,0 +1,10 @@
+<app-auth-card [title]="'Aprobación pendiente'" [subtitle]="'Tu cuenta aún no está activa'">
+  <p class="auth-note">
+    Hemos recibido tu solicitud de acceso. Un administrador debe aprobar tu cuenta antes de que puedas entrar.
+    @if (email()) { Te avisaremos en <strong>{{ email() }}</strong> cuando esté lista. }
+  </p>
+
+  <div class="auth-actions">
+    <button type="button" class="btn" (click)="logout()">Cerrar sesión</button>
+  </div>
+</app-auth-card>

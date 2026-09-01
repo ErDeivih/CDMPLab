@@ -1,0 +1,42 @@
+<app-auth-card [title]="'Crea tu equipo'" [subtitle]="'El primer paso para entrenar'">
+  <p class="auth-note">
+    Crea el equipo que vas a entrenar. Después podrás invitar colaboradores y diseñar ejercicios.
+  </p>
+
+  <label class="field-label" for="team-name">Nombre del equipo</label>
+  <input
+    id="team-name"
+    type="text"
+    class="input"
+    placeholder="p. ej. Primer Equipo"
+    [value]="name()"
+    (input)="onNameInput($event)"
+    autocomplete="off"
+  />
+
+  <div>
+    <div class="field-label">Color</div>
+    <div class="palette">
+      @for (c of palette; track c) {
+        <button
+          type="button"
+          class="swatch"
+          [class.selected]="color() === c"
+          [style.background]="c"
+          [attr.aria-label]="'Color ' + c"
+          (click)="setColor(c)"
+        ></button>
+      }
+    </div>
+  </div>
+
+  @if (error()) {
+    <p class="auth-msg err" role="alert">{{ error() }}</p>
+  }
+
+  <div class="auth-actions">
+    <button type="button" class="btn btn-primary" [disabled]="submitting()" (click)="create()">
+      {{ submitting() ? 'Creando…' : 'Crear equipo' }}
+    </button>
+  </div>
+</app-auth-card>

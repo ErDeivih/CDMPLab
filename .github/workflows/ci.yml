@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Validate migrations
+        run: npm run validate:migration
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # Conjunto E2E ESTABLE (los recorridos núcleo). El suite completo (≈520 tests)
+      # es pesado para CI; se ejecuta manualmente en desarrollo.
+      - name: E2E (estable)
+        run: npx playwright test f7-persistence p11-persistence mobile-toolbar accesibilidad galerias fields features --workers=1

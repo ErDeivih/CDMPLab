@@ -1,0 +1,1026 @@
+// Pizarra a pantalla completa (modo "estudio"), como TheTacticsApp.
+// Fase 1: el campo es el protagonista. Paneles solapados desde los cuatro lados.
+// z-index por encima de la barra de navegación inferior móvil (60) para que
+// ningún panel quede tapado por ella.
+.studio {
+  position: fixed;
+  inset: 0;
+  width: 100dvw;
+  height: 100dvh;
+  z-index: 70;
+  background: #10151a;
+  color: #e8edf2;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-base);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+// ---------- Barra superior ----------
+.studio-top {
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 6px;
+  background: #171d23;
+  border-bottom: 1px solid #262e35;
+}
+
+.top-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.top-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  // El escudo de la pizarra dimensionado AQUÍ (no hereda app.scss por el
+  // encapsulamiento de estilos de Angular: la regla de app.scss solo aplica al
+  // componente App, no a <img class="brand-shield"> de la pizarra). Sin tamaño
+  // explícito el PNG de 512px renderiza gigante e invade cabecera/campo/paneles
+  // y desborda .studio en móvil (scrollWidth 512→…). Tamaño pequeño y fijo,
+  // sin encoger/crecer por flex, manteniendo proporción.
+  .brand-shield {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    flex-shrink: 0;
+    min-width: 26px;
+  }
+
+  .brand {
+    font-weight: 700;
+    font-size: 14px;
+    color: #fff;
+  }
+
+  .top-sep {
+    color: #4a545e;
+  }
+
+  .exercise {
+    font-size: 13px;
+    color: #aab6c2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.dirty-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f6c945;
+  flex-shrink: 0;
+}
+
+.top-right {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+// Bloque compartido por los chips-botón del borde superior y del raíl (.edge-btn / .chip-icon).
+// Se emite UNA sola vez como selector agrupado (no se duplica con un @mixin).
+%edge-chip {
+  height: 36px;
+  min-width: 36px;
+  border-radius: 999px;
+  background: #212930;
+  color: #aab6c2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.edge-btn {
+  @extend %edge-chip;
+  padding: 0 8px;
+
+  .msi {
+    font-size: 18px;
+  }
+
+  &:hover {
+    background: #2b3947;
+    color: #fff;
+  }
+
+  &.edge-on {
+    background: var(--accent);
+    color: #fff;
+  }
+}
+
+.board-notice {
+  position: absolute;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 28;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  max-width: 80vw;
+
+  .msi {
+    font-size: 18px;
+  }
+}
+
+// La papelera vive DENTRO de `.board-host` (ancla: position:relative), anclada al borde
+// INFERIOR del campo vía `trashPos` (left/top bindeados al centro). Así el objeto que se
+// arrastra hacia abajo entra VISUALMENTE en ella (no queda atascado en el borde del
+// campo). Se centra en su punto con translate(-50%,-50%).
+.board-trash {
+  position: absolute;
+  transform: translate(-50%, -50%) scale(0.8);
+  z-index: 29;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(38, 46, 53, 0.92);
+  border: 2px solid #3a454f;
+  color: #aab6c2;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+
+  .msi {
+    font-size: 26px;
+  }
+
+  &.trash-visible {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  &.trash-hot {
+    background: #b3261e;
+    border-color: #ff8a80;
+    color: #fff;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+}
+
+// ---------- Barra de contexto (±90°, duplicar, eliminar) ----------
+// Overlay DOM sobre el campo, visible SOLO al seleccionar un objeto (nunca en
+// export PNG ni en miniaturas, que solo serializan el SVG sin handles). Se
+// posiciona cerca del objeto seleccionado y se recoloca para no salirse del
+// host ni tapar los menús. Botones compactos con área táctil >= 40×40 px.
+.context-bar {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: #171d23;
+  border: 1px solid #2b3947;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.ctx-btn {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #e8edf2;
+
+  &:hover {
+    background: #2b3947;
+    color: #fff;
+  }
+
+  &.ctx-danger {
+    color: #ff8a80;
+
+    &:hover {
+      background: #4d2721;
+      color: #ffd1c9;
+    }
+  }
+
+  .msi {
+    font-size: 18px;
+  }
+}
+
+// ---------- Pista de emplazamiento armado ----------
+// Banner superpuesto al campo (no desplaza el canvas → las coordenadas del
+// clic siguen siendo las mismas). Aparece al armar la colocación de un
+// jugador/material/texto y desaparece al colocar o al pulsar Escape/Cancelar.
+.placement-hint {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(92%, 560px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(31, 41, 51, 0.96);
+  border: 1px solid var(--accent);
+  color: #e8edf2;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+
+  .msi {
+    color: var(--accent);
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .placement-hint-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .placement-hint-cancel {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    color: #aab6c2;
+    flex-shrink: 0;
+
+    &:hover {
+      background: #2b3947;
+      color: #fff;
+    }
+
+    .msi {
+      font-size: 18px;
+      color: currentColor;
+    }
+  }
+}
+
+.chip-icon {
+  @extend %edge-chip;
+  padding: 0 10px;
+
+  .msi {
+    font-size: 18px;
+  }
+
+  &:hover {
+    background: #2b3947;
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.chip-icon-primary {
+    background: var(--accent);
+    color: #fff;
+
+    &:hover {
+      background: var(--accent-hover);
+    }
+  }
+}
+
+// ---------- Zona principal ----------
+.studio-main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+  // El campo en móvil "Llenar pantalla" es más ancho que la vista; se recorta aquí
+  // (el pan/zoom viven en el transform del canvas) para no desbordar la página.
+  overflow: hidden;
+}
+
+.studio-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 10px;
+  position: relative;
+}
+
+// Chips de estado del campo: contador y estado de guardado comparten la forma
+// (esquinas redondeadas a píldora + relleno vertical/horizontal + peso). Se emiten
+// UNA sola vez como selector agrupado.
+%field-chip {
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-weight: 600;
+}
+
+.field-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #8a97a3;
+  padding: 0 4px;
+  flex-wrap: wrap;
+
+  .msi {
+    font-size: 15px;
+  }
+
+  // La pista de la herramienta ocupa el espacio disponible y se trunca (evita
+  // desbordamiento horizontal en 360/390 px).
+  .field-hint {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .field-count {
+    @extend %field-chip;
+    margin-left: auto;
+    background: #212930;
+    color: #e8edf2;
+  }
+
+  // Estado de guardado: chip compacto y no intrusivo junto al contador.
+  .save-state {
+    @extend %field-chip;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+
+    .msi {
+      font-size: 14px;
+    }
+
+    &.saving {
+      background: #2b3947;
+      color: #aab6c2;
+    }
+
+    &.saved {
+      background: #1f3d2b;
+      color: #7fd99a;
+    }
+  }
+}
+
+// Disparador de "Llenar pantalla" / "Campo completo": un solo icono compacto y
+// discreto en la barra de estado del campo (no es una barra nueva de controles).
+.field-fit-toggle {
+  height: 30px;
+  width: 30px;
+  min-width: 30px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a97a3;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+
+  .msi {
+    font-size: 18px;
+  }
+
+  &:hover {
+    background: #212930;
+    color: #fff;
+  }
+
+  &.fit-on {
+    color: var(--accent);
+  }
+}
+
+// Indicador claro de elemento bloqueado dentro del inspector (sobre fondo oscuro).
+.locked-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #3a2a1c;
+  border: 1px solid #7a5a2e;
+  color: #ffd08a;
+  font-size: 12px;
+  font-weight: 500;
+
+  .msi {
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+}
+
+.board-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  position: relative; // ancla para los indicadores de paneo (Fase 3)
+
+  &.cursor-cross {
+    cursor: crosshair;
+  }
+
+  // Herramienta "Mano": agarre manual (grab) y, mientras arrastra, "grabbing".
+  &.cursor-grab {
+    cursor: grab;
+  }
+
+  &.cursor-grabbing {
+    cursor: grabbing;
+  }
+}
+
+.board-canvas {
+  width: 100%;
+  height: 100%;
+  line-height: 0;
+  // No encoger el canvas por debajo de su tamaño establecido: en modo "Llenar
+  // pantalla" el canvas es MÁS ANCHO que el host (desborda y el host lo recorta
+  // con overflow:hidden), de modo que se puede panear en horizontal. Con
+  // flex-shrink:0 el flexbox no lo aplasta para "ajustarlo" al ancho del host.
+  flex-shrink: 0;
+}
+
+// ---------- Paneles laterales (solapados) ----------
+.side-panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: #171d23;
+  border: 1px solid #262e35;
+  overflow-y: auto;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.studio-panel {
+  right: 0;
+  width: min(300px, 88vw);
+  border-left: 1px solid #262e35;
+
+  border-right: none;
+}
+
+.side-panel-left {
+  left: 0;
+  width: min(300px, 88vw);
+  border-right: 1px solid #262e35;
+  border-left: none;
+}
+
+// Fase 15: paneles de Material/Dibujo también como laterales izquierdos. Deben quedar
+// por ENCIMA de su backdrop móvil (z-79) para ser operables.
+.tools-panel-side {
+  z-index: 80;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  h3 {
+    margin: 0;
+  }
+}
+
+.panel-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #aab6c2;
+  flex-shrink: 0;
+
+  &:hover {
+    background: #212930;
+    color: #fff;
+  }
+
+  .msi {
+    font-size: 18px;
+  }
+}
+
+// ---------- Panel desplegable de herramientas (Material / Dibujo) ----------
+.tools-panel {
+  position: absolute;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(300px, calc(100vw - 24px));
+  max-height: min(72vh, 560px);
+  overflow-y: auto;
+  padding: 8px;
+  background: #171d23;
+  border: 1px solid #2b3947;
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+}
+
+.tools-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 79;
+  background: rgba(10, 14, 18, 0.55);
+}
+
+.tools-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #1c2329;
+  border: 1px solid #2b3947;
+  border-radius: 8px;
+  color: #8a97a3;
+
+  .msi {
+    font-size: 16px;
+  }
+
+  .tools-search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e8edf2;
+    font-size: 13px;
+    min-width: 0;
+
+    &::placeholder {
+      color: #8a97a3;
+    }
+  }
+}
+
+.tools-material-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tools-material-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a97a3;
+  padding: 8px 4px 2px;
+  border-top: 1px solid #232b32;
+
+  &:first-child {
+    border-top: none;
+    padding-top: 2px;
+  }
+}
+
+.tools-material-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+
+  &:hover {
+    background: #1c2329;
+  }
+}
+
+.tools-material-variants {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-left: 12px;
+}
+
+// ---------- Popovers superiores (Exportar / Más / Animación) ----------
+.top-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 82;
+  background: rgba(10, 14, 18, 0.45);
+}
+
+.top-pop {
+  position: absolute;
+  top: calc(52px + env(safe-area-inset-top));
+  right: calc(8px + env(safe-area-inset-right));
+  z-index: 84;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(300px, calc(100vw - 24px));
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 8px;
+  background: #171d23;
+  border: 1px solid #2b3947;
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+}
+
+// ---------- Raíl inferior de herramientas ----------
+.studio-tools {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #171d23;
+  border-top: 1px solid #262e35;
+  position: relative;
+  z-index: 1;
+}
+
+.tools-persist {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.tools-caption {
+  // Ocupa SIEMPRE su propia fila completa del raíl (flex-basis 100%) con altura FIJA.
+  // Así el raíl inferior no cambia de tamaño según la herramienta: si la barra de color
+  // de Fase 1/2 (muestrarios + chips, ancha) compartiera fila con los botones, en las
+  // herramientas de dibujo coloreables envolvería a una segunda línea y empujaría el
+  // tablero, alterando las coordenadas pantalla→normalizado entre "dibujar" y
+  // "seleccionar" (rompía los e2e de creación + selección de figuras).
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.tools-caption-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e8edf2;
+  white-space: nowrap;
+}
+
+.tools-caption-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #8a97a3;
+  align-self: center;
+  margin-right: 4px;
+}
+
+.tools-sep {
+  width: 1px;
+  height: 26px;
+  background: #2b3947;
+  flex-shrink: 0;
+}
+
+.tools-cat {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8a97a3;
+  background: transparent;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+
+  // En escritorio la categoría se identifica por su TEXT (@see .tools-cat-icon).
+  .tools-cat-icon {
+    display: none;
+  }
+
+  &.cat-active {
+    color: #fff;
+    background: rgba(200, 16, 46, 0.28);
+    border-color: var(--accent);
+  }
+}
+
+// ---------- Popover de variantes ----------
+.bar-variant-pop {
+  position: absolute;
+  bottom: calc(56px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #1c2329;
+  border: 1px solid #2b3947;
+}
+
+.bar-variant-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 59;
+}
+
+.bar-variant-title {
+  font-size: 11px;
+}
+
+.bar-variant-list {
+  display: flex;
+  gap: 6px;
+}
+
+// ---------- Confirmación de salida ----------
+.unsaved-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 18, 0.6);
+  display: grid;
+  place-items: center;
+  z-index: 90;
+}
+
+.unsaved {
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  background: #171d23;
+  border: 1px solid #2b3947;
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+.unsaved-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+
+  h3 {
+    font-size: 16px;
+  }
+}
+
+.unsaved-msg {
+  color: #aab6c2;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.unsaved-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  // Sobre el fondo OSCURO del diálogo, los estilos base (.btn) darían texto casi
+  // negro (--text = #17191c) → ilegible. Se re-estilizan los tres roles para que
+  // destaquen: primario (relleno acento), destructivo (contorno rojo) y neutro
+  // (ghost con borde sutil y texto claro).
+  .btn {
+    &.btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+
+      &:hover {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+    }
+
+    &.btn-danger {
+      background: transparent;
+      border-color: #7a2e26;
+      color: #ff8a80;
+
+      &:hover {
+        background: #4d2721;
+        border-color: #8f3a30;
+        color: #ffd1c9;
+      }
+    }
+
+    &.btn-ghost {
+      background: transparent;
+      border: 1px solid #3a454f;
+      color: #e8edf2;
+
+      &:hover {
+        background: #2b3947;
+        border-color: #46525d;
+        color: #fff;
+      }
+    }
+  }
+}
+
+// ---------- Responsive móvil: paneles desde sus lados ----------
+// Criterio coherente de "pizarra compacta" (Fase 1): móvil en vertical (ancho <=700)
+// o en horizontal (teléfono girado: altura <=480 con ancho <=1000). Debe coincidir con
+// `isCompactViewport()` del componente (app y CSS usan el MISMO criterio).
+@media (max-width: 700px), (max-height: 480px) and (max-width: 1000px) {
+  .studio-top {
+    height: 44px;
+  }
+
+  // Objetivos táctiles esenciales ≥ 44×44 px en móvil.
+  .edge-btn,
+  .chip-icon,
+  .panel-close,
+  .field-fit-toggle {
+    height: 44px;
+    min-width: 44px;
+    width: 44px;
+  }
+
+  // El raíl inferior persistente (Seleccionar/Deshacer/Rehacer) usa botones
+  // compactos 44×44. Los .rail-row (filas de los menús Material/Dibujo/
+  // Exportar/Más y del panel Jugadores) NO son botones compactos: deben ocupar
+  // el ancho completo y mostrar icono + texto completo (táctil ≥ 44 px).
+  .tools-persist .rail-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .rail-btn.rail-row {
+    width: 100%;
+    min-height: 44px;
+    height: auto;
+    align-items: center;
+
+    .rail-label {
+      overflow: visible;
+      white-space: normal;
+      text-overflow: clip;
+    }
+  }
+
+  .tl-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .tools-cat {
+    height: 44px;
+    min-width: 44px;
+    padding: 0 6px;
+    font-size: 12px;
+
+    // En móvil el texto de la categoría no cabe en una sola fila junto con el
+    // resto de controles persistentes; el icono identifica la categoría y la
+    // etiqueta se oculta (se conserva en el DOM para accesibilidad + aria-label).
+    .tools-cat-icon {
+      display: inline-flex;
+      font-size: 22px;
+    }
+
+    .tools-cat-label {
+      display: none;
+    }
+  }
+
+  .tools-caption-title {
+    font-size: 12px;
+    max-width: 88px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // El nombre de la herramienta no aporta una acción y forzaba una segunda
+  // fila cortada en 360/390 px. Los controles de color sí se conservan y usan
+  // una fila propia cuando la herramienta activa los necesita.
+  .tools-caption:not(.tools-caption-color) {
+    display: none;
+  }
+
+  .tools-caption-color {
+    flex: 1 0 100%;
+    margin-left: 0;
+    justify-content: center;
+    flex-wrap: wrap;
+
+    .tools-caption-title {
+      display: none;
+    }
+  }
+
+  // Paneles laterales a ancho completo/parcial, nunca empujan el campo.
+  .side-panel {
+    top: calc(44px + env(safe-area-inset-top));
+    bottom: calc(56px + env(safe-area-inset-bottom));
+    max-width: 82vw;
+  }
+
+  .studio-panel {
+    max-width: 82vw;
+    border-left: 1px solid #262e35;
+  }
+
+  .top-pop {
+    top: calc(48px + env(safe-area-inset-top));
+  }
+
+  .studio-tools {
+    padding: 6px 6px;
+  }
+
+  // Los controles persistentes (Deshacer/Rehacer/Seleccionar/Mano/Jugadores/
+  // Material/Dibujo) deben caber en UNA sola fila en 360/390/430 px. Separadores
+  // y huecos compactos aseguran que no haya wrapping ni overflow horizontal.
+  .tools-persist {
+    gap: 2px;
+  }
+
+  // En móvil el panel Material/Dibujo es un bottom-sheet a ancho completo.
+  .tools-panel {
+    position: fixed;
+    left: 0 !important;
+    right: 0;
+    top: auto !important;
+    bottom: 0 !important;
+    width: 100%;
+    // ~55dvh deja más de la mitad del campo visible y permite hacer scroll interno.
+    max-height: min(55dvh, 70vh);
+    border-radius: 16px 16px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .tool-hint {
+    display: none;
+  }
+
+  // Fase 1 — pizarra compacta: campo protagonista (relleno reducido + estado en una fila).
+  .studio-field {
+    padding: 4px;
+    gap: 6px;
+  }
+
+  .field-status {
+    min-height: 0;
+    padding: 0 2px;
+
+    .field-hint {
+      display: none;
+    }
+
+    .save-state {
+      display: none;
+    }
+  }
+}

@@ -1,0 +1,12 @@
+<section class="auth">
+  <img class="auth-brand" src="/assets/brand/cdm-pizarrales-512.png" alt="CDM Pizarrales">
+  <div class="auth-head">
+    <h1 class="auth-title">{{ title() }}</h1>
+    @if (subtitle()) {
+      <p class="auth-sub">{{ subtitle() }}</p>
+    }
+  </div>
+  <div class="card auth-card">
+    <ng-content />
+  </div>
+</section>

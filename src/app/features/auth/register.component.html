@@ -1,0 +1,73 @@
+<app-auth-card [title]="'Crear cuenta'" [subtitle]="'Solo necesitas un correo y una contraseña'">
+  @if (message(); as msg) {
+    <p class="auth-msg" [class.ok]="msg.kind === 'ok'" [class.err]="msg.kind === 'err'" role="status">{{ msg.text }}</p>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <div class="auth-stack">
+      <div class="field">
+        <label for="reg-email">Correo electrónico</label>
+        <input
+          id="reg-email"
+          type="email"
+          formControlName="email"
+          autocomplete="email"
+          placeholder="tucorreo@ejemplo.com"
+          aria-describedby="reg-email-hint"
+        />
+        @if (emailInvalid()) {
+          <div id="reg-email-hint" class="auth-note">
+            @if (form.controls.email.hasError('required')) { El correo es obligatorio. }
+            @else { Introduce un correo válido. }
+          </div>
+        }
+      </div>
+
+      <div class="field">
+        <label for="reg-password">Contraseña</label>
+        <input
+          id="reg-password"
+          type="password"
+          formControlName="password"
+          autocomplete="new-password"
+          placeholder="Mínimo 8 caracteres"
+          aria-describedby="reg-password-hint"
+        />
+        @if (passwordInvalid()) {
+          <div id="reg-password-hint" class="auth-note">
+            @if (form.controls.password.hasError('required')) { La contraseña es obligatoria. }
+            @else { Mínimo 8 caracteres. }
+          </div>
+        }
+      </div>
+
+      <div class="field">
+        <label for="reg-password-confirm">Repite la contraseña</label>
+        <input
+          id="reg-password-confirm"
+          type="password"
+          formControlName="passwordConfirm"
+          autocomplete="new-password"
+          placeholder="Repite la contraseña"
+          aria-describedby="reg-confirm-hint"
+        />
+        @if (confirmInvalid() || mismatch()) {
+          <div id="reg-confirm-hint" class="auth-note">
+            @if (form.controls.passwordConfirm.hasError('required')) { Repite la contraseña. }
+            @else { Las contraseñas no coinciden. }
+          </div>
+        }
+      </div>
+
+      <div class="auth-actions">
+        <button type="submit" class="btn btn-primary" [disabled]="submitting() || form.invalid || mismatch()">
+          {{ submitting() ? 'Creando cuenta…' : 'Crear cuenta' }}
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <div class="auth-row">
+    <a class="auth-link" routerLink="/auth/login">¿Ya tienes cuenta? Inicia sesión</a>
+  </div>
+</app-auth-card>

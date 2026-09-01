@@ -1,0 +1,131 @@
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-shield" src="/assets/brand/cdm-pizarrales-512.png" alt="CDM Pizarrales">
+      <span class="brand-name">CDMPLab</span>
+    </div>
+    @if (showNav()) {
+      <nav class="nav">
+        @for (item of navItems; track item.href) {
+          <a
+            [routerLink]="item.href"
+            routerLinkActive="nav-active"
+            class="nav-item"
+          >
+            <span class="msi">{{ item.icon }}</span>
+            <span class="nav-label">{{ item.label }}</span>
+          </a>
+        }
+      </nav>
+    } @else {
+      <div class="sidebar-auth">
+        <span class="msi sidebar-auth-icon">lock</span>
+        <p class="auth-note">Inicia sesión para usar CDMPLab.</p>
+        <a class="btn btn-primary" routerLink="/auth/login" aria-label="Iniciar sesión">
+          <span class="msi">login</span> Iniciar sesión
+        </a>
+      </div>
+    }
+    <div class="sidebar-foot">v0.1</div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img class="topbar-shield" src="/assets/brand/cdm-pizarrales-512.png" alt="CDM Pizarrales">
+        <span class="topbar-title">{{ activeTeam()?.name ?? 'Sin equipo' }}</span>
+      </div>
+      <div class="topbar-right">
+        @if (isAuthenticated()) {
+          <span class="topbar-user" [title]="userEmail()">{{ userEmail() }}</span>
+          <button class="btn btn-ghost" (click)="logout()" aria-label="Cerrar sesión">Cerrar sesión</button>
+        }
+        <button class="btn btn-ghost btn-icon" title="Ajustes" aria-label="Ajustes" (click)="openSettings()">
+          <span class="msi">settings</span>
+        </button>
+      </div>
+    </header>
+    <main class="content">
+      @if (storageError()) {
+        <div class="storage-error" role="alert">
+          <span class="msi">warning</span>
+          <span>{{ storageError() }}</span>
+          <button class="btn btn-ghost" (click)="clearStorageError()">Entendido</button>
+        </div>
+      }
+      @if (syncError()) {
+        <div class="storage-error" role="alert">
+          <span class="msi">sync_problem</span>
+          <span>{{ syncError() }}</span>
+          <button class="btn btn-ghost" (click)="clearSyncError()">Entendido</button>
+        </div>
+      }
+      @if (pendingWrites() > 0) {
+        <div class="sync-bar"><span class="msi">sync</span> Guardando en tu cuenta…</div>
+      }
+      <router-outlet />
+    </main>
+  </div>
+</div>
+
+<!-- Ajustes -->
+@if (settingsOpen()) {
+  <div class="modal-backdrop" (click)="closeSettings()">
+    <div class="settings" (click)="$event.stopPropagation()">
+      <div class="settings-head">
+        <h3>Ajustes</h3>
+        <button class="btn btn-ghost btn-icon" (click)="closeSettings()" title="Cerrar" aria-label="Cerrar">
+          <span class="msi">close</span>
+        </button>
+      </div>
+      <div class="settings-body">
+        <p class="settings-note">
+          @if (isAuthenticated()) { Tus datos se guardan en tu cuenta (Supabase). }
+          @else { Los datos se guardan localmente en este navegador. }
+        </p>
+        <div class="settings-row">
+          <div>
+            <div class="settings-title">Exportar respaldo</div>
+            <div class="settings-sub">Descarga un JSON con equipos, jugadores, carpetas, ejercicios (con su pizarra y miniaturas) y sesiones.</div>
+          </div>
+          <button class="btn" (click)="exportBackup()">Exportar</button>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-title">Importar respaldo</div>
+            <div class="settings-sub">Restaura desde un archivo JSON exportado antes. Se valida y nunca se pierden los datos actuales (copia automática).</div>
+          </div>
+          <label class="btn">
+            Importar
+            <input type="file" accept=".json,application/json" (change)="onImportFile($event)" style="display:none" />
+          </label>
+        </div>
+        @if (backupError()) {
+          <p class="settings-note" role="alert">{{ backupError() }}</p>
+        }
+        @if (importJson()) {
+          <div class="settings-row">
+            <div>
+              <div class="settings-title">Respaldo válido</div>
+              <div class="settings-sub">¿Cómo quieres aplicarlo?</div>
+            </div>
+            <div class="settings-actions">
+              <button class="btn" (click)="doImport('merge')">Fusionar</button>
+              <button class="btn btn-danger" (click)="doImport('replace')">Reemplazar</button>
+            </div>
+          </div>
+        }
+        <div class="settings-row">
+          <div>
+            <div class="settings-title">Restablecer datos</div>
+            <div class="settings-sub">Borra equipos, jugadores, ejercicios y sesiones guardados en este navegador.</div>
+          </div>
+          <button class="btn btn-danger" (click)="resetData()">Borrar</button>
+        </div>
+        <p class="settings-note">Gestión de equipo, invitaciones y colaboradores desde “Miembros”.</p>
+      </div>
+    </div>
+  </div>
+}
+
+<app-confirm />
