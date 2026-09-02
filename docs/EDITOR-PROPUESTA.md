@@ -1,4 +1,4 @@
-# Propuesta — Editor visual de ejercicios y jugadas (EntrenoLab)
+# Propuesta — Editor visual de ejercicios y jugadas (CDMPLab)
 
 > Análisis de la implementación **existente** frente al documento de requisitos, para
 > decidir qué reutilizar, qué cambiar de modelo y qué riesgos hay. **Antes de programar.**

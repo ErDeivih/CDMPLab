@@ -1,4 +1,4 @@
-# EntrenoLab — Sistema de diseño
+# CDMPLab — Sistema de diseño
 
 > Objetivo: producto profesional, **sin look de "IA generada"**: nada de degradados, nada de
 > emojis, nada de tarjetas con sombras enormes ni colores chillones. Todo bordes rectos,

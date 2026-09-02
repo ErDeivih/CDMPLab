@@ -5,7 +5,10 @@ export default defineConfig({
   // `prod-auth.spec.ts` es la prueba de PRODUCCIÓN y solo se ejecuta con
   // `playwright.prod.config.ts` (sirve la build real). Aquí (dev server) se
   // excluye para que la suite local no lo confunda con un smoke de dev.
-  testIgnore: ['**/prod-auth.spec.ts'],
+  // `supabase-real.spec.ts` es OPT-IN (requiere credenciales reales) y se
+  // ejecuta SOLO con `playwright.supabase-real.config.ts`.
+  // `cdmplab-pages.spec.ts` se ejecuta SOLO con `playwright.pages.config.ts`.
+  testIgnore: ['**/prod-auth.spec.ts', '**/supabase-real.spec.ts', '**/cdmplab-pages.spec.ts'],
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

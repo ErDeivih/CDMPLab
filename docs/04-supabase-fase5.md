@@ -1,8 +1,17 @@
-# EntrenoLab — Fase 5: Correos y despliegue gratuito
+# CDMPLab — Fase 5: Correos y despliegue gratuito
+
+> **Nota de vigencia (2026-09):** este documento es **histórico** de una fase
+> anterior y describe **Cloudflare Pages** como opción de despliegue. La opción
+> **vigente** de despliegue del frontend es **GitHub Pages** (ver `README.md` y
+> `.github/workflows/pages.yml`, que publica bajo `/CDMPLab/`). Lo que aquí se
+> mantiene vigente es la parte de **SMTP de Supabase** y la regla de **nunca
+> guardar credenciales en el repo**; la elección de host (Cloudflare vs. GitHub
+> Pages) queda superada por GitHub Pages. Las referencias a `EntrenoLab` son del
+> nombre previo; la marca actual es **CDMPLab**.
 
 > Objetivo: dejar la app lista para usar el SMTP configurado desde Supabase, sin
 > guardar credenciales SMTP en el repositorio, y documentar el despliegue inicial
-> gratuito (frontend Cloudflare Pages + Supabase Free + Brevo SMTP).
+> gratuito (frontend GitHub Pages + Supabase Free + Brevo SMTP).
 
 ## Regla de seguridad
 - **Nunca** guardar credenciales SMTP (host, puerto, usuario, contraseña) en el
@@ -39,7 +48,7 @@ Copiar estos campos de Brevo (Settings → SMTP & API) al panel de Supabase:
 | Port | `587` (STARTTLS) o `465` (SSL) |
 | Username | el login SMTP de Brevo (usuario del panel, no API key Salvo indicación) |
 | Password | la clave SMTP de Brevo |
-| Sender name | `EntrenoLab` |
+| Sender name | `CDMPLab` |
 | Sender email | un remitente verificado en Brevo |
 
 > No compartir la contraseña SMTP en el repositorio. Se introduce solo en Supabase.

@@ -1,0 +1,90 @@
+name: Deploy GitHub Pages (CDMPLab)
+
+# Publica la app en GitHub Pages bajo /CDMPLab/ usando las acciones oficiales.
+# Solo desde `main` (push) o con disparo manual (workflow_dispatch).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Permisos MÍNIMOS: solo lo que Pages necesita para subir el artefacto y
+# desplegar. Nada más (no se escribe en el repo, no se leen otros secretos).
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Concurrencia: un único despliegue a la vez; si llega uno nuevo se cancela el
+# anterior para no publicar dos versiones en paralelo.
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+# Variables de entorno para el build. La URL y la clave PUBLISHABLE del proyecto
+# Supabase se toman de GitHub vars/secrets; NUNCA se escribe una clave secreta
+# de servidor (service_role/secret key) aquí ni en el frontend.
+#
+# Configurar en GitHub (Settings → Secrets and variables → Actions):
+#   Vars/environment:  SUPABASE_URL=<https://XXXX.supabase.co>
+#   Secret:            SUPABASE_PUBLISHABLE_KEY=<clave publishable/anon>
+env:
+  SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+  SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Angular CLI requiere Node >= 22.22.3 (no usar 20.x).
+          node-version: 22.22.3
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Validate migrations
+        run: npm run validate:migration
+
+      - name: Build (base href /CDMPLab/)
+        run: npm run build:pages
+
+      # Smoke E2E de la build servida bajo /CDMPLab/ (carga, assets sin 404,
+      # navegación, recarga de ruta pública, guard de ruta privada sin sesión).
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E Pages (build /CDMPLab/)
+        run: npm run test:e2e:pages
+
+      # GitHub Pages NO hace fallback SPA automático: el artefacto debe incluir
+      # un 404.html (copia de index.html) para que las URLs directas de rutas
+      # Angular (/auth/login, /board) no devuelvan 404 al recargar o abrir en
+      # enlace directo. build-pages.mjs lo genera; aquí se comprueba explícitamente.
+      - name: Verify 404.html exists (SPA fallback)
+        run: test -f dist/entrenolab/browser/404.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/entrenolab/browser
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

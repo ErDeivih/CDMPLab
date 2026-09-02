@@ -106,10 +106,16 @@ test.describe('Fase 8 — el nombre/número del jugador se contrarrota al girar 
       await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
       await page.waitForTimeout(150);
 
-      // La marca gira +90° y el texto se contrarrota a -90° (upright).
+      // La marca gira +90° y el texto se contrarrota para quedar DERECHO por pantalla.
+      // En horizontal, el texto compensa solo la rotación del jugador: -(0 + 90) = -90.
+      // En vertical, además el CAMPO se gira +90 (todo el canvas), así que el texto debe
+      // compensar BOTH: -(90 + 90) = -180. Este test, antes de la FASE 1, asumía -90 para
+      // ambas orientaciones; eso era incorrecto para vertical (el texto quedaba a 90° y no
+      // se leía de izquierda a derecha). La FASE 1 corrige el render.
+      const expectedRot = orientation === 'vertical' ? 'rotate(-180 0 0)' : 'rotate(-90 0 0)';
       const html = await page.locator('.board-canvas svg').innerHTML();
       expect(html, 'la marca del jugador está girada +90°').toContain('rotate(90');
-      expect(html, 'el texto del jugador se contrarrota a -90° (queda derecho)').toContain('rotate(-90 0 0)');
+      expect(html, `el texto del jugador se contrarrota a ${expectedRot} (queda derecho) en ${orientation}`).toContain(expectedRot);
 
       // Evidencia: captura por orientación.
       await page.locator('.board-host').screenshot({ path: `${SHOTS}/nombre-${orientation}.png` });

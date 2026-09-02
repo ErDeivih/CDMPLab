@@ -540,7 +540,7 @@ function rotWrap(inner: string, rot: number | undefined, cx: number, cy: number)
   return rot ? `<g transform="rotate(${rot} ${cx} ${cy})">${inner}</g>` : inner;
 }
 
-function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect']): string {
+function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVertical = false): string {
   const gx = (nx: number) => px(nx, r);
   const gy = (ny: number) => py(ny, r);
   // Material en PNG: se renderiza como imagen. El `size` escala la caja (5.2×size)
@@ -569,10 +569,14 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect']): strin
       const gkText = el.type === 'goalkeeper' ? `<text y="4.2" text-anchor="middle" font-size="1.5" fill="#ffffff" font-weight="700" font-family="Inter, system-ui, sans-serif">POR</text>` : '';
       // Fase 1 (usabilidad): el NOMBRE va en BLANCO (alto contraste sobre el césped verde),
       // un poco más grande y en negrita para ser legible; SIN caja, fondo ni borde alrededor
-      // del texto. Se contrarrota (textGroup) para quedar horizontal al girar ±90°.
+      // del texto. Se contrarrota (textGroup) para quedar derecho POR PANTALLA: compensa
+      // tanto la rotación del jugador (±90) como la rotación de la ORIENTACIÓN vertical del
+      // campo (+90). Así en campo vertical el dorsal/nombre se leen de izquierda a derecha.
       const labelText = el.label ? `<text y="-4" text-anchor="middle" font-size="1.8" fill="#ffffff" font-weight="700" font-family="Inter, system-ui, sans-serif">${esc(el.label)}</text>` : '';
       const text = nText + gkText + labelText;
-      const textGroup = el.rot ? `<g transform="rotate(${-el.rot} 0 0)">${text}</g>` : text;
+      const orientAngle = isVertical ? 90 : 0;
+      const textAngle = orientAngle + (el.rot ?? 0);
+      const textGroup = textAngle !== 0 ? `<g transform="rotate(${-textAngle} 0 0)">${text}</g>` : text;
       const g =
         `<g transform="translate(${x} ${y}) scale(${s})">` +
         `<circle r="2.5" fill="${c}"${ring}/>` +
@@ -1014,7 +1018,7 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
   const fieldStr = fieldSvg(field, contentRect, 'horizontal').replace(/stroke="#ffffff"/g, `stroke="${lc}"`);
   const els = elements
     .map((el) => {
-      const s = elStr(el, el.id === opts.selectedId, contentRect);
+      const s = elStr(el, el.id === opts.selectedId, contentRect, isVertical);
       const inner = el.opacity != null && el.opacity < 1 ? `<g opacity="${el.opacity}">${s}</g>` : s;
       // Identificadores ESTABLES para las pruebas de cobertura E2E (no cambian la
       // representación): tipo de elemento (modelo real `el.t`), y para jugadores

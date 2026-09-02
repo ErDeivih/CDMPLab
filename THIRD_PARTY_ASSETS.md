@@ -1,36 +1,77 @@
-# Third-party assets (EntrenoLab)
+# Third-party assets (CDMPLab)
 
 Este repositorio es un **proyecto personal** del dueño. Los recursos de terceros que usa
 se enumeran aquí; **no se reivindican licencias que no se conozcan** y **no se autoriza**
-su reutilización por terceros salvo lo indicado explícitamente.
+su reutilización por terceros salvo lo indicado explícitamente. La columna **Acción**
+indica qué hacer antes de una redistribución pública.
 
-## PNG tácticos (posible procedencia Bcoach)
+## Inventario de assets como están versionados
 
-`src/assets/tactical/*.png` son PNG de material táctico (conos, balones, porterías, etc.).
+### PNG tácticos (material de la pizarra)
 
-- **Procedencia: desconocida/informal** (posiblemente de una app de pizarra usada por el
-  dueño "Bcoach"). No se tiene constancia de la licencia.
-- **Uso: autorizado por el dueño para este proyecto personal.** No se afirma que terceros
-  puedan reutilizarlos.
-- Estos PNG se usan en tiempo de ejecución. Antes de cualquier publicación pública conviene
-  sustituirlos por recursos propios o verificar permisos.
+Ruta: `public/assets/tactical/*.png` (22 PNG). Referenciados desde
+`src/app/core/tactic-assets.ts` y usados en tiempo de ejecución por el render SVG.
 
-## Fuente de iconos
+| Ruta | Descripción | Origen conocido | Licencia | Acción |
+|---|---|---|---|---|
+| `public/assets/tactical/ball.png` | Balón de fútbol | Del dueño; procede de una referencia de PowerPoint (ver manifiesto). | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/ball-purple.png` | Balón (morado) | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/cone-{red,yellow,blue,orange,white}.png` | Conos (5 colores) | Desconocida/informal (posiblemente app de pizarra usada por el dueño). | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/cone-blue-2.png` | Cono (azul 2) | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/disc.png` | Disco / marcador | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/flag.png` | Banderín | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/hurdle.png` | Valla | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/ladder.png` / `ladder-yellow.png` | Escalera (gris / amarilla) | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/mannequin.png` / `mannequin-row.png` | Maniquí / maniquí en fila | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/minigoal.png` | Miniportería | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/net.png` | Red / valla | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/pole.png` | Pértiga | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/ring.png` / `ring-flat.png` | Aro / aro plano | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/target.png` | Diana | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
+| `public/assets/tactical/trampoline.png` | Minitrampolín | Desconocida/informal. | Sin licencia formal. | **No apto** para redistribución pública hasta verificar o reemplazar. |
 
-`src/assets/fonts/material-symbols-outlined.woff2` — Google **Material Symbols** (Apache License 2.0).
+**Conclusión:** los PNG tácticos tienen **origen desconocido/informal** y el dueño los
+aprobó **solo para este proyecto personal**. Antes de cualquier **redistribución pública**
+hay que **verificar permisos o sustituirlos** por recursos propios (o material con licencia
+permitida). No se les atribuye licencia que no se conozca.
 
-- Licencia: Apache-2.0 (Google Fonts / Material Symbols).
-- Atribución: Google · Material Symbols — https://fonts.google.com/icons (licencia Apache-2.0).
+### Imagen de marca (escudo del club)
 
-## Otras fuentes
+| Ruta | Descripción | Origen conocido | Licencia | Acción |
+|---|---|---|---|---|
+| `src/assets/brand/cdm-pizarrales-512.png` | Escudo del club "CDM Pizarrales" (logo en auth-card, shell y board) | Property del club (el dueño). | Sin licencia de terceros; marca del dueño. | Uso autorizado por el dueño para este proyecto. No reutilizable por terceros. |
 
-- Inter (fuente tipográfica de la UI): se referencia como familia `Inter, system-ui, sans-serif`.
-  Si se incluye el archivo de fuente, indicar su licencia (SIL OFL 1.1). Verificar antes de
-  distribuir.
+### Fuentes (autoalojadas, sin Google Fonts en runtime)
+
+| Ruta | Descripción | Origen / licencia | Licencia | Acción |
+|---|---|---|---|---|
+| `src/assets/fonts/material-symbols-outlined.woff2` | Iconografía de línea Material Symbols | Google · Material Symbols (Apache License 2.0). | Apache-2.0 | Distribuible con atribución; ver `LICENSE-MaterialSymbolsOutlined.txt`. |
+| `src/assets/fonts/inter-latin.woff2` | Fuente tipográfica Inter (UI) | Google Fonts / Inter (SIL Open Font License 1.1). | SIL OFL 1.1 | Distribuible con atribución; ver `OFL-Inter.txt`. |
+| `src/assets/fonts/LICENSE-MaterialSymbolsOutlined.txt` | Texto de licencia Material Symbols | Google · Material Symbols. | Apache-2.0 | Conservado junto al `woff2`. |
+| `src/assets/fonts/OFL-Inter.txt` | Texto de licencia Inter | Google Fonts / Inter. | SIL OFL 1.1 | Conservado junto al `woff2`. |
+
+### Favicon / iconos de la app
+
+| Ruta | Descripción | Origen conocido | Licencia | Acción |
+|---|---|---|---|---|
+| `public/favicon.ico` | Favicon | Propiedad del dueño (marca CDM Pizarrales). | Sin licencia de terceros. | Uso autorizado por el dueño. |
+| `public/favicon-32x32.png` | Favicon 32×32 | Propiedad del dueño. | Sin licencia de terceros. | Uso autorizado por el dueño. |
+| `public/favicon-192x192.png` | Favicon 192×192 (PWA) | Propiedad del dueño. | Sin licencia de terceros. | Uso autorizado por el dueño. |
+| `public/apple-touch-icon.png` | Icono Apple touch | Propiedad del dueño. | Sin licencia de terceros. | Uso autorizado por el dueño. |
+
+## Qué NO está en el repositorio (verificado)
+
+- **Ninguna** Secret Key ni Service Role de Supabase (verificado en el escaneo final; solo la
+  clave **publishable/anon**, que es pública por diseño, está en `environment.prod.ts`).
+- **Ningún** correo real de prueba versionado (los E2E opt-in los leen de variables de
+  entorno ignoradas por git).
+- **Ningún** archivo temporal/log de build versionado (`*.log`, `dist/`, `node_modules/`,
+  `e2e/shots/` están en `.gitignore`).
 
 ## Nota
 
 - No se han añadido ni modificado licencias de terceros a ciegas.
+- Ningún asset se ha borrado ni sustituido en esta auditoría: solo se ha inventariado.
 - Cualquier PNG cuya procedencia sea Bcoach u otra app similar **no** debe distribuirse
   públicamente mientras no se tenga autorización; el dueño lo ha aprobado **solo para este
   proyecto personal**.

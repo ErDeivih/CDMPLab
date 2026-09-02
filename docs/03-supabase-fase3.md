@@ -1,4 +1,4 @@
-# EntrenoLab — Fase 3: Esquema Supabase (nuevo planteamiento, v2)
+# CDMPLab — Fase 3: Esquema Supabase (nuevo planteamiento, v2)
 
 > Proyecto real: `vgwfjkhvzprsoixpzruq` · región eu-west-1 · PostgreSQL 17.
 > Autenticación **solo correo/contraseña** (sin Google). Despliegue inicial gratuito.

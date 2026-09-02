@@ -1,4 +1,4 @@
-# EntrenoLab — Modelo de datos (Supabase nuevo)
+# CDMPLab — Modelo de datos (Supabase nuevo)
 
 > Backend nuevo y aislado. Los equipos tienen su plantilla de jugadores a mano para
 > colocarlos en el campo al instante. Tenemos sesiones y ejercicios, con biblioteca

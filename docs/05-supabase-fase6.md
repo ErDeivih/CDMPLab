@@ -1,4 +1,4 @@
-# EntrenoLab — Fase 6: Aplicar y verificar contra el remoto
+# CDMPLab — Fase 6: Aplicar y verificar contra el remoto
 
 > Verificación externa ejecutada el 27/08/2026 contra el proyecto
 > `vgwfjkhvzprsoixpzruq`. El esquema y cuatro correcciones incrementales están

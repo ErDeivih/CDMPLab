@@ -175,6 +175,20 @@ describe('render', () => {
     expect(svg1).not.toContain('rotate(-90 ');
   });
 
+  it('Fase 1: en campo VERTICAL el dorsal/nombre quedan DERECHOS por pantalla (contrarrotan la orientación +90)', () => {
+    // Vertical: todo el canvas se rota +90; el texto del jugador debe compensar -90.
+    const p0: CanvasElement = { id: 'p0', t: 'player', x: 0.5, y: 0.5, n: 7, label: 'Sergio' };
+    const svg = renderBoardSvg('full', [p0], { orientation: 'vertical' });
+    expect(svg).toContain('rotate(-90 0 0)');
+    // Un jugador girado ±90 en vertical compensa -(90+rot) → para rot=90, rotate(-180 0 0).
+    const p2: CanvasElement = { id: 'p2', t: 'player', x: 0.5, y: 0.5, n: 8, label: 'Pau', rot: 90 };
+    const svg2 = renderBoardSvg('full', [p2], { orientation: 'vertical' });
+    expect(svg2).toContain('rotate(-180 0 0)');
+    // Horizontal: un jugador sin rotación NO compensa la orientación (queda a 0°).
+    const svgH = renderBoardSvg('full', [{ id: 'p3', t: 'player', x: 0.5, y: 0.5, n: 9 }], { orientation: 'horizontal' });
+    expect(svgH).not.toContain('rotate(-90 ');
+  });
+
   it('Fase 11/9: el fondo usa backgroundColor, pero las líneas del campo son SIEMPRE blancas y el césped SIEMPRE de franjas', () => {
     const svg = renderBoardSvg('full', [], { backgroundColor: '#123456', lineColor: '#ff0000', grass: 'plain' });
     expect(svg).toContain('#123456');

@@ -1,4 +1,4 @@
-# EntrenoLab — Esquema/autoridad Supabase (estado aplicado y verificado)
+# CDMPLab — Esquema/autoridad Supabase (estado aplicado y verificado)
 
 > Proyecto: `vgwfjkhvzprsoixpzruq`. ChatGPT aplicó y verificó estas 5 migraciones
 > contra el remoto. **No modificar migraciones aplicadas (hasta 20260827000004).**
