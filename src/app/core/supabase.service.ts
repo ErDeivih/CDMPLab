@@ -62,6 +62,16 @@ export interface AuthResult {
   email?: string;
 }
 
+/**
+ * Construye redirects de Auth respetando el `<base href>` de la aplicación.
+ * En producción devuelve URLs bajo `/CDMPLab/`; en desarrollo conserva la raíz
+ * local. Nunca se fija un localhost dentro de la build publicada.
+ */
+export function buildAuthRedirectUrl(path = '', baseUri = document.baseURI): string {
+  const relativePath = path.replace(/^\/+/, '');
+  return new URL(relativePath, baseUri).toString();
+}
+
 @Injectable({ providedIn: 'root' })
 export class SupabaseService {
   private readonly clientPromise = inject(SUPABASE_CLIENT);
@@ -153,7 +163,11 @@ export class SupabaseService {
     const client = await this.requireClient();
     if (!client) return { ok: false, message: 'El inicio de sesión no está configurado.' };
     try {
-      const { data, error } = await client.auth.signUp({ email, password });
+      const { data, error } = await client.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: buildAuthRedirectUrl() },
+      });
       if (error) throw error;
       this._session.set(data.session);
       this._status.set(data.session ? 'authenticated' : 'unauthenticated');
@@ -205,7 +219,9 @@ export class SupabaseService {
     const client = await this.requireClient();
     if (!client) return { ok: false, message: 'El restablecimiento no está configurado.' };
     try {
-      const { error } = await client.auth.resetPasswordForEmail(email);
+      const { error } = await client.auth.resetPasswordForEmail(email, {
+        redirectTo: buildAuthRedirectUrl('auth/update-password'),
+      });
       if (error) throw error;
     } catch (err) {
       console.error('[SupabaseService] resetPassword', err);
@@ -239,7 +255,11 @@ export class SupabaseService {
     if (!client) return { ok: false, message: 'El reenvío no está configurado.' };
     this.lastResend = Date.now();
     try {
-      const { error } = await client.auth.resend({ type: 'signup', email });
+      const { error } = await client.auth.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: buildAuthRedirectUrl() },
+      });
       if (error) throw error;
       return { ok: true, message: 'Correo de confirmación reenviado.' };
     } catch (err) {

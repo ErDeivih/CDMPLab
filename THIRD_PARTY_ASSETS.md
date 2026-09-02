@@ -39,7 +39,7 @@ permitida). No se les atribuye licencia que no se conozca.
 
 | Ruta | Descripción | Origen conocido | Licencia | Acción |
 |---|---|---|---|---|
-| `src/assets/brand/cdm-pizarrales-512.png` | Escudo del club "CDM Pizarrales" (logo en auth-card, shell y board) | Property del club (el dueño). | Sin licencia de terceros; marca del dueño. | Uso autorizado por el dueño para este proyecto. No reutilizable por terceros. |
+| `src/assets/brand/cdm-pizarrales-original.jpg` | Escudo original completo del club "CDM Pizarrales" (logo, pestaña, auth-card, shell y board) | Propiedad del club (el dueño). | Sin licencia de terceros; marca del dueño. | Archivo original proporcionado por el dueño; no se recorta ni se redibuja. No reutilizable por terceros. |
 
 ### Fuentes (autoalojadas, sin Google Fonts en runtime)
 

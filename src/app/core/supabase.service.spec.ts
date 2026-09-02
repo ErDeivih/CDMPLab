@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { SUPABASE_CLIENT, SupabaseService } from './supabase.service';
+import { buildAuthRedirectUrl, SUPABASE_CLIENT, SupabaseService } from './supabase.service';
 
 interface MockAuth {
   getSession: ReturnType<typeof vi.fn>;
@@ -118,6 +118,19 @@ describe('SupabaseService', () => {
     const res = await service.signUp('a@b.c', 'password123');
     expect(res.ok).toBe(true);
     expect(res.needsVerification).toBe(true);
+    expect(client.auth.signUp).toHaveBeenCalledWith({
+      email: 'a@b.c',
+      password: 'password123',
+      options: { emailRedirectTo: buildAuthRedirectUrl() },
+    });
+  });
+
+  it('construye redirects bajo el base href de GitHub Pages, nunca en localhost', () => {
+    const base = 'https://erdeivih.github.io/CDMPLab/';
+    expect(buildAuthRedirectUrl('', base)).toBe(base);
+    expect(buildAuthRedirectUrl('auth/update-password', base)).toBe(
+      'https://erdeivih.github.io/CDMPLab/auth/update-password'
+    );
   });
 
   it('signOut limpia la sesión y deja el estado unauthenticated', async () => {
@@ -138,7 +151,9 @@ describe('SupabaseService', () => {
     const res = await service.resetPassword('a@b.c');
     expect(res.ok).toBe(true);
     expect(res.message).toBe('Si el correo existe, recibirás un enlace para restablecer tu contraseña.');
-    expect(client.auth.resetPasswordForEmail).toHaveBeenCalledWith('a@b.c');
+    expect(client.auth.resetPasswordForEmail).toHaveBeenCalledWith('a@b.c', {
+      redirectTo: buildAuthRedirectUrl('auth/update-password'),
+    });
   });
 
   it('updatePassword delega en el cliente', async () => {
@@ -156,7 +171,11 @@ describe('SupabaseService', () => {
     service = TestBed.inject(SupabaseService);
     const first = await service.resendConfirmation('a@b.c');
     expect(first.ok).toBe(true);
-    expect(client.auth.resend).toHaveBeenCalledWith({ type: 'signup', email: 'a@b.c' });
+    expect(client.auth.resend).toHaveBeenCalledWith({
+      type: 'signup',
+      email: 'a@b.c',
+      options: { emailRedirectTo: buildAuthRedirectUrl() },
+    });
     const second = await service.resendConfirmation('a@b.c');
     expect(second.ok).toBe(false);
     expect(second.message).toContain('Espera');

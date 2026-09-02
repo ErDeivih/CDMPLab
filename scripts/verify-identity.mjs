@@ -43,7 +43,7 @@ async function checkDesktop(name, viewport) {
   page.on('response', (res) => {
     const u = res.url();
     if (u.includes('/assets/fonts/')) fontStatus[u] = res.status();
-    if (u.includes('cdm-pizarrales-512.png') && res.status() !== 200) errors.push(`escudo ${res.status()} ${u}`);
+    if (u.includes('cdm-pizarrales-original.jpg') && res.status() !== 200) errors.push(`escudo ${res.status()} ${u}`);
   });
   page.on('console', (msg) => {
     if (msg.type() === 'error') errors.push(msg.text());

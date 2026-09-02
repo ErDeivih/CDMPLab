@@ -24,7 +24,7 @@ const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 const BENIGN_CONSOLE = ['[SupabaseService]', '[AccessService]'];
 
 // Assets de la app que NUNCA deben dar 404 ni requestfailed.
-const APP_ASSET_PATTERNS = [/\.js($|\?)/, /\.css($|\?)/, /\.woff2?($|\?)/, /favicon/, /cdm-pizarrales-512\.png/, /\.svg($|\?)/];
+const APP_ASSET_PATTERNS = [/\.js($|\?)/, /\.css($|\?)/, /\.woff2?($|\?)/, /favicon/, /cdm-pizarrales-original\.jpg/, /\.svg($|\?)/];
 
 /** la build servida debe ser la de producción (marcador en <html>). */
 async function expectProductionMode(page: Page): Promise<void> {
