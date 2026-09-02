@@ -47,7 +47,9 @@ export interface TacticAsset {
   color: string;
 }
 
-const P = '/assets/tactical/';
+// Relativa al <base href>: funciona en local (`/`) y en GitHub Pages
+// (`/CDMPLab/`) sin grabar el destino de despliegue dentro del ejercicio.
+const P = 'assets/tactical/';
 
 export const TACTIC_ASSETS: TacticAsset[] = [
   { kind: 'cone_red', asset: `${P}cone-red.png`, label: 'Cono (rojo)', color: '#e74c3c' },

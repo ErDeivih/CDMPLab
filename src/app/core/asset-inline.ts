@@ -4,18 +4,22 @@
 // Una imagen SVG embebida como data URL NO puede cargar subrecursos
 // externos (por seguridad del navegador los SVG cargados vía <img> o
 // data URL corren en modo "sin recursos externos"). Por tanto, los
-// <image href="/assets/tactical/*.png"> NUNCA se dibujaban en el PNG/GIF
+// <image href="assets/tactical/*.png"> NUNCA se dibujaban en el PNG/GIF
 // exportado ni en la miniatura: faltaban los conos, banderines, etc.
 // Esta utilidad sustituye cada href por un data URL base64 del PNG.
 // =============================================================
 
-const ASSET_RE = /href="(\/assets\/tactical\/[^"]+\.png)"/g;
+const ASSET_RE = /href="(\/?assets\/tactical\/[^"]+\.png)"/g;
 const cache = new Map<string, string>();
 
 async function assetToDataUrl(href: string): Promise<string> {
   const hit = cache.get(href);
   if (hit) return hit;
-  const res = await fetch(href);
+  // `document.baseURI` incorpora `/CDMPLab/` en Pages. También normaliza el
+  // formato histórico `/assets/...` para que no escape del subdirectorio.
+  const relativeHref = href.replace(/^\/+/, '');
+  const requestUrl = new URL(relativeHref, document.baseURI).toString();
+  const res = await fetch(requestUrl);
   if (!res.ok) return href; // si falta el asset, se deja el href tal cual (no rompe)
   const blob = await res.blob();
   const url = await new Promise<string>((resolve, reject) => {
@@ -29,7 +33,8 @@ async function assetToDataUrl(href: string): Promise<string> {
 }
 
 /**
- * Sustituye los `/assets/tactical/*.png` por data URLs base64 en un SVG.
+ * Sustituye los `assets/tactical/*.png` (incluido el formato histórico con
+ * barra inicial) por data URLs base64 en un SVG.
  * Idempotente y cacheado: los assets repetidos en varios frames no se
  * vuelven a descargar.
  */

@@ -32,7 +32,7 @@ export default defineConfig({
   },
   webServer: {
     command: 'node scripts/serve-pages.mjs',
-    url: 'http://127.0.0.1:4500',
+    url: 'http://127.0.0.1:4500/CDMPLab/',
     reuseExistingServer: true,
     timeout: 60_000,
     env: { HOST: '127.0.0.1', PORT: '4500' },

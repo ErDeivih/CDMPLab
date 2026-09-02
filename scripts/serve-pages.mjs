@@ -88,6 +88,13 @@ function serveFile(res, filePath, status = 200) {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://${HOST}:${PORT}`);
   const rawPath = decodeURIComponent(url.pathname);
+  // Un project site real de GitHub Pages NO sirve los ficheros de CDMPLab en
+  // la raíz del usuario. Rechazar rutas fuera del prefijo evita que un
+  // `/assets/...` incorrecto pase en local y falle solamente al publicar.
+  if (rawPath !== BASE && rawPath !== BASE + '/' && !rawPath.startsWith(BASE + '/')) {
+    okText(res, 404, 'Fuera del prefijo de CDMPLab');
+    return;
+  }
   const pathname = normalizePathname(rawPath);
 
   const rootWithSep = ROOT.endsWith(sep) ? ROOT : ROOT + sep;

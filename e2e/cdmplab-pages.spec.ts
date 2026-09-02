@@ -75,6 +75,26 @@ async function expectAppAssetsOk(page: Page): Promise<void> {
     return badList;
   }, { patterns: APP_ASSET_PATTERNS.map((p) => p.source) });
   expect(bad, `assets de la app con 404/fallo: ${bad.join(', ')}`).toEqual([]);
+
+  const visibleAssets = await page.evaluate(async () => {
+    const images = [...document.querySelectorAll<HTMLImageElement>('img[src*="cdm-pizarrales"]')];
+    await Promise.all(images.map((img) => img.complete ? Promise.resolve() : new Promise<void>((resolve) => {
+      img.addEventListener('load', () => resolve(), { once: true });
+      img.addEventListener('error', () => resolve(), { once: true });
+    })));
+    await document.fonts.ready;
+    return {
+      imageUrls: images.map((img) => img.currentSrc || img.src),
+      brokenImages: images.filter((img) => img.naturalWidth === 0).map((img) => img.currentSrc || img.src),
+      interLoaded: document.fonts.check('16px Inter'),
+      symbolsLoaded: document.fonts.check('24px "Material Symbols Outlined"'),
+    };
+  });
+  expect(visibleAssets.imageUrls.length, 'no se encontró el escudo').toBeGreaterThan(0);
+  expect(visibleAssets.imageUrls.every((url) => url.includes('/CDMPLab/assets/')), 'el escudo escapó del base href').toBe(true);
+  expect(visibleAssets.brokenImages, 'hay escudos rotos').toEqual([]);
+  expect(visibleAssets.interLoaded, 'Inter no cargó').toBe(true);
+  expect(visibleAssets.symbolsLoaded, 'Material Symbols no cargó').toBe(true);
 }
 
 /** Sin desbordamiento horizontal en los contenedores principales. */

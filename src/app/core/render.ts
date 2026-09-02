@@ -551,7 +551,10 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
     const y = gy(el.y ?? 0);
     const w = MATERIAL_BOX * s;
     const h = MATERIAL_BOX * s;
-    const img = `<image href="${el.asset}" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet" />`;
+    // Compatibilidad con ejercicios antiguos que guardaron `/assets/...`:
+    // se elimina la barra inicial para que el <base href> del despliegue mande.
+    const assetHref = el.asset.replace(/^\/assets\//, 'assets/');
+    const img = `<image href="${assetHref}" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet" />`;
     return rotWrap(img, el.rot, x, y);
   }
   switch (el.t) {

@@ -13,7 +13,9 @@ describe('tactic-assets — manifiesto de material', () => {
   it('cada asset referencia un PNG existente o es vectorial (asset vacío)', () => {
     for (const a of TACTIC_ASSETS) {
       expect(a.kind).toBeTruthy();
-      if (a.asset) expect(a.asset).toMatch(/^\/assets\/tactical\//);
+      // Debe respetar el <base href>; una barra inicial rompería GitHub Pages
+      // al sacar el recurso fuera de `/CDMPLab/`.
+      if (a.asset) expect(a.asset).toMatch(/^assets\/tactical\//);
     }
   });
 
