@@ -54,8 +54,8 @@ Copiar estos campos de Brevo (Settings → SMTP & API) al panel de Supabase:
 > No compartir la contraseña SMTP en el repositorio. Se introduce solo en Supabase.
 
 ### 2. Supabase → Authentication → URL Configuration
-- **Site URL** (producción): la URL de Cloudflare Pages (p. ej. `https://entrenolab.pages.dev`).
-- **Redirect URLs**: añadir la de producción y la de localhost (`http://localhost:4200/**`).
+- **Site URL** (producción): `https://erdeivih.github.io/CDMPLab/`.
+- **Redirect URLs**: añadir `https://erdeivih.github.io/CDMPLab/**` y `http://localhost:4200/**`.
 - Para SPA: el mismo Site URL sirve para confirmación, recuperación e invitación.
 
 ### 3. Cloudflare Pages — build y variables

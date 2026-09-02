@@ -30,14 +30,15 @@ de secretos.
 
 ## Procedimiento (paso a paso)
 
-1. **[CONFIG] Configurar Supabase Auth (no ejecutado aquí).** En Auth → URL
+1. **[CONFIG] Configurar Supabase Auth (pendiente de sesión en el panel).** En Auth → URL
    Configuration: fijar la **Site URL** de producción y **añadir las Redirect URLs**
-   (por ejemplo `https://<org>.github.io/CDMPLab/**` y `http://localhost:4200/**`).
-   Activar el **SMTP** (provider de correo) para que lleguen confirmaciones y
-   recuperaciones. Sin esto, Supabase Auth no envía correos.
-2. **[CÓDIGO] Desplegar la aplicación** (build de producción + hosting con Supabase
-   Auth configurado). La build de GitHub Pages (ver `README`) se despliega con la
-   configuración de pestaña C en modo `production`.
+   (`https://erdeivih.github.io/CDMPLab/**` y `http://localhost:4200/**`).
+   Configurar un **SMTP propio** para que confirmaciones y recuperaciones lleguen a
+   usuarios reales. Supabase Auth sí envía el correo: su SMTP compartido sirve para
+   pruebas limitadas, pero no sustituye un proveedor configurado para producción.
+2. **[HECHO 2026-09-02] Aplicación desplegada.** La build de producción está en
+   `https://erdeivih.github.io/CDMPLab/`, usa la configuración de pestaña C en modo
+   `production` y tiene CI, prueba de rutas directas y fallback SPA en verde.
 3. **[NO EJECUTADO] El administrador registra `<ADMIN_EMAIL>`** desde la app
    (`/auth/register`).
 4. **[NO EJECUTADO] Confirma el correo** — lo envía Supabase Auth. CDMPLab **no**
@@ -62,8 +63,8 @@ de secretos.
     colaboradores.**
 14. **[NO EJECUTADO] Probar recuperación de contraseña** (Supabase Auth).
 
-> Resumen: los pasos **1–2** son configuración/despliegue y **no** se han ejecutado
-> aquí; los pasos **3–14** dependen del proyecto real y quedan **pendientes de
+> Resumen: el paso **2 está completado**. El paso **1** requiere una sesión humana en
+> el panel de Supabase; los pasos **3–14** dependen de cuentas reales y quedan **pendientes de
 > ejecución por David** (no forman parte de la auditoría local).
 
 ## Precondición: nada de correos reales en tests versionados

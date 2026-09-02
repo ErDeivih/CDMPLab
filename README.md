@@ -115,7 +115,9 @@ acciones **oficiales** (`upload-pages-artifact` / `deploy-pages`). Solo se dispa
 desde `main` (push) o con `workflow_dispatch`; permisos mínimos y concurrencia.
 
 Ver `.github/workflows/pages.yml` y `scripts/build-pages.mjs`. La activación del
-repositorio (Settings → Pages → Source: GitHub Actions) queda **pendiente**.
+repositorio ya está completada y la aplicación pública está disponible en
+`https://erdeivih.github.io/CDMPLab/`. El despliegue y la CI se validan en cada
+`push` a `main`.
 
 ## Configuración de Supabase (nunca secretos)
 
