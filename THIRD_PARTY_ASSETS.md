@@ -35,6 +35,26 @@ aprobó **solo para este proyecto personal**. Antes de cualquier **redistribuci�
 hay que **verificar permisos o sustituirlos** por recursos propios (o material con licencia
 permitida). No se les atribuye licencia que no se conozca.
 
+### SVG vectoriales ORIGINALES del proyecto (B2)
+
+Estos dibujos son **originales del proyecto CDMPLab**, creados a mano (código SVG) para
+sustituir los PNG de origen desconocido/informal de la pizarra. No proceden de ninguna
+aplicación de terceros ni de fotografías entregadas; **no hay marca de agua, logo ni fondo
+blanco**. Se definen en `src/app/core/material-registry.ts` (`chinoSvg`, `dumbbellSvg`,
+`hurdleSvg`) y se usan como miniatura vectorial del panel.
+
+| Función | Descripción | Origen | Licencia |
+|---|---|---|---|
+| `dumbbellSvg()` | Mancuerna / pesa | Original del proyecto (SVG a mano). | Propiedad del dueño. |
+| `hurdleSvg()` | Valla de entrenamiento | Original del proyecto (SVG a mano). | Propiedad del dueño. |
+| `chinoSvg(color)` | Disco plano (Chino), **recoloreable** (6 colores) | Original del proyecto (SVG a mano). Un único SVG admite múltiples colores; no se crean imágenes rasterizadas. | Propiedad del dueño. |
+
+**Cambio de representación (B2):** la **miniatura** del panel de estos materiales ya usa el
+SVG original en lugar de un icono genérico de Material Symbols, y **no** incorpora las
+fotografías entregadas (que llevaban marca de agua/fondo). El render en el campo de
+`target`/Chino y `hurdle`/Valla todavía usa su PNG previo (`target.png`/`hurdle.png`), que
+sigue siendo de origen desconocido — queda anotado abajo.
+
 ### Imagen de marca (escudo del club)
 
 | Ruta | Descripción | Origen conocido | Licencia | Acción |

@@ -162,10 +162,18 @@ async function placeComodinAtCenter(page: Page): Promise<{ cx: number; cy: numbe
   const cy = host.y + host.height / 2;
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir un jugador de la plantilla NO cierra el panel.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  // FASE B (regla C): el panel persistente tapa el centro del host en móvil; se cierra por su
+  // botón X (.panel-close) —que no desarma la colocación— para poder tocar correctamente.
+  await page.locator('.side-panel-left .panel-close').click();
   await expect(page.locator('.side-panel-left')).toHaveCount(0);
   await page.touchscreen.tap(cx, cy);
   await expect(page.locator('.field-count')).toHaveText('1');
+  // FASE 3: la colocación es continua → se DESARMA con Seleccionar para que los gestos
+  // posteriores (mover/panear) no coloquen un segundo genérico.
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   // Se auto-abre Propiedades con el Portero; cerrarlo para dejar el campo libre.
   if (await page.locator('.studio-panel').isVisible().catch(() => false)) {
     await page.locator('.studio-panel .panel-close').click();
@@ -295,6 +303,8 @@ test.describe('pinch-to-zoom real (dos dedos) en la pizarra', () => {
     expect(v.zoom, 'zoom tras pointercancel').toBeGreaterThan(1);
 
     const v0 = await readView(page);
+    // FASE 5: para panear con un dedo sobre vacío hay que activar la herramienta "Mano".
+    await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
     await mouseDrag(page, cx - host.width * 0.32, cy + host.height * 0.1, 60, 30);
     const v1 = await readView(page);
     expect(v1.panX, 'el paneo de un dedo sigue funcionando tras el pinch cancelado').not.toBeCloseTo(v0.panX, 6);
@@ -312,11 +322,14 @@ test.describe('pinch-to-zoom real (dos dedos) en la pizarra', () => {
     expect((await readView(page)).zoom, 'zoom tras pinch').toBeGreaterThan(1.5);
     expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir el inspector').toBe(0);
 
-    // 1) PAN de un dedo (campo vacío).
+    // 1) PAN de un dedo (campo vacío): FASE 5 — panear requiere la herramienta "Mano".
+    await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
     const panBefore = await readView(page);
     await mouseDrag(page, cx - host.width * 0.32, cy + host.height * 0.1, 55, 25);
     const panAfter = await readView(page);
     expect(Math.abs(panAfter.panX - panBefore.panX), 'panX cambió tras arrastrar vacío').toBeGreaterThan(5);
+    // Volver a Seleccionar para mover el objeto.
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
 
     // 2) MOVIMIENTO de un objeto de un dedo.
     const beforeNorm = await readComodinNorm(page);

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { fillBoardTitle } from './gesture-helpers';
 
 type PlayerSeed = { id: string; number: number; position: string; name: string };
 
@@ -31,15 +32,25 @@ function count(page: Page): Promise<number> {
 }
 async function canvas(page: Page): Promise<CanvasDocument> {
   // Guardar para persistir el modelo y poder leerlo desde localStorage.
+  await fillBoardTitle(page, 'Formaciones');
   await page.locator('.chip-icon-primary').first().click().catch(() => void 0);
   await page.waitForTimeout(250);
   const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!);
   return ex[0].canvas;
 }
-async function applyForm(page: Page, side: 'own' | 'rival', f: string): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
+async function applyForm(page: Page, mirror: boolean, f: string): Promise<void> {
+  // FASE B (paneles persistentes): abrir Jugadores es IDEMPOTENTE — si ya está
+  // desplegado (porque ya no se cierra al armar un color) no se re-togglea (lo cerraría).
+  if (!(await page.locator('.side-panel-left').isVisible().catch(() => false))) {
+    await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
+  }
   await page.locator('.side-panel-left').first().waitFor();
-  if (side === 'rival') await page.locator('.seg-btn', { hasText: 'Rival' }).click();
+  // Elige el color del equipo (propio=azul, rival=rojo): el panel permanece abierto.
+  await page.locator(`.tray-player[title="Jugador ${mirror ? 'Rojo' : 'Azul'}"]`).click();
+  await page.locator('.side-panel-left').first().waitFor();
+  const mirrorBox = page.locator('.formation-mirror input');
+  if (mirror) await mirrorBox.check();
+  else await mirrorBox.uncheck();
   await page.locator(`.formation-btn`, { hasText: f }).click();
   await page.waitForTimeout(120);
   await page.locator('.side-panel-left .panel-close').first().click().catch(() => void 0);
@@ -47,29 +58,30 @@ async function applyForm(page: Page, side: 'own' | 'rival', f: string): Promise<
 }
 
 test.describe('Fase 4 — formaciones correctas e idempotentes', () => {
-  test('el portero real (aunque esté al final de la plantilla) va a la portería', async ({ page }) => {
+  test('la formación coloca 11 CÍRCULOS genéricos del color elegido, sin rol de portero', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.addInitScript(seed(ELEVEN));
     await openClosed(page);
-    await applyForm(page, 'own', '4-3-3');
+    await applyForm(page, false, '4-3-3');
     await expect.poll(() => count(page), { timeout: 5000 }).toBe(11);
     const doc = await canvas(page);
     const players = doc.frames[0].elements.filter((e) => e.t === 'player');
-    // El GK (playerId p11) debe estar en la posición de portero (la más baja, x menor).
-    const gk = players.find((e) => e.playerId === 'p11');
-    expect(gk, 'el portero está colocado').toBeTruthy();
-    const minX = Math.min(...players.map((e) => e.x ?? 1));
-    expect(gk!.x, 'el portero en la portería (x menor)').toBeCloseTo(minX, 5);
-    expect(gk!.type, 'el portero con type goalkeeper').toBe('goalkeeper');
+    // Los 11 de la formación son GENÉRICOS (sin playerId ni nombre).
+    expect(players.every((e) => !e.playerId), 'ningún genérico tiene playerId').toBe(true);
+    expect(players.every((e) => !e.label), 'ningún genérico tiene nombre').toBe(true);
+    // Ningún círculo lleva rol especial (ni "POR"): portero de la formación = círculo normal.
+    expect(players.every((e) => e.type !== 'goalkeeper'), 'sin portero especial').toBe(true);
+    // Todos del color elegido (azul #1a73e8).
+    expect(players.every((e) => e.c === '#1a73e8'), 'todos del color elegido').toBe(true);
   });
 
   test('aplicar la MISMA formación dos veces es idempotente (sigue habiendo 11, no 22)', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.addInitScript(seed(ELEVEN));
     await openClosed(page);
-    await applyForm(page, 'own', '4-3-3');
+    await applyForm(page, false, '4-3-3');
     await expect.poll(() => count(page), { timeout: 5000 }).toBe(11);
-    await applyForm(page, 'own', '4-3-3');
+    await applyForm(page, false, '4-3-3');
     await expect.poll(() => count(page), { timeout: 5000 }).toBe(11);
     const doc = await canvas(page);
     const players = doc.frames[0].elements.filter((e) => e.t === 'player');
@@ -78,11 +90,11 @@ test.describe('Fase 4 — formaciones correctas e idempotentes', () => {
     expect(ids.size, 'instancias únicas').toBe(11);
   });
 
-  test('reutiliza jugadores ya colocados (los recoloca, no duplica) y un solo Undo deshace', async ({ page }) => {
+  test('la formación es una transacción: reutiliza genéricos y conserva el de plantilla (un solo Undo)', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.addInitScript(seed(ELEVEN));
     await openClosed(page);
-    // Colocar manualmente al jugador p3 (DF).
+    // Colocar manualmente al jugador p1 (plantilla, con playerId).
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left').first().waitFor();
     await page.locator('.side-panel-left .roster-item').first().click(); // p1 (primer roster visible)
@@ -91,30 +103,35 @@ test.describe('Fase 4 — formaciones correctas e idempotentes', () => {
     await page.mouse.click(host.x + host.width / 2, host.y + host.height / 2);
     await expect(page.locator('.field-count')).toHaveText('1');
 
-    await applyForm(page, 'own', '4-3-3');
-    await expect.poll(() => count(page), { timeout: 5000 }).toBe(11);
+    await applyForm(page, false, '4-3-3');
+    // 1 real de plantilla (conservado) + 11 genéricos de la formación = 12.
+    await expect.poll(() => count(page), { timeout: 5000 }).toBe(12);
 
-    // Un solo Undo deshace la formación completa (vuelve a la colocación manual de 1);
-    // Rehacer vuelve a aplicarla (transacción atómica).
+    // Un único Undo deshace la formación completa (vuelve a la colocación manual de 1);
+    // Rehacer vuelve a aplicarla (transacción atómica). Conserva el de plantilla.
     await page.keyboard.press('Control+z');
     await expect.poll(() => count(page), { timeout: 5000 }).toBe(1);
     await page.keyboard.press('Control+y');
-    await expect.poll(() => count(page), { timeout: 5000 }).toBe(11);
+    await expect.poll(() => count(page), { timeout: 5000 }).toBe(12);
 
-    // Guardar + leer el modelo: reutiliza la instancia colocada (no duplica).
+    // Guardar + leer el modelo: el jugador de plantilla p1 sigue presente y los 11
+    // genéricos NO llevan playerId (no son duplicados de la plantilla).
     const doc = await canvas(page);
     const players = doc.frames[0].elements.filter((e) => e.t === 'player');
-    const ids = new Set(players.map((e) => e.id));
-    expect(ids.size, 'reutiliza la instancia colocada (no duplica)').toBe(11);
+    expect(players.length).toBe(12);
+    const real = players.filter((e) => e.playerId);
+    expect(real.length, 'el jugador de plantilla se conserva (1)').toBe(1);
+    const generics = players.filter((e) => !e.playerId);
+    expect(generics.length, '11 genéricos de la formación').toBe(11);
   });
 
   test('aplicar dos veces la formación RIVAL no supera 11 rivales', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.addInitScript(seed(ELEVEN));
     await openClosed(page);
-    await applyForm(page, 'rival', '4-4-2');
+    await applyForm(page, true, '4-4-2');
     await expect.poll(() => count(page), { timeout: 5000 }).toBe(11);
-    await applyForm(page, 'rival', '4-4-2');
+    await applyForm(page, true, '4-4-2');
     await expect.poll(() => count(page), { timeout: 5000 }).toBe(11);
     const doc = await canvas(page);
     const rivals = doc.frames[0].elements.filter((e) => e.t === 'player' && e.side === 'rival');

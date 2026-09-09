@@ -1,5 +1,5 @@
 import { CanvasElement, CanvasFrame } from '../../core/models';
-import { elementCenter } from '../../core/render';
+import { elementCenter, MARGIN_STRIP } from '../../core/render';
 
 /** Reexporta el centro geométrico compartido (render + transformaciones). */
 export { elementCenter };
@@ -23,8 +23,8 @@ export function removeElementFromFrames(frames: CanvasFrame[], id: string): Canv
 export function translateElement(el: CanvasElement, dx: number, dy: number): CanvasElement {
   const t = el.t;
   const out: CanvasElement = { ...el };
-  const tr = (v?: number, dv = 0) => (v === undefined ? v : Math.max(0, Math.min(1, v + dv)));
-  if (t === 'player' || t === 'ball' || t === 'cone' || t === 'mannequin' || t === 'minigoal' || t === 'pole' || t === 'marker' || t === 'hurdle' || t === 'ring' || t === 'ladder' || t === 'flag' || t === 'trampoline' || t === 'target' || t === 'net' || t === 'vball' || t === 'coachC' || t === 'peto' || t === 'chaleco' || t === 'bosu' || t === 'fitball' || t === 'pica') {
+  const tr = (v?: number, dv = 0) => (v === undefined ? v : Math.max(-MARGIN_STRIP, Math.min(1 + MARGIN_STRIP, v + dv)));
+  if (t === 'player' || t === 'ball' || t === 'cone' || t === 'mannequin' || t === 'mannequin_row' || t === 'minigoal' || t === 'goal' || t === 'pole' || t === 'marker' || t === 'hurdle' || t === 'ring' || t === 'ladder' || t === 'flag' || t === 'trampoline' || t === 'target' || t === 'net' || t === 'vball' || t === 'coachC' || t === 'peto' || t === 'chaleco' || t === 'bosu' || t === 'fitball' || t === 'pica' || t === 'dumbbell') {
     out.x = tr(out.x, dx);
     out.y = tr(out.y, dy);
   } else if (t === 'arrow' || t === 'line' || t === 'dribble' || t === 'doubleArrow' || t === 'measure') {
@@ -40,7 +40,7 @@ export function translateElement(el: CanvasElement, dx: number, dy: number): Can
     out.c1x = tr(out.c1x, dx);
     out.c1y = tr(out.c1y, dy);
   } else if (t === 'freehand') {
-    out.points = (el.points ?? []).map(([px, py]) => [Math.max(0, Math.min(1, px + dx)), Math.max(0, Math.min(1, py + dy))] as [number, number]);
+    out.points = (el.points ?? []).map(([px, py]) => [Math.max(-MARGIN_STRIP, Math.min(1 + MARGIN_STRIP, px + dx)), Math.max(-MARGIN_STRIP, Math.min(1 + MARGIN_STRIP, py + dy))] as [number, number]);
   } else if (t === 'rect' || t === 'ellipse' || t === 'zone' || t === 'text') {
     out.x = tr(out.x, dx);
     out.y = tr(out.y, dy);

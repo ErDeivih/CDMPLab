@@ -1,5 +1,5 @@
 import { CanvasElement, FieldType, F7Overlay } from './models';
-import { FIELD_RECT, fieldSvg, FIELD_LINE_WIDTH, fieldGeometry } from './field';
+import { FIELD_RECT, fieldSvg, FIELD_LINE_WIDTH, fieldGeometry, fieldObjectScale, STRIP_FRAC, STRIP_MARGIN_NORM, OFFICIAL_PITCH_COLOR, OFFICIAL_GRASS_MODE } from './field';
 import { f7Geometry } from './f7';
 import { materialBaseSize, materialHitFrac } from './tactic-assets';
 
@@ -11,7 +11,12 @@ import { materialBaseSize, materialHitFrac } from './tactic-assets';
 
 const VB_W = 100;
 const VB_H = 80;
-const PITCH_LIGHT = '#31834a';
+
+/** Margen (en coords normalizadas 0..1) permitido FUERA del rect de contenido para
+ *  colocar/arrastrar objetos en la franja exterior de césped (FASE 2). Deriva de la
+ *  fuente ÚNICA de la franja (`STRIP_FRAC` en field.ts), igual en ambos ejes y la
+ *  misma que usan el render, el clamp del board y el hit-test. */
+export const MARGIN_STRIP = STRIP_MARGIN_NORM;
 
 /** Lado de la caja cuadrada de un material en `size=1` (unidades del viewBox canónico).
  *  El `<image>` se dibuja en 5.2×5.2 y el contenido visible (bbox) ocupa una
@@ -29,11 +34,19 @@ export function materialSize(el: CanvasElement): number {
  *  (sin rotación). Usa el recuadro de contenido (bbox) escalado por `size` y lo
  *  eleva a un área táctil mínima de ~44 px CSS: los elementos largos/estrechos
  *  escalan con `size`, y nunca quedan por debajo del mínimo táctil. */
-export function materialHitHalfExtents(el: CanvasElement, r: Geometry['rect'] = BOARD_CANON_RECT): { hw: number; hh: number } {
-  const s = materialSize(el);
+export function materialHitHalfExtents(el: CanvasElement, r: Geometry['rect'] = BOARD_CANON_RECT, objectScale = 1, pxTol?: { x: number; y: number }): { hw: number; hh: number } {
+  const s = materialSize(el) * objectScale;
   const frac = materialHitFrac(el.assetKind ?? el.t);
   const boxW = MATERIAL_BOX * s * frac.w;
   const boxH = MATERIAL_BOX * s * frac.h;
+  // Hit-box = recuadro de contenido (bbox del material, con su proporción real via `frac`)
+  // + margen EN PANTALLA por zoom. D1: la base es la caja REAL del objeto (así un poste
+  // alto/estrecho conserva su caja vertical y un cono la suya), y el margen se convierte de
+  // px de pantalla a norm según el zoom (screenPxToNormTolerance). Sin `pxTol` se mantiene el
+  // mínimo táctil legado (~44 px) para compatibilidad.
+  if (pxTol) {
+    return { hw: boxW / 2 / r.w + pxTol.x, hh: boxH / 2 / r.h + pxTol.y };
+  }
   // Mínimo táctil en norm que garantiza ~44 CSS px sobre un móvil típico
   // (horiz, fit=height en 360×800 → ~10 px por unidad de viewBox).
   const minX = 4.4 / r.w; // ≈0.048 → ~44 px en X
@@ -307,16 +320,21 @@ export type FitMode = 'contain' | 'height';
  *   2) El SVG (letterboxed con preserveAspectRatio meet) mapea un punto del viewBox
  *      (vbX,vbY) a local (cx,cy) = (offX + vbX*s, offY + vbY*s).
  *      - En `contain`, s = min(hostW/vbW, hostH/vbH) y offX/offY centran.
- *      - En `height` (llenar pantalla), s = hostH / (dimensión vertical del rect de
- *        contenido: rect.h en horizontal, rect.w en vertical porque el contenido se
- *        rota). Así el CAMPO (su rect de contenido, con marcas y césped) LLENA la
- *        altura del host; offY = (hostH - vbH*s)/2 es negativo (el viewBox desborda
- *        verticalmente y sus márgenes se recortan) y offX = (hostW - vbW*s)/2 es
- *        negativo (el campo se recorta horizontalmente y puede panearse).
+ *      - En `height` (llenar pantalla), s = COVER = max(hostH/dimVert, hostW/dimHor) donde
+ *        dimVert = rect.h (horizontal) / rect.w (vertical) y dimHor = rect.w / rect.h. Es la
+ *        MISMA escala que `fillScale` del componente: el host se cubre (la dimensión que da
+ *        más tamaño), por lo que puede desbordar y panearse. En hosts verticales coincide
+ *        con contain-height; en panorámicos difiere y ANTES no cuadraba con el render.
  *  Así el round-trip norm→pantalla→norm es la identidad para cualquier zoom/pan. */
 export function screenToNorm(clientX: number, clientY: number, host: HostRect, g: Geometry, panX: number, panY: number, zoom: number, fit: FitMode = 'contain'): { x: number; y: number } {
   const fillExtent = g.vertical ? g.rect.w : g.rect.h;
-  const s = fit === 'height' ? host.height / fillExtent : Math.min(host.width / g.vbW, host.height / g.vbH);
+  // D1/fix: en `height` (llenar pantalla) la escala es COVER (igual que `fillScale` del
+  // componente): se cubre el host usando la dimensión que más tamaño da. Antes era
+  // `host.height/fillExtent` (contain-height) y NO coincidía con el render en hosts
+  // panorámicos (error de ~36 px, que la tolerancia de selección estricta destapaba).
+  const s = fit === 'height'
+    ? Math.max(host.height / fillExtent, host.width / (g.vertical ? g.rect.h : g.rect.w))
+    : Math.min(host.width / g.vbW, host.height / g.vbH);
   const offX = (host.width - g.vbW * s) / 2;
   const offY = (host.height - g.vbH * s) / 2;
   // Inverse del transform `translate(pan) scale(zoom)` con origen en el centro del host.
@@ -326,7 +344,7 @@ export function screenToNorm(clientX: number, clientY: number, host: HostRect, g
   const cy = oy + (clientY - host.top - panY - oy) / zoom;
   const vbX = (cx - offX) / s;
   const vbY = (cy - offY) / s;
-  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const clamp01 = (v: number) => Math.max(-MARGIN_STRIP, Math.min(1 + MARGIN_STRIP, v));
   const r = g.rect; // rect canónico del contenido (largo→X, ancho→Y) del tipo de campo actual
   if (g.vertical) {
     // Invertir la rotación (x,y) → (Tx - y, x): xh = vbY, yh = Tx - vbX.
@@ -424,7 +442,35 @@ function nearQuad(p: { x: number; y: number }, x1: number, y1: number, cx: numbe
   return false;
 }
 
-export function hitTestElement(p: { x: number; y: number }, elements: CanvasElement[], r: Geometry['rect'] = BOARD_CANON_RECT): string | null {
+/** Opciones para convertir una tolerancia de PANTALLA (px) a unidades NORMALIZADAS.
+ *  D1: el área de selección se define en px de pantalla y se convierte según ZOOM, en
+ *  vez de usar un 0.045 normalizado fijo que crece con la magnificación y selecciona
+ *  objetos próximos de más. `scale` es la escala de ajuste (px por unidad de viewBox).
+ */
+export interface ScreenPxTolerance {
+  zoom: number;
+  /** Escala de ajuste del SVG: viewBox → px del host (px por unidad de viewBox). */
+  scale: number;
+  rect: Geometry['rect'];
+}
+
+/** Tolerancia en NORM para `screenPx` px de pantalla, en el zoom actual. Inversa exacta
+ *  de screenToNorm: d(norm) = d(client) / (zoom * scale * r.w|r.h). */
+export function screenPxToNormTolerance(opts: ScreenPxTolerance, screenPx: number): { x: number; y: number } {
+  const denomX = opts.zoom * opts.scale * opts.rect.w;
+  const denomY = opts.zoom * opts.scale * opts.rect.h;
+  return { x: screenPx / denomX, y: screenPx / denomY };
+}
+
+export function hitTestElement(p: { x: number; y: number }, elements: CanvasElement[], r: Geometry['rect'] = BOARD_CANON_RECT, objectScale = 1, pxScreen?: { screenPx: number; zoom: number; scale: number }): string | null {
+  // D1: tolerancia en px de pantalla (ratón ~4, táctil ~8–10) convertida a norm según
+  // el zoom, en vez de un 0.045 normalizado fijo. Si no se pasa, se usa el mínimo táctil legado.
+  const pxTol = pxScreen ? screenPxToNormTolerance({ zoom: pxScreen.zoom, scale: pxScreen.scale, rect: r }, pxScreen.screenPx) : undefined;
+  // Fase 9: texto/línea/curva/mano alzada también usan tolerancia EN PANTALLA (por zoom),
+  // no un 0.03/0.09 normalizado fijo. Valor por eje (el mayor) para que el radio táctil sea
+  // constante en px de pantalla; sin pxScreen se conserva el legado.
+  const lineTol = pxTol ? Math.max(pxTol.x, pxTol.y) : 0.03;
+  const textTol = pxTol ? Math.max(pxTol.x, pxTol.y) : 0.09;
   for (let i = elements.length - 1; i >= 0; i--) {
     const el = elements[i];
     // Rotación: prueba en el espacio local del elemento (punto rotado por -rot alrededor de su centro).
@@ -435,7 +481,9 @@ export function hitTestElement(p: { x: number; y: number }, elements: CanvasElem
       el.t === 'ball' ||
       el.t === 'cone' ||
       el.t === 'mannequin' ||
+      el.t === 'mannequin_row' ||
       el.t === 'minigoal' ||
+      el.t === 'goal' ||
       el.t === 'pole' ||
       el.t === 'marker' ||
       el.t === 'hurdle' ||
@@ -446,29 +494,30 @@ export function hitTestElement(p: { x: number; y: number }, elements: CanvasElem
       el.t === 'target' ||
       el.t === 'net' ||
       el.t === 'vball' ||
+      el.t === 'dumbbell' ||
       el.t === 'coachC' || el.t === 'peto' || el.t === 'chaleco' || el.t === 'bosu' || el.t === 'fitball' || el.t === 'pica'
     ) {
       // Hit-box del material/objeto puntual: caja del contenido visible (bbox),
       // escalada por `size` y con un área táctil mínima. El punto ya está en el
       // espacio LOCAL del elemento (rotado por -rot), así que la caja es
       // axis-aligned: respeta `size` y `rot` y cubre las partes transparentes.
-      const { hw, hh } = materialHitHalfExtents(el, r);
+      const { hw, hh } = materialHitHalfExtents(el, r, objectScale, pxTol);
       if (Math.abs(lp.x - (el.x ?? 0)) <= hw && Math.abs(lp.y - (el.y ?? 0)) <= hh) return el.id;
     } else if (el.t === 'text') {
-      if (Math.hypot(lp.x - (el.x ?? 0), lp.y - (el.y ?? 0)) < 0.09) return el.id;
+      if (Math.hypot(lp.x - (el.x ?? 0), lp.y - (el.y ?? 0)) < textTol) return el.id;
       if (el.w && el.h && lp.x >= (el.x ?? 0) && lp.x <= (el.x ?? 0) + el.w && lp.y >= (el.y ?? 0) && lp.y <= (el.y ?? 0) + el.h) return el.id;
     } else if (el.t === 'arrow' || el.t === 'line' || el.t === 'dribble' || el.t === 'doubleArrow' || el.t === 'measure') {
-      if (distToSegment(lp.x, lp.y, el.x1 ?? 0, el.y1 ?? 0, el.x2 ?? 0, el.y2 ?? 0) < 0.03) return el.id;
+      if (distToSegment(lp.x, lp.y, el.x1 ?? 0, el.y1 ?? 0, el.x2 ?? 0, el.y2 ?? 0) < lineTol) return el.id;
     } else if (el.t === 'curve') {
       const cx = el.c1x ?? ((el.x1 ?? 0) + (el.x2 ?? 0)) / 2;
       const cy = el.c1y ?? ((el.y1 ?? 0) + (el.y2 ?? 0)) / 2;
-      if (nearQuad(lp, el.x1 ?? 0, el.y1 ?? 0, cx, cy, el.x2 ?? 0, el.y2 ?? 0, 0.03)) return el.id;
+      if (nearQuad(lp, el.x1 ?? 0, el.y1 ?? 0, cx, cy, el.x2 ?? 0, el.y2 ?? 0, lineTol)) return el.id;
     } else if (el.t === 'freehand') {
       const pts = el.points ?? [];
       for (let i = 1; i < pts.length; i++) {
-        if (distToSegment(lp.x, lp.y, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]) < 0.03) return el.id;
+        if (distToSegment(lp.x, lp.y, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]) < lineTol) return el.id;
       }
-      if (pts.length === 1 && Math.hypot(lp.x - pts[0][0], lp.y - pts[0][1]) < 0.05) return el.id;
+      if (pts.length === 1 && Math.hypot(lp.x - pts[0][0], lp.y - pts[0][1]) < lineTol) return el.id;
     } else if (el.t === 'ellipse') {
       const ex = (el.x ?? 0) + (el.w ?? 0) / 2;
       const ey = (el.y ?? 0) + (el.h ?? 0) / 2;
@@ -540,13 +589,15 @@ function rotWrap(inner: string, rot: number | undefined, cx: number, cy: number)
   return rot ? `<g transform="rotate(${rot} ${cx} ${cy})">${inner}</g>` : inner;
 }
 
-function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVertical = false): string {
+function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVertical = false, objectScale = 1): string {
   const gx = (nx: number) => px(nx, r);
   const gy = (ny: number) => py(ny, r);
   // Material en PNG: se renderiza como imagen. El `size` escala la caja (5.2×size)
   // y, en documentos sin `size`, se usa el tamaño base normalizado del tipo.
   if (el.asset) {
-    const s = materialSize(el);
+    // FASE 6: escala visual por campo (tamaño aparente constante). Se aplica SOLO en el
+    // render; el `size` del documento no se re-escribe. `objectScale` es 1 en campo completo.
+    const s = materialSize(el) * objectScale;
     const x = gx(el.x ?? 0);
     const y = gy(el.y ?? 0);
     const w = MATERIAL_BOX * s;
@@ -562,7 +613,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const c = el.c ?? '#1a73e8';
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el);
+      const s = materialSize(el) * objectScale;
       const ring = selected ? ' stroke="#fff" stroke-width="0.5" stroke-dasharray="0.8,0.6"' : ' stroke="#ffffff" stroke-width="0.6"';
       // Fase 8: el nombre y el número se CONTRARROTAN para permanecer derechos y
       // legibles aunque el jugador esté girado (±90°). El círculo (invariante bajo
@@ -590,69 +641,106 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
     case 'ball': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el);
+      const s = materialSize(el) * objectScale;
       const g = `<g transform="translate(${x} ${y}) scale(${s})"><circle r="1.3" fill="#ffffff" stroke="#111111" stroke-width="0.4"/><circle cx="-0.4" cy="0.4" r="0.35" fill="#111111"/></g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'cone': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el);
+      const s = materialSize(el) * objectScale;
       const g = `<g transform="translate(${x} ${y}) scale(${s})"><path d="M-1.4 1.7 L0 -1.7 L1.4 1.7 Z" fill="${el.c ?? '#f9ab00'}" stroke="#00000033" stroke-width="0.2"/></g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'coachC': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el);
+      const s = materialSize(el) * objectScale;
       const g = `<g transform="translate(${x} ${y}) scale(${s})"><circle r="1.7" fill="${el.c ?? '#e6b800'}" stroke="#20242a" stroke-width="0.25"/><text text-anchor="middle" dominant-baseline="central" font-size="1.8" font-weight="800" fill="#111111">C</text></g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'peto': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el);
+      const s = materialSize(el) * objectScale;
       const g = `<g transform="translate(${x} ${y}) scale(${s})"><path d="M-2 1.6 L-2.4 -1.4 L-1.2 -2.2 L-0.4 -1.2 L0.4 -1.2 L1.2 -2.2 L2.4 -1.4 L2 1.6 Z" fill="${el.c ?? '#f6c945'}" stroke="#20242a" stroke-width="0.2"/></g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'chaleco': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el);
+      const s = materialSize(el) * objectScale;
       const g = `<g transform="translate(${x} ${y}) scale(${s})"><path d="M-1.6 2 L-1.2 -1.8 L-0.2 -1.2 L0.2 -1.2 L1.2 -1.8 L1.6 2 Z" fill="${el.c ?? '#e74c3c'}" stroke="#20242a" stroke-width="0.2"/><rect x="-0.7" y="-0.4" width="1.4" height="1" fill="#ffffff" opacity="0.3"/></g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'bosu': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el);
+      const s = materialSize(el) * objectScale;
       const g = `<g transform="translate(${x} ${y}) scale(${s})"><path d="M-1.6 0 A1.6 1.6 0 0 1 1.6 0 Z" fill="${el.c ?? '#3056d3'}" stroke="#20242a" stroke-width="0.2"/><ellipse cx="0" cy="0" rx="1.6" ry="0.5" fill="#10151a" opacity="0.55"/></g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'fitball': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el);
+      const s = materialSize(el) * objectScale;
       const g = `<g transform="translate(${x} ${y}) scale(${s})"><circle r="1.8" fill="${el.c ?? '#e67e22'}" stroke="#20242a" stroke-width="0.2"/><path d="M-1.27 -1.27 A1.8 1.8 0 0 1 1.27 -1.27" fill="none" stroke="#ffffff" stroke-width="0.4" opacity="0.5"/></g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'pica': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el);
+      const s = materialSize(el) * objectScale;
       const g = `<g transform="translate(${x} ${y}) scale(${s})"><rect x="-0.25" y="-2.4" width="0.5" height="4.8" rx="0.25" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2"/></g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'marker': {
+      // BOSU: cúpula (hemisferio) reconocible sobre una base, RECOLOREABLE (usa `el.c`).
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})"><rect x="-0.8" y="-0.8" width="1.6" height="1.6" rx="0.2" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2"/></g>`;
+      const s = materialSize(el) * objectScale;
+      const c = el.c ?? '#3056d3';
+      const g = `<g transform="translate(${x} ${y}) scale(${s})" stroke="#20242a" stroke-width="0.2">` +
+        `<path d="M-1.6 0 A1.6 1.6 0 0 1 1.6 0 Z" fill="${c}"/>` +
+        `<ellipse cx="0" cy="0" rx="1.6" ry="0.5" fill="#10151a" opacity="0.55"/>` +
+        `</g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'target': {
+      // Chino: disco/conito plano pequeño, RECOLOREABLE (usa `el.c`). Vectorial (sin PNG).
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el) * objectScale;
+      const c = el.c ?? '#2c7be5';
+      const g = `<g transform="translate(${x} ${y}) scale(${s})" fill="${c}" stroke="#20242a" stroke-width="0.18">` +
+        `<ellipse cx="0" cy="0.45" rx="2.2" ry="0.9"/>` +
+        `<ellipse cx="0" cy="-0.45" rx="2.2" ry="0.9"/>` +
+        `<rect x="-2.2" y="-0.45" width="4.4" height="0.9"/>` +
+        `</g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'dumbbell': {
+      // B2: Mancuerna / pesa — SVG vectorial ORIGINAL, transparente.
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el) * objectScale;
+      const c = el.c ?? '#20242a';
+      const g = `<g transform="translate(${x} ${y}) scale(${s})" fill="${c}">` +
+        `<rect x="-2.6" y="-0.5" width="3" height="1" rx="0.5"/>` +
+        `<rect x="-0.4" y="-0.2" width="0.8" height="0.4" rx="0.2" transform="rotate(-45)"/>` +
+        `<rect x="5.2" y="-0.5" width="3" height="1" rx="0.5"/>` +
+        `<rect x="1.4" y="-0.2" width="0.8" height="0.4" rx="0.2" transform="rotate(-45)"/>` +
+        `<rect x="-4" y="-0.9" width="1" height="1.8" rx="0.4"/>` +
+        `<rect x="-4" y="3.1" width="1" height="1.8" rx="0.4" transform="rotate(90) translate(-4 4)"/>` +
+        `<rect x="10" y="-0.9" width="1" height="1.8" rx="0.4"/>` +
+        `<rect x="10" y="3.1" width="1" height="1.8" rx="0.4" transform="rotate(90) translate(-10 4)"/>` +
+        `</g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'hurdle': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2">` +
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2">` +
         `<rect x="-2.4" y="-1.9" width="4.8" height="0.55"/>` +
         `<rect x="-2.2" y="-1.4" width="0.5" height="2.6"/>` +
         `<rect x="1.7" y="-1.4" width="0.5" height="2.6"/>` +
@@ -662,7 +750,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
     case 'ring': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})" fill="none" stroke="${el.c ?? '#ffffff'}" stroke-width="0.5">` +
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})" fill="none" stroke="${el.c ?? '#ffffff'}" stroke-width="0.5">` +
         `<ellipse cx="0" cy="0" rx="1.8" ry="0.9"/>` +
         `<ellipse cx="0" cy="0.6" rx="1.1" ry="0.45"/>` +
         `</g>`;
@@ -673,7 +761,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const y = gy(el.y ?? 0);
       let rungs = '';
       for (let i = -2; i <= 2; i++) rungs += `<rect x="-2" y="${i * 1.1}" width="4" height="0.35"/>`;
-      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.15">` +
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.15">` +
         `<rect x="-2.1" y="-3" width="0.5" height="6"/>` +
         `<rect x="1.6" y="-3" width="0.5" height="6"/>` +
         rungs +
@@ -683,24 +771,50 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
     case 'pole': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})"><rect x="-0.3" y="-3" width="0.6" height="5.4" rx="0.3" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2"/><ellipse cx="0" cy="2.7" rx="0.5" ry="0.22" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2"/></g>`;
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})"><rect x="-0.3" y="-3" width="0.6" height="5.4" rx="0.3" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2"/><ellipse cx="0" cy="2.7" rx="0.5" ry="0.22" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2"/></g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'mannequin': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
       const body = el.c ?? '#e8edf2';
-      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el)})"><circle cx="0" cy="-2" r="1.1" fill="${body}" stroke="#20242a" stroke-width="0.2"/><rect x="-1.1" y="-0.8" width="2.2" height="3.4" rx="0.9" fill="${body}" stroke="#20242a" stroke-width="0.2"/></g>`;
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})"><circle cx="0" cy="-2" r="1.1" fill="${body}" stroke="#20242a" stroke-width="0.2"/><rect x="-1.1" y="-0.8" width="2.2" height="3.4" rx="0.9" fill="${body}" stroke="#20242a" stroke-width="0.2"/></g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'mannequin_row': {
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const body = el.c ?? '#e8edf2';
+      let m = '';
+      for (let i = -1; i <= 1; i++) {
+        m +=
+          `<circle cx="${i * 2.4}" cy="-1.8" r="0.95" fill="${body}" stroke="#20242a" stroke-width="0.18"/>` +
+          `<rect x="${i * 2.4 - 0.95}" y="-0.7" width="1.9" height="3" rx="0.8" fill="${body}" stroke="#20242a" stroke-width="0.18"/>`;
+      }
+      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})">${m}</g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'minigoal': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
       const g =
-        `<g transform="translate(${x} ${y}) scale(${materialSize(el)})">` +
+        `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})">` +
         `<rect x="-2.6" y="-1.5" width="5.2" height="3" fill="none" stroke="#ffffff" stroke-width="0.5"/>` +
         `<path d="M-2.6 -1.5 L2.6 1.5 M-2.6 1.5 L2.6 -1.5" stroke="#ffffff66" stroke-width="0.2"/>` +
         `<path d="M-2.6 -0.5 L2.6 -0.5 M-2.6 0.5 L2.6 0.5 M-1.3 -1.5 L-1.3 1.5 M0 -1.5 L0 1.5 M1.3 -1.5 L1.3 1.5" stroke="#ffffff55" stroke-width="0.2"/>` +
+        `</g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'goal': {
+      // Portería grande: marco blanco ancho con red (una portería reglamentaria).
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const g =
+        `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})">` +
+        `<rect x="-3.2" y="-2" width="6.4" height="4" fill="none" stroke="#ffffff" stroke-width="0.6"/>` +
+        `<rect x="2.8" y="-2" width="0.6" height="4" fill="#ffffff" stroke="#20242a" stroke-width="0.2"/>` +
+        `<rect x="-3.4" y="-2" width="0.6" height="4" fill="#ffffff" stroke="#20242a" stroke-width="0.2"/>` +
+        `<path d="M-3.2 -2 L3.2 2 M-3.2 2 L3.2 -2 M-3.2 -1.2 L3.2 -0.4 M-3.2 0 L3.2 0.8 M-3.2 1.2 L3.2 2" stroke="#ffffff77" stroke-width="0.2"/>` +
         `</g>`;
       return rotWrap(g, el.rot, x, y);
     }
@@ -906,9 +1020,11 @@ export function svgZigzag(x1: number, y1: number, x2: number, y2: number, color:
   const len = Math.hypot(dx, dy) || 1;
   const pxp = -dy / len;
   const pyp = dx / len;
-  const amp = Math.min(3, len * 0.08);
-  // Nº de picos adaptado a la longitud: trazos cortos reducen picos y amplitud.
-  const n = Math.max(2, Math.min(8, Math.round(len / 6)));
+  // Fase 6: zigzag COMPACTO — ~el doble de frecuencia (dientes ~la mitad) y amplitud
+  // reducida a la mitad de antes, para que resulte legible y no exagerado. Sigue
+  // escalando con la longitud (trazos cortos reducen picos y amplitud).
+  const amp = Math.min(1.5, len * 0.04);
+  const n = Math.max(2, Math.min(16, Math.round(len / 3)));
   const dash = lineStyle === 'dashed' ? ' stroke-dasharray="2,1.3"' : lineStyle === 'dotted' ? ' stroke-dasharray="0.6,1.4"' : '';
   // Picos intermedios (i = 1..n-1); el path termina EXACTAMENTE en (ax2,ay2).
   let d = `M ${ax1} ${ay1}`;
@@ -995,7 +1111,10 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
   const geo = fieldGeometry(field, orientation);
   const vbW = geo.vbW;
   const vbH = geo.vbH;
-  const bg = opts.backgroundColor ?? PITCH_LIGHT;
+  // A7: césped OFICIAL único. Se ignora el backgroundColor del documento: los
+  // documentos antiguos con otro color se ven con el césped oficial (no se rompe el
+  // dato, no se sobrescribe al abrir). La textura es siempre franjas.
+  const bg = OFFICIAL_PITCH_COLOR;
   // Fase 11: las marcas reglamentarias del campo son SIEMPRE blancas. Se ignora el
   // lineColor del documento (un antiguo con lineColor negro se ve en blanco, sin
   // romper el dato). El F7 transversal conserva su color de contraste (f7Svg).
@@ -1005,6 +1124,9 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
   // TODO el contenido. El rect canónico depende del TIPO de campo: así el medio
   // campo (52,5×68) no se estira a la caja 105×68 del campo completo.
   const contentRect = geo.rect; // rect canónico (largo→X, ancho→Y) del tipo + orientación
+  // FASE 6: escala visual por campo para mantener el tamaño aparente de materiales y
+  // jugadores (1 en campo completo; <1 en medio campo/F7). Solo afecta al render.
+  const objectScale = fieldObjectScale(field, orientation);
   // El césped cubre EXACTAMENTE el rect de contenido (el "área usable" real), para que
   // medir `.entrenolab-grass` en los e2e dé el rectángulo del campo con SUS proporciones.
   const contentW = contentRect.w;
@@ -1015,13 +1137,21 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
   const Tx = vbW / 2 + (contentRect.y + contentRect.h / 2);
   const wrap = isVertical ? `<g transform="translate(${Tx} 0) rotate(90)">` : '<g>';
 
-  // Fase 9: un único césped, el de FRANJAS. Se ignora la textura del documento; los
-  // antiguos con 'plain'/'checker' se ven con franjas (no se rompe el dato).
-  const bgStr = `<g transform="translate(${contentRect.x} ${contentRect.y})">${grassBg(bg, contentW, contentH, 'stripes')}</g>`;
+  // A7: un único césped, el de FRANJAS oficial. Se ignora la textura del documento.
+  const bgStr = `<g transform="translate(${contentRect.x} ${contentRect.y})">${grassBg(bg, contentW, contentH, OFFICIAL_GRASS_MODE)}</g>`;
+  // A6/A7: franja exterior de césped LISO alrededor del campo. El grosor usa la fuente
+  // ÚNICA `STRIP_FRAC` (mismo límite por eje que coord. permitidas y hit-test). Esta
+  // franja se renderiza ANTES del césped (ver orden en el return), así que NO tapa el
+  // césped de franjas interior: solo queda el borde liso alrededor.
+  const stripPx = (STRIP_FRAC * Math.min(contentW, contentH)).toFixed(2);
+  const stripStr =
+    `<g class="entrenolab-strip" transform="translate(${contentRect.x} ${contentRect.y})">` +
+    `<rect x="${-stripPx}" y="${-stripPx}" width="${(contentW + 2 * parseFloat(stripPx)).toFixed(2)}" height="${(contentH + 2 * parseFloat(stripPx)).toFixed(2)}" fill="${bg}" stroke="none"/>` +
+    `</g>`;
   const fieldStr = fieldSvg(field, contentRect, 'horizontal').replace(/stroke="#ffffff"/g, `stroke="${lc}"`);
   const els = elements
     .map((el) => {
-      const s = elStr(el, el.id === opts.selectedId, contentRect, isVertical);
+      const s = elStr(el, el.id === opts.selectedId, contentRect, isVertical, objectScale);
       const inner = el.opacity != null && el.opacity < 1 ? `<g opacity="${el.opacity}">${s}</g>` : s;
       // Identificadores ESTABLES para las pruebas de cobertura E2E (no cambian la
       // representación): tipo de elemento (modelo real `el.t`), y para jugadores
@@ -1042,6 +1172,11 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
   return (
     `<svg class="entrenolab-board" viewBox="0 0 ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg">` +
     wrap +
+    // FASE 2/A6: franja exterior de césped LISO alrededor del campo (~5 % del lado
+    // corto). Se dibuja ANTES del césped (detrás), de modo que el césped de franjas
+    // cubra el interior y la franja quede solo alrededor, lisa y sin rayas. Su rect es
+    // más grande que el de contenido (sobresale por los cuatro lados).
+    (opts.transparent ? '' : stripStr) +
     // El césped se agrupa con una clase estable para poder MEDIR en los e2e el
     // rectángulo real del campo renderizado (el "área usable") frente al host.
     (opts.transparent ? '' : `<g class="entrenolab-grass">${bgStr}</g>`) +
@@ -1060,7 +1195,7 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
 function selectionStr(elements: CanvasElement[], id: string, r: Geometry['rect']): string {
   const el = elements.find((e) => e.id === id);
   if (!el) return '';
-  if (el.t === 'player' || el.t === 'ball' || el.t === 'cone' || el.t === 'marker' || el.t === 'hurdle' || el.t === 'ring' || el.t === 'ladder' || el.t === 'mannequin' || el.t === 'minigoal' || el.t === 'pole' || el.t === 'flag' || el.t === 'trampoline' || el.t === 'target' || el.t === 'net' || el.t === 'vball' || el.t === 'coachC' || el.t === 'peto' || el.t === 'chaleco' || el.t === 'bosu' || el.t === 'fitball' || el.t === 'pica') {
+  if (el.t === 'player' || el.t === 'ball' || el.t === 'cone' || el.t === 'marker' || el.t === 'hurdle' || el.t === 'ring' || el.t === 'ladder' || el.t === 'mannequin' || el.t === 'mannequin_row' || el.t === 'minigoal' || el.t === 'goal' || el.t === 'pole' || el.t === 'flag' || el.t === 'trampoline' || el.t === 'target' || el.t === 'net' || el.t === 'vball' || el.t === 'coachC' || el.t === 'peto' || el.t === 'chaleco' || el.t === 'bosu' || el.t === 'fitball' || el.t === 'pica') {
     const x = px(el.x ?? 0, r);
     const y = py(el.y ?? 0, r);
     return `<circle cx="${x}" cy="${y}" r="3.4" fill="none" stroke="#2563eb" stroke-width="${SEL_STROKE_POINT}" stroke-dasharray="1,0.7"/>`;

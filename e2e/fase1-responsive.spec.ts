@@ -51,9 +51,14 @@ function ratio(b: Box, s: Box, axis: 'w' | 'h'): number {
 async function placeGenericPlayer(page: Page): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
-  // Tocar un genérico ARMA la colocación (cierra el panel); el clic en el campo lo coloca.
-  await expect(page.locator('.side-panel-left')).toHaveCount(0);
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): tocar un genérico ARMA la colocación pero NO
+  // cierra el panel — el panel Jugadores permanece abierto. El clic en el campo coloca.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  // En móvil vertical el centro del campo queda bajo el panel y las capturas posteriores
+  // ("todo cerrado") necesitan el panel fuera de juego: se cierra con su X (el cierre NO
+  // desarma la colocación) antes de pinchar el campo.
+  await page.locator('.side-panel-left .panel-close').first().click();
   const box = (await page.locator('.board-host').boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
   await expect(page.locator('.field-count')).toHaveText('1');

@@ -57,8 +57,12 @@ test.describe('Fase 6 — aviso de orientación móvil', () => {
     await expect(page.locator('.orient-hint')).toBeVisible();
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left').first().waitFor();
-    await page.locator('.tray-player[title="Portero"]').click();
+    await page.locator('.tray-player[title="Jugador Azul"]').click();
     await page.waitForTimeout(120);
+    // FASE B (regla C): en móvil vertical (390x844) el panel persistente tapa el centro
+    // del campo; lo cerramos con su botón X (.panel-close) para poder tocar el punto de
+    // colocación. Cerrar el panel NO desarma la colocación ya armada.
+    await page.locator('.side-panel-left .panel-close').click();
     const host = (await page.locator('.board-host').boundingBox())!;
     await page.touchscreen.tap(host.x + host.width / 2, host.y + host.height / 2);
     await expect(page.locator('.field-count')).toHaveText('1');

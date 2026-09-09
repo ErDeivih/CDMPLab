@@ -191,11 +191,14 @@ test.describe('Fase 2 — el campo es el protagonista en móvil (modo "Llenar pa
     // Punto de pantalla correspondiente al norm P en el modo actual (llenar pantalla).
     const S = normToScreen(P.x, P.y, host, 'height');
 
-    // Colocar un Portero (arma la colocación y cierra el panel).
+    // Colocar un Portero (arma la colocación; en FASE B el panel queda abierto).
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
-    await page.locator('.tray-player[title="Portero"]').click();
-    await expect(page.locator('.side-panel-left')).toHaveCount(0);
+    await page.locator('.tray-player[title="Jugador Azul"]').click();
+    await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+    // El punto P=(0.4,0.6) queda bajo el panel en móvil vertical; se cierra el panel
+    // con su X (el cierre NO desarma la colocación) antes del toque táctil real.
+    await page.locator('.side-panel-left .panel-close').first().click();
     // Toque táctil real.
     await page.touchscreen.tap(S.x, S.y);
     await expect(page.locator('.field-count')).toHaveText('1');
@@ -233,12 +236,19 @@ test.describe('Fase 2 — capturas móviles (Llenar pantalla por defecto)', () =
       // Un Portero visible para que la pizarra no esté vacía (no abre inspector).
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
-      await page.locator('.tray-player[title="Portero"]').click();
-      await expect(page.locator('.side-panel-left')).toHaveCount(0);
+      await page.locator('.tray-player[title="Jugador Azul"]').click();
+      await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+      // En móvil vertical el centro del campo queda bajo el panel y los pasos siguientes
+      // (captura "cerrado", toggle y paneo) necesitan el campo despejado: se cierra el
+      // panel con su X (no desarma la colocación) antes del toque táctil.
+      await page.locator('.side-panel-left .panel-close').first().click();
       const host = await hostBox(page);
       const c = normToScreen(0.5, 0.5, host, 'height');
       await page.touchscreen.tap(c.x, c.y);
       await expect(page.locator('.field-count')).toHaveText('1');
+      // Fase 3: la colocación es continua → queda ARMADO y muestra la pista (que taparía el
+      // toggle). Se DESARMA con Seleccionar para dejar el campo "cerrado" y poder usar el toggle.
+      await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
       await page.waitForTimeout(120);
       await page.screenshot({ path: `${SHOTS}/${w}x${h}-llenar-pantalla.png` });
 

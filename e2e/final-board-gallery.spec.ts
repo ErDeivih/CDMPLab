@@ -17,7 +17,7 @@ import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
 import type { CanvasDocument, CanvasElement } from '../src/app/core/models';
 import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO } from '../src/app/core/tactic-assets';
-import { longPress } from './gesture-helpers';
+import { longPress, fillBoardTitle } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/final-board-gallery';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -182,11 +182,61 @@ async function openProps(page: Page): Promise<void> {
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
-  if (category) await page.locator('.tools-cat', { hasText: category }).click();
+  if (category) await openCat(page, category);
+  if (title === 'Jugador propio' || title === 'Jugador rival') {
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+    return;
+  }
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
 
+/** FASE B (paneles persistentes): abre la categoría sin re-togglear una que ya está
+ *  desplegada (re-clickar la misma la cerraría). Distingue Jugadores de Material/Dibujo
+ *  por el aria-label del panel para no confundir categorías. */
+async function openCat(page: Page, category: string): Promise<void> {
+  const probe: Record<string, string> = {
+    Jugadores: '.side-panel-left[aria-label="Jugadores"]',
+    Material: '.side-panel-left[aria-label="Herramientas de Material"]',
+    Dibujo: '.side-panel-left[aria-label="Herramientas de Dibujo"]',
+  };
+  if (await page.locator(probe[category]).isVisible().catch(() => false)) return;
+  await page.locator('.tools-cat', { hasText: category }).click();
+  await expect(page.locator(probe[category])).toBeVisible();
+}
+
+/** FASE B (regla C): en móvil vertical el panel persistente (300px, left:0) tapa el
+ *  centro del campo. Lo cerramos con su X (.panel-close) ANTES de tocar/arrastrar el
+ *  campo para que el punto de colocación quede accesible. Cerrar el panel NO desarma una
+ *  colocación ya armada. En escritorio el panel no tapa el campo, así que no se toca. */
+async function closePanelIfBlocking(page: Page): Promise<void> {
+  const vp = await page.viewportSize();
+  if (!vp || vp.width >= 700) return;
+  const close = page.locator('.side-panel-left .panel-close');
+  if (await close.isVisible().catch(() => false)) await close.click();
+}
+
 async function save(page: Page): Promise<void> {
+  // A5: el guardado se BLOQUEA si el título está vacío. Solo se fija un título
+  // cuando el modelado realmente lo necesita (campo vacío o ejercicio nuevo sin
+  // metaTitle persistido); si ya hay un título — por la UI o del ejercicio que se
+  // acaba de reabrir — no se sobrescribe ni se abre el panel en balde.
+  const hasTitle = await page.evaluate(() => {
+    const raw = localStorage.getItem('entrenolab:exercises');
+    let persisted = '';
+    if (raw) {
+      try {
+        const list = JSON.parse(raw) as Array<{ metaTitle?: string }>;
+        persisted = (list?.[0]?.metaTitle ?? '').trim();
+      } catch {
+        persisted = '';
+      }
+    }
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Título del ejercicio"]');
+    const inputTitle = (input && input.value ? input.value : '').trim();
+    return persisted !== '' || inputTitle !== '';
+  }).catch(() => false);
+  if (!hasTitle) await fillBoardTitle(page, 'Galería');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
 }
@@ -225,30 +275,39 @@ async function hostBox(page: Page): Promise<Box> {
 }
 
 async function placePlayer(page: Page, box: Box, title: string, nx: number, ny: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-  await page.locator(`.rail-btn[title="${title}"]`).click();
+  await openCat(page, 'Jugadores');
+  if (title === 'Jugador propio' || title === 'Jugador rival') {
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+  } else {
+    await page.locator(`.rail-btn[title="${title}"]`).click();
+  }
   box = await hostBox(page);
+  await closePanelIfBlocking(page);
   const [x, y] = normToScreen(nx, ny, box);
   await page.mouse.click(x, y, { button: 'right' });
 }
 
 async function placeTrayPlayer(page: Page, box: Box, title: string, nx: number, ny: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
+  await openCat(page, 'Jugadores');
   await page.locator(`.tray-player[title="${title}"]`).click();
   box = await hostBox(page);
+  await closePanelIfBlocking(page);
   const [x, y] = normToScreen(nx, ny, box);
   await page.mouse.click(x, y);
 }
 
 /** Coloca un material (con variante opcional elegida antes de armar). */
 async function placeMaterial(page: Page, box: Box, tool: string, nx: number, ny: number, variantIndex?: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Material' }).click();
+  await openCat(page, 'Material');
   if (variantIndex != null) {
     const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${tool}"]`) });
-    await card.locator('.variant-swatch').nth(variantIndex).click();
+    const variantCount = await card.locator('.variant-swatch').count();
+    if (variantCount > 0) await card.locator('.variant-swatch').nth(variantIndex).click();
   }
   await page.locator(`.rail-btn[title="${tool}"]`).click();
   box = await hostBox(page);
+  await closePanelIfBlocking(page);
   const [x, y] = normToScreen(nx, ny, box);
   await page.mouse.click(x, y);
   // Un material se auto-selecciona al colocarlo y abre el panel Propiedades,
@@ -269,10 +328,11 @@ async function dragDraw(page: Page, box: Box, from: [number, number], to: [numbe
 
 /** Dibuja una forma configurada con color y relleno desde el rail de herramientas. */
 async function drawShape(page: Page, box: Box, tool: string, from: [number, number], to: [number, number], colorIndex?: number, fill?: boolean): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
+  await openCat(page, 'Dibujo');
   await page.locator(`.rail-btn[title="${tool}"]`).click();
   if (colorIndex != null) await page.locator('.tools-caption .swatch').nth(colorIndex).click();
   if (fill != null) await page.locator('.tools-caption .chip', { hasText: fill ? 'Relleno' : 'Perímetro' }).click();
+  await closePanelIfBlocking(page);
   await dragDraw(page, box, from, to);
 }
 
@@ -280,6 +340,7 @@ async function drawShape(page: Page, box: Box, tool: string, from: [number, numb
 async function placeText(page: Page, box: Box, nx: number, ny: number, value: string): Promise<void> {
   await useTool(page, 'Texto', 'Dibujo');
   box = await hostBox(page);
+  await closePanelIfBlocking(page);
   const [x, y] = normToScreen(nx, ny, box);
   await page.mouse.click(x, y);
   const ta = page.locator('.studio-panel .inspector textarea');
@@ -433,8 +494,8 @@ test.describe('Galería final — escenas a través de la UI real', () => {
 
     await placePlayer(page, box, 'Jugador propio', 0.14, 0.16);
     await placePlayer(page, box, 'Jugador rival', 0.31, 0.16);
-    await placeTrayPlayer(page, box, 'Portero', 0.48, 0.16);
-    await placeTrayPlayer(page, box, 'Portero', 0.65, 0.16);
+    await placeTrayPlayer(page, box, 'Jugador Azul', 0.48, 0.16);
+    await placeTrayPlayer(page, box, 'Jugador Azul', 0.65, 0.16);
     await placeMaterial(page, box, 'Balón', 0.82, 0.16);
     // Conos de varios colores (variantes).
     await placeMaterial(page, box, 'Cono', 0.11, 0.45, 0); // rojo
@@ -443,9 +504,9 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     await placeMaterial(page, box, 'Cono', 0.47, 0.45, 3); // naranja
     await placeMaterial(page, box, 'Cono', 0.59, 0.45, 4); // blanco
     await placeMaterial(page, box, 'Cono', 0.71, 0.45, 5); // azul2
-    await placeMaterial(page, box, 'Marcador', 0.85, 0.45);
+    await placeMaterial(page, box, 'BOSU', 0.85, 0.45);
     await placeMaterial(page, box, 'Banderín', 0.11, 0.68);
-    await placeMaterial(page, box, 'Diana', 0.29, 0.7);
+    await placeMaterial(page, box, 'Chino', 0.29, 0.7);
     await placeMaterial(page, box, 'Pica coloreable', 0.85, 0.7);
 
     await expect(page.locator('.field-count')).toHaveText('15');
@@ -467,12 +528,11 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     const box = (await page.locator('.board-host').boundingBox())!;
     const baseline = await captureBaseline(page);
 
-    // Fila superior: maniquí y fila, miniportería, pértiga, red.
-    await placeMaterial(page, box, 'Maniquí', 0.12, 0.18, 0);
-    await placeMaterial(page, box, 'Maniquí', 0.28, 0.18, 1);
-    await placeMaterial(page, box, 'Mini portería', 0.45, 0.18);
+    // Fila superior: maniquí y fila, miniportería, pértiga.
+    await placeMaterial(page, box, 'Maniquí individual', 0.12, 0.18, 0);
+    await placeMaterial(page, box, 'Maniquí individual', 0.28, 0.18, 1);
+    await placeMaterial(page, box, 'Miniportería', 0.45, 0.18);
     await placeMaterial(page, box, 'Pértiga / poste', 0.62, 0.18);
-    await placeMaterial(page, box, 'Red', 0.79, 0.18);
     // Fila central: valla, aros, escaleras, minitrampolín.
     await placeMaterial(page, box, 'Valla', 0.1, 0.45);
     await placeMaterial(page, box, 'Aro', 0.24, 0.45, 0);
@@ -480,20 +540,18 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     await placeMaterial(page, box, 'Escalera', 0.53, 0.45, 0);
     await placeMaterial(page, box, 'Escalera', 0.67, 0.45, 1);
     await placeMaterial(page, box, 'Minitrampolín', 0.82, 0.45);
-    // Fila inferior: peto, chaleco, BOSU, fitball, balón morado, marcador C.
+    // Fila inferior: peto, chaleco, BOSU, fitball.
     await placeMaterial(page, box, 'Peto', 0.12, 0.72);
     await placeMaterial(page, box, 'Chaleco lastrado', 0.26, 0.72);
     await placeMaterial(page, box, 'BOSU', 0.4, 0.72);
     await placeMaterial(page, box, 'Fitball', 0.54, 0.72);
-    await placeMaterial(page, box, 'Balón morado', 0.68, 0.72);
-    await placeMaterial(page, box, 'Marcador C', 0.82, 0.72);
 
-    await expect(page.locator('.field-count')).toHaveText('17');
+    await expect(page.locator('.field-count')).toHaveText('14');
     await page.waitForTimeout(250);
     await page.screenshot({ path: `${SHOTS}/02-material-entrenamiento.png` });
 
     const doc = await verifyPersistence(page);
-    expect(doc.frames[0].elements).toHaveLength(17);
+    expect(doc.frames[0].elements).toHaveLength(14);
     // Fase 3: cada material de la escena nace con su tamaño base normalizado.
     const vectorMat = ['coachC', 'peto', 'chaleco', 'bosu', 'fitball', 'pica'];
     for (const m of doc.frames[0].elements) {
@@ -503,7 +561,7 @@ test.describe('Galería final — escenas a través de la UI real', () => {
         expect(m.size, `tamaño base normalizado de ${key}`).toBeCloseTo(TACTICAL_SIZE[key] * MATERIAL_SIZE_RATIO, 5);
       }
     }
-    await verifyExport(page, baseline, [[0.28, 0.18], [0.53, 0.45], [0.68, 0.72]]);
+    await verifyExport(page, baseline, [[0.28, 0.18], [0.53, 0.45], [0.4, 0.72]]);
   });
 
   // =====================================================================
@@ -616,7 +674,9 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     await deselect(page, box2);
 
     // Seleccionar la CURVA por último → muestra extremos + C1 + manija de rotación.
-    await selectAt(page, box2, ...elCenter(curve));
+    // Se pincha el MIDPOINT de la Bézier (t=0,5): la tolerancia de selección es en px,
+    // y el baricentro de los 3 puntos de control queda FUERA del arco.
+    await selectAt(page, box2, (curve.x1 + 2 * (curve.c1x ?? curve.x1) + curve.x2) / 4, (curve.y1 + 2 * (curve.c1y ?? curve.y1) + curve.y2) / 4);
     await expect(page.locator('.inspector-actions')).toBeVisible();
     await page.waitForTimeout(250);
     await page.screenshot({ path: `${SHOTS}/04-interaccion-seleccionada.png` });
@@ -644,7 +704,7 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     const baseline = await captureBaseline(page);
 
     await placePlayer(page, box, 'Jugador propio', 0.2, 0.2);
-    await placeTrayPlayer(page, box, 'Portero', 0.12, 0.5);
+    await placeTrayPlayer(page, box, 'Jugador Azul', 0.12, 0.5);
     await placePlayer(page, box, 'Jugador rival', 0.7, 0.25);
     await placeMaterial(page, box, 'Balón', 0.4, 0.42);
     await placeMaterial(page, box, 'Cono', 0.25, 0.5, 1);
@@ -679,7 +739,7 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     const baseline = await captureBaseline(page);
 
     await placePlayer(page, box, 'Jugador propio', 0.25, 0.25);
-    await placeTrayPlayer(page, box, 'Portero', 0.4, 0.4);
+    await placeTrayPlayer(page, box, 'Jugador Azul', 0.4, 0.4);
     await placeMaterial(page, box, 'Cono', 0.5, 0.55, 1);
     await drawShape(page, box, 'Flecha (movimiento)', [0.3, 0.5], [0.45, 0.62], 0);
     await deselect(page, box);
@@ -690,7 +750,9 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     await page.locator('.studio-panel input[aria-label="Título del ejercicio"]').fill('Rondos de pase y recepción');
     await page.locator('.studio-panel select[aria-label="Categoría"]').selectOption('Táctica');
     await page.locator('.studio-panel textarea[aria-label="Descripción"]').fill('Conservación en superioridad con pase al apoyo');
-    await page.locator('.studio-panel input[aria-label="Material necesario"]').fill('Conos, balones');
+    // FASE 8: "Material necesario" es un checklist; se marcan Conos y Balones.
+    await page.locator('.material-checklist .mat-check', { hasText: 'Conos' }).locator('input').check();
+    await page.locator('.material-checklist .mat-check', { hasText: 'Balones' }).locator('input').check();
     await page.locator('.studio-panel select[aria-label="Carpeta"]').selectOption('f1');
     const dur = page.locator('.studio-panel .field-grid2 > div').nth(0).locator('input');
     await dur.fill('14');
@@ -731,7 +793,7 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     const baseline = await captureBaseline(page);
 
     await placePlayer(page, box, 'Jugador propio', 0.25, 0.25);
-    await placeTrayPlayer(page, box, 'Portero', 0.5, 0.5);
+    await placeTrayPlayer(page, box, 'Jugador Azul', 0.5, 0.5);
     await placeMaterial(page, box, 'Cono', 0.35, 0.7, 1);
     await drawShape(page, box, 'Línea', [0.1, 0.4], [0.3, 0.45], 0);
     await deselect(page, box);
@@ -1214,7 +1276,7 @@ test.describe('Fase 4 — objetos asimétricos: SVG renderizado y PNG exportado'
   test('miniportería: rotate + Tamaño → SVG con <image> crecido y <g rotate>, PNG en su posición', async ({ page }) => {
     await runAsym(page, {
       label: 'Miniportería',
-      create: (pg, box) => placeMaterial(pg, box, 'Mini portería', 0.62, 0.6),
+      create: (pg, box) => placeMaterial(pg, box, 'Miniportería', 0.62, 0.6),
       moveDelta: [0.06, 0.04],
       resize: async () => undefined,
       sx: assertMaterialSvg,

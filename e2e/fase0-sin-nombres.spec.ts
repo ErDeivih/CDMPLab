@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
+import { fillBoardTitle } from './gesture-helpers';
 
 // FASE 0 — los objetos colocados NO muestran su nombre automáticamente.
 // El modelo (SVG) debe tener exactamente los objetos colocados, sin elementos
@@ -41,7 +42,12 @@ async function openBoard(page: Page): Promise<void> {
   if (fill) { await page.locator('.field-fit-toggle').click(); await page.waitForTimeout(120); }
 }
 async function placeMaterial(page: Page, host: Box, title: string, nx: number, ny: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Material' }).click();
+  // FASE B (paneles persistentes): abrir la categoría Material es IDEMPOTENTE. Si el panel
+  // ya está desplegado (ya no se cierra al elegir un material) no lo re-togglea, porque
+  // re-clickear el mismo .tools-cat lo cerraría y rompería la siguiente colocación.
+  if (!(await page.locator('.side-panel-left.tools-panel-side').isVisible().catch(() => false))) {
+    await page.locator('.tools-cat', { hasText: 'Material' }).click();
+  }
   const input = page.locator('.tools-search-input');
   await input.fill(''); await input.fill(title); await page.waitForTimeout(80);
   await page.locator(`.rail-btn[title="${title}"]`).click();
@@ -64,7 +70,7 @@ test('colocar materiales y una línea: modelo 1:1, sin textos, sin nombres en el
   await seed(page);
   await openBoard(page);
   const host = (await page.locator('.board-host').boundingBox())!;
-  const mats = ['Cono', 'Balón', 'Maniquí', 'Aro', 'Valla', 'Marcador'];
+  const mats = ['Cono', 'Balón', 'Maniquí individual', 'Aro', 'Valla', 'BOSU'];
   for (let i = 0; i < mats.length; i++) await placeMaterial(page, host, mats[i], 0.2 + 0.14 * i, 0.35);
   await page.keyboard.press('Escape'); // cerrar panel Propiedades
   await page.waitForTimeout(120);
@@ -81,10 +87,11 @@ test('colocar materiales y una línea: modelo 1:1, sin textos, sin nombres en el
   expect(total, 'modelo = objetos colocados (6 materiales + 1 línea)').toBe(7);
   expect(textEls, 'sin elementos text automáticos').toBe(0);
   // El render no contiene el nombre de ningún material como texto.
-  const names = await svgTextsNoNames(page, ['Cono', 'Balón', 'Maniquí', 'Aro', 'Valla', 'Marcador']);
+  const names = await svgTextsNoNames(page, ['Cono', 'Balón', 'Maniquí individual', 'Aro', 'Valla', 'BOSU']);
   expect(names, 'sin nombres de materiales en el render').toEqual([]);
 
   // Guardar y reabrir: no introduce etiquetas.
+  await fillBoardTitle(page, 'SinNombres');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
   await page.locator('.ex-card').first().hover();
@@ -95,7 +102,7 @@ test('colocar materiales y una línea: modelo 1:1, sin textos, sin nombres en el
   const textEls2 = await page.locator('.board-canvas svg [data-el-type="text"]').count();
   expect(total2, 'tras reabrir el modelo sigue siendo 7').toBe(7);
   expect(textEls2, 'tras reabrir no hay textos automáticos').toBe(0);
-  const names2 = await svgTextsNoNames(page, ['Cono', 'Balón', 'Maniquí', 'Aro', 'Valla', 'Marcador']);
+  const names2 = await svgTextsNoNames(page, ['Cono', 'Balón', 'Maniquí individual', 'Aro', 'Valla', 'BOSU']);
   expect(names2, 'tras reabrir no hay nombres de materiales').toEqual([]);
 });
 

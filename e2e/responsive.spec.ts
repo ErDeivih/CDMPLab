@@ -82,6 +82,10 @@ test.describe('Responsive móvil (390×844)', () => {
     // Colocar un texto primero (toolbar accesible con panel cerrado).
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Texto"]').click();
+    // FASE B: el panel Dibujo persiste y cubre el campo en móvil; se minimiza (X) para
+    // poder colocar el texto en el centro (no desarma la herramienta).
+    const dibPanel = page.locator('.side-panel-left.tools-panel-side');
+    if (await dibPanel.isVisible().catch(() => false)) await dibPanel.locator('.panel-close').click();
     const x = box.x + box.width * 0.5;
     const y = box.y + box.height * 0.5;
     await page.mouse.click(x, y);
@@ -145,11 +149,14 @@ test.describe('Panel de pizarra sin desbordamiento (escritorio)', () => {
     await measureNoOverflow(page, '.studio-panel');
     await measureNoOverflow(page, '.studio-panel .field-grid2');
 
-    // Material (cono) seleccionado (variante/tamaño).
+    // Material (cono) seleccionado (variante/tamaño). Fase 3: la colocación es continua,
+    // así que tras colocar hay que dar a Seleccionar y hacer clic para seleccionarlo.
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.4);
     await expect(page.locator('.field-count')).toHaveText('2');
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
+    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.4);
     await expect(page.locator('.inspector')).toBeVisible();
     await measureNoOverflow(page, '.studio-panel');
     await measureNoOverflow(page, '.studio-panel .field-grid2');

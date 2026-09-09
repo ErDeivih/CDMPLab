@@ -82,7 +82,22 @@ describe('normalizeCanvas (schemaVersion/migrador)', () => {
     expect(ids).toContain('f');
     expect(ids).toContain('e');
     const freehand = doc.frames[0].elements.find((e) => e.id === 'f')!;
-    expect(freehand.points).toEqual([[0.1, 0.2], [1, 0], [0.5, 0.5]]);
+    // La franja exterior es dominio válido [-0.05, 1.05]: un punto muy fuera se clampa al
+    // borde de la franja (no a 0..1), para no "saltar" al límite del campo al guardar.
+    expect(freehand.points).toEqual([[0.1, 0.2], [1.05, -0.05], [0.5, 0.5]]);
+  });
+
+  it('la franja exterior es dominio persistente: un objeto en [-0.05,1.05] se conserva al normalizar (FASE 3)', () => {
+    const inStrip: CanvasElement = { id: 's', t: 'cone', x: -0.03, y: 1.04, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
+    const doc = normalizeCanvas({ version: 5, field: 'full', frames: [{ duration: 1000, elements: [inStrip] }] });
+    const el = doc.frames[0].elements[0];
+    expect(el.x, 'x < 0 dentro de la franja se conserva').toBeCloseTo(-0.03, 5);
+    expect(el.y, 'y > 1 dentro de la franja se conserva').toBeCloseTo(1.04, 5);
+    // Fuera del dominio (muy lejos) se clampa al borde de la franja, no a 0..1.
+    const farOut = { id: 'o', t: 'cone', x: 9, y: -7 };
+    const doc2 = normalizeCanvas({ version: 5, field: 'full', frames: [{ duration: 1000, elements: [farOut] }] });
+    expect(doc2.frames[0].elements[0].x).toBeCloseTo(1.05, 5);
+    expect(doc2.frames[0].elements[0].y).toBeCloseTo(-0.05, 5);
   });
 
   it('migra materiales: vector histórico, asset sin assetKind, assetKind válido y desconocido', () => {

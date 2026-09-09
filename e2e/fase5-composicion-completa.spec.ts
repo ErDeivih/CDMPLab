@@ -6,14 +6,16 @@
 // soportada: línea, flecha, flecha doble, curva derecha, curva
 // izquierda, zigzag (conducción), mano alzada, rect perímetro, rect
 // relleno, elipse perímetro, elipse relleno, texto, jugador propio,
-// jugador rival, portero, balón, cono, maniquí, mini portería,
-// pértiga, marcador, valla, aro, escalera, banderín, minitrampolín,
-// diana, red, balón morado, marcador C, peto, chaleco, BOSU, fitball,
-// pica. Al terminar: nada seleccionado, sin paneles abiertos, y se
-// asevera que CADA familia está presente en el modelo persistido.
+// jugador rival, portero, balón, fitball, cono, BOSU, banderín, chino,
+// pica coloreable, pértiga, maniquí individual, barrera de maniquíes,
+// miniportería, portería grande, valla, aro, escalera, minitrampolín,
+// peto, chaleco lastrado, mancuerna / pesa. Al terminar: nada
+// seleccionado, sin paneles abiertos, y se asevera que CADA familia
+// está presente en el modelo persistido.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
+import { fillBoardTitle } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/fase5-composicion';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -85,12 +87,20 @@ async function deselect(page: Page): Promise<void> {
 
 async function placePlayer(page: Page, title: string, nx: number, ny: number, tray = false): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
+  const isPlayerTool = title === 'Jugador propio' || title === 'Jugador rival';
   if (tray) {
     await page.locator('.side-panel-left').first().waitFor();
-    await page.locator(`.tray-player[title="${title}"]`).click();
+    await page.locator(`.tray-player[title="${title}"]`).click(); // ya es 'Jugador <Color>'
+  } else if (isPlayerTool) {
+    await page.locator('.side-panel-left').first().waitFor();
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
   } else {
     await page.locator(`.rail-btn[title="${title}"]`).click();
   }
+  // FASE B: cerrar el panel Jugadores con la X (no desarma) antes de tocar el campo,
+  // porque el panel ya no se cierra al elegir y taparía el punto en columnas a la izquierda.
+  await page.locator('.side-panel-left .panel-close').click();
   const box = await hostBox(page);
   const [x, y] = normToScreen(nx, ny, box);
   await page.mouse.click(x, y);
@@ -103,6 +113,8 @@ async function placeMaterial(page: Page, tool: string, nx: number, ny: number): 
   const variantCount = await card.locator('.variant-swatch').count();
   if (variantCount > 0) await card.locator('.variant-swatch').first().click();
   await card.locator(`.rail-btn[title="${tool}"]`).click();
+  // FASE B: cerrar el panel Material con la X (no desarma) antes de tocar el campo.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
   const box = await hostBox(page);
   const [x, y] = normToScreen(nx, ny, box);
   await page.mouse.click(x, y);
@@ -112,6 +124,8 @@ async function placeMaterial(page: Page, tool: string, nx: number, ny: number): 
 async function dragDraw(page: Page, tool: string, from: [number, number], to: [number, number], fill?: boolean): Promise<void> {
   await useTool(page, tool, 'Dibujo');
   if (fill != null) await page.locator('.tools-caption .chip', { hasText: fill ? 'Relleno' : 'Perímetro' }).click();
+  // FASE B: cerrar el panel Dibujo con la X (no desarma) antes de arrastrar sobre el campo.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
   const box = await hostBox(page);
   const [x1, y1] = normToScreen(from[0], from[1], box);
   const [x2, y2] = normToScreen(to[0], to[1], box);
@@ -123,6 +137,8 @@ async function dragDraw(page: Page, tool: string, from: [number, number], to: [n
 
 async function placeText(page: Page, nx: number, ny: number, value: string): Promise<void> {
   await useTool(page, 'Texto', 'Dibujo');
+  // FASE B: cerrar el panel Dibujo con la X (no desarma) antes de tocar el campo.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
   const box = await hostBox(page);
   const [x, y] = normToScreen(nx, ny, box);
   await page.mouse.click(x, y);
@@ -158,16 +174,16 @@ test('composición completa: cada familia presente en el modelo, nada selecciona
   // 1) Jugadores y portero (fila superior, a la izquierda).
   await placePlayer(page, 'Jugador propio', ...pt(0, 0));
   await placePlayer(page, 'Jugador rival', ...pt(1, 0));
-  await placePlayer(page, 'Portero', ...pt(2, 0), true);
+  await placePlayer(page, 'Jugador Azul', ...pt(2, 0), true);
 
   // 2) Materiales (cada familia puntual) en la fila 1-2 de la franja superior.
   const materials: Array<[string, number, number]> = [
-    ['Balón', 0, 1], ['Fitball', 1, 1], ['Balón morado', 2, 1], ['Cono', 3, 1],
-    ['Marcador', 4, 1], ['Banderín', 5, 1], ['Diana', 6, 1], ['Marcador C', 7, 1],
-    ['Pica coloreable', 8, 1], ['Pértiga / poste', 9, 1],
-    ['Maniquí', 0, 2], ['Mini portería', 1, 2], ['Red', 2, 2], ['Valla', 3, 2],
-    ['Aro', 4, 2], ['Escalera', 5, 2], ['Minitrampolín', 6, 2], ['Peto', 7, 2],
-    ['Chaleco lastrado', 8, 2], ['BOSU', 9, 2],
+    ['Balón', 0, 1], ['Fitball', 1, 1], ['Cono', 2, 1], ['BOSU', 3, 1],
+    ['Banderín', 4, 1], ['Chino', 5, 1], ['Pica coloreable', 6, 1], ['Pértiga / poste', 7, 1],
+    ['Maniquí individual', 8, 1], ['Barrera de maniquíes', 9, 1],
+    ['Miniportería', 0, 2], ['Portería grande', 1, 2], ['Valla', 2, 2], ['Aro', 3, 2],
+    ['Escalera', 4, 2], ['Minitrampolín', 5, 2], ['Peto', 6, 2], ['Chaleco lastrado', 7, 2],
+    ['Mancuerna / pesa', 8, 2],
   ];
   for (const [tool, c, r] of materials) await placeMaterial(page, tool, ...pt(c, r));
 
@@ -197,17 +213,18 @@ test('composición completa: cada familia presente en el modelo, nada selecciona
   await page.locator('.board-host').screenshot({ path: `${SHOTS}/composicion-completa.png` });
 
   // 6) Guardar y aseverar que CADA familia está en el modelo.
+  await fillBoardTitle(page, 'ComposicionCompleta');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
   const els = await elements(page);
 
   const familyTypes = ['line', 'arrow', 'doubleArrow', 'curve', 'dribble', 'freehand', 'rect', 'ellipse', 'text',
-    'player', 'ball', 'cone', 'mannequin', 'minigoal', 'pole', 'marker', 'hurdle', 'ring', 'ladder', 'flag',
-    'trampoline', 'target', 'net', 'vball', 'coachC', 'peto', 'chaleco', 'bosu', 'fitball', 'pica'];
+    'player', 'ball', 'vball', 'cone', 'marker', 'flag', 'target', 'pica', 'pole', 'mannequin', 'mannequin_row',
+    'minigoal', 'goal', 'hurdle', 'ring', 'ladder', 'trampoline', 'peto', 'chaleco', 'dumbbell'];
   for (const t of familyTypes) {
     expect(els.some((e) => e.t === t), `familia «${t}» presente en el modelo`).toBe(true);
   }
-  // Rival y portero.
-  expect(els.some((e) => e.t === 'player' && e.side === 'rival'), 'hay jugador RIVAL').toBe(true);
-  expect(els.some((e) => e.t === 'player' && (e.type === 'goalkeeper')), 'hay PORTERO (goalkeeper)').toBe(true);
+  // Rival por COLOR (la diferenciación de equipos es por color, no por side) y genéricos sin rol especial.
+  expect(els.some((e) => e.t === 'player' && e.c === '#c0392b'), 'hay jugador RIVAL (por color rojo)').toBe(true);
+  expect(els.every((e) => e.t !== 'player' || e.type !== 'goalkeeper'), 'ningún genérico lleva rol de portero').toBe(true);
 });

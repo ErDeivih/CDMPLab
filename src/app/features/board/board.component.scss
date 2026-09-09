@@ -188,7 +188,7 @@
 // host ni tapar los menús. Botones compactos con área táctil >= 40×40 px.
 .context-bar {
   position: absolute;
-  z-index: 30;
+  z-index: 89;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -466,6 +466,32 @@
   &.cursor-grabbing {
     cursor: grabbing;
   }
+
+  // Fase 4: ocultar el aspa cuando hay una previsualización armada junto al cursor.
+  &.cursor-none {
+    cursor: none;
+  }
+}
+
+// Fase 4 — Previsualización del objeto armado junto al cursor (no forma parte del
+// documento: pointer-events:none, ~55 % opacidad). Solo indicación visual.
+.placement-preview {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0.55;
+  display: grid;
+  place-items: center;
+  z-index: 24;
+  width: 44px;
+  height: 44px;
+
+  img,
+  svg {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
 }
 
 .board-canvas {
@@ -548,29 +574,6 @@
 }
 
 // ---------- Panel desplegable de herramientas (Material / Dibujo) ----------
-.tools-panel {
-  position: absolute;
-  z-index: 80;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: min(300px, calc(100vw - 24px));
-  max-height: min(72vh, 560px);
-  overflow-y: auto;
-  padding: 8px;
-  background: #171d23;
-  border: 1px solid #2b3947;
-  border-radius: 12px;
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
-}
-
-.tools-panel-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 79;
-  background: rgba(10, 14, 18, 0.55);
-}
-
 .tools-search {
   display: flex;
   align-items: center;
@@ -641,13 +644,6 @@
 }
 
 // ---------- Popovers superiores (Exportar / Más / Animación) ----------
-.top-panel-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 82;
-  background: rgba(10, 14, 18, 0.45);
-}
-
 .top-pop {
   position: absolute;
   top: calc(52px + env(safe-area-inset-top));
@@ -667,6 +663,9 @@
 }
 
 // ---------- Raíl inferior de herramientas ----------
+// Jerarquía de capas coherente: el raíl SIEMPRE por encima de paneles (40), panel de
+// Material/Dibujo (80) y su backdrop móvil (79), para que la barra sea visible y operable.
+// Por debajo de overlays que deben taparlo (diálogo, variante/color, menú contextual).
 .studio-tools {
   flex-shrink: 0;
   display: flex;
@@ -677,7 +676,7 @@
   background: #171d23;
   border-top: 1px solid #262e35;
   position: relative;
-  z-index: 1;
+  z-index: 86;
 }
 
 .tools-persist {
@@ -760,7 +759,7 @@
   bottom: calc(56px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
-  z-index: 60;
+  z-index: 88;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -772,7 +771,7 @@
 .bar-variant-backdrop {
   position: absolute;
   inset: 0;
-  z-index: 59;
+  z-index: 87;
 }
 
 .bar-variant-title {
@@ -958,9 +957,11 @@
   }
 
   // Paneles laterales a ancho completo/parcial, nunca empujan el campo.
+  // Están DENTRO de `.studio-main`, que ya excluye la barra inferior: `bottom: 0`
+  // los hace terminar exactamente en el borde superior de la barra (no la tapan).
   .side-panel {
     top: calc(44px + env(safe-area-inset-top));
-    bottom: calc(56px + env(safe-area-inset-bottom));
+    bottom: 0;
     max-width: 82vw;
   }
 
@@ -982,23 +983,6 @@
   // y huecos compactos aseguran que no haya wrapping ni overflow horizontal.
   .tools-persist {
     gap: 2px;
-  }
-
-  // En móvil el panel Material/Dibujo es un bottom-sheet a ancho completo.
-  .tools-panel {
-    position: fixed;
-    left: 0 !important;
-    right: 0;
-    top: auto !important;
-    bottom: 0 !important;
-    width: 100%;
-    // ~55dvh deja más de la mitad del campo visible y permite hacer scroll interno.
-    max-height: min(55dvh, 70vh);
-    border-radius: 16px 16px 0 0;
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
-    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .tool-hint {

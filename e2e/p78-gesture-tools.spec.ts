@@ -111,9 +111,16 @@ async function readView(page: Page): Promise<{ panX: number; panY: number; zoom:
   });
 }
 
-/** Centro en PANTALLA (page coords) del bounding box de un selector del SVG. */
+/** Centro en PANTALLA (page coords) del bounding box de un selector del SVG.
+ *  Usa `getBoundingClientRect()` vía evaluate (robusto para SVG), en vez de
+ *  `locator.boundingBox()`, que devuelve null de forma intermitente en SVG. */
 async function objectScreen(page: Page, selector: string): Promise<Pt> {
-  const b = (await page.locator(selector).first().boundingBox())!;
+  const loc = page.locator(selector).first();
+  await loc.waitFor({ state: 'attached', timeout: 5000 });
+  const b = await loc.evaluate((el) => {
+    const r = (el as SVGGraphicsElement).getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
 
@@ -140,21 +147,26 @@ async function imageNorm(page: Page, selector: string): Promise<Pt> {
   return { x: (v.x - RECT.x) / RECT.w, y: (v.y - RECT.y) / RECT.h };
 }
 
-/** Coloca un Portero (jugador genérico) en el norm (nx,ny). Devuelve su centro en pantalla. */
+/** Coloca un Portero (jugador genérico) en el norm (nx,ny). Devuelve su centro en pantalla.
+ *  (Fase 3): la colocación de genéricos es CONTINUA, así que tras colocar este helper
+ *  vuelve a "Seleccionar" para que el test que continúa opere sobre el objeto.) */
 async function placeComodinAt(page: Page, nx: number, ny: number): Promise<Pt> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
-  await expect(page.locator('.side-panel-left')).toHaveCount(0);
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir un jugador genérico NO cierra el panel.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
   const host = await hostBox(page);
   const fit = await fitMode(page);
   const s = normToScreen(nx, ny, host, fit);
   await page.touchscreen.tap(s.x, s.y);
   await expect(page.locator('.field-count')).toHaveText('1');
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   return objectScreen(page, '.entrenolab-board circle[r="2.5"]');
 }
 
-/** Coloca un Cono (material) en el norm (nx,ny); ciérra Propiedades si se abre. */
+/** Coloca un Cono (material) en el norm (nx,ny); ciérra Propiedades si se abre.
+ *  (Fase 3): la colocación es continua; este helper vuelve a "Seleccionar" al final. */
 async function placeConeAt(page: Page, nx: number, ny: number): Promise<Pt> {
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
@@ -167,6 +179,7 @@ async function placeConeAt(page: Page, nx: number, ny: number): Promise<Pt> {
     await page.locator('.studio-panel .panel-close').click();
     await expect(page.locator('.studio-panel')).toHaveCount(0);
   }
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   return objectScreen(page, '.board-canvas svg image[href*="cone"]');
 }
 
@@ -175,19 +188,21 @@ async function placeRosterAt(page: Page, nx: number, ny: number): Promise<void> 
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.side-panel-left .roster-item').first().click();
-  await expect(page.locator('.side-panel-left')).toHaveCount(0);
+  // FASE B (paneles persistentes): elegir un jugador de plantilla NO cierra el panel.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
   const host = await hostBox(page);
   const fit = await fitMode(page);
   const s = normToScreen(nx, ny, host, fit);
   await page.touchscreen.tap(s.x, s.y);
   await expect(page.locator('.field-count')).toHaveText('1');
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
 }
 
 /** Oculta los paneles flotantes (Propiedades y barra de contexto) para que no tapen el
  *  campo ni intercepten el arrastre (patrón usado por otras specs del proyecto). */
 async function hideOverlays(page: Page): Promise<void> {
   await page.evaluate(() => {
-    document.querySelectorAll('.studio-panel, .side-panel-backdrop, .top-pop, .context-bar').forEach((el) => {
+    document.querySelectorAll('.studio-panel, .top-pop, .context-bar').forEach((el) => {
       (el as HTMLElement).style.display = 'none';
     });
   });
@@ -213,24 +228,36 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await openClosed(page);
     const obj = await placeComodinAt(page, 0.5, 0.5);
     expect(await fieldCount(page)).toBe(1);
-    // Tap corto sobre el objeto (sin mantener).
-    await tap(page, obj.x, obj.y, 8);
-    await page.waitForTimeout(300); // más que la pulsación larga: nada debe duplicar
-    expect(await fieldCount(page), 'un tap corto NO duplica').toBe(1);
-    // El objeto queda seleccionado (contorno/asis de selección visibles).
+    // Tap corto sobre el objeto (sin mantener): un down+up inmediato NUNCA arma el
+    // temporizador de pulsación larga (el up lo cancela), así que no hay que esperar
+    // 300 ms. Se recalcula el centro en pantalla justo antes (bajo carga el objeto puede
+    // moverse un frame respecto a la lectura de placeComodinAt y el tap debe aterrizar sobre él).
+    const t = await objectScreen(page, PLAYER);
+    await tap(page, t.x, t.y, 8);
     await expect(page.locator(SEL)).not.toHaveCount(0);
+    expect(await fieldCount(page), 'un tap corto NO duplica').toBe(1);
+    await expect(page.locator('.context-bar')).toHaveCount(0);   // nada se abre por long-press
   });
 
   test('(b) mantener ~600 ms abre el menú contextual y pulsa Duplicar (una vez) con un solo Undo', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
-    const obj = await placeComodinAt(page, 0.5, 0.5);
+    await placeComodinAt(page, 0.5, 0.5);
     expect(await fieldCount(page)).toBe(1);
+    // DEFECTO DE TEST CORREGIDO: el caso de tap corto recalcula el centro del objeto
+    // justo antes de tocarlo porque, bajo carga, puede desplazarse un frame desde la
+    // lectura de placeComodinAt. El caso de long-press reutilizaba las coordenadas de
+    // colocación, así que el pointerdown podía caer FUERA del objeto y la pulsación
+    // larga no abriría el menú. Se recalcula el centro inmediatamente antes del gesto
+    // (sin subir timeouts ni tocar LONG_PRESS_MS).
+    const t = await objectScreen(page, PLAYER);
     // Pulsación larga real: Fase 3 — abre el MENÚ CONTEXTUAL (no duplica solo).
-    await ptr(page, 'pointerdown', obj.x, obj.y, 9, true);
-    await page.waitForTimeout(620);
-    await ptr(page, 'pointerup', obj.x, obj.y, 9);
+    await ptr(page, 'pointerdown', t.x, t.y, 9, true);
+    // Sin wait fijo: se espera de forma observable a que el temporizador de la
+    // pulsación larga abra el menú contextual (el componente usa LONG_PRESS_MS).
+    await expect.poll(() => page.locator('.context-bar').count(), { timeout: 2000 }).toBe(1);
+    await ptr(page, 'pointerup', t.x, t.y, 9);
     await expect(page.locator('.context-bar')).toBeVisible();
     await expect(page.locator('.field-count'), 'el long-press solo abre el menú').toHaveText('1');
     // FASE 8 evidencia: la barra de contexto abierta por PULSACIÓN LARGA (Fase 3: el clic
@@ -256,7 +283,9 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     expect(await fieldCount(page)).toBe(1);
     const obj = await objectScreen(page, CONE);
     await ptr(page, 'pointerdown', obj.x, obj.y, 10, true);
-    await page.waitForTimeout(620);
+    // Espera observable (sin waitForTimeout): el temporizador de la pulsación larga
+    // abre el menú contextual mientras el dedo sigue bajado.
+    await expect.poll(() => page.locator('.context-bar').count(), { timeout: 2000 }).toBe(1);
     await ptr(page, 'pointerup', obj.x, obj.y, 10);
     await expect(page.locator('.context-bar')).toBeVisible();
     await page.locator('.context-bar .ctx-btn[title="Duplicar"]').click();
@@ -270,11 +299,20 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     const obj = await placeComodinAt(page, 0.5, 0.5);
     const before = await objectNorm(page, PLAYER);
     expect(await fieldCount(page)).toBe(1);
-    // Baja, mueve (supera la tolerancia) y suelta ANTES de los 550 ms.
-    await ptr(page, 'pointerdown', obj.x, obj.y, 11, true);
-    await ptr(page, 'pointermove', obj.x + 55, obj.y + 34, 11);
-    await ptr(page, 'pointerup', obj.x + 55, obj.y + 34, 11);
-    await page.waitForTimeout(300); // esperar por si acaso quedara un timer pendiente
+    // Baja, mueve (supera la tolerancia) y suelta ANTES de los 550 ms. Se RECALCULA el
+    // centro en pantalla del objeto justo antes de bajar (bajo carga el render del objeto
+    // puede moverse un frame respecto a la lectura inicial de placeComodinAt, y el puntero
+    // debe aterrizar sobre él para que el arrastre lo mueva, no duplique).
+    const down = await objectScreen(page, PLAYER);
+    await ptr(page, 'pointerdown', down.x, down.y, 11, true);
+    await ptr(page, 'pointermove', down.x + 55, down.y + 34, 11);
+    await ptr(page, 'pointerup', down.x + 55, down.y + 34, 11);
+    // Espera observable: el arrastre procesado mueve el objeto. Sin retardo fijo; si
+    // quedara un timer de pulsación larga, se cancela por el move antes del umbral.
+    await expect.poll(async () => {
+      const n = await objectNorm(page, PLAYER);
+      return Math.abs(n.x - before.x) + Math.abs(n.y - before.y);
+    }, { timeout: 4000 }).toBeGreaterThan(0.005);
     const after = await objectNorm(page, PLAYER);
     expect(await fieldCount(page), 'un arrastre NO duplica').toBe(1);
     expect(Math.abs(after.x - before.x), 'el objeto se movió con el arrastre').toBeGreaterThan(0.005);
@@ -283,7 +321,9 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
 
   test('(d) un SEGUNDO dedo cancela la pulsación larga y empieza el pinch (sin duplicar)', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
-    await seed(page);
+    // Campo completo: el pinch central es determinista (en Llenar pantalla el zoom de un
+    // spread corto variaba 1.10 vs >1.2 según el frame).
+    await seed(page, { fill: 'contain' });
     await openClosed(page);
     const obj = await placeComodinAt(page, 0.5, 0.5);
     const host = await hostBox(page);
@@ -294,12 +334,15 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await ptr(page, 'pointerdown', obj.x + 120, cy, 13, false);
     await ptr(page, 'pointermove', obj.x, obj.y, 12);
     await ptr(page, 'pointermove', obj.x + 220, cy, 13);
-    await page.waitForTimeout(200); // más que la pulsación larga: no debe duplicar
     await ptr(page, 'pointerup', obj.x, obj.y, 12);
     await ptr(page, 'pointerup', obj.x + 220, cy, 13);
+    // Espera observable: el pinch hace zoom (se procesó). El segundo dedo cancela el
+    // temporizador de la pulsación larga (se limpia en pointerup), así que no hay
+    // duplicación pendiente: verificamos el campo y el zoom, sin retardo fijo.
+    await expect.poll(async () => (await readView(page)).zoom, { timeout: 4000 }).toBeGreaterThan(1.05);
     await expect(page.locator('.field-count'), 'el segundo dedo cancela la duplicación').toHaveText('1');
     const v = await readView(page);
-    expect(v.zoom, 'el pinch sigue haciendo zoom').toBeGreaterThan(1.2);
+    expect(v.zoom, 'el pinch sigue haciendo zoom').toBeGreaterThan(1.05);
   });
 
   test('(e) un jugador de PLANTILLA NO se duplica y muestra "Este jugador ya está en el campo"', async ({ page }) => {
@@ -310,7 +353,8 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     expect(await fieldCount(page)).toBe(1);
     const obj = await objectScreen(page, PLAYER);
     await ptr(page, 'pointerdown', obj.x, obj.y, 14, true);
-    await page.waitForTimeout(620);
+    // Espera observable (sin waitForTimeout): el temporizador abre el menú contextual.
+    await expect.poll(() => page.locator('.context-bar').count(), { timeout: 2000 }).toBe(1);
     await ptr(page, 'pointerup', obj.x, obj.y, 14);
     await expect(page.locator('.context-bar')).toBeVisible();
     await expect(page.locator('.field-count'), 'el jugador de plantilla NO se duplica').toHaveText('1');

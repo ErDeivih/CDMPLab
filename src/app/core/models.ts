@@ -2,6 +2,8 @@
 // EntrenoLab — Modelos de dominio
 // =============================================================
 
+import { CANONICAL_MATERIALS } from './material-registry';
+
 export type Position = 'GK' | 'DF' | 'MF' | 'FW' | '';
 
 export interface Team {
@@ -28,7 +30,32 @@ export type ExerciseCategory =
   | 'Físico'
   | 'Portero'
   | 'Calentamiento'
-  | 'Partido';
+  | 'Rondo'
+  | 'Posesión'
+  | 'Finalización'
+  | 'Defensa'
+  | 'Ataque'
+  | 'Transiciones'
+  | 'Estrategia / ABP'
+  | 'Partido'
+  | 'Recuperación';
+
+/** Lista ÚNICA de categorías (FASE 7). Se usa en el selector para evitar listas
+ *  duplicadas. Los ejercicios antiguos conservan su categoría aunque no esté en la lista. */
+export const EXERCISE_CATEGORIES: readonly ExerciseCategory[] = [
+  'Técnica', 'Táctica', 'Físico', 'Portero', 'Calentamiento', 'Rondo', 'Posesión',
+  'Finalización', 'Defensa', 'Ataque', 'Transiciones', 'Estrategia / ABP', 'Partido',
+  'Recuperación',
+];
+
+/** Opciones del checklist de "Material necesario" (FASE 8). Son las opciones mínimas
+ *  que el dueño pedía, más "Otro" para elementos personalizados. Los valores se guardan
+ *  como lista de strings y se conservan al guardar/reabrir/duplicar/exportar/importar. */
+export const MATERIAL_OPTIONS: readonly string[] = [
+  'Balones', 'Conos', 'Chinos', 'Picas', 'Petos', 'Maniquíes', 'Vallas', 'Escalera',
+  'Miniporterías', 'Portería grande', 'Aros', 'BOSU', 'Fitball', 'Pesas / mancuernas',
+  'Cronómetro', 'Otro',
+];
 
 export type LoadMode = 'fixed' | 'interval';
 
@@ -75,7 +102,8 @@ export type FieldType =
   | 'box'
   | 'futsal'
   | 'f7'
-  | 'blank';
+  | 'blank'
+  | 'two_halves'; // A2: dos medios campos (izquierda/derecha o arriba/abajo)
 
 export type ElementType =
   | 'player'
@@ -93,12 +121,15 @@ export type ElementType =
   | 'dribble'
   | 'freehand'
   | 'mannequin'
+  | 'mannequin_row'
   | 'minigoal'
+  | 'goal'
   | 'pole'
   | 'marker'
   | 'hurdle'
   | 'ring'
   | 'ladder'
+  | 'dumbbell'
   | 'flag'
   | 'trampoline'
   | 'target'
@@ -114,12 +145,14 @@ export type ElementType =
 /**
  * Fuente ÚNICA y comprobable de los tipos de elemento admitidos. El render, la
  * validación de respaldo y las pruebas deben usar esto para no divergir.
+ * Los tipos de MATERIAL se derivan del REGISTRO CANÓNICO (material-registry.ts) para
+ * no mantener la lista a mano; se incluyen los materiales retirados (`hidden`) porque
+ * sus documentos antiguos deben seguir siendo válidos (p. ej. `ring_flat`).
  */
 export const ELEMENT_TYPES: ReadonlySet<string> = new Set([
-  'player', 'ball', 'cone', 'text', 'zone', 'rect', 'ellipse', 'arrow', 'doubleArrow', 'measure',
-  'curve', 'line', 'dribble', 'freehand', 'mannequin', 'minigoal', 'pole', 'marker', 'hurdle',
-  'ring', 'ladder', 'flag', 'trampoline', 'target', 'net', 'vball', 'coachC', 'peto', 'chaleco',
-  'bosu', 'fitball', 'pica',
+  'player', 'text', 'zone', 'rect', 'ellipse', 'arrow', 'doubleArrow', 'measure',
+  'curve', 'line', 'dribble', 'freehand',
+  ...CANONICAL_MATERIALS.map((c) => c.id),
 ]);
 
 export function isKnownElementType(t: string): boolean {

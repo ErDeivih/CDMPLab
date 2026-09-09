@@ -54,7 +54,13 @@ async function openBoard(page: Page): Promise<void> {
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
-  if (category) await page.locator('.tools-cat', { hasText: category }).click();
+  if (category) {
+    // FASE B: el catálogo persiste abierto, así que solo se abre la categoría si su
+    // herramienta aún no está visible (un re-toggle la cerraría).
+    if (!(await page.locator(`.rail-btn[title="${title}"]`).isVisible().catch(() => false))) {
+      await page.locator('.tools-cat', { hasText: category }).click();
+    }
+  }
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
 async function drawShape(page: Page, from: [number, number], to: [number, number]): Promise<void> {
@@ -73,8 +79,11 @@ async function clean(page: Page): Promise<void> {
   await page.waitForTimeout(120);
 }
 async function placeMaterial(page: Page, host: Box, title: string, nx: number, ny: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Material' }).click();
   const input = page.locator('.tools-search-input');
+  // FASE B: el catálogo persiste abierto; solo se abre si no lo está (evitar re-toggle).
+  if (!(await input.isVisible().catch(() => false))) {
+    await page.locator('.tools-cat', { hasText: 'Material' }).click();
+  }
   await input.fill('');
   await input.fill(title);
   await page.waitForTimeout(80);
@@ -89,8 +98,10 @@ async function setColor(page: Page, hex: string): Promise<void> {
 }
 
 const MATERIALS = [
-  'Cono', 'Balón', 'Maniquí', 'Mini portería', 'Pértiga / poste', 'Marcador', 'Valla', 'Aro', 'Escalera',
-  'Banderín', 'Minitrampolín', 'Diana', 'Red', 'Balón morado', 'Marcador C', 'Peto', 'Chaleco lastrado', 'BOSU', 'Fitball', 'Pica coloreable',
+  'Balón', 'Fitball', 'Cono', 'BOSU', 'Banderín', 'Chino',
+  'Pica coloreable', 'Pértiga / poste', 'Maniquí individual', 'Barrera de maniquíes',
+  'Miniportería', 'Portería grande', 'Valla', 'Aro', 'Escalera',
+  'Minitrampolín', 'Peto', 'Chaleco lastrado', 'Mancuerna / pesa',
 ];
 
 test.describe('Galerías sin nombres en el campo', () => {
@@ -115,11 +126,11 @@ test.describe('Galerías sin nombres en el campo', () => {
       await clean(page);
       await page.locator('.board-host').screenshot({ path: `${SHOTS}/${name}.png` });
     }
-    // 20 materiales colocados y NO debe existir ningún elemento text automático.
+    // 19 materiales colocados y NO debe existir ningún elemento text automático.
     const total = await page.locator('.board-canvas svg [data-el-type]').count();
     const texts = await page.locator('.board-canvas svg [data-el-type="text"]').count();
     expect(texts, 'sin textos automáticos de material').toBe(0);
-    expect(total, 'los 20 materiales son los únicos objetos').toBe(20);
+    expect(total, 'los 19 materiales son los únicos objetos').toBe(19);
   });
 
   test('dibujo: líneas y flechas (galeria-lineas-flechas)', async ({ page }) => {

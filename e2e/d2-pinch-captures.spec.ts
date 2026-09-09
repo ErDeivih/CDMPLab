@@ -111,9 +111,16 @@ async function grassBox(page: Page): Promise<Box> {
   });
 }
 
-/** Centro en PANTALLA del bounding box de un selector del SVG. */
+/** Centro en PANTALLA del bounding box de un selector del SVG.
+ *  Usa `getBoundingClientRect()` vía evaluate (robusto en hijos SVG, donde
+ *  `locator.boundingBox()` devuelve null de forma intermitente). */
 async function objectScreen(page: Page, selector: string): Promise<Pt> {
-  const b = (await page.locator(selector).first().boundingBox())!;
+  const loc = page.locator(selector).first();
+  await loc.waitFor({ state: 'attached', timeout: 5000 });
+  const b = await loc.evaluate((el) => {
+    const r = (el as SVGGraphicsElement).getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
 
@@ -203,7 +210,12 @@ async function twoFinger(page: Page, cx: number, cy: number, spreads: number[]):
 async function placeComodinAt(page: Page, nx: number, ny: number, expectCount = 1): Promise<Pt> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir un jugador de la plantilla NO cierra el panel.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  // FASE B (regla C): en móvil el panel persistente tapa el centro del campo; se cierra por
+  // su botón X (.panel-close) —que no desarma la colocación— para poder tocar el punto.
+  await page.locator('.side-panel-left .panel-close').click();
   await expect(page.locator('.side-panel-left')).toHaveCount(0);
   const host = await hostBox(page);
   const fit = await fitMode(page);
@@ -221,7 +233,12 @@ async function placeComodinAt(page: Page, nx: number, ny: number, expectCount = 
 async function placeComodinAtCenter(page: Page, expectCount = 1): Promise<Pt> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir un jugador de la plantilla NO cierra el panel.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  // FASE B (regla C): el panel persistente tapa el centro del host en móvil; se cierra por su
+  // botón X (.panel-close) —que no desarma la colocación— para poder tocar correctamente.
+  await page.locator('.side-panel-left .panel-close').click();
   await expect(page.locator('.side-panel-left')).toHaveCount(0);
   const host = await hostBox(page);
   await page.touchscreen.tap(host.x + host.width / 2, host.y + host.height / 2);
@@ -237,6 +254,10 @@ async function placeComodinAtCenter(page: Page, expectCount = 1): Promise<Pt> {
 async function placeConeAt(page: Page, nx: number, ny: number, expectCount = 1): Promise<Pt> {
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
+  // FASE B (paneles persistentes): el panel Material sigue abierto y en móvil tapa el centro
+  // del campo. Se cierra por su botón X (.panel-close), que no desarma la colocación.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
+  await expect(page.locator('.side-panel-left.tools-panel-side')).toHaveCount(0);
   const host = await hostBox(page);
   const fit = await fitMode(page);
   const s = normToScreen(nx, ny, host, fit);

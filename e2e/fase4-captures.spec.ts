@@ -49,13 +49,17 @@ async function boardWithContent(page: Page): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await page.locator('.side-panel-left .roster-item').first().click();
   await page.waitForTimeout(200);
-  // Tocar un jugador arma la colocación (cierra el panel); el clic en el campo lo coloca.
+  // FASE B (paneles persistentes): elegir un jugador NO cierra el panel; hay que
+  // cerrarlo con la X para poder tocar el campo en móvil retrato (el panel lo taparía).
+  await page.locator('.side-panel-left .panel-close').click();
   await page.mouse.click(box.x + box.width * 0.35, box.y + box.height * 0.5);
   await page.waitForTimeout(150);
 
   // Texto desde el panel Dibujo.
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Texto"]').click();
+  // FASE B: cerrar el panel Dibujo con la X (no desarma) antes de tocar el campo.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
   await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.4);
   await page.waitForTimeout(200);
   await expect(page.locator('.field-count')).toHaveText('2');
@@ -120,7 +124,7 @@ test.describe('Fase 4 — capturas multi-anchura (pizarra con paneles de herrami
     await page.waitForTimeout(250);
     // La plantilla compuesta (sin toggle overlay) dibuja tanto el F11 como el F7.
     const svg = await page.locator('.board-canvas svg').first().innerHTML();
-    expect(svg).toContain('width="92"');
+    expect(svg).toContain('height="46"'); // FASE 4/8b: F7 sobre el medio campo F11 apaisado (46 de alto)
     await page.screenshot({ path: `${SHOTS}/f7-overlay-horizontal.png` });
   });
 });

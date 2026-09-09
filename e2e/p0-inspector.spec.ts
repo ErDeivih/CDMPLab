@@ -21,12 +21,15 @@ test.describe('Botones del inspector en panel oscuro', () => {
     await seed(page);
     await page.goto('/board');
 
-    // Colocar un material (cono) que se auto-selecciona y abre el inspector.
+    // Colocar un material (cono). Fase 3: la colocación es continua, así que tras colocar
+    // se DESARMA con Seleccionar y se hace clic sobre él para seleccionarlo (abre inspector).
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     const box = (await page.locator('.board-host').boundingBox())!;
     await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
+    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
     await expect(page.locator('.inspector-actions')).toBeVisible();
 
     const results = await page.evaluate(() => {

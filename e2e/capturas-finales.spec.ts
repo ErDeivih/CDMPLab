@@ -64,6 +64,20 @@ async function setField(page: Page, field: string): Promise<void> {
   await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption(field);
   await page.waitForTimeout(150);
 }
+
+/** FASE B (paneles persistentes): abre una categoría del panel izquierdo de forma
+ *  IDEMPOTENTE. Si el panel de esa categoría ya está desplegado (ya no se cierra al
+ *  elegir una herramienta), NO se re-togglea la categoría (eso la cerraría y rompería
+ *  los pasos siguientes). */
+async function openCategory(page: Page, label: 'Jugadores' | 'Material' | 'Dibujo'): Promise<void> {
+  const panelSel =
+    label === 'Jugadores'
+      ? '.side-panel-left[aria-label="Jugadores"]'
+      : `.side-panel-left.tools-panel-side[aria-label="${label === 'Material' ? 'Herramientas de Material' : 'Herramientas de Dibujo'}"]`;
+  if (await page.locator(panelSel).isVisible().catch(() => false)) return;
+  await page.locator('.tools-cat', { hasText: label }).click();
+  await expect(page.locator(panelSel)).toBeVisible();
+}
 async function setOrient(page: Page, orient: 'horizontal' | 'vertical'): Promise<void> {
   await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator(`.chip[data-orient="${orient}"]`).click();
   await page.waitForTimeout(150);
@@ -121,11 +135,15 @@ test.describe('Capturas finales de esta versión', () => {
     // Fase 3: clic derecho coloca el cono; el menú contextual se abre con pulsación larga.
     await page.mouse.click(cx, cy, { button: 'right' });
     await expect(page.locator('.field-count')).toHaveText('1');
-    await page.waitForTimeout(200);
+    // Fase 3: la colocación del cono es CONTINUA → desarmar con "Seleccionar y mover" para
+    // poder abrir el menú contextual sobre el cono ya colocado (sin colocar otro).
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
     // Girar +90° desde el menú contextual.
     await longPress(page, cx, cy);
+    await expect(page.locator('.context-bar')).toBeVisible();
     await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
-    await page.waitForTimeout(150);
+    // Espera observable: el giro se refleja en la rotación del elemento (sin retardo fijo).
+    await expect.poll(async () => page.locator('.board-canvas svg [transform*="rotate("]').count(), { timeout: 4000 }).toBeGreaterThan(0);
     await page.screenshot({ path: `${SHOTS}/propiedades-cono-girado.png` });
   });
 
@@ -240,6 +258,10 @@ test.describe('Capturas finales de esta versión', () => {
       // Colocar y seleccionar un cono.
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await page.locator('.rail-btn[title="Cono"]').click();
+      // FASE B (paneles persistentes): el panel Material permanece abierto tras armar el cono
+      // y, en móvil vertical, tapa el centro del campo. Se cierra con su X (no desarma la
+      // colocación) para que el tap de colocación y la pulsación larga ocurran en el campo.
+      await page.locator('.side-panel-left .panel-close').click();
       const b = (await page.locator('.board-host').boundingBox())!;
       const [cx, cy] = normToScreen(0.5, 0.5, b);
       await page.mouse.click(cx, cy, { button: 'right' });
@@ -268,7 +290,7 @@ test.describe('Capturas finales de esta versión', () => {
     // así que la composición usa las figuras existentes.
     const b = await page.locator('.board-host').boundingBox();
     async function drawShape(title: string, fill: 'Relleno' | 'Perímetro', from: [number, number], to: [number, number]): Promise<void> {
-      await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
+      await openCategory(page, 'Dibujo');
       await page.locator(`.rail-btn[title="${title}"]`).click();
       await page.locator('.tools-caption .chip', { hasText: fill }).click();
       const p0 = normToScreen(from[0], from[1], b!);
@@ -292,20 +314,25 @@ test.describe('Capturas finales de esta versión', () => {
       ['Balón', 'Material', 0.5, 0.5],
     ];
     for (const [title, cat, nx, ny] of place) {
-      await page.locator('.tools-cat', { hasText: cat }).click();
-      await page.locator(`.rail-btn[title="${title}"]`).click();
+      await openCategory(page, cat as 'Jugadores' | 'Material');
+      if (title === 'Jugador propio' || title === 'Jugador rival') {
+        const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+        await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+      } else {
+        await page.locator(`.rail-btn[title="${title}"]`).click();
+      }
       const p = normToScreen(nx, ny, b!);
       await page.mouse.click(p[0], p[1]);
     }
     // Línea y flecha.
     for (const [tool, f, t] of [['Línea',[0.35,0.35],[0.6,0.4]],['Flecha (movimiento)',[0.5,0.55],[0.62,0.5]]] as Array<[string,[number,number],[number,number]]>) {
-      await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
+      await openCategory(page, 'Dibujo');
       await page.locator(`.rail-btn[title="${tool}"]`).click();
       const a2 = normToScreen(f[0], f[1], b!); const b2 = normToScreen(t[0], t[1], b!);
       await page.mouse.move(a2[0], a2[1]); await page.mouse.down(); await page.mouse.move(b2[0], b2[1], { steps: 5 }); await page.mouse.up();
     }
     // Texto explicativo.
-    await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
+    await openCategory(page, 'Dibujo');
     await page.locator('.rail-btn[title="Texto"]').click();
     const tp = normToScreen(0.5, 0.85, b!);
     await page.mouse.click(tp[0], tp[1]);

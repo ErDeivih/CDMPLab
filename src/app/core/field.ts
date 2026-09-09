@@ -1,5 +1,6 @@
 import { FieldType } from './models';
 import { f7Geometry } from './f7';
+import type { F7Geom } from './f7';
 
 // =============================================================
 // EntrenoLab — Geometría del campo.
@@ -28,15 +29,21 @@ export const FIELD_SPECS: FieldSpec[] = [
   { type: 'third', label: 'Tercio de campo' },
   { type: 'box', label: 'Área y portería' },
   { type: 'futsal', label: 'Futsal' },
+  { type: 'two_halves', label: 'Dos medios campos' },
   { type: 'blank', label: 'Lienzo' },
 ];
 
-/** Campos base del complemento: solo estos se ofrecen en el selector. */
+/** Campos base del complemento: solo estos se ofrecen en el selector (galería visual). */
 export const FIELD_BASE_SPECS: FieldSpec[] = [
-  { type: 'full', label: 'Campo completo de fútbol' },
-  { type: 'half', label: 'Medio campo de fútbol' },
-  { type: 'f7', label: 'F7 transversal sobre medio campo F11' },
-  { type: 'blank', label: 'Sin líneas / lienzo vacío' },
+  { type: 'full', label: 'Campo completo' },
+  { type: 'half', label: 'Medio campo' },
+  { type: 'vertical_half', label: 'Medio campo vertical' },
+  { type: 'third', label: 'Tercio de campo' },
+  { type: 'box', label: 'Área y portería' },
+  { type: 'futsal', label: 'Fútbol sala' },
+  { type: 'f7', label: 'F7 transversal' },
+  { type: 'two_halves', label: 'Dos medios campos' },
+  { type: 'blank', label: 'Lienzo' },
 ];
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -80,9 +87,20 @@ export function fieldDimensions(field: FieldType): { len: number; wid: number } 
   switch (field) {
     case 'half':
     case 'vertical_half':
+    case 'f7':
+      // El campo base F7 es la plantilla del MEDIO campo F11 (52,5×68), no del campo completo.
       return { len: 52.5, wid: 68 };
+    case 'futsal':
+      // Fútbol sala (40×20 m) tiene su propia geometría, no la del campo completo.
+      return { len: 40, wid: 20 };
+    case 'third':
+      // Tercio de campo: recorte medido de 1/3 del largo del F11 (35 m × 68 m).
+      return { len: 35, wid: 68 };
+    case 'box':
+      // Recorte "Área y portería": 22 m de largo × 44 m de ancho.
+      return { len: 22, wid: 44 };
     default:
-      // full / f7 / blank / third / box / futsal conservan el rect canónico 105×68.
+      // full / blank conservan el rect canónico 105×68.
       return { len: 105, wid: 68 };
   }
 }
@@ -124,14 +142,68 @@ function halfGeom(orientation: Orientation): FieldGeom {
     : { vbW: px + 2 * VB_MARGIN, vbH: py + 2 * VB_MARGIN, rect, lenM: 52.5, widM: 68, vertical: false };
 }
 
+/** Geometría del campo base F7: medio campo F11 APISAADO (68 m en X, 52,5 m en Y).
+ *  El medio campo F11 es 52,5 m de largo × 68 m de ancho; aquí se dibuja GIrado 90°
+ *  (apaisado) porque así lo pide el dueño: portería F11 ARRIBA y porterías F7
+ *  IZQUIERDA/DERECHA. El rect es, por tanto, 68 m en el eje X y 52,5 m en el eje Y;
+ *  la superficie física sigue siendo el medio campo (52,5×68), solo cambia el dibujo. */
+function f7Geom(orientation: Orientation): FieldGeom {
+  const px = 68 * PX_PER_M; // 68 m (ancho del medio campo) en X → 59.58
+  const py = 52.5 * PX_PER_M; // 52,5 m (largo del medio campo) en Y → 46
+  const rect = { x: VB_MARGIN, y: VB_MARGIN, w: px, h: py };
+  return orientation === 'vertical'
+    ? { vbW: py + 2 * VB_MARGIN, vbH: px + 2 * VB_MARGIN, rect, lenM: 52.5, widM: 68, vertical: true }
+    : { vbW: px + 2 * VB_MARGIN, vbH: py + 2 * VB_MARGIN, rect, lenM: 52.5, widM: 68, vertical: false };
+}
+
+/** Geometría del campo de FÚTBOL SALA (40×20 m). Rect canónico con proporción 2:1.
+ *  La superficie física es 40 m de largo × 20 m de ancho; NO se estira a la caja 105×68.
+ *  Las marcas se dibujan con las fracciones de futsal (círculo central 3 m, portería 3×2). */
+function futsalGeom(orientation: Orientation): FieldGeom {
+  const px = 40 * PX_PER_M; // 40 m en X → 35.05
+  const py = 20 * PX_PER_M; // 20 m en Y → 17.52
+  const rect = { x: VB_MARGIN, y: VB_MARGIN, w: px, h: py };
+  return orientation === 'vertical'
+    ? { vbW: py + 2 * VB_MARGIN, vbH: px + 2 * VB_MARGIN, rect, lenM: 40, widM: 20, vertical: true }
+    : { vbW: px + 2 * VB_MARGIN, vbH: py + 2 * VB_MARGIN, rect, lenM: 40, widM: 20, vertical: false };
+}
+
+/** Geometría del TERCIO de campo (35×68 m): recorte medido de 1/3 del largo del F11
+ *  (105/3 = 35 m) conservando el ancho de 68 m. Rect propio, NO estirado a 105×68. */
+function thirdGeom(orientation: Orientation): FieldGeom {
+  const px = 35 * PX_PER_M; // 35 m en X → 30.67
+  const py = 68 * PX_PER_M; // 68 m en Y → 59.58
+  const rect = { x: VB_MARGIN, y: VB_MARGIN, w: px, h: py };
+  return orientation === 'vertical'
+    ? { vbW: py + 2 * VB_MARGIN, vbH: px + 2 * VB_MARGIN, rect, lenM: 35, widM: 68, vertical: true }
+    : { vbW: px + 2 * VB_MARGIN, vbH: py + 2 * VB_MARGIN, rect, lenM: 35, widM: 68, vertical: false };
+}
+
+/** Geometría del recorte "Área y portería" (22×44 m): crop del F11 que incluye la
+ *  portería, el área pequeña (5,5×18,32 m), el área penal (16,5×40,32 m) y el arco de
+ *  penalti (que sobresale hasta ~20 m de la línea de fondo). Rect propio. */
+function boxGeom(orientation: Orientation): FieldGeom {
+  const px = 22 * PX_PER_M; // 22 m en X → 19.28
+  const py = 44 * PX_PER_M; // 44 m en Y → 38.57
+  const rect = { x: VB_MARGIN, y: VB_MARGIN, w: px, h: py };
+  return orientation === 'vertical'
+    ? { vbW: py + 2 * VB_MARGIN, vbH: px + 2 * VB_MARGIN, rect, lenM: 22, widM: 44, vertical: true }
+    : { vbW: px + 2 * VB_MARGIN, vbH: py + 2 * VB_MARGIN, rect, lenM: 22, widM: 44, vertical: false };
+}
+
 /**
  * Geometría dinámica del campo para el TIPO de campo y la ORIENTACIÓN actuales.
  * Devuelve el rect canónico de contenido con las proporciones REALES (105×68 campo
- * completo; 52,5×68 medio campo) y el viewBox que lo encaja. Es la ÚNICA fuente de
- * la geometría: la usan el render, la conversión pantalla↔norm, el hit-test, el
+ * completo; 52,5×68 medio campo; F7 medio campo apaisado 68×52,5; futsal 40×20;
+ * tercio 35×68; área 22×44) y el viewBox que lo encaja. Es la ÚNICA fuente de la
+ * geometría: la usan el render, la conversión pantalla↔norm, el hit-test, el
  * movimiento/redimensionado, el zoom/pan, las miniaturas, el PNG y al volver a abrir.
  */
 export function fieldGeometry(field: FieldType, orientation: Orientation = 'horizontal'): FieldGeom {
+  if (field === 'f7') return f7Geom(orientation);
+  if (field === 'futsal') return futsalGeom(orientation);
+  if (field === 'third') return thirdGeom(orientation);
+  if (field === 'box') return boxGeom(orientation);
   return field === 'half' || field === 'vertical_half' ? halfGeom(orientation) : fullGeom(orientation);
 }
 
@@ -139,6 +211,42 @@ const LEN = 105; // largo del campo (m)
 const WID = 68; // ancho del campo (m)
 const lf = (m: number) => m / LEN; // fracción de longitud (eje de largo)
 const wf = (m: number) => m / WID; // fracción de anchura (eje de ancho)
+
+/** Franja exterior de césped liso alrededor del campo. Es ~5 % del lado corto (68 m)
+ *  expresado como FRACCIÓN de la longitud (105 m), de modo que la franja tenga el
+ *  mismo grosor visual en ambos ejes y los objetos puedan colocarse ligeramente
+ *  fuera de las líneas del terreno. Fuente ÚNICA: la usan field.ts (render de la
+ *  franja), render.ts (dominio de coordenadas permitidas) y el board (clamp/PNG). */
+export const OUTER_STRIP_LEN_FRAC = (0.05 * WID) / LEN;
+/** La misma franja como fracción de la anchura (≈5 %). */
+export const OUTER_STRIP_WID_FRAC = 0.05;
+
+/** A6: fuente ÚNICA del grosor de la franja (fracción del lado corto del campo).
+ *  La usan el render (franja visible), `screenToNorm`/`MARGIN_STRIP` (coordenadas
+ *  permitidas), el clamp de colocación/arrastre del board y el hit-test. */
+export const STRIP_FRAC = 0.05;
+/** Margen (en coords normalizadas) permitido FUERA de [0,1], el mismo en ambos ejes.
+ *  Deriva de STRIP_FRAC y es la fuente de `MARGIN_STRIP` del render. */
+export const STRIP_MARGIN_NORM = STRIP_FRAC;
+/** Césped OFICIAL único (A7): color y textura fijos. El render usa SIEMPRE estos
+ *  valores; los documentos antiguos con otro backgroundColor/grass siguen siendo
+ *  válidos y no se sobrescriben al abrir, pero se visualizan con el césped oficial. */
+export const OFFICIAL_PITCH_COLOR = '#31834a';
+export const OFFICIAL_GRASS_MODE = 'stripes';
+
+/** ESCALA VISUAL APARENTE de los objetos por TIPO de campo (FASE 6).
+ *  Los materiales/jugadores se dibujan con un tamaño fijo en unidades de viewBox. Como
+ *  el viewBox de un campo reducido encaja un campo MÁS CORTO en el MISMO host que un
+ *  campo completo (105 m), los objetos se verían proporcionalmente MÁS GRANDES. Este
+ *  factor compensa esa dilatación (escala ≤1 en campos reducidos) para que el tamaño
+ *  APARENTE sea el mismo en cualquier campo, sin tocar el tamaño `size` guardado.
+ *  Se deriva de la longitud física real del campo (fuente: fieldDimensions):
+ *  completo = 1; medio campo/F7 (52,5 m) ≈ 0,5; fútbol sala (40 m) = 40/105. */
+export function fieldObjectScale(field: FieldType, orientation: Orientation = 'horizontal'): number {
+  // Relación longitudReal/longitudReferencia(105). No depende de la orientación (la
+  // dilatación es la misma). Futsal (40 m) pasa de 1 a 40/105 al tener geometría propia.
+  return fieldDimensions(field).len / 105;
+}
 
 /**
  * Mapea coordenadas abstractas (l = fracción de longitud, w = fracción de
@@ -182,10 +290,10 @@ const spot = (r: Rect, o: Orientation, l: number, w: number) => {
  * punto de penalti) que queda FUERA del área. En horizontal el arco se
  * dibuja correctamente; en vertical se intercambian los ejes.
  */
-const penaltyArc = (r: Rect, o: Orientation, left: boolean, lenFrac: (m: number) => number) => {
+const penaltyArc = (r: Rect, o: Orientation, left: boolean, lenFrac: (m: number) => number, widFrac: (m: number) => number = wf) => {
   const Rm = 9.15;
   const rxL = lenFrac(Rm); // radio en fracción de longitud
-  const ryW = wf(Rm); // radio en fracción de anchura
+  const ryW = widFrac(Rm); // radio en fracción de anchura
   const psL = left ? lenFrac(11) : 1 - lenFrac(11);
   const boxL = left ? lenFrac(16.5) : 1 - lenFrac(16.5);
   const dx = boxL - psL;
@@ -200,10 +308,13 @@ const penaltyArc = (r: Rect, o: Orientation, left: boolean, lenFrac: (m: number)
   return `<path d="M ${x1} ${y1} A ${rxP} ${ryP} 0 0 ${sweep} ${x2} ${y2}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
 };
 
-/** Arcos de esquina (radio 1,2 m) por las cuatro esquinas del campo. */
-const cornerArcs = (r: Rect, o: Orientation) => {
-  const rl = lf(1.2); // radio en fracción de longitud
-  const rw = wf(1.2); // radio en fracción de anchura
+/** Arcos de esquina (radio 1,2 m) por las cuatro esquinas del campo.
+ *  `lenFrac`/`widFrac` convierten metros a FRACCIÓN de longitud/anchura del campo
+ *  (full usa 105/68; medio campo usa 52,5/68) para que el radio sea idéntico en
+ *  metros y el arco conserve su proporción en cada tipo de campo. */
+const cornerArcs = (r: Rect, o: Orientation, lenFrac: (m: number) => number = lf, widFrac: (m: number) => number = wf) => {
+  const rl = lenFrac(1.2); // radio en fracción de longitud
+  const rw = widFrac(1.2); // radio en fracción de anchura
   const rlx = o === 'vertical' ? rw : rl;
   const rly = o === 'vertical' ? rl : rw;
   // Esquinas (l, w) con las direcciones hacia el interior en cada eje.
@@ -285,48 +396,192 @@ function halfField(r: Rect, o: Orientation): string {
   const [x2, y2] = at(r, o, 1, centerW + ryW);
   const sweep = o === 'horizontal' ? 0 : 1;
   s += `<path d="M ${x1} ${y1} A ${rxP} ${ryP} 0 0 ${sweep} ${x2} ${y2}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
-  return s;
+  // FASE 8: arcos de esquina (radio 1,2 m, fracción de longitud 52,5) en las 4 esquinas.
+  return s + cornerArcs(r, o, hlf, wf);
 }
 
-function thirdField(r: Rect, o: Orientation): string {
+/** Medio campo con la PORTERÍA a l=1 (línea de medio campo a l=0). Es el espejo X de
+ *  `halfField`; se usa para la segunda mitad del campo "dos medios campos". La fracción
+ *  de longitud se mide DESDE la línea de medio campo (l=0) hacia la portería (l=1). */
+function halfFieldFlipped(r: Rect, o: Orientation): string {
+  const HL = 52.5;
+  const hlf = (m: number) => m / HL;
+  const centerW = 0.5;
+  const boxL = hlf(16.5);
+  const boxHW = wf(40.32) / 2;
+  const goalL = hlf(2);
+  const goalHW = wf(7.32) / 2;
+  const sixL = hlf(5.5);
+  const sixHW = wf(18.32) / 2;
+  const spotL = hlf(11);
   let s = '';
   s += rect(r, o, 0, 0, 1, 1);
-  const centerW = 0.5;
-  const boxL = 0.28;
-  const boxHW = 0.3;
-  const goalL = 0.02;
-  const goalHW = 0.13;
+  // Áreas/portería junto a l=1 (portería a la derecha en horizontal):
   s += rect(r, o, 1 - boxL, centerW - boxHW, 1, centerW + boxHW);
+  s += rect(r, o, 1 - sixL, centerW - sixHW, 1, centerW + sixHW);
   s += rect(r, o, 1, centerW - goalHW, 1 + goalL, centerW + goalHW, 'rgba(255,255,255,0.25)');
-  s += circlePx(r, o, 0.5, centerW, 9.15);
+  s += spot(r, o, 1 - spotL, centerW);
+  const Rm = 9.15;
+  const rxL = hlf(Rm);
+  const ryW = wf(Rm);
+  const rxP = o === 'vertical' ? ryW * r.w : rxL * r.w;
+  const ryP = o === 'vertical' ? rxL * r.h : ryW * r.h;
+  // Arco de penalti (fuera del área, hacia el centro). En horizontal sobresale a la
+  // izquierda del área; sweep adecuado.
+  const [ax1, ay1] = at(r, o, 1 - boxL, centerW - ryW * Math.sqrt(Math.max(0, 1 - ((boxL - spotL) / rxL) ** 2)));
+  const [ax2, ay2] = at(r, o, 1 - boxL, centerW + ryW * Math.sqrt(Math.max(0, 1 - ((boxL - spotL) / rxL) ** 2)));
+  const rsweep = o === 'horizontal' ? 0 : 1;
+  s += `<path d="M ${ax1} ${ay1} A ${rxP} ${ryP} 0 0 ${rsweep} ${ax2} ${ay2}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
+  // Semicírculo central en la línea de medio campo (l=0), hacia el interior.
+  const [x1, y1] = at(r, o, 0, centerW - ryW);
+  const [x2, y2] = at(r, o, 0, centerW + ryW);
+  const sweep = o === 'horizontal' ? 1 : 0;
+  s += `<path d="M ${x1} ${y1} A ${rxP} ${ryP} 0 0 ${sweep} ${x2} ${y2}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
   return s;
 }
 
+/** A2: campo "dos medios campos" (izquierda/derecha en horizontal, arriba/abajo en
+ *  vertical). Cada mitad es un medio campo F11 completo que linda con la otra en la
+ *  línea de medio campo central. La unión NO produce línea doble: se dibuja el contorno
+ *  de cada mitad y la arista central coincide exactamente. */
+function twoHalvesField(r: Rect, o: Orientation): string {
+  const left: Rect = { ...r, w: r.w / 2 };
+  const right: Rect = { x: r.x + r.w / 2, y: r.y, w: r.w / 2, h: r.h };
+  // Mitad izquierda (portería a la izquierda) + mitad derecha (portería a la derecha).
+  // Comparten la arista central (la línea de medio campo); no se añade ninguna línea
+  // extra en el centro para no duplicar el trazo.
+  const leftStr = halfField(left, o);
+  const rightStr = halfFieldFlipped(right, o);
+  return leftStr + rightStr;
+}
+
+/** Tercio de campo (35×68 m): recorte del F11 que muestra el extremo de la portería
+ *  con su área grande (16,5 m), área pequeña (5,5 m), punto de penalti (11 m) y arco.
+ *  Las fracciones usan 35 m (largo) y 68 m (ancho). No hay línea de medio campo (el
+ *  recorte de 35 m no llega al centro). */
+function thirdField(r: Rect, o: Orientation): string {
+  const tl = (m: number) => m / 35; // fracción de longitud (35 m)
+  const tw = (m: number) => m / 68; // fracción de anchura (68 m)
+  const centerW = 0.5;
+  const boxL = tl(16.5); // área grande
+  const boxHW = tw(40.32) / 2;
+  const goalL = tl(2);
+  const goalHW = tw(7.32) / 2;
+  const sixL = tl(5.5);
+  const sixHW = tw(18.32) / 2;
+  const spotL = tl(11);
+  let s = '';
+  s += rect(r, o, 0, 0, 1, 1);
+  s += rect(r, o, -goalL, centerW - goalHW, 0, centerW + goalHW, 'rgba(255,255,255,0.25)'); // portería
+  s += rect(r, o, 0, centerW - boxHW, boxL, centerW + boxHW); // área grande
+  s += rect(r, o, 0, centerW - sixHW, sixL, centerW + sixHW); // área pequeña
+  s += spot(r, o, spotL, centerW); // punto de penalti
+  s += penaltyArc(r, o, true, tl); // arco de penalti (9,15 m fuera del área)
+  return s;
+}
+
+/** Recorte "Área y portería" (22×44 m): crop del F11 centrado en la portería que muestra
+ *  el área pequeña (5,5×18,32 m), el área penal (16,5×40,32 m), el punto de penalti
+ *  (11 m) y el arco. Las fracciones usan 22 m (largo) y 44 m (ancho); por eso el arco
+ *  de penalti se dibuja con la fracción de anchura del propio recorte. */
 function boxField(r: Rect, o: Orientation): string {
+  const bl = (m: number) => m / 22; // fracción de longitud (22 m)
+  const bw = (m: number) => m / 44; // fracción de anchura (44 m)
+  const centerW = 0.5;
+  const boxL = bl(16.5); // área penal
+  const boxHW = bw(40.32) / 2;
+  const goalL = bl(2);
+  const goalHW = bw(7.32) / 2;
+  const sixL = bl(5.5);
+  const sixHW = bw(18.32) / 2;
+  const spotL = bl(11);
   let s = '';
   s += rect(r, o, 0, 0, 1, 1);
-  const centerW = 0.5;
-  const goalL = 0.06;
-  const goalHW = 0.13;
-  s += rect(r, o, 1, centerW - goalHW, 1 + goalL, centerW + goalHW, 'rgba(255,255,255,0.25)');
-  s += circlePx(r, o, 0.5, centerW, 9.15);
-  s += line(r, o, 0, centerW, 0.2, centerW, true);
+  s += rect(r, o, -goalL, centerW - goalHW, 0, centerW + goalHW, 'rgba(255,255,255,0.25)'); // portería
+  s += rect(r, o, 0, centerW - boxHW, boxL, centerW + boxHW); // área penal
+  s += rect(r, o, 0, centerW - sixHW, sixL, centerW + sixHW); // área pequeña
+  s += spot(r, o, spotL, centerW); // punto de penalti
+  s += penaltyArc(r, o, true, bl, bw); // arco de penalti (width-aware)
   return s;
 }
 
-function futsalField(r: Rect, o: Orientation): string {
+/** Arcos de esquina de FÚTBOL SALA (radio 0,25 m, NO los 1,2 m del fútbol once). */
+function futsalCornerArcs(r: Rect, o: Orientation): string {
+  const flf = (m: number) => m / 40;
+  const fwf = (m: number) => m / 20;
+  const rl = flf(0.25);
+  const rw = fwf(0.25);
+  const rx = o === 'vertical' ? rw * r.w : rl * r.w;
+  const ry = o === 'vertical' ? rl * r.h : rw * r.h;
+  const corners: Array<[number, number, number, number]> = [
+    [0, 0, 1, 1], [1, 0, -1, 1], [0, 1, 1, -1], [1, 1, -1, -1],
+  ];
   let s = '';
-  s += rect(r, o, 0, 0, 1, 1);
-  const centerW = 0.5;
-  const boxL = 0.12;
-  const boxHW = 0.25;
-  s += line(r, o, 0.5, 0, 0.5, 1, true);
-  s += circlePx(r, o, 0.5, centerW, 9.15);
-  for (const left of [true, false]) {
-    const b0 = left ? 0 : 1 - boxL;
-    s += rect(r, o, b0, centerW - boxHW, b0 + boxL, centerW + boxHW);
+  for (const [cl, cw, dl, dw] of corners) {
+    const [xE, yE] = at(r, o, cl + dl * rl, cw);
+    const [xW, yW] = at(r, o, cl, cw + dw * rw);
+    const sweep = o === 'horizontal' ? (dw > 0 ? 1 : 0) : dl > 0 ? 0 : 1;
+    s += `<path d="M ${xE} ${yE} A ${rx} ${ry} 0 0 ${sweep} ${xW} ${yW}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
   }
   return s;
+}
+
+/** Área de penalti de FÚTBOL SALA reglamentaria: dos arcos de radio 6 m desde cada poste
+ *  + el tramo (línea de 6 m) que los une. NO es un rectángulo 6×20 a lo ancho. */
+function futsalPenaltyArea(r: Rect, o: Orientation, left: boolean): string {
+  const flf = (m: number) => m / 40;
+  const fwf = (m: number) => m / 20;
+  const rl = flf(6); // radio 6 m en longitud
+  const rw = fwf(6); // radio 6 m en anchura
+  const centerW = 0.5;
+  const goalHW = fwf(3) / 2;
+  const postL = centerW - goalHW;
+  const postR = centerW + goalHW;
+  const gl = left ? 0 : 1; // línea de portería
+  const dl = left ? rl : 1 - rl; // línea de 6 m
+  const rx = o === 'vertical' ? rw * r.w : rl * r.w;
+  const ry = o === 'vertical' ? rl * r.h : rw * r.h;
+  const sweep = o === 'vertical' ? (left ? 0 : 1) : left ? 1 : 0;
+  let s = '';
+  for (const post of [postL, postR]) {
+    const [xs, ys] = at(r, o, gl, post + (post === postL ? -rw : rw)); // hacia fuera en la línea de portería
+    const [xe, ye] = at(r, o, dl, post); // en la línea de 6 m
+    s += `<path d="M ${xs} ${ys} A ${rx} ${ry} 0 0 ${sweep} ${xe} ${ye}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
+  }
+  const [lx1, ly1] = at(r, o, dl, postL);
+  const [lx2, ly2] = at(r, o, dl, postR);
+  s += `<line x1="${lx1}" y1="${ly1}" x2="${lx2}" y2="${ly2}" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
+  return s;
+}
+
+/** Campo de FÚTBOL SALA (40×20 m) realmente reglamentario: superficie 2:1, línea de medio
+ *  campo, círculo central de 3 m, portería 3×2 m, área de penalti en D (arcos de 6 m desde
+ *  cada poste + tramo), punto de penalti a 6 m, segundo punto a 10 m y arcos de esquina de
+ *  0,25 m. Las fracciones usan 40 m (largo) y 20 m (ancho). */
+function futsalField(r: Rect, o: Orientation): string {
+  const flf = (m: number) => m / 40; // fracción de longitud (40 m)
+  const fwf = (m: number) => m / 20; // fracción de anchura (20 m)
+  const centerW = 0.5;
+  const goalL = flf(2);
+  const goalHW = fwf(3) / 2;
+  const spot1 = flf(6); // punto de penalti a 6 m
+  const spot2 = flf(10); // segundo punto a 10 m (doble penalti)
+  let s = '';
+  s += rect(r, o, 0, 0, 1, 1);
+  s += line(r, o, 0.5, 0, 0.5, 1, false); // línea de medio campo (continua)
+  // Círculo central r=3 m (circular en píxeles).
+  const [ccx, ccy] = at(r, o, 0.5, centerW);
+  const crx = o === 'vertical' ? fwf(3) * r.w : flf(3) * r.w;
+  const cry = o === 'vertical' ? flf(3) * r.h : fwf(3) * r.h;
+  s += `<ellipse cx="${ccx}" cy="${ccy}" rx="${crx}" ry="${cry}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
+  for (const left of [true, false]) {
+    const g0 = left ? -goalL : 1;
+    s += rect(r, o, g0, centerW - goalHW, g0 + goalL, centerW + goalHW, 'rgba(255,255,255,0.25)'); // portería 3×2
+    s += futsalPenaltyArea(r, o, left); // área de penalti en D (no rectángulo 6×20)
+    s += spot(r, o, left ? spot1 : 1 - spot1, centerW); // punto de penalti 6 m
+    s += spot(r, o, left ? spot2 : 1 - spot2, centerW); // segundo punto 10 m
+  }
+  return s + futsalCornerArcs(r, o); // arcos de esquina de 0,25 m
 }
 
 /** Mapea (fl = fracción de longitud desde la línea de medio campo [0] hasta la
@@ -410,12 +665,36 @@ function halfPitchAtTop(r: Rect): string {
   return s;
 }
 
+/** Arcos de esquina del F7 (radio 1,2 m) en las 4 esquinas de la superficie F7.
+ *  La superficie F7 (`F7Geom`) ya está en unidades de viewBox del rect canónico; aquí
+ *  se dibuja el arco de esquina como una cuarte-partición circular en cada esquina,
+ *  en el color de contraste del F7. */
+function f7CornerArcs(g: F7Geom): string {
+  const rad = 1.2 * PX_PER_M; // radio (1,2 m) en unidades de viewBox
+  const { x, y, w, h } = g;
+  const rx = rad;
+  const ry = rad;
+  const edges = [
+    // [puntoInicial, puntoFinal, sweep]
+    [`${x + rad} ${y}`, `${x} ${y + rad}`, 0], // superior-izquierda
+    [`${x + w - rad} ${y}`, `${x + w} ${y + rad}`, 1], // superior-derecha
+    [`${x + w} ${y + h - rad}`, `${x + w - rad} ${y + h}`, 1], // inferior-derecha
+    [`${x} ${y + h - rad}`, `${x + rad} ${y + h}`, 1], // inferior-izquierda
+  ] as const;
+  let s = '';
+  for (const [a, b, sweep] of edges) {
+    s += `<path d="M ${a} A ${rx} ${ry} 0 0 ${sweep} ${b}" fill="none" stroke="${F7_LINE_COLOR}" stroke-width="${FIELD_LINE_WIDTH}" />`;
+  }
+  return s;
+}
+
 /** Campo base "F7 transversal sobre medio campo F11" (plantilla compuesta).
  *  Dibuja el MEDIO CAMPO del F11 (portería arriba) y, PERPENDICULAR a su eje largo
  *  (vertical), el F7 con sus porterías/áreas a IZQUIERDA y DERECHA: el F7 cruza el
  *  ancho del medio campo (mismo origen geométrico f7Geometry) y NO dibuja línea ni
  *  círculo central (solo el punto central r=0.35). En vertical, render board rota
- *  todo el contenido, de modo que áreas/porterías/centro se conservan sin deformar. */
+ *  todo el contenido, de modo que áreas/porterías/centro se conservan sin deformar.
+ *  FASE 8b: se añaden los cuatro arcos de esquina del F7 (faltaban). */
 function f7Field(r: Rect, o: Orientation): string {
   let out = halfPitchAtTop(r);
   const g = f7Geometry(r);
@@ -426,6 +705,7 @@ function f7Field(r: Rect, o: Orientation): string {
   for (const b of g.big) out += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" stroke="${stroke}" stroke-width="${lw}" fill="none"/>`;
   for (const b of g.small) out += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" stroke="${stroke}" stroke-width="${lw}" fill="none"/>`;
   out += `<circle cx="${g.center.x}" cy="${g.center.y}" r="0.35" fill="${F7_LINE_COLOR}" stroke="none"/>`;
+  out += f7CornerArcs(g);
   return out;
 }
 
@@ -447,6 +727,8 @@ export function fieldSvg(field: FieldType, rect: Rect, orientation: Orientation 
       return futsalField(rect, orientation);
     case 'f7':
       return f7Field(rect, orientation);
+    case 'two_halves':
+      return twoHalvesField(rect, orientation);
     case 'blank':
     default:
       return '';

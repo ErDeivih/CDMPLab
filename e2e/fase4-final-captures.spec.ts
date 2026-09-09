@@ -143,8 +143,12 @@ async function deselect(page: Page): Promise<void> {
 async function placeComodin(page: Page, host: Box, nx = 0.5, ny = 0.3): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
-  await expect(page.locator('.side-panel-left')).toHaveCount(0);
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir un jugador NO cierra el panel Jugadores.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  // FASE B: cerrar el panel con la X (no desarma la colocación) para que el tap en el
+  // campo, en móvil retrato, no quede interceptado por el panel persistente.
+  await page.locator('.side-panel-left .panel-close').click();
   const c = normToScreen(nx, ny, host, 'height');
   await page.mouse.click(c[0], c[1]);
   await expect(page.locator('.field-count')).toHaveText('1');
@@ -268,6 +272,8 @@ function segEntersRect(x1: number, y1: number, x2: number, y2: number, r: { x: n
  *  buscado desaparece. No se debilita ninguna aserción: al terminar, el indicador del
  *  lado revelado debe estar oculto y el contrario visible (lo verifican los tests). */
 async function panToGoal(page: Page, host: Box, goal: 'left' | 'right'): Promise<void> {
+  // Fase 5: panear requiere la herramienta "Desplazar campo" (Mano); Seleccionar ya NO panea.
+  await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
   const y = host.y + host.height / 2;
   const startX = goal === 'left' ? host.x + 40 : host.x + host.width - 40;
   const endX = goal === 'left' ? host.x + host.width - 40 : host.x + 40;
@@ -433,6 +439,9 @@ test.describe('Fase 4 — revisión visual final (capturas)', () => {
     await expect(page.locator('.board-host')).toHaveClass(/board-fill/);
     const host = await hostBox(page);
     await placeComodin(page, host);
+    // Desarmar la colocación continua para que la pista (.placement-hint) no intercepte
+    // el clic sobre el conmutador de campo.
+    await page.keyboard.press('Escape');
     // Cambiar a Campo completo: caben todo → sin pan → sin indicadores.
     await page.locator('.field-fit-toggle').click();
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);

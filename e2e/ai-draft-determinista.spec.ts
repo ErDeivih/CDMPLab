@@ -99,7 +99,10 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   await expect(page.locator('[aria-label="Título del ejercicio"]')).toHaveValue('Salida de balón 4-3-3');
   await expect(page.locator('[aria-label="Descripción"]')).toHaveValue(/Posesión y salida limpia/);
   await expect(page.locator('[aria-label="Explicación"]')).toHaveValue(/Circular el balón/);
-  await expect(page.locator('[aria-label="Material necesario"]')).toHaveValue(/2 miniporterías/);
+  // FASE 8: "Material necesario" es un checklist. El material del borrador IA
+  // ("2 miniporterías") se muestra como opción marcada.
+  await expect(page.locator('.material-checklist input[aria-label="2 miniporterías"]')).toBeChecked();
+  await expect(page.locator('.material-checklist')).toContainText('miniporterías');
 
   // 2) EDITAR: mover el primer jugador.
   const playerSel = '.board-canvas svg [data-el-type="player"]';
@@ -151,7 +154,8 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   const savedTitle = await page.locator('[aria-label="Título del ejercicio"]').inputValue();
   expect(savedTitle, 'el título guardado se conserva').toBe('Salida de balón 4-3-3');
   await expect(page.locator('[aria-label="Descripción"]')).toHaveValue(/Posesión y salida limpia/);
-  await expect(page.locator('[aria-label="Material necesario"]')).toHaveValue(/2 miniporterías/);
+  // FASE 8: material como checkbox (se conserva al reabrir).
+  await expect(page.locator('.material-checklist input[aria-label="2 miniporterías"]')).toBeChecked();
   const saveCount = Number(await page.locator('.field-count').innerText());
   expect(saveCount, 'los elementos del borrador se conservan').toBeGreaterThanOrEqual(25);
 });

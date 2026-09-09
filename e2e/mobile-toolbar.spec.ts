@@ -159,7 +159,11 @@ test.describe('Defecto 1 — barra inferior móvil en una sola fila', () => {
 
     // Jugadores → colocar un Portero.
     await page.locator('.tools-cat[aria-label="Jugadores"]').click();
-    await page.locator('.tray-player[title="Portero"]').click();
+    await page.locator('.tray-player[title="Jugador Azul"]').click();
+    // FASE B (paneles persistentes): el panel Jugadores permanece abierto tras armar el
+    // jugador y, en móvil vertical, tapa el punto de colocación. Se cierra con su X
+    // (no desarma la colocación) antes de hacer tap en el campo.
+    await page.locator('.side-panel-left .panel-close').click();
     let p = normToScreen(0.35, 0.45, host, fit);
     await page.mouse.click(p.x, p.y);
     await expect(page.locator('.field-count')).toHaveText('1');
@@ -168,6 +172,9 @@ test.describe('Defecto 1 — barra inferior móvil en una sola fila', () => {
     await page.keyboard.press('Escape');
     await page.locator('.tools-cat[aria-label="Material"]').click();
     await page.locator('.rail-btn[title="Cono"]').click();
+    // FASE B (paneles persistentes): cerrar el panel con su X (sin desarmar) para poder
+    // colocar el cono en el campo, que queda fuera del panel cerrado.
+    await page.locator('.side-panel-left .panel-close').click();
     p = normToScreen(0.55, 0.5, host, fit);
     await page.mouse.click(p.x, p.y);
     await expect(page.locator('.field-count')).toHaveText('2');
@@ -176,6 +183,9 @@ test.describe('Defecto 1 — barra inferior móvil en una sola fila', () => {
     await page.keyboard.press('Escape');
     await page.locator('.tools-cat[aria-label="Dibujo"]').click();
     await page.locator('.rail-btn[title="Línea"]').click();
+    // FASE B (paneles persistentes): el panel Dibujo permanece abierto y tapa el inicio del
+    // arrastre; se cierra con su X (no desarma la herramienta) para dibujar sobre el campo.
+    await page.locator('.side-panel-left .panel-close').click();
     const a = normToScreen(0.42, 0.4, host, fit);
     const b = normToScreen(0.6, 0.55, host, fit);
     await page.mouse.move(a.x, a.y);

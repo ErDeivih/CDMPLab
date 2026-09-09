@@ -14,7 +14,7 @@
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
-import { longPress } from './gesture-helpers';
+import { longPress, fillBoardTitle } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/fase5';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -111,6 +111,7 @@ async function hostBox(page: Page): Promise<Box> {
 }
 
 async function save(page: Page): Promise<void> {
+  await fillBoardTitle(page, 'Fase 5');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
 }
@@ -195,8 +196,18 @@ async function deselect(page: Page): Promise<void> {
 
 async function placePlayer(page: Page, title: string, nx: number, ny: number, fit: 'contain' | 'height' = 'contain', tray = false): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-  if (tray) await page.locator(`.tray-player[title="${title}"]`).click();
-  else await page.locator(`.rail-btn[title="${title}"]`).click();
+  const isPlayerTool = title === 'Jugador propio' || title === 'Jugador rival';
+  if (tray) {
+    await page.locator(`.tray-player[title="${title}"]`).click(); // ya es 'Jugador <Color>'
+  } else if (isPlayerTool) {
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+  } else {
+    await page.locator(`.rail-btn[title="${title}"]`).click();
+  }
+  // FASE B: cerrar el panel Jugadores con la X (no desarma) antes de tocar el campo,
+  // porque ya no se cierra al elegir y taparía el punto en móvil/columnas a la izquierda.
+  await page.locator('.side-panel-left .panel-close').click();
   const box = await hostBox(page);
   const [x, y] = normToScreen(nx, ny, box, fit);
   await page.mouse.click(x, y, { button: 'right' });
@@ -214,6 +225,8 @@ async function placeMaterial(page: Page, tool: string, nx: number, ny: number, f
     await card.locator('.variant-swatch').nth(variantIndex).click();
   }
   await page.locator(`.rail-btn[title="${tool}"]`).click();
+  // FASE B: cerrar el panel Material con la X (no desarma) antes de tocar el campo.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
   const box = await hostBox(page);
   const [x, y] = normToScreen(nx, ny, box, fit);
   await page.mouse.click(x, y);
@@ -235,11 +248,15 @@ async function drawShape(page: Page, tool: string, from: [number, number], to: [
   await page.locator(`.rail-btn[title="${tool}"]`).click();
   if (colorIndex != null) await page.locator('.tools-caption .swatch').nth(colorIndex).click();
   if (fill != null) await page.locator('.tools-caption .chip', { hasText: fill ? 'Relleno' : 'Perímetro' }).click();
+  // FASE B: cerrar el panel Dibujo con la X (no desarma) antes de arrastrar sobre el campo.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
   await dragDraw(page, from, to, fit);
 }
 
 async function placeText(page: Page, nx: number, ny: number, value: string, fit: 'contain' | 'height' = 'contain', select = false): Promise<void> {
   await useTool(page, 'Texto', 'Dibujo');
+  // FASE B: cerrar el panel Dibujo con la X (no desarma) antes de tocar el campo.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
   const box = await hostBox(page);
   const [x, y] = normToScreen(nx, ny, box, fit);
   await page.mouse.click(x, y);
@@ -310,14 +327,17 @@ async function exportPngBuf(page: Page): Promise<Buffer> {
 // -------------------------------------------------------------
 // Geom F7: comprobación de que las líneas interiores azules del F7
 // aterrizan EXACTAMENTE en los laterales del área grande del F11.
+// FASE 4/8b: el campo base F7 usa el medio campo F11 APISAADO (68 m en X,
+// 52,5 m en Y) → rect canónico {x:4, y:4, w:59.58, h:46} (no 46 de ancho).
 // -------------------------------------------------------------
+const F7_RECT = { x: 4, y: 4, w: (92 * 68) / 105, h: 46 };
 function f7OffsideX(): [number, number] {
   const p = { offside: [(68 - 40.32) / (2 * 68), 1 - (68 - 40.32) / (2 * 68)] as const };
-  return [RECT.x + p.offside[0] * RECT.w, RECT.x + p.offside[1] * RECT.w];
+  return [F7_RECT.x + p.offside[0] * F7_RECT.w, F7_RECT.x + p.offside[1] * F7_RECT.w];
 }
 function f11AreaSideX(): [number, number] {
   const boxHW = (40.32 / 68) / 2;
-  return [RECT.x + (0.5 - boxHW) * RECT.w, RECT.x + (0.5 + boxHW) * RECT.w];
+  return [F7_RECT.x + (0.5 - boxHW) * F7_RECT.w, F7_RECT.x + (0.5 + boxHW) * F7_RECT.w];
 }
 
 test.setTimeout(120_000);
@@ -504,8 +524,12 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
       // Un Portero para que la pizarra no esté vacía, sin abrir inspector.
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
-      await page.locator('.tray-player[title="Portero"]').click();
-      await expect(page.locator('.side-panel-left')).toHaveCount(0);
+      await page.locator('.tray-player[title="Jugador Azul"]').click();
+      // FASE B (paneles persistentes): elegir un jugador NO cierra el panel Jugadores.
+      await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+      // FASE B: cerrar el panel con la X (no desarma) para que el tap en el campo
+      // (móvil retrato, centro bajo el panel) no quede interceptado.
+      await page.locator('.side-panel-left .panel-close').click();
       const host = await hostBox(page);
       const [x, y] = normToScreen(0.5, 0.5, host, 'height');
       await page.mouse.click(x, y, { button: 'right' });
@@ -586,16 +610,16 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
     const xs = [0.12, 0.31, 0.5, 0.69, 0.88];
     const ys = [0.13, 0.36, 0.59, 0.82];
     const recipe: Array<[string, number]> = [
-      ['Balón', 0], ['Fitball', 0], ['Balón morado', 0], ['Cono', 0], ['Marcador', 0],
-      ['Banderín', 0], ['Diana', 0], ['Marcador C', 0], ['Pica coloreable', 0], ['Maniquí', 0],
-      ['Mini portería', 0], ['Pértiga / poste', 0], ['Red', 0], ['Valla', 0], ['Aro', 0],
-      ['Escalera', 0], ['Minitrampolín', 0], ['Peto', 0], ['Chaleco lastrado', 0], ['BOSU', 0],
+      ['Balón', 0], ['Fitball', 0], ['Cono', 0], ['BOSU', 0], ['Banderín', 0],
+      ['Chino', 0], ['Pica coloreable', 0], ['Pértiga / poste', 0], ['Maniquí individual', 0], ['Barrera de maniquíes', 0],
+      ['Miniportería', 0], ['Portería grande', 0], ['Valla', 0], ['Aro', 0], ['Escalera', 0],
+      ['Minitrampolín', 0], ['Peto', 0], ['Chaleco lastrado', 0], ['Mancuerna / pesa', 0],
     ];
     for (let i = 0; i < recipe.length; i++) {
       const [tool] = recipe[i];
       await placeMaterial(page, tool, xs[i % 5], ys[Math.floor(i / 5)], 'contain');
     }
-    await expect(page.locator('.field-count')).toHaveText('20');
+    await expect(page.locator('.field-count')).toHaveText('19');
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${SHOTS}/materiales-escala-normalizada.png` });
@@ -611,8 +635,8 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
     // Jugadores.
     await placePlayer(page, 'Jugador propio', 0.16, 0.2);
     await placePlayer(page, 'Jugador propio', 0.26, 0.16);
-    await placeTrayPlayer(page, 'Portero', 0.12, 0.6);
-    await placeTrayPlayer(page, 'Portero', 0.5, 0.82);
+    await placeTrayPlayer(page, 'Jugador Rojo', 0.12, 0.6);
+    await placeTrayPlayer(page, 'Jugador Rojo', 0.5, 0.82);
     // Materiales.
     await placeMaterial(page, 'Balón', 0.26, 0.42);
     await placeMaterial(page, 'Cono', 0.2, 0.5, 'contain', 1);

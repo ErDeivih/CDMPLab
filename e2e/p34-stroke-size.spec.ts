@@ -17,6 +17,7 @@ import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
 import type { CanvasDocument, CanvasElement } from '../src/app/core/models';
 import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO, materialBaseSize } from '../src/app/core/tactic-assets';
+import { fillBoardTitle } from './gesture-helpers';
 import { MATERIAL_BOX } from '../src/app/core/render';
 
 const SHOTS = 'e2e/shots/p34-stroke-size';
@@ -98,7 +99,7 @@ async function draw(page: Page, title: string, from: [number, number], to: [numb
 
 async function placePlayer(page: Page, nx: number, ny: number): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-  await page.locator('.rail-btn[title="Jugador propio"]').click();
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
   const box = await hostBox(page);
   const [x, y] = normToScreen(nx, ny, box);
   await page.mouse.click(x, y);
@@ -119,6 +120,7 @@ async function boardSvg(page: Page): Promise<string> {
 }
 
 async function save(page: Page): Promise<void> {
+  await fillBoardTitle(page, 'Trazo');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
 }

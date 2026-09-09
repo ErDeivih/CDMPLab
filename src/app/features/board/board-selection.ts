@@ -1,4 +1,5 @@
 import { CanvasElement } from '../../core/models';
+import { CANONICAL_MATERIALS } from '../../core/material-registry';
 import { py, px, BOARD_CANON_RECT, materialSize, MATERIAL_BOX, SEL_STROKE, SEL_STROKE_POINT } from '../../core/render';
 import { elementCenter } from './board-doc';
 
@@ -7,62 +8,28 @@ import { elementCenter } from './board-doc';
 // sin estado, sin UI. Operan sobre elementos + geometría.
 // =============================================================
 
-export function isPointLike(t: string): boolean {
-  return (
-    t === 'player' ||
-    t === 'ball' ||
-    t === 'cone' ||
-    t === 'text' ||
-    t === 'mannequin' ||
-    t === 'minigoal' ||
-    t === 'pole' ||
-    t === 'marker' ||
-    t === 'hurdle' ||
-    t === 'ring' ||
-    t === 'ladder' ||
-    t === 'flag' ||
-    t === 'trampoline' ||
-    t === 'target' ||
-    t === 'net' ||
-    t === 'vball' ||
-    t === 'coachC' ||
-    t === 'peto' ||
-    t === 'chaleco' ||
-    t === 'bosu' ||
-    t === 'fitball' ||
-    t === 'pica'
-  );
-}
+/**
+ * Ids de CATEGORÍA MATERIAL (objetos del catálogo, NO jugadores ni texto), derivados
+ * del REGISTRO CANÓNICO (`material-registry.ts`) — la fuente ÚNICA del catálogo.
+ * Se incluyen TAMBIÉN los materiales retirados (`hidden`) porque un documento antiguo
+ * puede contener cualquiera de esos ids y debe seguir tratándose como material (sin
+ * asas de redimensionado). Al derivarlo del registro se evita mantener a mano esta
+ * lista en paralelo.
+ */
+const MATERIAL_TYPES: ReadonlySet<string> = new Set(CANONICAL_MATERIALS.map((c) => c.id));
 
-/** Tipos de la categoría MATERIAL (objetos del catálogo, NO jugadores ni texto).
- *  Fase 1: los materiales se colocan a tamaño fijo — se mueven, rotan ±90°, se
- *  duplican y cambian variante/color, pero NO se redimensionan (sin asas ni Tamaño). */
-export const MATERIAL_TYPES: ReadonlySet<string> = new Set([
-  'ball',
-  'cone',
-  'mannequin',
-  'minigoal',
-  'pole',
-  'marker',
-  'hurdle',
-  'ring',
-  'ladder',
-  'flag',
-  'trampoline',
-  'target',
-  'net',
-  'vball',
-  'coachC',
-  'peto',
-  'chaleco',
-  'bosu',
-  'fitball',
-  'pica',
-]);
+/** Elementos PUNTUALES no-material (jugador y texto) que sumamos a los materiales. */
+const POINT_LIKE_NON_MATERIAL: ReadonlySet<string> = new Set(['player', 'text']);
 
 /** true si el tipo pertenece a la categoría Material (no jugador ni texto). */
 export function isMaterial(t: string): boolean {
   return MATERIAL_TYPES.has(t);
+}
+
+/** true si el tipo es "puntual" (jugador/genérico, texto o material): se mueve con un
+ *  punto, rota ±90° y (los no-material) se redimensionan vía `size`. */
+export function isPointLike(t: string): boolean {
+  return POINT_LIKE_NON_MATERIAL.has(t) || isMaterial(t);
 }
 
 /** Centro (normalizado 0..1) de un elemento, según su geometría. */

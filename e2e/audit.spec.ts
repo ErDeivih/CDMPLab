@@ -26,9 +26,31 @@ async function seed(page: Page): Promise<void> {
   });
 }
 
+/** FASE B (paneles persistentes): abrir una categoría del catálogo es IDEMPOTENTE. Si el
+ *  panel correspondiente ya está desplegado (ya no se cierra al elegir un elemento), no lo
+ *  re-togglea: re-clickear el mismo .tools-cat la cerraría. El panel de Material/Dibujo es
+ *  el MISMO elemento .side-panel-left.tools-panel-side (solo cambia su aria-label según la
+ *  categoría activa), así que la detección usa ese aria-label para no confundir Material con
+ *  Dibujo al cambiar de categoría. */
+async function openCatalog(page: Page, category: string): Promise<void> {
+  const sel =
+    category === 'Jugadores'
+      ? '.side-panel-left:not(.tools-panel-side)'
+      : category === 'Material'
+        ? '.side-panel-left.tools-panel-side[aria-label="Herramientas de Material"]'
+        : '.side-panel-left.tools-panel-side[aria-label="Herramientas de Dibujo"]';
+  if (await page.locator(sel).isVisible().catch(() => false)) return;
+  await page.locator('.tools-cat', { hasText: category }).click();
+}
+
 /** Pulsa una herramienta activando primero su categoría. */
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
-  if (category) await page.locator('.tools-cat', { hasText: category }).click();
+  if (category) await openCatalog(page, category);
+  if (title === 'Jugador propio' || title === 'Jugador rival') {
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+    return;
+  }
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
 
@@ -56,25 +78,29 @@ test('no hay errores de consola ni peticiones fallidas en los flujos de la pizar
   const box = (await page.locator('.board-host').boundingBox())!;
   const pt = (fx: number, fy: number) => [box.x + box.width * fx, box.y + box.height * fy] as const;
 
-  // Carga los 14 PNG de material base (cada uno dispara una petición de imagen).
+  // Carga los PNG de material base (cada uno dispara una petición de imagen).
   const materials: Array<[string, number, number]> = [
     ['Cono', 0.15, 0.3],
-    ['Marcador', 0.3, 0.3],
+    ['BOSU', 0.3, 0.3],
     ['Pértiga / poste', 0.45, 0.3],
-    ['Maniquí', 0.6, 0.3],
+    ['Maniquí individual', 0.6, 0.3],
     ['Valla', 0.75, 0.3],
     ['Aro', 0.15, 0.45],
     ['Escalera', 0.3, 0.45],
-    ['Mini portería', 0.45, 0.45],
+    ['Miniportería', 0.45, 0.45],
     ['Balón', 0.6, 0.45],
     ['Banderín', 0.75, 0.45],
     ['Minitrampolín', 0.15, 0.6],
-    ['Diana', 0.3, 0.6],
-    ['Red', 0.45, 0.6],
-    ['Balón morado', 0.6, 0.6],
+    ['Chino', 0.3, 0.6],
+    ['Fitball', 0.6, 0.6],
   ];
   for (const [title, fx, fy] of materials) {
     await useTool(page, title, 'Material');
+    // FASE B (paneles persistentes): tras armar el material el panel Material queda
+    // abierto y TAPA los puntos de la columna izquierda (fx=0.15 → pantalla ~180-200px,
+    // bajo los 300px del panel, en el viewport por defecto). Se cierra con su X (.panel-close,
+    // que no desarma la colocación) antes del clic, igual que en la migración de matrix.
+    if (fx <= 0.2) await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
     const [x, y] = pt(fx, fy);
     await page.mouse.click(x, y);
   }
@@ -92,11 +118,21 @@ test('no hay errores de consola ni peticiones fallidas en los flujos de la pizar
   await page.mouse.up();
 
   // Cambiar campo (half) y orientación (vertical). (La "Rejilla" fue retirada por el dueño.)
+  // FASE 5: al pasar de un campo completo A UN medio campo con elementos se abre el
+  // diálogo de conversión; se elige expresamente "Encajar todo" para que el test no quede
+  // bloqueado por el backdrop y la conversión sea la intencionada.
   await openProps(page);
   await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('half');
+  const dialog = page.locator('.field-change-dialog');
+  if (await dialog.isVisible().catch(() => false)) {
+    await dialog.getByText('Encajar todo').click();
+    await expect(dialog).toHaveCount(0);
+  }
   await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();
 
-  // Guardar → reabrir (thumbnail + normalización).
+  // Guardar → reabrir (thumbnail + normalización). A5: el título es obligatorio, así
+  // que se escribe antes de guardar (si no, el guardado se bloquea y no navega).
+  await page.locator('.studio-panel input[aria-label="Título del ejercicio"]').fill('Auditoría');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
   await page.locator('.ex-card').first().hover();

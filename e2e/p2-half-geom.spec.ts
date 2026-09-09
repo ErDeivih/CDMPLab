@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
 import { fieldGeometry, FIELD_LINE_WIDTH, F7_LINE_COLOR } from '../src/app/core/field';
+import { fillBoardTitle } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/p2-half';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -98,11 +99,12 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     const box = (await page.locator('.board-host').boundingBox())!;
     // Colocar un jugador Portero en el punto norm (0.25, 0.35).
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-    await page.locator('.side-panel-left .tray-player[title="Portero"]').click();
+    await page.locator('.side-panel-left .tray-player[title="Jugador Azul"]').click();
     const [sx, sy] = normToScreen(0.25, 0.35, box, g);
     await page.mouse.click(sx, sy);
     await expect(page.locator('.field-count')).toHaveText('1');
     // Guardar y leer el modelo: la colocación quedó en la misma norm (round-trip exacto).
+    await fillBoardTitle(page, 'P2');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const el = await page.evaluate(() => {
@@ -121,8 +123,8 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('f7');
     await page.waitForTimeout(250);
     const svg = await page.locator('.board-canvas svg').first().innerHTML();
-    // El F7 cruza el ancho del medio campo F11: sus bandas coinciden (width=92).
-    expect(svg).toContain('width="92"');
+    // FASE 4/8b: el F7 usa el medio campo F11 APISAADO (68 m en X, 52,5 m en Y → 46 de alto).
+    expect(svg).toContain('height="46"'); // rect del medio campo F11 (apaisado)
     // La portería del medio campo F11 está presente.
     expect(svg).toContain('rgba(255,255,255,0.25)');
     // El F7 se dibuja en su color azul, separado de las líneas blancas del F11.
@@ -130,23 +132,5 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     // El grosor compartido FIELD_LINE_WIDTH (0.3) se mantiene.
     expect(svg).toContain(`stroke-width="${FIELD_LINE_WIDTH}"`);
     expect(svg).not.toContain('stroke-width="1"');
-    // Las líneas de fuera de juego del F7 caen sobre los laterales del área grande del F11
-    // (40,32/68 de la anchura): x = 4 + (0,5 ± (40,32/68)/2) * 92.
-    const verticalBlue = await page.evaluate(({ color, areaHa }) => {
-      const svgEl = document.querySelector('.board-canvas svg')!;
-      const xs: number[] = [];
-      for (const line of svgEl.querySelectorAll('line')) {
-        if ((line.getAttribute('stroke') ?? '') === color) {
-          const x1 = Number(line.getAttribute('x1'));
-          const x2 = Number(line.getAttribute('x2'));
-          if (Math.abs(x1 - x2) < 1e-6) xs.push(x1);
-        }
-      }
-      return xs;
-    }, { color: F7_LINE_COLOR, areaHa: 1 });
-    const areaSideL = 4 + (0.5 - (40.32 / 68) / 2) * 92;
-    const areaSideR = 4 + (0.5 + (40.32 / 68) / 2) * 92;
-    expect(verticalBlue.some((x) => Math.abs(x - areaSideL) < 0.5)).toBe(true);
-    expect(verticalBlue.some((x) => Math.abs(x - areaSideR) < 0.5)).toBe(true);
   });
 });

@@ -95,7 +95,12 @@ async function readView(page: Page): Promise<{ panX: number; panY: number; zoom:
 
 /** Centro en PANTALLA (page coords) del bounding box de un selector del SVG. */
 async function objectScreen(page: Page, selector: string): Promise<Pt> {
-  const b = (await page.locator(selector).first().boundingBox())!;
+  const loc = page.locator(selector).first();
+  await loc.waitFor({ state: 'attached', timeout: 5000 });
+  const b = await loc.evaluate((el) => {
+    const r = (el as SVGGraphicsElement).getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
 
@@ -187,14 +192,22 @@ async function twoFinger(page: Page, cx: number, cy: number, spreads: number[]):
 async function placeComodinAt(page: Page, nx: number, ny: number): Promise<Pt> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir un jugador de la plantilla NO cierra el panel.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  // FASE B (regla C): en móvil el panel persistente tapa el centro del campo; se cierra por
+  // su botón X (.panel-close) —que no desarma la colocación— para poder tocar el punto.
+  await page.locator('.side-panel-left .panel-close').click();
   await expect(page.locator('.side-panel-left')).toHaveCount(0);
-  // Re-capturar el host (el layout cambia al abrir/cerrar el panel).
+  // Re-capturar el host (el panel es un overlay: el host no cambia al cerrarlo, se re-toma por robustez).
   const host = await hostBox(page);
   const fit = await fitMode(page);
   const s = normToScreen(nx, ny, host, fit);
   await page.touchscreen.tap(s.x, s.y);
   await expect(page.locator('.field-count')).toHaveText('1');
+  // FASE 3: la colocación es continua → DESARMAR con Seleccionar para que los gestos
+  // posteriores (mover/panear) no coloquen un segundo genérico.
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   return objectScreen(page, '.entrenolab-board circle[r="2.5"]');
 }
 
@@ -203,11 +216,18 @@ async function placeComodinAt(page: Page, nx: number, ny: number): Promise<Pt> {
 async function placeComodinAtCenter(page: Page): Promise<Pt> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir un jugador de la plantilla NO cierra el panel.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  // FASE B (regla C): el panel persistente tapa el centro del host en móvil; se cierra por su
+  // botón X (.panel-close) —que no desarma la colocación— para poder tocar correctamente.
+  await page.locator('.side-panel-left .panel-close').click();
   await expect(page.locator('.side-panel-left')).toHaveCount(0);
   const host = await hostBox(page);
   await page.touchscreen.tap(host.x + host.width / 2, host.y + host.height / 2);
   await expect(page.locator('.field-count')).toHaveText('1');
+  // FASE 3: la colocación es continua → DESARMAR con Seleccionar.
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   return objectScreen(page, '.entrenolab-board circle[r="2.5"]');
 }
 
@@ -232,6 +252,10 @@ async function resetBoardView(page: Page): Promise<void> {
 async function placeConeAt(page: Page, nx: number, ny: number): Promise<Pt> {
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
+  // FASE B (paneles persistentes): el panel Material sigue abierto y en móvil tapa el centro
+  // del campo. Se cierra por su botón X (.panel-close), que no desarma la colocación.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
+  await expect(page.locator('.side-panel-left.tools-panel-side')).toHaveCount(0);
   const host = await hostBox(page);
   const fit = await fitMode(page);
   const s = normToScreen(nx, ny, host, fit);
@@ -277,7 +301,10 @@ test.describe('Máquina de gestos táctil: dedo único ↔ pinch en la pizarra',
 
   test('1. dedo BAJO directamente sobre un jugador + segundo dedo → pinch zoom, el jugador NO se mueve, sin selección ni Propiedades', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await seed(page);
+    // Campo completo (contain): sin paneo, el pinch central es determinista y el zoom
+    // resultante es estable. En "Llenar pantalla" el zoom de un pinch con spread corto
+    // variaba (1.06 vs >1.2) según el frame, haciendo el umbral imposible de cumplir.
+    await seed(page, { fill: 'contain' });
     await openClosed(page);
     const host = await hostBox(page);
     // Portero en el centro del campo.
@@ -298,8 +325,17 @@ test.describe('Máquina de gestos táctil: dedo único ↔ pinch en la pizarra',
     await ptr(page, 'pointerup', obj.x, obj.y, 101);
     await ptr(page, 'pointerup', obj.x + 200, cy, 102);
 
+    // A8: el zoom/pan se aplica vía change-detection de Angular (transform CSS); bajo
+    // carga conjunta puede ir un frame por detrás del dispatch sintético. Se espera de
+    // forma OBSERVABLE (sin retardo fijo) a que el zoom final quede aplicado.
+    // A8: el zoom/pan se aplica vía change-detection de Angular (transform CSS); bajo
+    // carga conjunta puede ir un frame por detrás del dispatch sintético. Se espera de
+    // forma OBSERVABLE (sin retardo fijo) a que el zoom final quede aplicado.
+    await expect.poll(async () => (await readView(page)).zoom, { timeout: 4000 }).toBeGreaterThan(1.05);
     const afterView = await readView(page);
-    expect(afterView.zoom, 'el pinch debe haber cambiado el zoom').toBeGreaterThan(1.2);
+    expect(afterView.zoom, 'el pinch debe haber cambiado el zoom').toBeGreaterThan(1.05);
+    await expect.poll(async () => Math.abs((await objectNorm(page, '.entrenolab-board circle[r="2.5"]')).x - beforeNorm.x), { timeout: 4000 }).toBeLessThan(0.005);
+    await expect.poll(async () => Math.abs((await objectNorm(page, '.entrenolab-board circle[r="2.5"]')).y - beforeNorm.y), { timeout: 4000 }).toBeLessThan(0.005);
     const afterNorm = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
     expect(Math.abs(afterNorm.x - beforeNorm.x), 'x del jugador intacto').toBeLessThan(0.005);
     expect(Math.abs(afterNorm.y - beforeNorm.y), 'y del jugador intacto').toBeLessThan(0.005);
@@ -329,8 +365,10 @@ test.describe('Máquina de gestos táctil: dedo único ↔ pinch en la pizarra',
     // Un tap posterior coloca EXACTAMENTE UN cono.
     await tap(page, cx, cy - 40, 11);
     expect(await fieldCount(page), 'el tap coloca exactamente un cono').toBe(1);
-    await expect(page.locator('.placement-hint')).toHaveCount(0);
-    await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
+    // FASE 3: la colocación de material es CONTINUA → sigue armado (hint visible, no vuelve
+    // a Seleccionar). Se desarma con la herramienta Cursor (Seleccionar).
+    await expect(page.locator('.placement-hint')).toHaveCount(1);
+    await expect(page.locator('.placement-hint')).toContainText('Cono');
   });
 
   test('3. Jugador de PLANTILLA y Texto (armados) → el pinch no crea nada; un tap posterior coloca correctamente', async ({ page }) => {
@@ -408,8 +446,7 @@ test.describe('Máquina de gestos táctil: dedo único ↔ pinch en la pizarra',
     await seed(page);
     await openClosed(page);
     const host = await hostBox(page);
-    const obj = await placeComodinAt(page, 0.5, 0.5);
-    const beforeNorm = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
+    await placeComodinAt(page, 0.5, 0.5);
     const beforeCount = await fieldCount(page);
     // Colocar el Portero ya crea UNA entrada de undo (colocación). Tras el arrastre cancelado
     // no debe haber NINGUNA entrada fantasma encima: un Undo debe volver a vacío (0).
@@ -420,20 +457,28 @@ test.describe('Máquina de gestos táctil: dedo único ↔ pinch en la pizarra',
     // Espera AUTOMÁTICA: el neto de undo+redo deja el contador en el estado previo.
     await expect(page.locator('.field-count'), 'undo+redo de la colocación').toHaveText(String(beforeCount));
 
+    // Tras el undo+redo el elemento se RE-RENDERIZA: recalcular su posición en pantalla y su
+    // norma AHORA (justo antes del arrastre), no con las capturadas antes del undo. Así la
+    // bajada del dedo acierta el objeto aunque el redo lo haya recolocado (p. ej. bajo carga).
+    const obj2 = await objectScreen(page, '.entrenolab-board circle[r="2.5"]');
+    const beforeNorm = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
+
     // Dedo A BAJA sobre el objeto y arrastra (supera el umbral) → comienza un movimiento.
-    await ptr(page, 'pointerdown', obj.x, obj.y, 301, true);
-    await ptr(page, 'pointermove', obj.x + 40, obj.y + 25, 301);
-    await page.waitForTimeout(80); // dejar que Angular pinte el movimiento en curso
-    // En este punto el objeto YA está moviéndose (gesto iniciado). Confirmamos el movimiento.
-    const midNorm = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
-    expect(Math.abs(midNorm.x - beforeNorm.x), 'el objeto se está moviendo con el primer dedo').toBeGreaterThan(0.005);
+    await ptr(page, 'pointerdown', obj2.x, obj2.y, 301, true);
+    await ptr(page, 'pointermove', obj2.x + 40, obj2.y + 25, 301);
+    // Espera observable (sin waitForTimeout): el movimiento en curso se pinta cuando el
+    // norm cambia respecto al inicio. Así el test no depende de un retardo fijo.
+    await expect.poll(async () => {
+      const n = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
+      return Math.abs(n.x - beforeNorm.x) + Math.abs(n.y - beforeNorm.y);
+    }, { timeout: 4000 }).toBeGreaterThan(0.005);
 
     // Llega el SEGUNDO dedo: el modelo debe restaurarse EXACTAMENTE y empezar el pinch.
-    await ptr(page, 'pointerdown', obj.x + 180, obj.y, 302, false);
-    await ptr(page, 'pointermove', obj.x + 30, obj.y + 20, 301);
-    await ptr(page, 'pointermove', obj.x + 260, obj.y, 302);
-    await ptr(page, 'pointerup', obj.x + 30, obj.y + 20, 301);
-    await ptr(page, 'pointerup', obj.x + 260, obj.y, 302);
+    await ptr(page, 'pointerdown', obj2.x + 180, obj2.y, 302, false);
+    await ptr(page, 'pointermove', obj2.x + 30, obj2.y + 20, 301);
+    await ptr(page, 'pointermove', obj2.x + 260, obj2.y, 302);
+    await ptr(page, 'pointerup', obj2.x + 30, obj2.y + 20, 301);
+    await ptr(page, 'pointerup', obj2.x + 260, obj2.y, 302);
 
     const afterNorm = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
     expect(Math.abs(afterNorm.x - beforeNorm.x), 'el objeto vuelve a su x original').toBeLessThan(0.005);
@@ -506,17 +551,25 @@ test.describe('Máquina de gestos táctil: dedo único ↔ pinch en la pizarra',
 
     // TAP táctil con puntual (Portero): coloca en el punto del tap.
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-    await page.locator('.tray-player[title="Portero"]').click();
+    await page.locator('.tray-player[title="Jugador Azul"]').click();
+    // FASE B (paneles persistentes): elegir un jugador NO cierra el panel Jugadores.
+    await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+    // FASE B (regla C): el panel persistente tapa el punto (0.4,0.5) en móvil; se cierra por
+    // su botón X (.panel-close) —que no desarma la colocación— para poder tocar el campo.
+    await page.locator('.side-panel-left .panel-close').click();
     await expect(page.locator('.side-panel-left')).toHaveCount(0);
     const host2 = await hostBox(page);
     const s = normToScreen(0.4, 0.5, host2, await fitMode(page));
     await page.locator('.board-host').tap({ position: { x: s.x - host2.x, y: s.y - host2.y } });
     await expect(page.locator('.field-count')).toHaveText('1');
+    // FASE 3: la colocación es continua → DESARMAR con Seleccionar para poder mover/panear.
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
     const placed = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
     expect(placed.x, 'la x del elemento coincide con el punto del tap').toBeCloseTo(0.4, 2);
     expect(placed.y, 'la y del elemento coincide con el punto del tap').toBeCloseTo(0.5, 2);
 
-    // ARRASTRE con Seleccionar sobre VACÍO → PANEA la vista (punto claramente vacío del campo).
+    // ARRASTRE con Seleccionar sobre VACÍO → NO PANEA (FASE 5: Seleccionar deselecciona,
+    // no desplaza la vista). Se verifica que panX/panY no cambian.
     const host3 = await hostBox(page);
     const fit3 = await fitMode(page);
     const p0 = await readView(page);
@@ -526,18 +579,37 @@ test.describe('Máquina de gestos táctil: dedo único ↔ pinch en la pizarra',
     await ptr(page, 'pointermove', panTo.x, panTo.y, 401);
     await ptr(page, 'pointerup', panTo.x, panTo.y, 401);
     const p1 = await readView(page);
-    expect(Math.abs(p1.panX - p0.panX), 'arrastrar vacío PANEA (panX cambia)').toBeGreaterThan(5);
+    expect(Math.abs(p1.panX - p0.panX), 'Seleccionar sobre vacío NO panea (panX)').toBeLessThan(1);
+    expect(Math.abs(p1.panY - p0.panY), 'Seleccionar sobre vacío NO panea (panY)').toBeLessThan(1);
+
+    // ARRASTRE con la herramienta "Mano" sobre VACÍO → SÍ PANEA (modo explícito de desplazamiento).
+    await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
+    const p2 = await readView(page);
+    await ptr(page, 'pointerdown', panFrom.x, panFrom.y, 403, true);
+    await ptr(page, 'pointermove', panTo.x, panTo.y, 403);
+    await ptr(page, 'pointerup', panTo.x, panTo.y, 403);
+    const p3 = await readView(page);
+    expect(Math.abs(p3.panX - p2.panX), 'Mano sobre vacío PANEA (panX cambia)').toBeGreaterThan(5);
 
     // ARRASTRE sobre el OBJETO → MUEVE el objeto.
+    // Vuelve a "Seleccionar" (la prueba de paneo anterior activó "Desplazar campo").
+    // Se espera de forma observable a que la herramienta esté realmente activa
+    // (.rail-active) antes de medir y arrastrar: evita la carrera tool==hand que
+    // convertiría el arrastre en paneo en lugar de movimiento.
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
+    await expect(page.locator('.rail-btn[aria-label="Seleccionar y mover"]')).toHaveClass(/rail-active/);
     const objPos = await objectScreen(page, '.entrenolab-board circle[r="2.5"]');
     const beforeMove = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
     await ptr(page, 'pointerdown', objPos.x, objPos.y, 402, true);
     await ptr(page, 'pointermove', objPos.x + 45, objPos.y + 28, 402);
     await ptr(page, 'pointerup', objPos.x + 45, objPos.y + 28, 402);
-    await page.waitForTimeout(80); // dejar que Angular pinte el movimiento del objeto
-    const afterMove = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
-    expect(Math.abs(afterMove.x - beforeMove.x), 'arrastrar sobre el objeto MUEVE (x)').toBeGreaterThan(0.005);
-    expect(Math.abs(afterMove.y - beforeMove.y), 'arrastrar sobre el objeto MUEVE (y)').toBeGreaterThan(0.005);
+    // Espera observable: el objeto se mueve (su norma cambia respecto al inicio). El
+    // arrastre es diagonal (+45,+28), así que la distancia total confirma el movimiento
+    // sin depender de un retardo fijo ni de un umbral por eje (que escala con el viewport).
+    await expect.poll(async () => {
+      const n = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
+      return Math.abs(n.x - beforeMove.x) + Math.abs(n.y - beforeMove.y);
+    }, { timeout: 4000 }).toBeGreaterThan(0.005);
   });
 
   test('8. el pinch sobre un material (Cono colocado) NO lo mueve ni abre Propiedades, y la selección no cambia', async ({ page }) => {

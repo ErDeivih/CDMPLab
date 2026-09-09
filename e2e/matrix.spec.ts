@@ -1,7 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
 import type { CanvasDocument, CanvasElement } from '../src/app/core/models';
-import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO } from '../src/app/core/tactic-assets';
+import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO, tacticAsset, TacticalKind } from '../src/app/core/tactic-assets';
+import { fillBoardTitle } from './gesture-helpers';
 
 // =============================================================
 // Matriz HONESTA por familia: TODA herramienta de creación de
@@ -96,6 +97,9 @@ function isPointLike(t: string): boolean {
     t === 'target' ||
     t === 'net' ||
     t === 'vball' ||
+    t === 'mannequin_row' ||
+    t === 'goal' ||
+    t === 'dumbbell' ||
     t === 'coachC' ||
     t === 'peto' ||
     t === 'chaleco' ||
@@ -212,6 +216,14 @@ async function seed(page: Page): Promise<void> {
 /** Activa la categoría correcta y pulsa la herramienta por su título. */
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
   if (category) await page.locator('.tools-cat', { hasText: category }).click();
+  if (title === 'Jugador propio' || title === 'Jugador rival') {
+    // FASE C: se retiraron los botones "Jugador propio/rival". El genérico se arma con
+    // las fichas rápidas por COLOR (Propio = Azul, Rival = Rojo); la diferenciación de
+    // equipos es por color, no por un botón de "rival".
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+    return;
+  }
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
 
@@ -224,6 +236,7 @@ async function openProps(page: Page): Promise<void> {
 }
 
 async function save(page: Page): Promise<void> {
+  await fillBoardTitle(page, 'Matriz');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
 }
@@ -277,24 +290,23 @@ const FAMILIES: Family[] = [
   { name: 'player', tool: 'Jugador rival', category: 'Jugadores', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'cone', tool: 'Cono', category: 'Material', draw: false, assetKind: 'cone_red', variantKind: 'cone_yellow', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
   { name: 'ball', tool: 'Balón', category: 'Material', draw: false, assetKind: 'ball_football', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'mannequin', tool: 'Maniquí', category: 'Material', draw: false, assetKind: 'mannequin', variantKind: 'mannequin_row', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
-  { name: 'minigoal', tool: 'Mini portería', category: 'Material', draw: false, assetKind: 'minigoal', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'mannequin', tool: 'Maniquí individual', category: 'Material', draw: false, assetKind: 'mannequin', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'minigoal', tool: 'Miniportería', category: 'Material', draw: false, assetKind: 'minigoal', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'pole', tool: 'Pértiga / poste', category: 'Material', draw: false, assetKind: 'pole', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'marker', tool: 'Marcador', category: 'Material', draw: false, assetKind: 'disc', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'marker', tool: 'BOSU', category: 'Material', draw: false, assetKind: 'disc', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'hurdle', tool: 'Valla', category: 'Material', draw: false, assetKind: 'hurdle', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'ring', tool: 'Aro', category: 'Material', draw: false, assetKind: 'ring', variantKind: 'ring_flat', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
-  { name: 'ladder', tool: 'Escalera', category: 'Material', draw: false, assetKind: 'ladder', variantKind: 'ladder_yellow', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
+  { name: 'ring', tool: 'Aro', category: 'Material', draw: false, assetKind: 'ring', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'ladder', tool: 'Escalera', category: 'Material', draw: false, assetKind: 'ladder', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'flag', tool: 'Banderín', category: 'Material', draw: false, assetKind: 'flag', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'trampoline', tool: 'Minitrampolín', category: 'Material', draw: false, assetKind: 'trampoline', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'target', tool: 'Diana', category: 'Material', draw: false, assetKind: 'target', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'net', tool: 'Red', category: 'Material', draw: false, assetKind: 'net', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'vball', tool: 'Balón morado', category: 'Material', draw: false, assetKind: 'vball', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'coachC', tool: 'Marcador C', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'target', tool: 'Chino', category: 'Material', draw: false, assetKind: 'target', caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'vball', tool: 'Fitball', category: 'Material', draw: false, assetKind: 'vball', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'peto', tool: 'Peto', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'chaleco', tool: 'Chaleco lastrado', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'bosu', tool: 'BOSU', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'fitball', tool: 'Fitball', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'pica', tool: 'Pica coloreable', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'goal', tool: 'Portería grande', category: 'Material', draw: false, assetKind: 'goal', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'mannequin_row', tool: 'Barrera de maniquíes', category: 'Material', draw: false, assetKind: 'mannequin_row', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'dumbbell', tool: 'Mancuerna / pesa', category: 'Material', draw: false, assetKind: 'dumbbell', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'rect', tool: 'Rectángulo', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: true, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'ellipse', tool: 'Círculo / elipse', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: true, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'line', tool: 'Línea', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: true, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
@@ -310,7 +322,12 @@ function assertModelEl(el: CanvasElement, fam: Family): void {
   expect(el.t).toBe(fam.name as string);
   if (fam.assetKind) {
     expect(el.assetKind).toBe(fam.assetKind);
-    if (fam.assetKind !== 'ball_vec') expect(el.asset).toContain('/assets/tactical/');
+    // Fuente de verdad: el manifiesto de assets. Un material vectorial (goal, dumbbell,
+    // ball_vec, etc.) tiene asset === '' (se renderiza como SVG); uno rasterizado lleva
+    // la ruta PNG de `assets/tactical/`.
+    const ta = tacticAsset(fam.assetKind as TacticalKind);
+    if (ta?.asset) expect(el.asset).toBe(ta.asset);
+    else expect(!!el.asset).toBe(false); // vectorial: sin asset (vacío)
   } else {
     expect(el.asset).toBeUndefined();
   }
@@ -860,6 +877,10 @@ test('coherencia vertical: un jugador junto a la portería izquierda conserva el
   const box = (await page.locator('.board-host').boundingBox())!;
 
   await useTool(page, 'Jugador propio', 'Jugadores');
+  // FASE B (paneles persistentes): el panel Jugadores queda abierto tras armar el
+  // jugador y TAPA la zona izquierda del campo (x≈0.02). Lo cerramos con su botón X
+  // (.panel-close) para poder tocar el punto de colocación (regla C).
+  await page.locator('.side-panel-left .panel-close').click();
   const [x, y] = normToScreen(0.02, 0.5, box);
   await page.mouse.click(x, y, { button: 'right' });
   await expect(page.locator('.field-count')).toHaveText('1');

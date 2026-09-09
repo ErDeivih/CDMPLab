@@ -289,6 +289,9 @@ select {
 .studio-panel .field-grid2,
 .studio-panel .field-inline,
 .studio-panel .chips,
+.studio-panel .field-gallery,
+.studio-panel .material-checklist,
+.studio-panel .mat-check,
 .studio-panel .inspector-actions {
   min-width: 0;
 }
@@ -422,6 +425,130 @@ select {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+// FASE 3: galería visual de campos. Lista horizontal desplazable en móvil y escritorio;
+// cada tarjeta muestra la miniatura real del campo y su estado seleccionado.
+.field-gallery {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  // Contener el scroll horizontal DENTRO de la galería: no empuja el ancho del panel.
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.field-card {
+  flex: 0 0 auto;
+  width: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid #2b3947;
+  border-radius: 8px;
+  background: #141b21;
+  color: #cdd6df;
+  cursor: pointer;
+  scroll-snap-align: start;
+
+  &:hover {
+    border-color: #3a4c5c;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 1px;
+  }
+
+  &.field-card-active {
+    border-color: #2563eb;
+    background: #1c2a3a;
+    color: #fff;
+  }
+}
+
+.field-card-thumb {
+  width: 84px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  background: #0c1116;
+  border-radius: 5px;
+  overflow: hidden;
+
+  .field-preview-svg {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.field-card-name {
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.15;
+}
+
+// Control semántico oculto (accesibilidad + API de pruebas) sin quitar del flujo.
+.sr-only {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+// FASE 8: checklist de "Material necesario".
+.material-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  // Contener el ancho: no empuja el panel (overflow horizontal).
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mat-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+
+  input[type="checkbox"] {
+    accent-color: #2563eb;
+    flex-shrink: 0;
+  }
+
+  // El texto envuelve/recorta en vez de empujar el ancho.
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+}
+
+.mat-custom {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  min-width: 0;
+}
+
 
 .edit-sep {
   width: 1px;
@@ -884,6 +1011,28 @@ select {
   gap: 8px;
   flex-shrink: 0;
   flex-wrap: wrap;
+}
+
+// C1 — fichas rápidas de jugador genérico por color. Fila de chips compactos que
+// envuelven si hace falta; cada chip es un `tray-player` con un círculo de color.
+.tray-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-top: 8px;
+
+  .tray-player {
+    padding: 4px 10px;
+  }
+
+  .tray-quick-chip {
+    .mini-avatar {
+      width: 18px;
+      height: 18px;
+      font-size: 11px;
+    }
+  }
 }
 
 // Fase 7 — formaciones rápidas.

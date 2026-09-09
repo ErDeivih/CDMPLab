@@ -48,7 +48,7 @@ test.describe('Campos (geometría y evidencia visual)', () => {
   test('captura las 6 combinaciones y ningún arco de campo es gigante', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
-    const fields = ['Campo completo de fútbol', 'Medio campo de fútbol', 'Sin líneas / lienzo vacío'] as const;
+    const fields = ['full', 'half', 'blank'] as const;
     // Decisión del dueño: la orientación se elige/verifica por valor estable (data-orient),
     // no por el texto visible (que ahora describe el RESULTADO y depende del campo).
     for (const orient of ['horizontal', 'vertical'] as const) {
@@ -56,9 +56,9 @@ test.describe('Campos (geometría y evidencia visual)', () => {
         await page.goto('/board');
         await openProps(page);
         await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator(`.chip[data-orient="${orient}"]`).click();
-        await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption({ label: field });
+        await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption(field);
         await page.waitForTimeout(250);
-        const name = `${orient}-${field.split(' ')[0].toLowerCase()}`;
+        const name = `${orient}-${field}`;
         await page.screenshot({ path: `${SHOTS}/${name}.png` });
         // Comprobación geométrica real: ningún arco gigante (evita el doble escalado de esquinas).
         expect(await hugeShapes(page), `arco gigante en ${orient} / ${field}`).toEqual([]);
@@ -107,10 +107,14 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     await page.waitForTimeout(250);
     await expect(page.locator('.board-canvas svg').first()).toBeVisible();
     const svg = await page.locator('.board-canvas svg').first().innerHTML();
-    expect(svg).toContain('width="92"'); // fondos F7 coinciden con las bandas F11
+    // FASE 4/8b: el F7 usa el medio campo F11 APISAADO (68 m en X, 52,5 m en Y → 46 de alto).
+    expect(svg).toContain('height="46"'); // medio campo F11 apaisado (52,5 m en Y)
     expect(svg).toContain('rgba(255,255,255,0.25)'); // portería del medio campo F11
 
     // Guardar → reabrir → el campo compuesto se conserva y se vuelve a dibujar.
+    // A5: el título es obligatorio; se escribe antes de guardar.
+    await openProps(page);
+    await page.locator('.studio-panel input[aria-label="Título del ejercicio"]').fill('F7 compuesto');
     await page.locator('[title="Guardar ejercicio"]').click();
     await page.waitForURL('**/library');
     await page.locator('.ex-card').first().hover();
@@ -119,7 +123,8 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     await openProps(page);
     await expect(page.locator('.board-canvas svg').first()).toBeVisible();
     const svg2 = await page.locator('.board-canvas svg').first().innerHTML();
-    expect(svg2).toContain('width="92"');
+    // FASE 4/8b: al reabrir se mantiene el F7 apaisado sobre el MEDIO campo F11 (46 de alto).
+    expect(svg2).toContain('height="46"');
     expect(svg2).toContain('rgba(255,255,255,0.25)');
     // Al reabrir tampoco aparece el toggle overlay.
     await expect(page.locator('.studio-panel .field', { hasText: 'Ayudas' }).locator('.chip', { hasText: 'F7' })).toHaveCount(0);
@@ -175,7 +180,9 @@ test.describe('Campos (geometría y evidencia visual)', () => {
       for (const el of svg.querySelectorAll('rect')) {
         if ((el.getAttribute('fill') ?? '') === 'rgba(255,255,255,0.25)') {
           goals.push(boxOf(el));
-        } else {
+        } else if (el.getAttribute('stroke') !== 'none' && !el.closest('.entrenolab-strip')) {
+          // FASE 2: ignorar el rect de la franja exterior (stroke=none / .entrenolab-strip)
+          // para que el "pitch" sea el rect del terreno reglamentario, no la franja.
           const bb = boxOf(el);
           if (!pitch || bb.w * bb.h > pitch.w * pitch.h) pitch = bb;
         }
@@ -193,5 +200,39 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     // El círculo central es visualmente circular (no deformado en uno de los ejes).
     expect(res.center).toBeDefined();
     expect(Math.abs(res.center!.w - res.center!.h)).toBeLessThan(1);
+  });
+
+  test('FASE 3: la galería visual de campos muestra tarjetas con miniatura REAL, estado seleccionado y es navegable', async ({ page }) => {
+    await seed(page);
+    await page.goto('/board');
+    await openProps(page);
+    // La galería existe con varias tarjetas.
+    const gallery = page.locator('.field-gallery');
+    await expect(gallery).toBeVisible();
+    const cards = gallery.locator('.field-card');
+    const count = await cards.count();
+    // Al menos los campos base requeridos (incluye F7 y lienzo).
+    expect(count, 'la galería muestra todos los campos base').toBeGreaterThanOrEqual(5);
+    // Cada tarjeta tiene una miniatura REAL (SVG del renderizador) y un nombre.
+    for (let i = 0; i < count; i++) {
+      await expect(cards.nth(i).locator('.field-card-thumb .field-preview-svg')).toHaveCount(1);
+      await expect(cards.nth(i).locator('.field-card-name')).toBeVisible();
+    }
+    // Estado seleccionado: el campo por defecto (full) está activo.
+    await expect(gallery.locator('.field-card-active')).toHaveCount(1);
+    // Hacer clic en la tarjeta "Medio campo" cambia el campo activo y actualiza la señal.
+    const half = cards.filter({ hasText: 'Medio campo' }).first();
+    await half.click();
+    await expect(half).toHaveClass(/field-card-active/);
+    await expect(page.locator('.board-canvas svg')).toBeVisible();
+    // La selección es NAVEGABLE por teclado: foco en la galería y Tab activa la primera
+    // tarjeta; Enter la selecciona.
+    await gallery.focus();
+    await page.keyboard.press('Tab');
+    await expect(cards.first()).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(cards.first()).toHaveClass(/field-card-active/);
+    // Captura de la galería para la revisión visual.
+    await page.locator('.studio-panel').screenshot({ path: `${SHOTS}/galeria-campos.png` });
   });
 });

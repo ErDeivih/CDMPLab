@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { fillBoardTitle } from './gesture-helpers';
 
 // FASE 2 — perímetro, relleno y opacidad INDEPENDIENTES en rect/elipse/zona.
 const VBW = 100;
@@ -110,6 +111,7 @@ test('FASE 10: guardar/reabrir y respaldo conservan relleno, color y opacidad (v
   await page.locator('.studio-panel .swatch[aria-label="Color verde"]').click();
   await page.locator('.studio-panel .field', { hasText: 'Opacidad del relleno' }).locator('.chip', { hasText: '20%' }).click();
   await page.waitForTimeout(120);
+  await fillBoardTitle(page, 'Relleno');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
   const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];

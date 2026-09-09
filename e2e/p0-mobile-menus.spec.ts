@@ -70,15 +70,15 @@ for (const [W, H] of [
       // Todas las filas de Material muestran su texto completo.
       const rows = await page.locator('.side-panel-left .rail-btn.rail-row').count();
       expect(rows).toBeGreaterThan(5);
-      for (const title of ['Balón', 'Cono', 'Mini portería', 'Minitrampolín', 'Balón morado']) {
+      for (const title of ['Balón', 'Cono', 'Miniportería', 'Minitrampolín', 'Fitball']) {
         // La fila existe y su etiqueta es legible (se consulta por el título de la fila).
         const row = page.locator(`.side-panel-left .rail-btn.rail-row[title="${title}"]`).first();
         await expect(row, `fila ${title}`).toBeVisible();
       }
       // Comprobar una fila concreta: icono + texto, altura, sin truncado.
       await expectRowFull(page, {
-        locator: '.side-panel-left .rail-btn.rail-row[title="Mini portería"]',
-        label: 'Mini portería',
+        locator: '.side-panel-left .rail-btn.rail-row[title="Miniportería"]',
+        label: 'Miniportería',
       });
 
       // El panel hace scroll: bajamos hasta la última categoría y se ve.
@@ -90,6 +90,10 @@ for (const [W, H] of [
 
       // Clic en una fila funciona: elegir "Balón" y colocarlo en el campo.
       await page.locator('.side-panel-left .rail-btn.rail-row[title="Balón"]').first().click();
+      // FASE B (paneles persistentes): el panel Material permanece abierto tras armar el Balón
+      // y, en móvil vertical, tapa el centro del campo. Se cierra con su X (no desarma la
+      // colocación) antes de hacer tap en el campo para poder colocarlo.
+      await page.locator('.side-panel-left .panel-close').click();
       const box = (await page.locator('.board-host').boundingBox())!;
       await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
       await expect(page.locator('.field-count')).toHaveText('1');

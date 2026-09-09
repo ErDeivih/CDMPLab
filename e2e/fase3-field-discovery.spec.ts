@@ -127,6 +127,9 @@ function expectFillMode(page: Page): Promise<void> {
  *  buscado desaparece. No se debilita ninguna aserción: al terminar, el indicador del
  *  lado revelado debe estar oculto y el contrario visible (lo verifican los tests). */
 async function panToGoal(page: Page, host: Box, goal: 'left' | 'right'): Promise<void> {
+  // Fase 5: panear requiere la herramienta "Desplazar campo" (Mano); Seleccionar ya
+  // NO panea. Se activa explícitamente antes de arrastrar.
+  await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
   const y = host.y + host.height / 2;
   const startX = goal === 'left' ? host.x + 40 : host.x + host.width - 40;
   const endX = goal === 'left' ? host.x + host.width - 40 : host.x + 40;
@@ -258,15 +261,27 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
     // Colocar un Portero en S.
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
-    await page.locator('.tray-player[title="Portero"]').click();
-    await expect(page.locator('.side-panel-left')).toHaveCount(0);
+    await page.locator('.tray-player[title="Jugador Azul"]').click();
+    await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+    // Tras panear a la derecha, el punto S (y el posterior arrastre del objeto) cae bajo
+    // el panel en móvil vertical; se cierra el panel con su X (no desarma la colocación)
+    // antes del toque táctil.
+    await page.locator('.side-panel-left .panel-close').first().click();
     await page.touchscreen.tap(S.x, S.y);
     await expect(page.locator('.field-count')).toHaveText('1');
 
+    // Fase 3: la colocación continua sigue armada tras el toque. Para mover el objeto
+    // hay que pasar a "Seleccionar" (si no, arrastrar sobre él colocaría otro genérico).
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
+
     const circle = page.locator('.entrenolab-board circle[r="2.5"]').first();
+    await circle.waitFor({ state: 'attached', timeout: 5000 });
     await expect(circle).toHaveCount(1);
     // El elemento RENDERIZADO debe estar donde se tocó (consistencia pantalla↔modelo).
-    const cb = (await circle.boundingBox())!;
+    const cb = await circle.evaluate((el) => {
+      const r = (el as SVGGraphicsElement).getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    });
     expect(Math.abs(cb.x + cb.width / 2 - S.x), 'centro X del elemento ≈ toque tras paneo').toBeLessThan(6);
     expect(Math.abs(cb.y + cb.height / 2 - S.y), 'centro Y del elemento ≈ toque tras paneo').toBeLessThan(6);
 
@@ -353,8 +368,12 @@ test.describe('Fase 3 — capturas (indicadores + pista y tras paneo)', () => {
       // Un Portero visible para que la pizarra no esté vacía (no abre inspector).
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
-      await page.locator('.tray-player[title="Portero"]').click();
-      await expect(page.locator('.side-panel-left')).toHaveCount(0);
+      await page.locator('.tray-player[title="Jugador Azul"]').click();
+      await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+      // En móvil vertical el centro del campo queda bajo el panel y el paneo posterior
+      // arrastra desde el borde izquierdo del host (bajo el panel): se cierra el panel con
+      // su X (no desarma la colocación) antes de tocar el campo.
+      await page.locator('.side-panel-left .panel-close').first().click();
       const host = await hostBox(page);
       const c = normToScreen(0.5, 0.5, host, 'height');
       await page.touchscreen.tap(c.x, c.y);

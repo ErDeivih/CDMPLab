@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
 import type { CanvasElement } from '../src/app/core/models';
-import { longPress } from './gesture-helpers';
+import { longPress, fillBoardTitle } from './gesture-helpers';
 
 // =============================================================
 // Fase 11 — modelo y persistencia: round-trip por familia.
@@ -74,10 +74,16 @@ async function seed(page: Page): Promise<void> {
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
   if (category) await page.locator('.tools-cat', { hasText: category }).click();
+  if (title === 'Jugador propio' || title === 'Jugador rival') {
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+    return;
+  }
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
 
 async function save(page: Page): Promise<void> {
+  await fillBoardTitle(page, 'P11');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
 }
@@ -189,10 +195,17 @@ async function dragHandle(page: Page, from: [number, number], to: [number, numbe
 async function resizeSelected(page: Page, el: CanvasElement, kind: 'box' | 'point' | 'seg' | 'curve' | 'freehand'): Promise<void> {
   // Ocultar los overlay flotantes (panel de Propiedades, barra de contexto) para que no
   // intercepten el arrastre de las asas de redimensionado (patrón de otras specs).
+  // Se guarda el display original de cada uno para RESTAURARLO al terminar: dejar el
+  // panel de Propiedades oculto rompería el guardado posterior, que necesita el campo
+  // de título del ejercicio visible (A5).
   await page.evaluate(() => {
-    document.querySelectorAll('.studio-panel, .side-panel-backdrop, .top-pop, .context-bar').forEach((el2) => {
-      (el2 as HTMLElement).style.display = 'none';
+    const originals: Array<[HTMLElement, string]> = [];
+    document.querySelectorAll('.studio-panel, .top-pop, .context-bar').forEach((el2) => {
+      const h = el2 as HTMLElement;
+      originals.push([h, h.style.display]);
+      h.style.display = 'none';
     });
+    (window as unknown as { __resizeOriginals: Array<[HTMLElement, string]> }).__resizeOriginals = originals;
   });
   await page.waitForTimeout(40);
   if (kind === 'box') {
@@ -212,6 +225,15 @@ async function resizeSelected(page: Page, el: CanvasElement, kind: 'box' | 'poin
     const minX = Math.min(...xs), minY = Math.min(...ys);
     await dragHandle(page, [minX, minY], [Math.max(0.1, minX - 0.08), Math.max(0.1, minY - 0.08)]);
   }
+  // Restaurar el display de los overlay que se ocultaron (para que el panel de
+  // Propiedades vuelva a estar visible y el guardado pueda leer el título).
+  await page.evaluate(() => {
+    const w = window as unknown as { __resizeOriginals?: Array<[HTMLElement, string]> };
+    const originals = w.__resizeOriginals;
+    if (originals) for (const [h, d] of originals) h.style.display = d;
+    delete w.__resizeOriginals;
+  });
+  await page.waitForTimeout(40);
 }
 
 async function rotateViaBar(page: Page, deg: 90 | -90, el: CanvasElement): Promise<void> {
@@ -387,7 +409,9 @@ test.describe('Fase 11 — round-trip de modelo y persistencia por familia', () 
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     await page.locator('.roster-item', { hasText: 'Marcos' }).click();
-    await expect(page.locator('.side-panel-left')).toHaveCount(0);
+    // FASE B (paneles persistentes): elegir un jugador de plantilla ARMA la colocación
+    // pero NO cierra el panel; el panel Jugadores permanece abierto hasta el cierre explícito.
+    await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
     const box = await hostBox(page);
     const [cx, cy] = normToScreen(0.5, 0.5, box);
     await page.mouse.click(cx, cy);
@@ -412,7 +436,7 @@ test.describe('Fase 11 — round-trip de modelo y persistencia por familia', () 
     await createFamily(page, FAMILIES.find((f) => f.name === 'cone')!);
     await page.locator('button[title="Volver"]').click();
     await expect(page.getByRole('dialog', { name: 'Cambios sin guardar' })).toBeVisible();
-    await page.getByRole('button', { name: 'Cancelar' }).click();
+    await page.getByRole('dialog', { name: 'Cambios sin guardar' }).getByRole('button', { name: 'Cancelar', exact: true }).click();
     await expect(page.locator('.board-host')).toBeVisible();
     await expect(page.locator('.field-count')).toHaveText('1');
   });

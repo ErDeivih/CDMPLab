@@ -116,16 +116,17 @@ async function clickFieldCenter(page: Page): Promise<void> {
 }
 
 test.describe('Swatches de color — nombre accesible (aria-label + title)', () => {
-  test('Propiedades sin selección: Césped está nombrado y todo botón tiene nombre', async ({ page }) => {
+  test('Propiedades sin selección: el césped es único (sin swatches) y todo botón tiene nombre', async ({ page }) => {
     await openBoard(page);
     await page.locator('button[aria-label="Propiedades"]').click();
     await expect(page.locator('.studio-panel')).toBeVisible();
 
-    // Césped: 4 swatches, cada uno con "Césped <color>" y title.
-    const grass = page.locator('.studio-panel .field', { hasText: 'Césped' }).locator('.swatch');
-    await expect(grass).toHaveCount(4);
-    await expectSwatchNamed(grass, 'Césped');
-    await expect(grass.nth(1), 'el 2º césped debe ser verde oscuro').toHaveAttribute('aria-label', 'Césped verde oscuro');
+    // FASE 2: el césped es el oficial ÚNICO. Se retira el selector de color (y el de
+    // textura, retirado en la Fase 9): no hay swatches de "Césped" y se muestra una
+    // indicación estática. Los ejercicios guardados conservan su backgroundColor.
+    const grassField = page.locator('.studio-panel .field', { hasText: 'Césped' });
+    await expect(grassField).toBeVisible();
+    await expect(grassField.locator('.swatch')).toHaveCount(0);
 
     // Fase 11: se retira el selector de color de líneas del campo (las marcas
     // reglamentarias son siempre blancas), así que ya no hay swatches de "Líneas".
@@ -137,12 +138,14 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await openBoard(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
-    await page.locator('.tray-player[title="Portero"]').click();
-    await expect(page.locator('.side-panel-left')).toHaveCount(0);
+    await page.locator('.tray-player[title="Jugador Azul"]').click();
+    // FASE B (paneles persistentes): elegir jugador NO cierra el panel Jugadores.
+    await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
     await clickFieldCenter(page);
     await expect(page.locator('.field-count')).toHaveText('1');
-    // Colocar un jugador NO lo selecciona (solo la herramienta vuelve a Seleccionar):
-    // pulsamos de nuevo sobre él para seleccionarlo y abrir el inspector.
+    // Fase 3: la colocación es continua y NO auto-selecciona. Se DESARMA con Seleccionar
+    // y se hace clic sobre el jugador para seleccionarlo (abre el inspector).
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
     await clickFieldCenter(page);
     await expect(page.locator('.studio-panel')).toBeVisible();
 
@@ -159,6 +162,10 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await page.locator('.rail-btn[title="Peto"]').click();
     await clickFieldCenter(page);
     await expect(page.locator('.field-count')).toHaveText('1');
+    // Fase 3: la colocación es continua y NO auto-selecciona. Se DESARMA con Seleccionar
+    // y se hace clic sobre el peto para seleccionarlo (abre Propiedades).
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
+    await clickFieldCenter(page);
     await expect(page.locator('.studio-panel')).toBeVisible();
 
     const color = page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch');

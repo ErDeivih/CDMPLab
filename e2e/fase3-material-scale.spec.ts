@@ -18,7 +18,7 @@ import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO } from '../src/app/core/tactic-asset
 
 const SHOTS = 'e2e/shots/fase3-material-scale';
 import fs from 'node:fs';
-import { longPress } from './gesture-helpers';
+import { longPress, fillBoardTitle } from './gesture-helpers';
 fs.mkdirSync(SHOTS, { recursive: true });
 
 interface Box { x: number; y: number; width: number; height: number }
@@ -65,7 +65,14 @@ async function hostBox(page: Page): Promise<Box> {
 }
 
 async function placeMaterial(page: Page, box: Box, tool: string, nx: number, ny: number, variantIndex?: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Material' }).click();
+  // FASE B (paneles persistentes): elegir un material NO cierra el panel, así que abrir la
+  // categoría es IDEMPOTENTE (solo se toca .tools-cat la primera vez). En la hoja de
+  // contactos y en el test de rotación se coloca en bucle: re-togglear Material ahora
+  // cerraría el panel y el .rail-btn del material siguiente ya no sería visible.
+  const panel = page.locator('.side-panel-left.tools-panel-side');
+  if (!(await panel.isVisible().catch(() => false))) {
+    await page.locator('.tools-cat', { hasText: 'Material' }).click();
+  }
   const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${tool}"]`) });
   // Solo se pincha el swatch de variante si el material realmente lo tiene.
   const variantCount = await card.locator('.variant-swatch').count();
@@ -84,6 +91,7 @@ async function placeMaterial(page: Page, box: Box, tool: string, nx: number, ny:
 }
 
 async function save(page: Page): Promise<void> {
+  await fillBoardTitle(page, 'Fase 3');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
 }
@@ -118,23 +126,23 @@ test.describe('Fase 3 — escala del material y selección táctil robusta', () 
     const xs = [0.12, 0.31, 0.5, 0.69, 0.88];
     const ys = [0.13, 0.36, 0.59, 0.82];
     const recipe: Array<[string, number]> = [
-      ['Balón', 0], ['Fitball', 0], ['Balón morado', 0], ['Cono', 0], ['Marcador', 0],
-      ['Banderín', 0], ['Diana', 0], ['Marcador C', 0], ['Pica coloreable', 0], ['Maniquí', 0],
-      ['Mini portería', 0], ['Pértiga / poste', 0], ['Red', 0], ['Valla', 0], ['Aro', 0],
-      ['Escalera', 0], ['Minitrampolín', 0], ['Peto', 0], ['Chaleco lastrado', 0], ['BOSU', 0],
+      ['Balón', 0], ['Fitball', 0], ['Cono', 0], ['BOSU', 0], ['Banderín', 0],
+      ['Chino', 0], ['Pica coloreable', 0], ['Pértiga / poste', 0], ['Maniquí individual', 0], ['Barrera de maniquíes', 0],
+      ['Miniportería', 0], ['Portería grande', 0], ['Valla', 0], ['Aro', 0], ['Escalera', 0],
+      ['Minitrampolín', 0], ['Peto', 0], ['Chaleco lastrado', 0], ['Mancuerna / pesa', 0],
     ];
     for (let i = 0; i < recipe.length; i++) {
       const [tool] = recipe[i];
       await placeMaterial(page, box, tool, xs[i % 5], ys[Math.floor(i / 5)]);
     }
 
-    await expect(page.locator('.field-count')).toHaveText('20');
+    await expect(page.locator('.field-count')).toHaveText('19');
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${SHOTS}/contact-sheet.png` });
 
     await save(page);
     const els = await canvasElements(page);
-    expect(els).toHaveLength(20);
+    expect(els).toHaveLength(19);
     for (const el of els) {
       const kind = (el.assetKind ?? el.t) as string;
       const expectsSize = TACTICAL_SIZE[kind];
@@ -161,18 +169,24 @@ test.describe('Fase 3 — escala del material y selección táctil robusta', () 
     await placeMaterial(page, box, 'Pértiga / poste', 0.4, 0.5);
     expect(await page.locator('.field-count').innerText()).toBe('1');
 
-    // Cuerpo del poste: punto a media altura (lejos del ancla y del antiguo
-    // radio circular de 0.05). Debe seleccionarse gracias a la caja (bbox).
-    await tapSelect(page, box, 0.4, 0.5 - 0.06);
+    // Cuerpo del poste: un punto dentro de la caja real del material (proporción fina y
+    // alta de la pértiga). D1: el área de selección es la caja del objeto + un margen en px
+    // (no el antiguo radio fijo de ~44 px), así que se selecciona por el CUERPO.
+    await tapSelect(page, box, 0.4, 0.5 - 0.03);
     await expect(page.locator('.inspector')).toBeVisible();
     // Fase 1: un material NO ofrece control "Tamaño" (resizable:false); el inspector
     // lo selecciona pero sin asas ni tamaño editable.
     await expect(page.locator('.studio-panel .inspector .field', { hasText: 'Tamaño' })).toHaveCount(0);
 
-    // Hueco vacío claramente separado del poste: NO se selecciona.
+    // Hueco vacío JUSTO ENCIMA del poste (el antiguo punto de selección con el floor de
+    // ~44 px): D1 lo considera FUERA del cuerpo → NO se selecciona.
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
     await page.keyboard.press('Escape');
     await page.waitForTimeout(80);
+    await tapSelect(page, box, 0.4, 0.5 - 0.06);
+    await expect(page.locator('.inspector')).not.toBeVisible();
+
+    // Hueco vacío claramente separado del poste: NO se selecciona.
     await tapSelect(page, box, 0.4, 0.5 - 0.16);
     await expect(page.locator('.inspector')).not.toBeVisible();
 

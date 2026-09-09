@@ -19,6 +19,7 @@ yarn-error.log
 # Capturas generadas por los tests (la galería oficial vive en docs/screenshots)
 /e2e/shots
 /e2e/*.png
+/e2e/_server.err
 
 # Caché local de npm
 /.npm-cache

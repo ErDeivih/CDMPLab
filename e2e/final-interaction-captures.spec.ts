@@ -78,8 +78,22 @@ async function openBoard(page: Page): Promise<void> {
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
-  if (category) await page.locator('.tools-cat', { hasText: category }).click();
+  if (category) await openCat(page, category);
   await page.locator(`.rail-btn[title="${title}"]`).click();
+}
+
+/** FASE B (paneles persistentes): abre la categoría sin re-togglear una que ya está
+ *  desplegada (re-clickar la misma la cerraría). Distingue Jugadores de Material/Dibujo
+ *  por el aria-label del panel para no confundir categorías. */
+async function openCat(page: Page, category: string): Promise<void> {
+  const probe: Record<string, string> = {
+    Jugadores: '.side-panel-left[aria-label="Jugadores"]',
+    Material: '.side-panel-left[aria-label="Herramientas de Material"]',
+    Dibujo: '.side-panel-left[aria-label="Herramientas de Dibujo"]',
+  };
+  if (await page.locator(probe[category]).isVisible().catch(() => false)) return;
+  await page.locator('.tools-cat', { hasText: category }).click();
+  await expect(page.locator(probe[category])).toBeVisible();
 }
 
 /** Dibuja en UN gesto (mouse) desde (nx0,ny0) a (nx1,ny1), sin soltar el puntero. */
@@ -106,7 +120,7 @@ async function selectAt(page: Page, nx: number, ny: number): Promise<void> {
 /** Oculta los paneles flotantes para ver el campo despejado (no borra la selección). */
 async function hideOverlays(page: Page): Promise<void> {
   await page.evaluate(() => {
-    document.querySelectorAll('.studio-panel, .side-panel-backdrop, .top-pop, .context-bar').forEach((el) => {
+    document.querySelectorAll('.studio-panel, .top-pop, .context-bar').forEach((el) => {
       (el as HTMLElement).style.display = 'none';
     });
   });
@@ -115,7 +129,7 @@ async function hideOverlays(page: Page): Promise<void> {
 
 /** Coloca un material usando el buscador del panel (filtra al tipo exacto). */
 async function placeMaterial(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Material' }).click();
+  await openCat(page, 'Material');
   const input = page.locator('.tools-search-input');
   await input.fill('');
   await input.fill(title);
@@ -141,15 +155,20 @@ async function placeText(page: Page, host: Box, fit: Fit, content: string, nx: n
 
 /** Coloca un jugador genérico (Jugador propio / Jugador rival) desde la sección Herramientas. */
 async function placeJugador(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-  await page.locator(`.rail-btn[title="${title}"]`).click();
+  await openCat(page, 'Jugadores');
+  if (title === 'Jugador propio' || title === 'Jugador rival') {
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+  } else {
+    await page.locator(`.rail-btn[title="${title}"]`).click();
+  }
   const p = normToScreen(nx, ny, host, fit);
   await page.mouse.click(p.x, p.y);
 }
 
 /** Coloca un jugador de la bandeja de genéricos (Portero / Portero). */
 async function placeTrayJugador(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
+  await openCat(page, 'Jugadores');
   await page.locator(`.tray-player[title="${title}"]`).click();
   const p = normToScreen(nx, ny, host, fit);
   await page.mouse.click(p.x, p.y);
@@ -162,7 +181,7 @@ async function cleanScene(page: Page): Promise<void> {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(120);
   await page.evaluate(() => {
-    document.querySelectorAll('.context-bar, .tools-panel-backdrop, .top-pop, .side-panel').forEach((el) => {
+    document.querySelectorAll('.context-bar, .top-pop, .side-panel').forEach((el) => {
       (el as HTMLElement).style.display = 'none';
     });
   });
@@ -227,21 +246,21 @@ test.describe('Fase 12 — capturas finales de interacción', () => {
     await drawShape(page, [0.3, 0.3], [0.68, 0.7]);
 
     // Jugadores: Portero central, 4 propios en rombo, 2 rivales presionando y portero.
-    await placeTrayJugador(page, host, fit, 'Portero', 0.5, 0.5);
+    await placeTrayJugador(page, host, fit, 'Jugador Azul', 0.5, 0.5);
     await placeJugador(page, host, fit, 'Jugador propio', 0.34, 0.34);
     await placeJugador(page, host, fit, 'Jugador propio', 0.66, 0.34);
     await placeJugador(page, host, fit, 'Jugador propio', 0.34, 0.66);
     await placeJugador(page, host, fit, 'Jugador propio', 0.66, 0.66);
     await placeJugador(page, host, fit, 'Jugador rival', 0.5, 0.4);
     await placeJugador(page, host, fit, 'Jugador rival', 0.5, 0.6);
-    await placeTrayJugador(page, host, fit, 'Portero', 0.1, 0.5);
+    await placeTrayJugador(page, host, fit, 'Jugador Azul', 0.1, 0.5);
 
-    // Material: balón, conos y mini portería.
+    // Material: balón, conos y miniportería.
     await placeMaterial(page, host, fit, 'Balón', 0.57, 0.5);
     await placeMaterial(page, host, fit, 'Cono', 0.16, 0.3);
     await placeMaterial(page, host, fit, 'Cono', 0.16, 0.42);
     await placeMaterial(page, host, fit, 'Cono', 0.16, 0.54);
-    await placeMaterial(page, host, fit, 'Mini portería', 0.9, 0.5);
+    await placeMaterial(page, host, fit, 'Miniportería', 0.9, 0.5);
 
     // Flechas de movimiento (rondo) y líneas de pase.
     await useTool(page, 'Flecha (movimiento)', 'Dibujo');

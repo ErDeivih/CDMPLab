@@ -114,7 +114,12 @@ async function ptr(page: Page, type: 'pointerdown' | 'pointermove' | 'pointerup'
 
 /** Centro en PANTALLA (coordenadas de página) del bounding box de un selector del SVG. */
 async function objectScreen(page: Page, selector: string): Promise<Pt> {
-  const b = (await page.locator(selector).first().boundingBox())!;
+  const loc = page.locator(selector).first();
+  await loc.waitFor({ state: 'attached', timeout: 5000 });
+  const b = await loc.evaluate((el) => {
+    const r = (el as SVGGraphicsElement).getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
 
@@ -177,13 +182,24 @@ async function armCone(page: Page): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
   await expect(page.locator('.placement-hint')).toBeVisible();
+  // FASE B (paneles persistentes): el panel Material sigue abierto y en móvil tapa el punto de
+  // colocación del cono (izquierda). Se cierra por su botón X (.panel-close), que no desarma la
+  // colocación, para poder tocar el campo después.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
+  await expect(page.locator('.side-panel-left.tools-panel-side')).toHaveCount(0);
 }
 
 /** Arma la colocación de un Portero (jugador genérico). */
 async function armComodin(page: Page): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir un jugador NO cierra el panel Jugadores.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  // FASE B (regla C): el panel Jugadores, que ya no se autocienda, taparía después los toques
+  // sobre el cono (colocado a la izquierda). Se cierra por su botón X (.panel-close), que no
+  // desarma la colocación.
+  await page.locator('.side-panel-left .panel-close').click();
   await expect(page.locator('.side-panel-left')).toHaveCount(0);
 }
 
@@ -232,11 +248,17 @@ test.describe('E1 — el panel Propiedades NO bloquea el movimiento en móvil (�
       let s = normToScreen(0.35, 0.6, host, fit);
       await page.touchscreen.tap(s.x, s.y);
       await expect(page.locator('.field-count')).toHaveText('1');
+      await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click(); // Fase 3: desarmar para interactuar
+      // El cono se coloca con su CENTRO en el punto de colocación `s` (el material se
+      // centra en el norm del toque), así que `s` es la posición exacta del cono en
+      // pantalla. Selecto con `s` en vez de `objectScreen` (getBoundingClientRect),
+      // que en "Llenar pantalla" y viewports pequeños desvía el centro al borde.
+      const coneScreen = s;                                                // centro exacto del cono (pantalla)
+      await page.touchscreen.tap(coneScreen.x, coneScreen.y);              // seleccionar el cono
       await expect(page.locator('.studio-panel')).toHaveCount(0);          // NO auto-abre
       await expect(page.locator(SEL)).not.toHaveCount(0);                  // manijas/selección visibles
       // Fase 6: la rotación ya no es una manija continua sino la BARRA/MENÚ contextual (±90°).
       await expect(page.locator('.rot-handle')).toHaveCount(0);            // sin manija de rotación
-      const coneScreen = await objectScreen(page, CONE);                   // posición real del cono (pantalla)
       // Fase 3: el menú contextual se abre con pulsación larga.
       await longPress(page, coneScreen.x, coneScreen.y);
       await expect(page.locator('.context-bar')).toBeVisible();            // menú contextual (±90°)
@@ -250,6 +272,7 @@ test.describe('E1 — el panel Propiedades NO bloquea el movimiento en móvil (�
       s = normToScreen(0.65, 0.35, host, fit);
       await page.touchscreen.tap(s.x, s.y);
       await expect(page.locator('.field-count')).toHaveText('2');
+      await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click(); // Fase 3: desarmar
       await expect(page.locator('.studio-panel')).toHaveCount(0);          // sigue cerrado
       const playerScreen = await objectScreen(page, PLAYER);               // posición real del jugador (pantalla)
 

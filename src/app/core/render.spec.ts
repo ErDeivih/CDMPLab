@@ -27,10 +27,12 @@ import {
   arrowHeadSize,
   ARROW_HEAD_FACTOR,
   svgZigzag,
+  screenPxToNormTolerance,
+  BOARD_CANON_RECT,
 } from './render';
 import { CanvasElement } from './models';
 import { MATERIAL_SIZE_RATIO, TACTICAL_SIZE } from './tactic-assets';
-import { fieldGeometry } from './field';
+import { fieldGeometry, F7_LINE_COLOR, OFFICIAL_PITCH_COLOR, STRIP_FRAC } from './field';
 
 function mkPlayer(id: string, x: number, y: number, n = 9): CanvasElement {
   return { id, t: 'player', x, y, n, c: '#1a73e8', side: 'own' };
@@ -76,10 +78,11 @@ function normToScreenPoint(
   };
 }
 
-/** Forward norm→pantalla para el modo "Llenar pantalla" (fit = 'height'): la escala
- *  es s = hostH / (dimensión vertical del rect de contenido), así que el campo (el
- *  rect de contenido) LLENA la altura del host y puede desbordar el ancho (offX
- *  negativo) manteniendo la proporción. Debe coincidir con screenToNorm. */
+/** Forward norm→pantalla para el modo "Llenar pantalla" (fit = 'height'): la escala es
+ *  COVER (igual que `fillScale` del componente), es decir max(hostH/dimVert, hostW/dimHor).
+ *  Así el rect de contenido (el campo con sus marcas) cubre el host y puede desbordar y
+ *  panearse. En hosts verticales coincide con contain-height; en panorámicos difiere. Debe
+ *  coincidir EXACTAMENTE con screenToNorm(..., 'height'). */
 function normToScreenPointFit(
   nx: number,
   ny: number,
@@ -89,7 +92,9 @@ function normToScreenPointFit(
   panY: number,
   zoom: number
 ): { x: number; y: number } {
-  const s = host.height / (g.vertical ? g.rect.w : g.rect.h);
+  const dimVert = g.vertical ? g.rect.w : g.rect.h;
+  const dimHor = g.vertical ? g.rect.h : g.rect.w;
+  const s = Math.max(host.height / dimVert, host.width / dimHor);
   const offX = (host.width - g.vbW * s) / 2;
   const offY = (host.height - g.vbH * s) / 2;
   const cxg = nx * g.rect.w + g.rect.x;
@@ -189,12 +194,43 @@ describe('render', () => {
     expect(svgH).not.toContain('rotate(-90 ');
   });
 
-  it('Fase 11/9: el fondo usa backgroundColor, pero las líneas del campo son SIEMPRE blancas y el césped SIEMPRE de franjas', () => {
+  it('A7: el césped es el OFICIAL único (se ignora backgroundColor), las líneas son SIEMPRE blancas y el césped de franjas', () => {
     const svg = renderBoardSvg('full', [], { backgroundColor: '#123456', lineColor: '#ff0000', grass: 'plain' });
-    expect(svg).toContain('#123456');
+    // A7: el render usa el césped oficial, NO el backgroundColor del documento.
+    expect(svg).not.toContain('#123456');
+    expect(svg).toContain(OFFICIAL_PITCH_COLOR);
     // La marca reglamentaria ignora el color del documento: siempre blanca.
     expect(svg).toContain('stroke="#ffffff"');
     expect(svg).not.toContain('stroke="#ff0000"');
+  });
+
+  it('Fase 2: el césped va precedido de una franja exterior LISA (5 % del lado corto) y las franjas quedan dentro del terreno', () => {
+    const svg = renderBoardSvg('full', [], {});
+    // Existe la franja exterior con su clase estable.
+    expect(svg).toContain('class="entrenolab-strip"');
+    // La franja es un rect LISO (fill=base, sin rayas) que rodea el rect de contenido.
+    const strip = /<g class="entrenolab-strip"[^>]*><rect x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="([^"]+)"/.exec(svg);
+    expect(strip, 'debe existir el <rect> de la franja').not.toBeNull();
+    expect(parseFloat(strip![1])).toBeLessThan(0); // se extiende a la izquierda del rect
+    expect(parseFloat(strip![2])).toBeLessThan(0); // y por arriba
+    // El ancho/alto de la franja es mayor que el rect de contenido (92×~59,58): sobresale.
+    expect(parseFloat(strip![3])).toBeGreaterThan(92);
+    // El rect de contenido (césped de franjas) sigue existiendo dentro.
+    expect(svg).toContain('class="entrenolab-grass"');
+  });
+
+  it('Bloque F #9 — la franja exterior NO tapa el césped interior (se dibuja ANTES y el césped va encima)', () => {
+    const svg = renderBoardSvg('full', [], {});
+    const idxStrip = svg.indexOf('class="entrenolab-strip"');
+    const idxGrass = svg.indexOf('class="entrenolab-grass"');
+    expect(idxStrip, 'existe la franja').toBeGreaterThan(-1);
+    expect(idxGrass, 'existe el césped').toBeGreaterThan(-1);
+    // El orden en el SVG: franja ANTES, césped DESPUÉS (el césped interior queda encima).
+    expect(idxStrip, 'la franja se dibuja ANTES del césped (queda detrás)').toBeLessThan(idxGrass);
+    // El césped interior cubre el campo con sus bandas (no queda tapado por la franja):
+    // al existir el grupo de césped después de la franja, las bandas se pintan encima.
+    const bands = svg.slice(idxGrass).match(/<rect /g) ?? [];
+    expect(bands.length, 'el césped pinta sus bandas (no está vacío)').toBeGreaterThanOrEqual(10);
   });
 
   it('Fase 9: el césped es SIEMPRE de franjas (se ignora la textura liso/cuadros del documento)', () => {
@@ -528,6 +564,26 @@ describe('render', () => {
     expect(n.y).toBeCloseTo(0.5, 1);
   });
 
+  it('round-trip norm→pantalla→norm es la identidad en HOST PANORÁMICO con fit=height (fix D1)', () => {
+    // En hosts panorámicos (dar más el ancho) la escala de "Llenar pantalla" es COVER
+    // (width-based), NO contain-height. Antes screenToNorm usaba hostH/dimVert y NO
+    // coincidía con el render (fillScale), produciendo un error de ~36 px que la selección
+    // estricta destapaba. Este test lo fija para que sean exactos en panorámico.
+    const g = boardGeometry('horizontal');
+    const host: HostRect = { left: 10, top: 98, width: 1346, height: 563 };
+    for (const [panX, panY] of [[0, 0], [40, -30]] as Array<[number, number]>) {
+      for (const [nx, ny] of ([[0.55, 0.5], [0.2, 0.8]] as Array<[number, number]>)) {
+        const f = normToScreenPointFit(nx, ny, host, g, panX, panY, 1);
+        const inv = screenToNorm(f.x, f.y, host, g, panX, panY, 1, 'height');
+        expect(inv.x, `x para (${nx},${ny})`).toBeCloseTo(nx, 3);
+        expect(inv.y, `y para (${nx},${ny})`).toBeCloseTo(ny, 3);
+      }
+    }
+    // La escala es COVER: el contenido alcanza al menos la dimensión del host y una la supera.
+    const s = Math.max(host.height / g.rect.h, host.width / g.rect.w);
+    expect(g.rect.h * s >= host.height || g.rect.w * s >= host.width).toBe(true);
+  });
+
   it('renderBoardSvg dibuja el overlay F7 cuando está activado (no cuando no)', () => {
     const on = renderBoardSvg('full', [], { f7: { enabled: true, color: '#2563eb', thickness: 0.8, opacity: 0.8 } });
     expect(on).toContain('stroke="#2563eb"');
@@ -555,7 +611,11 @@ describe('render', () => {
     // El campo base 'f7' (sin overlay) dibuja el fondo F11 siempre en blanco (Fase 11);
     // el color de contraste del F7 transversal es el de su propio overlay, no el de línea.
     const svg = renderBoardSvg('f7', [], { lineColor: '#ff0000', grid: false });
-    expect(svg).toContain('width="92"');
+    // FASE 4/8b: el F7 usa el medio campo F11 APISAADO (68 m en X → 59,58 de ancho).
+    const halfW = 68 * (92 / 105);
+    const cont = /<rect x="4" y="4" width="([\d.]+)" height="([\d.]+)"[^>]*stroke="#ffffff"/.exec(svg);
+    expect(cont, 'el medio campo F11 apaisado dibuja su contorno').not.toBeNull();
+    expect(parseFloat(cont![1])).toBeCloseTo(halfW, 3);
     expect(svg).toContain('stroke="#ffffff"');
     expect(svg).not.toContain('stroke="#ff0000"');
     // No dibuja círculo central ni ellipse.
@@ -566,8 +626,13 @@ describe('render', () => {
     const svg = renderBoardSvg('f7', [], {});
     // Marca del medio campo F11: portería (rect con relleno translúcido).
     expect(svg).toContain('rgba(255,255,255,0.25)');
-    // Marca del F7 perpendicular: rect ancho que cruza el ancho (largo en X).
-    expect(svg).toContain('width="92"');
+    // Contorno del medio campo apaisado (68 m en X → 59,58 de ancho).
+    const halfW = 68 * (92 / 105);
+    const cont = /<rect x="4" y="4" width="([\d.]+)" height="([\d.]+)"[^>]*stroke="#ffffff"/.exec(svg);
+    expect(cont).not.toBeNull();
+    expect(parseFloat(cont![1])).toBeCloseTo(halfW, 3);
+    // El F7 transversal se dibuja en SU color de contraste, separado del fondo blanco.
+    expect(svg).toContain(F7_LINE_COLOR);
     // Solo el punto central pequeño; sin ellipse de círculo central.
     expect(svg).not.toContain('<ellipse');
     expect(svg).toContain('r="0.35"');
@@ -580,12 +645,51 @@ describe('render', () => {
     expect(a).toBe(b);
     // Vertical rota TODO el contenido (F7 y F11 siguen perpendiculares sin deformar).
     expect(a).toContain('rotate(90)');
-    expect(a).toContain('width="92"');
+    // El F7 usa la geometría del medio campo (52,5×68), que en vertical encaja en el
+    // alto del viewBox (58,47) y dibuja el rect del medio campo con su proporción.
+    expect(a).toContain(F7_LINE_COLOR);
   });
 
   it('renderiza el marcador de entrenador C (coachC, SVG nativo rotable)', () => {
     const svg = renderBoardSvg('full', [{ id: 'c', t: 'coachC', x: 0.5, y: 0.5 }], {});
     expect(svg).toContain('>C</text>');
+  });
+
+  it('B2: la Mancuerna (dumbbell) se renderiza como SVG vectorial original, transparente', () => {
+    const svg = renderBoardSvg('full', [{ id: 'd', t: 'dumbbell', x: 0.5, y: 0.5 }], {});
+    expect(svg).toContain('data-el-type="dumbbell"');
+    // Es un <g> nativo (no un <image> de PNG rasterizado).
+    expect(svg).not.toContain('data-el-type="dumbbell" image');
+    const el = svg.match(/<g[^>]*data-el-type="dumbbell"[^>]*>(.*?)<\/g>/);
+    expect(el, 'el dumbbell se dibuja como <g> con barras').not.toBeNull();
+    expect(el![1], 'la pesa tiene barras/platos').toContain('<rect');
+  });
+
+  it('B1: la Portería grande (goal) y la Barrera de maniquíes (mannequin_row) se renderizan como <g> vectorial', () => {
+    const g = renderBoardSvg('full', [{ id: 'g', t: 'goal', x: 0.5, y: 0.5 }], {});
+    expect(g).toContain('data-el-type="goal"');
+    expect(g).not.toContain('data-el-type="goal" image');
+    expect(g.match(/<g[^>]*data-el-type="goal"[^>]*>(.*?)<\/g>/)![1]).toContain('<rect');
+    const mr = renderBoardSvg('full', [{ id: 'm', t: 'mannequin_row', x: 0.5, y: 0.5 }], {});
+    expect(mr).toContain('data-el-type="mannequin_row"');
+    expect(mr.match(/<g[^>]*data-el-type="mannequin_row"[^>]*>(.*?)<\/g>/)![1]).toContain('<circle');
+  });
+
+  it('FASE 6: un material se ve a la MITAD de tamaño aparente en medio campo que en campo completo', () => {
+    const cone = (id: string): CanvasElement => ({ id, t: 'cone', x: 0.5, y: 0.5 });
+    const get = (svg: string): number[] => {
+      const re = /<g transform="translate\([^)]+\) scale\(([\d.]+)\)"/g;
+      const out: number[] = []; let m: RegExpExecArray | null;
+      while ((m = re.exec(svg))) out.push(Number(m[1]));
+      return out;
+    };
+    const fullScale = get(renderBoardSvg('full', [cone('a')], {}))[0];
+    const halfScale = get(renderBoardSvg('half', [cone('b')], {}))[0];
+    expect(fullScale).toBeGreaterThan(0);
+    // Campo completo objectScale=1; medio campo ≈0,5 (mitad de tamaño aparente).
+    expect(halfScale).toBeCloseTo(fullScale * 0.5, 5);
+    // No se re-escribe `size` del documento (el modelo conserva el tamaño base).
+    expect(cone('c').size).toBeUndefined();
   });
 
   it('renderiza el peto (SVG nativo) con el color elegido', () => {
@@ -840,6 +944,27 @@ describe('render', () => {
     expect(hitTestElement({ x: 0.5, y: 0.42 }, [big])).toBe('b');
   });
 
+  it('D1: dos objetos PRÓXIMOS se seleccionan por separado (la caja no crece con el zoom)', () => {
+    // Con la tolerancia en px-sola (sin el floor legado de ~44 px), dos conos a 0.02 de
+    // distancia se seleccionan individualmente: el punto que toca A elige A, no B, y un
+    // punto claramente fuera (a medio camino vacío) no elige a ninguno.
+    const r = BOARD_CANON_RECT;
+    const pxScreen = { screenPx: 6, zoom: 1, scale: 14 };
+    const a: CanvasElement = { id: 'a', t: 'cone', x: 0.4, y: 0.5, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
+    const b: CanvasElement = { id: 'b', t: 'cone', x: 0.42, y: 0.5, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
+    // Sobre A → A (A está más cerca; no devuelve B).
+    expect(hitTestElement({ x: 0.4, y: 0.5 }, [a, b], r, 1, pxScreen)).toBe('a');
+    // Sobre B → B (aunque esté a 0.02, su propia caja lo captura y es la de encima si pisa A).
+    expect(hitTestElement({ x: 0.42, y: 0.5 }, [a, b], r, 1, pxScreen)).toBe('b');
+    // Punto claramente fuera (a la izquierda de A): NO selecciona ninguno.
+    expect(hitTestElement({ x: 0.3, y: 0.5 }, [a, b], r, 1, pxScreen)).toBeNull();
+    // A zoom 2 la tolerancia NORM se reduce (misma zona de px de pantalla): los conos se
+    // siguen seleccionando por separado.
+    expect(hitTestElement({ x: 0.4, y: 0.5 }, [a, b], r, 1, { screenPx: 6, zoom: 2, scale: 14 })).toBe('a');
+    expect(hitTestElement({ x: 0.42, y: 0.5 }, [a, b], r, 1, { screenPx: 6, zoom: 2, scale: 14 })).toBe('b');
+  });
+
+
   it('materialHitHalfExtents nunca baja del mínimo táctil de ~44px y escala con size', () => {
     const cone: CanvasElement = { id: 'c', t: 'cone', x: 0.5, y: 0.5, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
     const h = materialHitHalfExtents(cone);
@@ -850,6 +975,44 @@ describe('render', () => {
     const hb = materialHitHalfExtents(big);
     expect(hb.hh).toBeGreaterThan(h.hh);
   });
+
+  it('screenPxToNormTolerance convierte px de pantalla a norm según zoom y reduce con la magnificación', () => {
+    const r = BOARD_CANON_RECT;
+    // 10 px/unidad de viewBox, zoom 1 (escala típica de escritorio).
+    const t1 = screenPxToNormTolerance({ zoom: 1, scale: 10, rect: r }, 4);
+    expect(t1.x).toBeCloseTo(4 / (1 * 10 * r.w), 10);
+    expect(t1.y).toBeCloseTo(4 / (1 * 10 * r.h), 10);
+    // Misma tolerancia de pantalla (4px) con zoom 2 → la mitad de norm (D1: no crece la
+    // zona de selección al acercar).
+    const t2 = screenPxToNormTolerance({ zoom: 2, scale: 10, rect: r }, 4);
+    expect(t2.x).toBeCloseTo(t1.x / 2, 10);
+    expect(t2.y).toBeCloseTo(t1.y / 2, 10);
+    // El ratón (4px) es más estricto que el táctil (9px): mismo zoom → mayor norm.
+    const touch = screenPxToNormTolerance({ zoom: 1, scale: 10, rect: r }, 9);
+    expect(touch.x).toBeGreaterThan(t1.x);
+    expect(touch.y).toBeGreaterThan(t1.y);
+    // En un zoom alto la tolerancia NORM es menor, pero los px de pantalla son los mismos.
+    const hi = screenPxToNormTolerance({ zoom: 3, scale: 10, rect: r }, 4);
+    expect(hi.x).toBeLessThan(t1.x);
+  });
+
+  it('FASE 9: línea y texto se seleccionan con tolerancia en PANTALLA (por zoom), no con 0.03/0.09 fijo', () => {
+    const r = BOARD_CANON_RECT;
+    const px = { screenPx: 8, zoom: 1, scale: 11 }; // táctil ~8px
+    const line: CanvasElement = { id: 'l', t: 'line', x1: 0.2, y1: 0.5, x2: 0.8, y2: 0.5 };
+    // Cerca de la línea (dentro de la tolerancia en px) → se selecciona.
+    expect(hitTestElement({ x: 0.5, y: 0.5 + 0.005 }, [line], r, 1, px)).toBe('l');
+    // Lejos (más que la tolerancia táctil en px, ~0.012 norm) → NO.
+    expect(hitTestElement({ x: 0.5, y: 0.5 + 0.06 }, [line], r, 1, px)).toBeNull();
+    // A zoom 2 la tolerancia NORM se reduce (misma zona de px) → a la misma distancia NO.
+    expect(hitTestElement({ x: 0.5, y: 0.5 + 0.06 }, [line], r, 1, { screenPx: 8, zoom: 2, scale: 11 })).toBeNull();
+    // Texto con caja: se selecciona dentro de la caja y NO fuera por la radio por defecto.
+    const text: CanvasElement = { id: 't', t: 'text', x: 0.4, y: 0.4, w: 0.2, h: 0.1, v: 'X' };
+    expect(hitTestElement({ x: 0.5, y: 0.45 }, [text], r, 1, px)).toBe('t');
+    expect(hitTestElement({ x: 0.5, y: 0.6 }, [text], r, 1, px)).toBeNull();
+  });
+
+
 
   // ---------- Fase 2 — unidades humanas: % ↔ normalizado y ajuste al contenido ----------
 
@@ -1166,5 +1329,59 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       expect(svg).toContain('stroke="#e11d48"');
       expect(svg).toContain('fill="#e11d48"');
     }
+  });
+
+  it('el zigzag NUEVO (Fase 6) tiene ~el doble de picos que el anterior para una longitud representativa', () => {
+    // Longitud representativa: 0.2..0.8 horizontal → len = 0.6*92 ≈ 55.2 px.
+    const svg = svgZigzag(0.2, 0.3, 0.8, 0.3, '#111111', false, DEFAULT_STROKE_WIDTH, 'solid', g);
+    const path = /<path d="([^"]+)"/.exec(svg)!;
+    // Nº de vértices (M + L) = 1 + nº de picos intermedios. Antes: n=round(len/6)=9→cap 8;
+    // ahora n=round(len/3)=18→cap 16. Para len≈55.2, n_new=round(18.4)=18→cap 16.
+    const segs = (path[1].match(/L /g) ?? []).length;
+    expect(segs, 'picos intermedios del zigzag nuevo').toBeGreaterThanOrEqual(14);
+  });
+
+  it('la punta del zigzag coincide EXACTAMENTE con el extremo final dibujado', () => {
+    const svg = svgZigzag(0.2, 0.3, 0.8, 0.6, '#0f766e', false, 1.2, 'solid', g);
+    const h = heads(svg);
+    expect(h).toHaveLength(1);
+    expect(h[0][0][0]).toBeCloseTo(0.8 * 92 + 4, 4);
+    expect(h[0][0][1]).toBeCloseTo(0.6 * g.h + g.y, 4);
+  });
+
+  it('el zigzag no produce NaN/Infinity ni geometría degenerada (horizontal/vertical/diagonal/corto)', () => {
+    const cases: Array<[number, number, number, number]> = [
+      [0.2, 0.3, 0.8, 0.3], // horizontal
+      [0.3, 0.2, 0.3, 0.8], // vertical
+      [0.2, 0.2, 0.8, 0.8], // diagonal
+      [0.49, 0.5, 0.51, 0.51], // muy corto
+      [0.5, 0.5, 0.5, 0.5], // degenerada (punto)
+    ];
+    for (const [x1, y1, x2, y2] of cases) {
+      const svg = svgZigzag(x1, y1, x2, y2, '#111111', false, 1.2, 'solid', g);
+      expect(svg).not.toMatch(/NaN|Infinity|undefined/);
+      // Los dos extremos del path deben ser finitos y coincidir con el punto final.
+      const path = /<path d="([^"]+)"/.exec(svg)!;
+      const coords = path[1].match(/[^ML ]+ [^ ]+/g)?.map((pt) => pt.trim().split(' ').map(Number)) ?? [];
+      for (const c of coords) {
+        expect(Number.isFinite(c[0])).toBe(true);
+        expect(Number.isFinite(c[1])).toBe(true);
+      }
+    }
+  });
+
+  it('Bloque F #21 — línea y flecha con trazo DISCONTINUO se renderizan con stroke-dasharray; las continuas no', () => {
+    const dashedLine: CanvasElement = { id: 'l1', t: 'line', x1: 0.2, y1: 0.4, x2: 0.8, y2: 0.4, style: 'dashed' };
+    const solidArrow: CanvasElement = { id: 'a1', t: 'arrow', x1: 0.2, y1: 0.6, x2: 0.8, y2: 0.6, style: 'solid' };
+    const dashedArrow: CanvasElement = { id: 'a2', t: 'arrow', x1: 0.2, y1: 0.7, x2: 0.8, y2: 0.7, style: 'dashed' };
+    // Línea discontinua → dasharray.
+    const svgLine = renderBoardSvg('full', [dashedLine], {});
+    expect(svgLine, 'la línea discontinua lleva stroke-dasharray').toContain('stroke-dasharray');
+    // Flecha SOLID (continua) → SIN dasharray.
+    const svgArrowSolid = renderBoardSvg('full', [solidArrow], {});
+    expect(svgArrowSolid, 'la flecha continua NO lleva dasharray').not.toMatch(/<line[^>]*stroke-dasharray/);
+    // Flecha discontinua → dasharray.
+    const svgArrowDash = renderBoardSvg('full', [dashedArrow], {});
+    expect(svgArrowDash, 'la flecha discontinua lleva dasharray').toMatch(/<line[^>]*stroke-dasharray/);
   });
 });

@@ -53,7 +53,8 @@ test.describe('Capturas baseline', () => {
     await page.goto('/board');
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .roster-item').first().click();
-    // Tocar un jugador arma la colocación (cierra el panel); el clic en el campo lo coloca.
+    // Tocar un jugador arma la colocación (FASE B: el panel permanece abierto, no se cierra
+    // al elegir el jugador); el clic en el campo lo coloca.
     const box = (await page.locator('.board-host').boundingBox())!;
     await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5, { button: 'right' });
     await page.waitForTimeout(300);

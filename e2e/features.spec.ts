@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
-import { longPress } from './gesture-helpers';
+import { longPress, fillBoardTitle } from './gesture-helpers';
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -25,6 +25,20 @@ async function createTask(page: Page, title: string): Promise<void> {
   await page.locator('.modal input[name="title"]').fill(title);
   await page.getByText('Guardar').click();}
 
+/** FASE B (paneles persistentes): abre la categoría sin re-togglear una que ya está
+ *  desplegada (re-clickar la misma la cerraría). Distingue Jugadores de Material/Dibujo
+ *  por el aria-label del panel para no confundir categorías. */
+async function openCat(page: Page, category: string): Promise<void> {
+  const probe: Record<string, string> = {
+    Jugadores: '.side-panel-left[aria-label="Jugadores"]',
+    Material: '.side-panel-left[aria-label="Herramientas de Material"]',
+    Dibujo: '.side-panel-left[aria-label="Herramientas de Dibujo"]',
+  };
+  if (await page.locator(probe[category]).isVisible().catch(() => false)) return;
+  await page.locator('.tools-cat', { hasText: category }).click();
+  await expect(page.locator(probe[category])).toBeVisible();
+}
+
 /** Activa la categoría correcta y pulsa la herramienta por su título. */
 async function useTool(page: Page, title: string): Promise<void> {
   const category: Record<string, string> = {
@@ -32,10 +46,10 @@ async function useTool(page: Page, title: string): Promise<void> {
     'Jugador rival': 'Jugadores',
     'Cono': 'Material',
     'Balón': 'Material',
-    'Maniquí': 'Material',
-    'Mini portería': 'Material',
+    'Maniquí individual': 'Material',
+    'Miniportería': 'Material',
     'Pértiga / poste': 'Material',
-    'Marcador': 'Material',
+    'BOSU': 'Material',
     'Conducción (zigzag)': 'Dibujo',
     'Línea': 'Dibujo',
     'Flecha (movimiento)': 'Dibujo',
@@ -48,9 +62,30 @@ async function useTool(page: Page, title: string): Promise<void> {
   };
   const tab = category[title];
   if (tab) {
-    await page.locator('.tools-cat', { hasText: tab }).click();
+    await openCat(page, tab);
+  }
+  if (title === 'Jugador propio' || title === 'Jugador rival') {
+    // FASE C: se retiraron los botones "Jugador propio/rival"; el genérico se arma con
+    // las fichas rápidas por COLOR (Propio = Azul, Rival = Rojo).
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+    await closeCatalogPanelIfOpen(page);
+    return;
   }
   await page.locator(`.rail-btn[title="${title}"]`).click();
+  // FASE B: minimizar el catálogo tras elegir la herramienta para liberar el campo
+  // (los arrastres/colocaciones en la zona izquierda quedan bajo el panel persistente).
+  await closeCatalogPanelIfOpen(page);
+}
+
+/** Minimiza el catálogo lateral abierto (si lo hay) con su botón X: NO desarma la
+ *  herramienta; deja el campo libre para dibujar/colocar. */
+async function closeCatalogPanelIfOpen(page: Page): Promise<void> {
+  const panel = page.locator('.side-panel');
+  if (await panel.isVisible().catch(() => false)) {
+    const close = panel.first().locator('.panel-close');
+    if (await close.isVisible().catch(() => false)) await close.click();
+  }
 }
 
 /** Abre el panel de Propiedades (derecha), que empieza cerrado (Fase 1). */
@@ -126,15 +161,16 @@ test.describe('EntrenoLab funcionalidades', () => {
     await openProps(page);
     // Orientación vertical. (La "Rejilla" fue retirada por el dueño y ya no se guarda.)
     await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();
-    // Un jugador (genérico): tocar el genérico ARMA la colocación (cierra el panel).
+    // Un jugador (genérico): tocar el genérico ARMA la colocación. FASE B: el panel no se cierra.
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-    await page.locator('.side-panel-left .tray-player[title="Portero"]').click();
+    await page.locator('.side-panel-left .tray-player[title="Jugador Azul"]').click();
     await expect(page.locator('.field-count')).toHaveText('0');
     const boxC = (await page.locator('.board-host').boundingBox())!;
     await page.mouse.click(boxC.x + boxC.width * 0.5, boxC.y + boxC.height * 0.5, { button: 'right' });
     await expect(page.locator('.field-count')).toHaveText('1');
 
     // Guardar → biblioteca.
+    await fillBoardTitle(page, 'OrientacionVertical');
     await page.locator('[title="Guardar ejercicio"]').click();
     await page.waitForURL('**/library');
 
@@ -214,6 +250,11 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(cx, cy);
     await expect(page.locator('.field-count')).toHaveText('1');
+
+    // Fase 3: la colocación continua NO auto-selecciona. Seleccionamos el cono (que ya está
+    // en el centro) para que Delete lo borre.
+    await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
+    await page.mouse.click(cx, cy);
 
     // Exportar (con cono).
     const dlA = page.waitForEvent('download');
@@ -353,10 +394,10 @@ test.describe('EntrenoLab funcionalidades', () => {
     const point = (fx: number, fy: number) => [box.x + box.width * fx, box.y + box.height * fy];
 
     const objs: Array<[string, number, number]> = [
-      ['Maniquí', 0.3, 0.4],
-      ['Mini portería', 0.6, 0.4],
+      ['Maniquí individual', 0.3, 0.4],
+      ['Miniportería', 0.6, 0.4],
       ['Pértiga / poste', 0.3, 0.6],
-      ['Marcador', 0.6, 0.6],
+      ['BOSU', 0.6, 0.6],
       ['Rectángulo', 0.45, 0.75],
     ];
     for (const [title, fx, fy] of objs) {
@@ -489,7 +530,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.field-count')).toHaveText('1');
   });
 
-  test('coloca material desde el panel cambia el color del césped', async ({ page }) => {
+  test('coloca materiales y el césped es el oficial único (sin selector de color)', async ({ page }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -498,15 +539,16 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.4);
     await expect(page.locator('.field-count')).toHaveText('1');
-    await page.locator('.tools-cat', { hasText: 'Material' }).click();
+    // FASE B (paneles persistentes): el panel Material ya está abierto; no se re-togglea (lo cerraría).
+    await openCat(page, 'Material');
     await page.locator('.rail-btn[title="Valla"]').click();
     await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.6);
     await expect(page.locator('.field-count')).toHaveText('2');
-    // color de césped
+    // FASE 2: el césped es el oficial ÚNICO: no hay selector de color (ni de textura).
     await openProps(page);
-    const grass = page.locator('.field', { hasText: 'Césped' }).locator('.swatch').nth(1);
-    await grass.click();
-    await expect(grass).toHaveClass(/swatch-active/);
+    const grassField = page.locator('.field', { hasText: 'Césped' });
+    await expect(grassField).toBeVisible();
+    await expect(grassField.locator('.swatch')).toHaveCount(0);
   });
 
   test('rectángulo, elipse y zona guardan el color elegido y el relleno (no blanco fijo)', async ({ page }) => {
@@ -520,8 +562,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     const col = '#c0392b';
     const draw = async (title: string, fx: number, fy: number) => {
       // Cada herramienta vive en el panel desplegable de Dibujo: hay que abrirlo
-      // antes de pulsar la herramienta (elegir una cierra el panel).
-      await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
+      // antes de pulsar la herramienta. FASE B: abrir es IDEMPOTENTE (si ya está
+      // abierto no se re-togglea, lo cerraría).
+      await openCat(page, 'Dibujo');
       await page.locator('.rail-btn[title="' + title + '"]').click();
       // DECISIÓN DEL DUEÑO (Fase 1): cada herramienta recuerda SU color. Elegimos
       // rojo para esta herramienta concreta antes de dibujar.
@@ -537,6 +580,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await draw('Círculo / elipse', 0.5, 0.3);
     await draw('Línea', 0.25, 0.5);
     await expect(page.locator('.field-count')).toHaveText('3');
+    await fillBoardTitle(page, 'Dibujo');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
@@ -554,6 +598,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('select[aria-label="Textura del césped"]')).toHaveCount(0);
 
     // Un ejercicio guardado nuevo queda con césped de franjas.
+    await fillBoardTitle(page, 'CespedFranjas');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
@@ -571,6 +616,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
 
+    await fillBoardTitle(page, 'MiniaturaVertical');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
 
@@ -633,6 +679,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(swatchRed).toHaveClass(/swatch-active/);
 
     // Guardar → reabrir → el color rojo persiste.
+    await fillBoardTitle(page, 'ColorRojo');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
@@ -685,13 +732,15 @@ test.describe('EntrenoLab funcionalidades', () => {
 
     // Tres conos (A y B se moverán juntos; C queda fuera de la selección).
     for (const [x, y] of [pa, pb, pc]) {
-      await page.locator('.tools-cat', { hasText: 'Material' }).click();
+      // FASE B (paneles persistentes): abrir Material es IDEMPOTENTE (no re-togglea lo abierto).
+      await openCat(page, 'Material');
       await page.locator('.rail-btn[title="Cono"]').click();
       await page.mouse.click(x, y);
     }
     await expect(page.locator('.field-count')).toHaveText('3');
 
     // Capturar posiciones iniciales.
+    await fillBoardTitle(page, 'SeleccionMulti');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const readEls = async () =>
@@ -718,6 +767,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.field-count')).toHaveText('3');
 
     // Guardar y comparar.
+    await fillBoardTitle(page, 'SeleccionMulti');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const fin = await readEls();
@@ -783,13 +833,14 @@ test.describe('EntrenoLab funcionalidades', () => {
 
     // Editar el documento (colocar un jugador) mantiene los fotogramas.
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-    await page.locator('.side-panel-left .tray-player[title="Portero"]').click();
+    await page.locator('.side-panel-left .tray-player[title="Jugador Azul"]').click();
     await expect(page.locator('.field-count')).toHaveText('1'); // aún no coloca: está armado
     const boxM = (await page.locator('.board-host').boundingBox())!;
     await page.mouse.click(boxM.x + boxM.width * 0.8, boxM.y + boxM.height * 0.8);
     await expect(page.locator('.field-count')).toHaveText('2');
 
     // Guardar → el array de fotogramas NO se resetea a 1.
+    await fillBoardTitle(page, 'Fotogramas');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
@@ -866,6 +917,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
 
+    await fillBoardTitle(page, 'MiniaturaMaterial');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
 
@@ -906,14 +958,15 @@ test.describe('EntrenoLab funcionalidades', () => {
     const box = (await page.locator('.board-host').boundingBox())!;
     const pt = (fx: number, fy: number) => [box.x + box.width * fx, box.y + box.height * fy] as const;
 
-    // Tocar un jugador ARMA la colocación (no coloca aún) y cierra el panel.
+    // Tocar un jugador ARMA la colocación (no coloca aún). FASE B: el panel no se cierra.
     await page.locator('.side-panel-left .roster-item').nth(0).click();
     await expect(page.locator('.field-count')).toHaveText('0');
     await page.mouse.click(...pt(0.35, 0.45));
     await expect(page.locator('.field-count')).toHaveText('1');
 
-    // Reabrir el panel y colocar el segundo jugador en otro punto.
-    await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
+    // Colocar el segundo jugador en otro punto. FASE B: el panel ya está abierto;
+    // no se re-togglea (lo cerraría).
+    await openCat(page, 'Jugadores');
     await page.locator('.side-panel-left .roster-item').nth(1).click();
     await page.mouse.click(...pt(0.65, 0.55));
     await expect(page.locator('.field-count')).toHaveText('2');
@@ -935,23 +988,23 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.field-count')).toHaveText('1');
   });
 
-  test('bandeja: coloca Portero, portero y rival', async ({ page }) => {
+  test('bandeja: coloca genéricos de dos colores y un jugador de plantilla', async ({ page }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
     const pt = (fx: number, fy: number) => [box.x + box.width * fx, box.y + box.height * fy] as const;
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-    await page.locator('.tray-player[title="Portero"]').click();
+    await page.locator('.tray-player[title="Jugador Azul"]').click();
     await expect(page.locator('.field-count')).toHaveText('0'); // armado, aún no coloca
     await page.mouse.click(...pt(0.25, 0.4));
     await expect(page.locator('.field-count')).toHaveText('1');
-    await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-    await page.locator('.tray-player[title="Portero"]').click();
+    // FASE B (paneles persistentes): el panel ya está abierto; no se re-togglea (lo cerraría).
+    await openCat(page, 'Jugadores');
+    await page.locator('.tray-player[title="Jugador Rojo"]').click();
     await page.mouse.click(...pt(0.45, 0.4));
     await expect(page.locator('.field-count')).toHaveText('2');
-    // Cambiar a Rival y colocar un jugador de la plantilla.
-    await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-    await page.locator('.seg-btn', { hasText: 'Rival' }).click();
+    // Colocar un jugador de la plantilla (conserva su color, una sola instancia).
+    await openCat(page, 'Jugadores');
     await page.locator('.side-panel-left .roster-item').first().click();
     await page.mouse.click(...pt(0.65, 0.55));
     await expect(page.locator('.field-count')).toHaveText('3');
@@ -980,19 +1033,27 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.getByText('2 tareas')).toBeVisible();
   });
 
-  test('colocación única cambia a Selección y no duplica al pulsar de nuevo', async ({ page }) => {
+  test('la colocación de material es CONTINUA (Fase 3): queda armado y cada clic coloca una instancia', async ({ page }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
     const pt = [box.x + box.width * 0.4, box.y + box.height * 0.5] as const;
+    const pt2 = [box.x + box.width * 0.55, box.y + box.height * 0.6] as const;
     await useTool(page, 'Cono');
     await page.mouse.click(pt[0], pt[1]);
     await expect(page.locator('.field-count')).toHaveText('1');
-    // Vuelve a Selección automáticamente.
+    // Fase 3: el material SIGUE armado (no vuelve a Seleccionar).
+    await expect(page.locator('.placement-hint')).toBeVisible();
+    await expect(page.locator('.tools-caption-title')).toHaveText('Cono');
+    // Cada clic en una zona distinta coloca una nueva instancia (colocación continua).
+    await page.mouse.click(pt2[0], pt2[1]);
+    await expect(page.locator('.field-count')).toHaveText('2');
+    // Pasar a Seleccionar detiene la colocación: un clic posterior no crea otro cono.
+    await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
+    await expect(page.locator('.placement-hint')).toHaveCount(0);
     await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
-    // Un clic posterior en la misma zona no crea otro cono.
     await page.mouse.click(pt[0], pt[1]);
-    await expect(page.locator('.field-count')).toHaveText('1');
+    await expect(page.locator('.field-count')).toHaveText('2');
   });
 
   test('un jugador de plantilla no se duplica en la pizarra', async ({ page }) => {
@@ -1007,7 +1068,8 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
     // La tarjeta queda deshabilitada con "Ya está en el campo".
-    await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
+    // FASE B (paneles persistentes): el panel ya está abierto; no se re-togglea (lo cerraría).
+    await openCat(page, 'Jugadores');
     await expect(first).toHaveClass(/tray-disabled/);
     await expect(first.locator('.mini-name')).toHaveText('Ya está en el campo');
     // Pulsar de nuevo no duplica.
@@ -1167,6 +1229,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await alto.fill('25');
     await alto.dispatchEvent('change');
     // Guardar → reabrir → w/h persisten.
+    await fillBoardTitle(page, 'FeaturesText');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
@@ -1196,6 +1259,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.field-count')).toHaveText('1');
 
     // Guardar y salir → guarda y vuelve a la biblioteca.
+    await fillBoardTitle(page, 'Confirmacion');
     await page.locator('[title="Volver"]').click();
     await page.getByRole('dialog', { name: 'Cambios sin guardar' }).getByText('Guardar y salir').click();
     await page.waitForURL('**/library');
@@ -1431,8 +1495,8 @@ test.describe('EntrenoLab funcionalidades', () => {
       ['Texto', 0.55, 0.75],
       ['Balón', 0.55, 0.65],
       ['Cono', 0.55, 0.55],
-      ['Marcador', 0.55, 0.45],
-      ['Mini portería', 0.55, 0.35],
+      ['BOSU', 0.55, 0.45],
+      ['Miniportería', 0.55, 0.35],
     ];
     for (const [title, fx, fy] of place) {
       await useTool(page, title);
@@ -1444,6 +1508,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.field-count')).toHaveText(String(total));
 
     // Guardar → biblioteca → reabrir → se conservan todos.
+    await fillBoardTitle(page, 'ColocacionContinua');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     await page.locator('.ex-card').first().hover();
@@ -1523,6 +1588,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     expect(html).toContain('cone-red.png');
 
     // Guardar → reabrir → persiste el mismo recurso.
+    await fillBoardTitle(page, 'MaterialPNG');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     await page.locator('.ex-card').first().hover();
@@ -1718,6 +1784,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.mouse.up();
 
     // Guardar.
+    await fillBoardTitle(page, 'GuardarCompuesto');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
 

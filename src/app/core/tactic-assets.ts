@@ -24,6 +24,7 @@ export type TacticalKind =
   | 'cone_blue2'
   | 'mannequin'
   | 'mannequin_row'
+  | 'goal'
   | 'flag'
   | 'ladder'
   | 'ladder_yellow'
@@ -37,6 +38,7 @@ export type TacticalKind =
   | 'target'
   | 'net'
   | 'vball'
+  | 'dumbbell'
   | 'ball_football'
   | 'ball_vec';
 
@@ -60,6 +62,7 @@ export const TACTIC_ASSETS: TacticAsset[] = [
   { kind: 'cone_blue2', asset: `${P}cone-blue-2.png`, label: 'Cono (azul 2)', color: '#3b82c4' },
   { kind: 'mannequin', asset: `${P}mannequin.png`, label: 'Maniquí', color: '#e8edf2' },
   { kind: 'mannequin_row', asset: `${P}mannequin-row.png`, label: 'Maniquí (fila)', color: '#f6c945' },
+  { kind: 'goal', asset: '', label: 'Portería grande', color: '#ffffff' },
   { kind: 'flag', asset: `${P}flag.png`, label: 'Banderín', color: '#f6c945' },
   { kind: 'ladder', asset: `${P}ladder.png`, label: 'Escalera', color: '#e8edf2' },
   { kind: 'ladder_yellow', asset: `${P}ladder-yellow.png`, label: 'Escalera (amarilla)', color: '#f6c945' },
@@ -69,10 +72,11 @@ export const TACTIC_ASSETS: TacticAsset[] = [
   { kind: 'ring_flat', asset: `${P}ring-flat.png`, label: 'Aro plano', color: '#e67e22' },
   { kind: 'trampoline', asset: `${P}trampoline.png`, label: 'Minitrampolín', color: '#e8edf2' },
   { kind: 'pole', asset: `${P}pole.png`, label: 'Pértiga', color: '#30353b' },
-  { kind: 'disc', asset: `${P}disc.png`, label: 'Disco', color: '#2c7be5' },
-  { kind: 'target', asset: `${P}target.png`, label: 'Diana', color: '#e74c3c' },
+  { kind: 'disc', asset: '', label: 'BOSU', color: '#2c7be5' },
+  { kind: 'target', asset: '', label: 'Chino', color: '#2c7be5' },
   { kind: 'net', asset: `${P}net.png`, label: 'Red / valla', color: '#e74c3c' },
-  { kind: 'vball', asset: `${P}ball-purple.png`, label: 'Balón (morado)', color: '#c98ab0' },
+  { kind: 'vball', asset: `${P}ball-purple.png`, label: 'Fitball', color: '#c98ab0' },
+  { kind: 'dumbbell', asset: '', label: 'Mancuerna / pesa', color: '#20242a' },
   { kind: 'ball_football', asset: `${P}ball.png`, label: 'Balón de fútbol', color: '#ffffff' },
   { kind: 'ball_vec', asset: '', label: 'Balón (vectorial)', color: '#ffffff' },
 ];
@@ -88,6 +92,8 @@ export function materialAsset(toolId: string): TacticAsset | undefined {
     marker: 'disc',
     pole: 'pole',
     mannequin: 'mannequin',
+    goal: 'goal',
+    mannequin_row: 'mannequin_row',
     hurdle: 'hurdle',
     ring: 'ring',
     ladder: 'ladder',
@@ -98,6 +104,7 @@ export function materialAsset(toolId: string): TacticAsset | undefined {
     target: 'target',
     net: 'net',
     vball: 'vball',
+    dumbbell: 'dumbbell',
   };
   const kind = map[toolId];
   return kind ? tacticAsset(kind) : undefined;
@@ -128,6 +135,7 @@ export const TACTICAL_SIZE: Record<string, number> = {
   cone_blue2: 1.0,
   mannequin: 1.35,
   mannequin_row: 1.55,
+  goal: 1.6,
   flag: 1.25,
   ladder: 1.6,
   ladder_yellow: 1.6,
@@ -150,6 +158,7 @@ export const TACTICAL_SIZE: Record<string, number> = {
   bosu: 1.5,
   fitball: 1.4,
   pica: 1.6,
+  dumbbell: 1.2,
 };
 
 /** Fracción (0..1, sobre el lado LARGO de la imagen) del recuadro de contenido
@@ -173,6 +182,7 @@ export const TACTICAL_BBOX: Record<string, BBoxFrac> = {
   cone_blue2: { w: 0.56, h: 1 },
   mannequin: { w: 0.28, h: 1 },
   mannequin_row: { w: 1, h: 0.733 },
+  goal: { w: 1, h: 0.573 },
   flag: { w: 0.367, h: 1 },
   ladder: { w: 1, h: 0.28 },
   ladder_yellow: { w: 0.293, h: 1 },

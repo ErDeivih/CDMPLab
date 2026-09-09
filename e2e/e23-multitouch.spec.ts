@@ -61,9 +61,16 @@ async function objectNorm(page: Page, selector: string): Promise<{ x: number; y:
   return { x: (v!.x - RECT.x) / RECT.w, y: (v!.y - RECT.y) / RECT.h };
 }
 
-/** Centro en PANTALLA (page coords) del bounding box de un selector del SVG. */
+/** Centro en PANTALLA (page coords) del bounding box de un selector del SVG.
+ *  Usa `getBoundingClientRect()` vía evaluate: `locator.boundingBox()` devuelve null
+ *  de forma intermitente en hijos SVG. */
 async function objectScreen(page: Page, selector: string): Promise<{ x: number; y: number }> {
-  const b = (await page.locator(selector).first().boundingBox())!;
+  const loc = page.locator(selector).first();
+  await loc.waitFor({ state: 'attached', timeout: 5000 });
+  const b = await loc.evaluate((el) => {
+    const r = (el as SVGGraphicsElement).getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
 
@@ -131,11 +138,19 @@ async function tap(page: Page, x: number, y: number, id = 7): Promise<void> {
 async function placeComodinAtCenter(page: Page): Promise<{ x: number; y: number }> {
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir un jugador de la plantilla NO cierra el panel.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  // FASE B (regla C): el panel persistente tapa el centro del host en móvil; se cierra por su
+  // botón X (.panel-close) —que no desarma la colocación— para poder tocar correctamente.
+  await page.locator('.side-panel-left .panel-close').click();
   await expect(page.locator('.side-panel-left')).toHaveCount(0);
   const host = await hostBox(page);
   await page.touchscreen.tap(host.x + host.width / 2, host.y + host.height / 2);
   await expect(page.locator('.field-count')).toHaveText('1');
+  // Fase 3: la colocación es continua → DESARMAR con Seleccionar para que tests posteriores
+  // (pinch de 3 dedos y arrastre de un dedo) muevan/seleccionen en lugar de colocar.
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   return objectScreen(page, '.entrenolab-board circle[r="2.5"]');
 }
 
@@ -323,8 +338,9 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     // Un tap posterior coloca EXACTAMENTE UN cono.
     await tap(page, cx - 60, cy + 40, 11);
     expect(await fieldCount(page), 'el tap posterior coloca exactamente uno').toBe(1);
-    await expect(page.locator('.placement-hint')).toHaveCount(0);
-    await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
+    // Fase 3: la colocación es continua → el cono sigue armado (pista visible, no Seleccionar).
+    await expect(page.locator('.placement-hint')).toHaveCount(1);
+    await expect(page.locator('.tools-caption-title')).toHaveText('Cono');
   });
 
   test('D2-e: tras el pinch de 3 dedos, un arrastre de un dedo mueve el objeto correctamente', async ({ page }) => {
@@ -362,7 +378,11 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     await ptr(page, 'pointerdown', objPos.x, objPos.y, 504, 'touch', true);
     await ptr(page, 'pointermove', objPos.x + 45, objPos.y + 28, 504, 'touch');
     await ptr(page, 'pointerup', objPos.x + 45, objPos.y + 28, 504, 'touch');
-    await page.waitForTimeout(80);
+    // Espera observable: el objeto se mueve (su norm cambia respecto al inicio).
+    await expect.poll(async () => {
+      const n = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
+      return Math.abs(n.x - beforeNorm.x) + Math.abs(n.y - beforeNorm.y);
+    }, { timeout: 4000 }).toBeGreaterThan(0.005);
     const afterNorm = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
     expect(Math.abs(afterNorm.x - beforeNorm.x), 'el objeto se mueve tras el pinch (x)').toBeGreaterThan(0.005);
     expect(Math.abs(afterNorm.y - beforeNorm.y), 'el objeto se mueve tras el pinch (y)').toBeGreaterThan(0.005);
@@ -381,7 +401,10 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     const idTouch = 602;
     const v0 = await readView(page);
 
-    // Ratón baja sobre campo vacío y arrastra → PAN inmediato (comportamiento inmediato).
+    // Fase 5: Seleccionar ya NO panea. Para que el arrastre de ratón panea, se activa
+    // explícitamente la herramienta "Desplazar campo" (Mano).
+    await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
+    // Ratón baja sobre campo vacío y arrastra → PAN inmediato (comportamiento de Mano).
     await ptr(page, 'pointerdown', cx - host.width * 0.30, cy, idMouse, 'mouse', true);
     await ptr(page, 'pointermove', cx - host.width * 0.30 + 60, cy + 30, idMouse, 'mouse');
     const vDrag = await readView(page);
@@ -422,6 +445,9 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     const idTouch = 702;
     const v0 = await readView(page);
 
+    // Fase 5: Seleccionar ya NO panea; se activa "Desplazar campo" (Mano) para que el
+    // arrastre de lápiz panea.
+    await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
     // Lápiz baja sobre campo vacío y arrastra → PAN inmediato.
     await ptr(page, 'pointerdown', cx - host.width * 0.30, cy, idPen, 'pen', true);
     await ptr(page, 'pointermove', cx - host.width * 0.30 + 60, cy + 30, idPen, 'pen');

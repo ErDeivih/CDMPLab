@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { longPress } from './gesture-helpers';
+import { longPress, fillBoardTitle } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots';
 
@@ -55,6 +55,7 @@ test.describe('Fase 3 — texto usable', () => {
     const tsps = await page.evaluate(() => document.querySelectorAll('.board-canvas svg tspan').length);
     expect(tsps).toBe(1);
     // El tamaño y la caja no son los antiguos (size 4 / w 0.2 / h 0.09).
+    await fillBoardTitle(page, 'Texto3');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const t = await page.evaluate(() => {
@@ -134,6 +135,7 @@ test.describe('Fase 3 — texto usable', () => {
     await expect(page.locator('.board-canvas svg')).toContainText('Título editado');
 
     // Guardar → reabrir → persisten v + rot + size + opacity + color.
+    await fillBoardTitle(page, 'Texto3');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const t = await page.evaluate(() => {
@@ -157,6 +159,7 @@ test.describe('Fase 3 — texto usable', () => {
     const ta = page.locator('.studio-panel .inspector textarea');
     await ta.fill('Marca');
     await ta.dispatchEvent('change');
+    await fillBoardTitle(page, 'Texto3');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
 
@@ -174,7 +177,10 @@ test.describe('Fase 3 — texto usable', () => {
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
     const place = async (v: string, fx: number, fy: number) => {
-      await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
+      // FASE B: el catálogo Dibujo persiste abierto; solo se abre si no lo está.
+      if (!(await page.locator('.rail-btn[title="Texto"]').isVisible().catch(() => false))) {
+        await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
+      }
       await page.locator('.rail-btn[title="Texto"]').click();
       await page.mouse.click(...normToScreen(fx, fy, box), { button: 'right' });
       const ta = page.locator('.studio-panel .inspector textarea');

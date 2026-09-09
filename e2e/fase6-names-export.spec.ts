@@ -10,7 +10,7 @@
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
-import { longPress } from './gesture-helpers';
+import { longPress, fillBoardTitle } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/fase6-names';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -100,6 +100,7 @@ test.describe('Fase 6 — nombre/número del jugador: ±90° upright, persistenc
       expect(html0, 'el dorsal 8 está pintado').toContain('8');
 
       // GUARDAR → el modelo queda en localStorage; leer el modelo persistido.
+      await fillBoardTitle(page, 'NombreExport');
       await page.locator('.chip-icon-primary').click();
       await page.waitForURL('**/library');
       let persisted = await page.evaluate(() => {
@@ -151,6 +152,7 @@ test.describe('Fase 6 — nombre/número del jugador: ±90° upright, persistenc
       expect(upright, 'el dorsal está contrarrotado y queda upright a -90°').toBe(true);
 
       // Guardar → rot -90 y nombre/dorsal persisten.
+      await fillBoardTitle(page, 'NombreExport2');
       await page.locator('.chip-icon-primary').click();
       await page.waitForURL('**/library');
       persisted = await page.evaluate(() => {

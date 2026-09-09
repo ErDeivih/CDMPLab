@@ -16,6 +16,15 @@ describe('board-selection (geometría/selección pura)', () => {
     expect(isPointLike('text')).toBe(true);
   });
 
+  it('los tipos nuevos goal/mannequin_row/dumbbell son MATERIALES puntuales (sin asas de resize)', () => {
+    expect(isPointLike('goal')).toBe(true);
+    expect(isPointLike('mannequin_row')).toBe(true);
+    expect(isPointLike('dumbbell')).toBe(true);
+    expect(isMaterial('dumbbell')).toBe(true);
+    expect(isMaterial('goal')).toBe(true);
+    expect(isMaterial('mannequin_row')).toBe(true);
+  });
+
   it('calcula el centro de una zona/rectángulo', () => {
     const r = el('rect', { x: 0.2, y: 0.2, w: 0.4, h: 0.2 });
     const c = selCenter(r);

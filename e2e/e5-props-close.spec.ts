@@ -77,6 +77,11 @@ async function armCone(page: Page): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
   await expect(page.locator('.placement-hint')).toBeVisible();
+  // FASE B (paneles persistentes): el panel Material sigue abierto y en móvil tapa el punto de
+  // colocación del cono (izquierda). Se cierra por su botón X (.panel-close), que no desarma la
+  // colocación, para poder tocar el campo después.
+  await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
+  await expect(page.locator('.side-panel-left.tools-panel-side')).toHaveCount(0);
 }
 
 const CONE = '.board-canvas svg image[href*="cone"]';
@@ -86,7 +91,8 @@ const SEL = '.board-canvas svg [stroke="#2563eb"]';
 const RESIZE = '.board-canvas svg .reshandle';
 const ROT_HANDLE = '.rot-handle';
 
-/** Coloca un cono vía el panel de Material y devuelve su posición en pantalla. */
+/** Coloca un cono vía el panel de Material y lo deja seleccionado. (Fase 3: la colocación
+ *  es continua, así que tras colocar se DESARMA con Seleccionar y se hace clic sobre él.) */
 async function placeCone(page: Page): Promise<void> {
   await armCone(page);
   const host = await hostBox(page);
@@ -94,6 +100,8 @@ async function placeCone(page: Page): Promise<void> {
   const s = normToScreen(0.4, 0.55, host, fit);
   await page.mouse.click(s.x, s.y);
   await expect(page.locator('.field-count')).toHaveText('1');
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
+  await page.mouse.click(s.x, s.y); // seleccionar el cono recién colocado
 }
 
 async function topPropsClosedState(page: Page): Promise<void> {

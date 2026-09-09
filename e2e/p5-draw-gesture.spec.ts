@@ -68,6 +68,11 @@ function fieldCount(page: Page): Promise<number> {
 async function useDrawTool(page: Page, title: string): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator(`.rail-btn[title="${title}"]`).click();
+  // FASE B (paneles persistentes): el panel Dibujo queda desplegado y cubriría el
+  // campo en viewports compactos. Para dibujar el ejercicio necesita el campo libre,
+  // así que se MINIMIZA con su botón X (sin desarmar la herramienta) antes del gesto.
+  const panel = page.locator('.side-panel-left.tools-panel-side');
+  if (await panel.isVisible().catch(() => false)) await panel.locator('.panel-close').click();
 }
 
 // ============================================================================

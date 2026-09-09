@@ -90,8 +90,19 @@ async function openProps(page: Page): Promise<void> {
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
-  if (category) await page.locator('.tools-cat', { hasText: category }).click();
+  if (category) {
+    // FASE B: el catálogo persiste abierto; solo se abre si su herramienta no está visible.
+    if (!(await page.locator(`.rail-btn[title="${title}"]`).isVisible().catch(() => false))) {
+      await page.locator('.tools-cat', { hasText: category }).click();
+    }
+  }
   await page.locator(`.rail-btn[title="${title}"]`).click();
+  // FASE B: minimizar el catálogo para que no cubra el campo al dibujar/colocar.
+  const panel = page.locator('.side-panel');
+  if (await panel.isVisible().catch(() => false)) {
+    const close = panel.first().locator('.panel-close');
+    if (await close.isVisible().catch(() => false)) await close.click();
+  }
 }
 
 async function hostBox(page: Page): Promise<Box> {
@@ -360,7 +371,7 @@ test.describe('Fase 1 — capturas de la manija de rotación del texto (revisió
     // solo visualmente (la selección vive en el modelo y no se pierde) para
     // poder ver la manija sobre el campo.
     await page.evaluate(() => {
-      document.querySelectorAll('.studio-panel, .side-panel-backdrop, .top-pop, .top-panel-backdrop').forEach((el) => {
+      document.querySelectorAll('.studio-panel, .top-pop').forEach((el) => {
         (el as HTMLElement).style.display = 'none';
       });
     });
@@ -372,7 +383,7 @@ test.describe('Fase 1 — capturas de la manija de rotación del texto (revisió
 test.describe('Fase 3 — el círculo azul sobre el texto ya NO se dibuja (revisión visual)', () => {
   const hidePanels = (page: Page): Promise<void> =>
     page.evaluate(() => {
-      document.querySelectorAll('.studio-panel, .side-panel-backdrop, .top-pop, .top-panel-backdrop').forEach((el) => {
+      document.querySelectorAll('.studio-panel, .top-pop').forEach((el) => {
         (el as HTMLElement).style.display = 'none';
       });
     });

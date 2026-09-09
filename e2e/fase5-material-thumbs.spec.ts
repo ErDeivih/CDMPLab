@@ -67,9 +67,9 @@ test.describe('Fase 5 — miniaturas REALES de todos los materiales (sin icono g
     const panel = page.locator('.side-panel-left.tools-panel-side');
     await expect(panel).toBeVisible();
 
-    // El Fitball es vectorial y debe tener un <svg.mat-thumb-svg> con un <circle>.
-    const fitball = panel.locator('.tools-material-card', { hasText: 'Fitball' }).first();
-    const svg = fitball.locator('svg.mat-thumb-svg');
+    // La Portería grande (goal) es vectorial y debe tener un <svg.mat-thumb-svg> con formas.
+    const vectorial = panel.locator('.tools-material-card', { hasText: 'Portería grande' }).first();
+    const svg = vectorial.locator('svg.mat-thumb-svg');
     await expect(svg).toHaveCount(1);
     // Dentro del SVG hay al menos un elemento gráfico (circle/path/rect).
     const nShapes = await svg.locator('circle, path, rect, text').count();

@@ -24,7 +24,7 @@
 //   · movil-horizontal-*.png           (conservadas) móvil horizontal con menús
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
-import { longPress } from './gesture-helpers';
+import { longPress, fillBoardTitle } from './gesture-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -116,6 +116,11 @@ async function openBoard(page: Page): Promise<void> {
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
   if (category) await page.locator('.tools-cat', { hasText: category }).click();
+  if (title === 'Jugador propio' || title === 'Jugador rival') {
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+    return;
+  }
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
 
@@ -150,7 +155,8 @@ async function placeMaterial(page: Page, tool: string, nx: number, ny: number, v
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   if (variantIndex != null) {
     const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${tool}"]`) });
-    await card.locator('.variant-swatch').nth(variantIndex).click();
+    const variantCount = await card.locator('.variant-swatch').count();
+    if (variantCount > 0) await card.locator('.variant-swatch').nth(variantIndex).click();
   }
   await page.locator(`.rail-btn[title="${tool}"]`).click();
   const box = await hostBox(page);
@@ -258,21 +264,19 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await openBoard(page);
 
     await placeMaterial(page, 'Balón', 0.14, 0.14);
-    await placeMaterial(page, 'Balón morado', 0.28, 0.14);
-    await placeMaterial(page, 'Fitball', 0.42, 0.14);
+    await placeMaterial(page, 'Fitball', 0.28, 0.14);
     await placeMaterial(page, 'Cono', 0.14, 0.3, 0); // rojo
-    await placeMaterial(page, 'Marcador', 0.28, 0.3);
+    await placeMaterial(page, 'BOSU', 0.28, 0.3);
     await placeMaterial(page, 'Banderín', 0.42, 0.3);
-    await placeMaterial(page, 'Diana', 0.56, 0.3);
+    await placeMaterial(page, 'Chino', 0.56, 0.3);
     await placeMaterial(page, 'Pica coloreable', 0.7, 0.3);
-    await placeMaterial(page, 'Maniquí', 0.14, 0.46, 0);
-    await placeMaterial(page, 'Mini portería', 0.3, 0.46);
+    await placeMaterial(page, 'Maniquí individual', 0.14, 0.46, 0);
+    await placeMaterial(page, 'Miniportería', 0.3, 0.46);
     // Rotado +90° para demostrar que un material puede girar.
     await placeMaterial(page, 'Pértiga / poste', 0.5, 0.46);
     await rotateSelected(page, 0.5, 0.46, 'right');
-    await placeMaterial(page, 'Red', 0.66, 0.46);
 
-    await expect(page.locator('.field-count')).toHaveText('12');
+    await expect(page.locator('.field-count')).toHaveText('10');
     await page.waitForTimeout(250);
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/materiales-colocados-1.png` });
   });
@@ -289,14 +293,12 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await placeMaterial(page, 'Minitrampolín', 0.56, 0.14);
     await placeMaterial(page, 'Peto', 0.7, 0.14);
     await placeMaterial(page, 'Chaleco lastrado', 0.14, 0.3);
-    await placeMaterial(page, 'BOSU', 0.28, 0.3);
-    await placeMaterial(page, 'Marcador C', 0.42, 0.3);
     // Rotado -90° para demostrar giro a la izquierda.
-    await placeMaterial(page, 'Marcador', 0.56, 0.3);
-    await rotateSelected(page, 0.56, 0.3, 'left');
+    await placeMaterial(page, 'BOSU', 0.28, 0.3);
+    await rotateSelected(page, 0.28, 0.3, 'left');
     await placeMaterial(page, 'Cono', 0.7, 0.3, 1); // amarillo
 
-    await expect(page.locator('.field-count')).toHaveText('10');
+    await expect(page.locator('.field-count')).toHaveText('8');
     await page.waitForTimeout(250);
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/materiales-colocados-2.png` });
   });
@@ -323,6 +325,7 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await expect(page.locator('.field-count')).toHaveText('4');
 
     // Persistir para obtener los CENTROS exactos de cada elemento y seleccionarlos con precisión.
+    await fillBoardTitle(page, 'Visual1');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const els = await page.evaluate(() => {
@@ -348,10 +351,13 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     expect(await rectHandle.count()).toBeGreaterThanOrEqual(4);
     await deselect(page);
 
-    // Seleccionar la CURVA: extremos + C1 + manija de rotación.
+    // Seleccionar la CURVA: extremos + C1 + manija de rotación. El punto para pinchar
+    // es el MIDPOINT de la Bézier (t=0,5: (P0+2·P1+P2)/4), que SÍ está sobre el arco
+    // (la tolerancia de selección es ahora en px, así que hay que pinchar la curva, no
+    // el baricentro de sus 3 puntos de control que queda fuera del arco).
     const curveEl = els.find((e: { t: string }) => e.t === 'curve')!;
-    const cx = (curveEl.x1 + curveEl.c1x + curveEl.x2) / 3;
-    const cy = (curveEl.y1 + curveEl.c1y + curveEl.y2) / 3;
+    const cx = (curveEl.x1 + 2 * curveEl.c1x + curveEl.x2) / 4;
+    const cy = (curveEl.y1 + 2 * curveEl.c1y + curveEl.y2) / 4;
     await selectByNorm(page, cx, cy);
     const curveHandles = page.locator('.reshandle');
     expect(await curveHandles.count()).toBeGreaterThanOrEqual(3);
@@ -430,6 +436,7 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await deselect(page);
     await expect(page.locator('.field-count')).toHaveText('3');
 
+    await fillBoardTitle(page, 'Visual2');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     await expect(page.locator('.ex-card')).toHaveCount(1);

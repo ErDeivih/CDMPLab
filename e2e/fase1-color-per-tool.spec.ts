@@ -36,7 +36,14 @@ async function openBoard(page: Page): Promise<void> {
   if (fill) { await page.locator('.field-fit-toggle').click(); await page.waitForTimeout(120); }
 }
 async function armTool(page: Page, title: string): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
+  // FASE B (paneles persistentes): elegir una herramienta de Dibujo ya NO cierra el
+  // panel. Abrir la categoría es IDEMPOTENTE: si el panel sigue desplegado no se
+  // re-togglea con .tools-cat Dibujo (eso ahora lo cerraría y el .rail-btn siguiente
+  // ya no sería visible). En el test 1 se arma dos veces seguidas (Línea→Flecha).
+  const panel = page.locator('.side-panel-left.tools-panel-side');
+  if (!(await panel.isVisible().catch(() => false))) {
+    await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
+  }
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
 async function pickPaletteColor(page: Page, hex: string): Promise<void> {
@@ -113,6 +120,9 @@ test('la memoria de color por herramienta persiste entre sesiones', async ({ pag
   const host = (await page.locator('.board-host').boundingBox())!;
   const a = normToScreen(0.3, 0.5, host); const b = normToScreen(0.7, 0.5, host);
   await page.mouse.move(a[0], a[1]); await page.mouse.down(); await page.mouse.move(b[0], b[1], { steps: 5 }); await page.mouse.up();
-  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('entrenolab:tool-colors') ?? '{}'));
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('cdmplab:tool-colors:v1') ?? '{}'));
   expect(stored['line'], 'Línea recuerda su color').toBe('#c0392b');
+  // BLOQUE E: la clave legacy se migra y deja de usarse (no vuelve a escribirse).
+  const legacy = await page.evaluate(() => localStorage.getItem('entrenolab:tool-colors'));
+  expect(legacy).toBeNull();
 });

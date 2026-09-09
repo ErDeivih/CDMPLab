@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
-import { longPress } from './gesture-helpers';
+import { longPress, fillBoardTitle } from './gesture-helpers';
 
 // FASE 1 — color de líneas/familias al estilo Bcoach.
 // Matriz para la familia `line`: elegir rojo antes de dibujar → previsualización
@@ -103,6 +103,7 @@ test('color de línea: rojo → azul, undo/redo, duplicar, persiste en guardar/r
   expect(strokes, 'duplicado conserva azul').toEqual(['#1a73e8', '#1a73e8']);
 
   // 9) Guardar y reabrir conserva azul.
+  await fillBoardTitle(page, 'Colores');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
   await page.locator('.ex-card').first().hover();

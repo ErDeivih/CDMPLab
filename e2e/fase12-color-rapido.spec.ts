@@ -44,9 +44,8 @@ test('FASE 12: cambiar el color estando ya colocado actualiza la ficha visible e
   const host = (await page.locator('.board-host').boundingBox())!;
   await page.mouse.click(host.x + host.width * 0.5, host.y + host.height * 0.5);
   await expect(page.locator('.field-count')).toHaveText('1');
-  // Cambiar el color del jugador ya colocado (sin duplicarlo). Colocar cerró el panel,
-  // así que lo reabrimos.
-  await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
+  // FASE B: el panel Jugadores permanece abierto tras colocar, así que NO se re-togglea
+  // (eso lo cerraría); se usa el panel ya desplegado.
   await page.locator('.roster-color').click();
   await page.locator('.roster-color-menu .swatch[aria-label="Color naranja"]').click();
   await expect(page.locator('.field-count')).toHaveText('1');

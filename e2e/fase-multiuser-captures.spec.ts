@@ -154,15 +154,17 @@ test.describe('Fase multiusuario — capturas del estado actual', () => {
     await expect(page.locator('.board-host')).toBeVisible();
     await dismissHelp(page);
 
-    // Captura "cerrada" con un jugador colocado (paneles todos cerrados).
+    // Captura "cerrada" con un jugador colocado. FASE B: el panel Jugadores PERMANECE
+    // abierto tras tocar el jugador (persistencia), así que hay UN panel principal (el
+    // lateral izquierdo), no cero.
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .roster-item').first().click();
     await page.waitForTimeout(200);
-    // Tocar un jugador arma la colocación (cierra el panel); el clic en el campo lo coloca.
+    // Tocar un jugador arma la colocación (el panel queda abierto); el clic en el campo lo coloca.
     const fbox = (await page.locator('.board-host').boundingBox())!;
     await page.mouse.click(fbox.x + fbox.width * 0.5, fbox.y + fbox.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
-    await expect(await visibleMainPanels(page)).toBe(0);
+    await expect(await visibleMainPanels(page)).toBe(1);
     await page.waitForTimeout(150);
     await page.screenshot({ path: `${SHOTS}/board-desktop-cerrado.png` });
 
@@ -263,7 +265,7 @@ test.describe('Fase multiusuario — capturas del estado actual', () => {
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('f7');
     await page.waitForTimeout(250);
     const svg = await page.locator('.board-canvas svg').first().innerHTML();
-    expect(svg).toContain('width="92"');
+    expect(svg).toContain('height="46"'); // FASE 4/8b: F7 sobre el medio campo F11 apaisado (46 de alto)
     await page.screenshot({ path: `${SHOTS}/f7-overlay-horizontal.png` });
   });
 });

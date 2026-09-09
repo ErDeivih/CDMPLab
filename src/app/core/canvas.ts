@@ -1,5 +1,6 @@
 import { CanvasDocument, CanvasFrame, CanvasElement, ElementType, FieldType, ELEMENT_TYPES } from './models';
 import { TACTIC_ASSETS, MATERIAL_SIZE_RATIO } from './tactic-assets';
+import { MARGIN_STRIP } from './render';
 
 const VALID_KINDS = new Set<string>(TACTIC_ASSETS.map((a) => a.kind));
 
@@ -24,6 +25,12 @@ const SIZE_MIGRATION_VERSION = 5;
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
+/** Dominio de POSICIÓN: permite la franja exterior [-MARGIN_STRIP, 1 + MARGIN_STRIP]
+ *  (misma fuente que el render/hit-test/clamp), para que un objeto colocado fuera de las
+ *  líneas conserve exactamente su posición al guardar, reabrir, mover y duplicar. */
+function clampStrip(v: number): number {
+  return Math.max(-MARGIN_STRIP, Math.min(1 + MARGIN_STRIP, v));
+}
 function num(v: unknown): number | undefined {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 }
@@ -43,8 +50,8 @@ function normalizeElement(raw: unknown): CanvasElement | null {
   const out: CanvasElement = { ...ensureId(el) };
   const x = num(out.x);
   const y = num(out.y);
-  if (x !== undefined) out.x = clamp01(x);
-  if (y !== undefined) out.y = clamp01(y);
+  if (x !== undefined) out.x = clampStrip(x);
+  if (y !== undefined) out.y = clampStrip(y);
   const w = num(out.w);
   const h = num(out.h);
   if (w !== undefined) out.w = Math.max(0, clamp01(w));
@@ -61,12 +68,12 @@ function normalizeElement(raw: unknown): CanvasElement | null {
     out.points = Array.isArray(out.points)
       ? (out.points as unknown[])
           .filter((pt): pt is [number, number] => Array.isArray(pt) && pt.length === 2 && num(pt[0]) !== undefined && num(pt[1]) !== undefined)
-          .map((pt) => [clamp01(num(pt[0]) as number), clamp01(num(pt[1]) as number)] as [number, number])
+          .map((pt) => [clampStrip(num(pt[0]) as number), clampStrip(num(pt[1]) as number)] as [number, number])
       : [];
   }
   if (el.t === 'curve') {
-    if (num(out.c1x) !== undefined) out.c1x = clamp01(num(out.c1x) as number);
-    if (num(out.c1y) !== undefined) out.c1y = clamp01(num(out.c1y) as number);
+    if (num(out.c1x) !== undefined) out.c1x = clampStrip(num(out.c1x) as number);
+    if (num(out.c1y) !== undefined) out.c1y = clampStrip(num(out.c1y) as number);
   }
   // Material: si el identificador es desconocido, cae al fallback vectorial (no romper la actividad).
   if (out.assetKind && !VALID_KINDS.has(out.assetKind)) {
@@ -77,8 +84,8 @@ function normalizeElement(raw: unknown): CanvasElement | null {
 
 /** Tipos "puntuales"/materiales cuyo `size` controla el tamaño visual. */
 const POINT_LIKE: ReadonlySet<string> = new Set([
-  'player', 'ball', 'cone', 'mannequin', 'minigoal', 'pole', 'marker', 'hurdle', 'ring', 'ladder',
-  'flag', 'trampoline', 'target', 'net', 'vball', 'coachC', 'peto', 'chaleco', 'bosu', 'fitball', 'pica',
+  'player', 'ball', 'cone', 'mannequin', 'mannequin_row', 'minigoal', 'goal', 'pole', 'marker', 'hurdle', 'ring', 'ladder',
+  'flag', 'trampoline', 'target', 'net', 'vball', 'coachC', 'peto', 'chaleco', 'bosu', 'fitball', 'pica', 'dumbbell',
 ]);
 
 /** La base por defecto de los objetos puntuales/materiales/texto (Fase 3: el dueño

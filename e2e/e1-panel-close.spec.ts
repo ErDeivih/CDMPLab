@@ -32,6 +32,10 @@ const SELECTION_MARKER = '.board-canvas svg [stroke="#2563eb"]';
 async function placeTextAtCenter(page: Page): Promise<void> {
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Texto"]').click();
+  // FASE B: el panel Dibujo persiste y cubre el centro en móvil; se minimiza (X) para
+  // poder colocar el texto en el centro del campo (no desarma la herramienta).
+  const dibPanel = page.locator('.side-panel-left.tools-panel-side');
+  if (await dibPanel.isVisible().catch(() => false)) await dibPanel.locator('.panel-close').click();
   const box = (await page.locator('.board-host').boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
 }

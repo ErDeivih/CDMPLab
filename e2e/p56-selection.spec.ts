@@ -93,19 +93,33 @@ async function selectAt(page: Page, nx: number, ny: number): Promise<void> {
   await longPress(page, p.x, p.y);
 }
 
-/** Coloca un Portero (jugador genérico) en el norm (nx,ny). */
+/** Coloca un Portero (jugador genérico) en el norm (nx,ny) y lo SELECCIONA (pulsación larga).
+ *  (Fase 3): la colocación genérica es continua, así que tras colocar se DESARMA con
+ *  Seleccionar para que la pulsación larga sobre él lo seleccione/abra el menú contextual. */
 async function placeComodin(page: Page, nx: number, ny: number): Promise<void> {
+  const host = await hostBox(page);
+  const fit = await fitMode(page);
+  const pos = normToScreen(nx, ny, host, fit);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
-  await expect(page.locator('.side-panel-left')).toHaveCount(0);
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir un jugador genérico NO cierra el panel;
+  // el panel Jugadores permanece abierto (se cierra solo explícitamente).
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await page.mouse.click(pos.x, pos.y); // coloca (tool player armado)
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   await selectAt(page, nx, ny);
 }
 
-/** Coloca un cono (material) en el norm (nx,ny). */
+/** Coloca un cono (material) en el norm (nx,ny) y lo SELECCIONA. */
 async function placeCone(page: Page, nx: number, ny: number): Promise<void> {
+  const host = await hostBox(page);
+  const fit = await fitMode(page);
+  const pos = normToScreen(nx, ny, host, fit);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
+  await page.mouse.click(pos.x, pos.y); // coloca
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   await selectAt(page, nx, ny);
 }
 
@@ -113,7 +127,7 @@ async function placeCone(page: Page, nx: number, ny: number): Promise<void> {
  *  el arrastre de las asas de redimensionado (patrón usado por otras specs del proyecto). */
 async function hideOverlays(page: Page): Promise<void> {
   await page.evaluate(() => {
-    document.querySelectorAll('.studio-panel, .side-panel-backdrop, .top-pop, .context-bar').forEach((el) => {
+    document.querySelectorAll('.studio-panel, .top-pop, .context-bar').forEach((el) => {
       (el as HTMLElement).style.display = 'none';
     });
   });
@@ -194,6 +208,12 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await seed(page);
       await openClosed(page);
       await useDrawTool(page, 'Línea');
+      // FASE B (paneles persistentes): el panel Dibujo permanece abierto tras elegir la
+      // herramienta y, en móvil, tapa el punto de inicio del dibujo. Se cierra con su X
+      // (no desarma la herramienta) antes de empezar el gesto.
+      if (await page.locator('.side-panel-left .panel-close').isVisible().catch(() => false)) {
+        await page.locator('.side-panel-left .panel-close').click();
+      }
       await expect(page.locator('.field-count')).toHaveText('0');
 
       // Dibuja en un gesto (mouse). Sin pointerup intermedio.
@@ -212,8 +232,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       // La línea queda SIN seleccionar; la seleccionamos para mostrar la barra.
       await selectAt(page, 0.5, 0.5);
       await expect(page.locator('.context-bar')).toBeVisible();
-      // Fase 3: el menú contextual tiene 6 acciones (Deshacer, Rehacer, girar izq/der, Duplicar, Eliminar).
-      await expect(page.locator('.context-bar .ctx-btn')).toHaveCount(6);
+      // Bloque D2: el menú contextual tiene 8 acciones (Deshacer, Rehacer, girar ±45° izq/der,
+      // girar ±90° izq/der, Duplicar, Eliminar).
+      await expect(page.locator('.context-bar .ctx-btn')).toHaveCount(8);
       await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toBeVisible();
       await expect(page.locator('.context-bar [aria-label="Duplicar"]')).toBeVisible();
       await expect(page.locator('.context-bar [aria-label="Eliminar"]')).toBeVisible();
@@ -239,6 +260,63 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       expect(await page.locator('.studio-panel .inspector .field', { hasText: 'Rotación' }).count(), 'sin control numérico Rotación (°)').toBe(0);
     });
   }
+
+  test('D2: ±45° en la barra de contexto produce rotación exacta (45/315) y un solo Undo', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await seed(page);
+    await openClosed(page);
+    await useDrawTool(page, 'Línea');
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
+    const a = normToScreen(0.3, 0.4, host, fit);
+    const b = normToScreen(0.6, 0.4, host, fit);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 5 });
+    await page.mouse.up();
+    await expect(page.locator('.field-count')).toHaveText('1');
+
+    await selectAt(page, 0.45, 0.4);
+    await expect(page.locator('.context-bar')).toBeVisible();
+
+    // +45° → rot exacta 45.
+    await page.locator('.context-bar [aria-label="Girar 45° a la derecha"]').click();
+    await page.waitForTimeout(80);
+    expect(await firstRot(page), 'la rotación aplicada es exactamente +45°').toBeCloseTo(45, 0);
+    // Un Undo la devuelve a 0 (una sola operación de historial).
+    await page.keyboard.press('Control+z');
+    await expect.poll(() => firstRot(page), { timeout: 4000 }).toBeCloseTo(0, 0);
+
+    // Re-seleccionar con pulsación larga (el menú se cierra tras el Undo) y girar -45°.
+    await selectAt(page, 0.45, 0.4);
+    await expect(page.locator('.context-bar')).toBeVisible();
+    await page.locator('.context-bar [aria-label="Girar 45° a la izquierda"]').click();
+    await page.waitForTimeout(80);
+    expect(await firstRot(page), 'la rotación -45° se normaliza a 315°').toBeCloseTo(315, 0);
+  });
+
+  test('D2: el DOBLE CLIC de ratón abre el menú contextual sobre el elemento y no duplica/mueve', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await seed(page);
+    await openClosed(page);
+    // Un cono (material puntual, caja de hit robusta) en un punto conocido.
+    await page.locator('.tools-cat', { hasText: 'Material' }).click();
+    await page.locator('.rail-btn[title="Cono"]').click();
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
+    const pos = normToScreen(0.45, 0.45, host, fit);
+    await page.mouse.click(pos.x, pos.y);
+    await expect(page.locator('.field-count')).toHaveText('1');
+    // Cambiar a Seleccionar para que el doble clic no intente colocar otro cono.
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
+    await page.keyboard.press('Escape');
+
+    // Doble clic sobre el centro del cono.
+    await page.mouse.dblclick(pos.x, pos.y, { delay: 40 });
+    // Abre el menú contextual y NO duplica ni mueve.
+    await expect(page.locator('.context-bar')).toBeVisible();
+    await expect(page.locator('.field-count'), 'el doble clic no duplica el cono').toHaveText('1');
+  });
 
   test.describe('redimensionado por familia (escritorio determinista)', () => {
     test.use({ viewport: { width: 1366, height: 768 } });

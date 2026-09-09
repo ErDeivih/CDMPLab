@@ -67,7 +67,7 @@ test.describe('Fase 7 — capturas (identidad CDM Pizarrales, F7 compuesto, lín
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('f7');
     await page.waitForTimeout(250);
     const svg = await page.locator('.board-canvas svg').first().innerHTML();
-    expect(svg).toContain('width="92"'); // fondos F7 coinciden con las bandas F11
+    expect(svg).toContain('height="46"'); // FASE 4/8b: F7 sobre el medio campo F11 apaisado (46 de alto)
     expect(svg).not.toContain('<ellipse'); // sin círculo central del F7
     await page.screenshot({ path: `${SHOTS}/f7-composite-horizontal.png` });
     await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();

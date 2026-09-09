@@ -83,10 +83,16 @@ async function placeComodin(page: Page, nx: number, ny: number): Promise<{ x: nu
   const S = normToScreen(nx, ny, host, 'height');
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
-  await page.locator('.tray-player[title="Portero"]').click();
-  await expect(page.locator('.side-panel-left')).toHaveCount(0);
+  await page.locator('.tray-player[title="Jugador Azul"]').click();
+  // FASE B (paneles persistentes): elegir jugador NO cierra el panel Jugadores.
+  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  // FASE B (regla C): en móvil vertical el panel persistente tapa el centro del campo;
+  // lo cerramos con su botón X (.panel-close) para poder tocar el punto de colocación.
+  await page.locator('.side-panel-left .panel-close').click();
   await page.touchscreen.tap(S.x, S.y);
   await expect(page.locator('.field-count')).toHaveText('1');
+  // FASE 3: la colocación es continua → DESARMAR con Seleccionar para seleccionar después.
+  await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   return S;
 }
 

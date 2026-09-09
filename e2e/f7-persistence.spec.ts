@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
+import { fillBoardTitle } from './gesture-helpers';
 
 // =============================================================
 // FASE 0 — persistencia del campo F7 (transversal sobre medio campo F11).
@@ -89,6 +90,7 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     const host = await page.locator('.board-host').boundingBox();
     await page.mouse.click(host!.x + host!.width * 0.5, host!.y + host!.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
+    await fillBoardTitle(page, 'Rondo F7');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
 
@@ -126,6 +128,7 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     const host = await page.locator('.board-host').boundingBox();
     await page.mouse.click(host!.x + host!.width * 0.5, host!.y + host!.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
+    await fillBoardTitle(page, 'Duplicar F7');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
 
@@ -165,6 +168,7 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     const host = await page.locator('.board-host').boundingBox();
     await page.mouse.click(host!.x + host!.width * 0.5, host!.y + host!.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
+    await fillBoardTitle(page, 'Backup F7');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
 

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { fillBoardTitle } from './gesture-helpers';
 
 // Sembramos un equipo con jugadores en localStorage para que los flujos
 // sean deterministas (la app arranca con ese equipo activo).
@@ -43,7 +44,7 @@ test.describe('EntrenoLab flujos', () => {
     // Colocamos un jugador desde el panel Jugadores (izquierda, antes abierto por defecto).
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .roster-item').first().click();
-    // Tocar un jugador ARMA la colocación (no coloca aún): el panel se cierra.
+    // Tocar un jugador ARMA la colocación (no coloca aún). FASE B: el panel permanece abierto.
     await expect(page.locator('.field-count')).toHaveText('0');
     // El siguiente clic sobre el campo coloca al jugador en esa posición.
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -51,6 +52,7 @@ test.describe('EntrenoLab flujos', () => {
     await expect(page.locator('.field-count')).toHaveText('1');
 
     // La pizarra es estática (sin animación): guardamos directamente.
+    await fillBoardTitle(page, 'Flows');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     await expect(page.locator('.ex-card')).toHaveCount(1);

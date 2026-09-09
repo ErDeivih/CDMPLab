@@ -52,12 +52,13 @@ function recordPlaced(kind: keyof Manifest, title: string): void {
 
 // ---------- Tipo de elemento (modelo real) por título de herramienta ----------
 const MATERIAL_TYPE: Record<string, string> = {
-  'Balón': 'ball', 'Fitball': 'fitball', 'Balón morado': 'vball', 'Cono': 'cone',
-  'Marcador': 'marker', 'Banderín': 'flag', 'Diana': 'target', 'Marcador C': 'coachC',
-  'Pica coloreable': 'pica', 'Pértiga / poste': 'pole', 'Maniquí': 'mannequin',
-  'Mini portería': 'minigoal', 'Red': 'net', 'Valla': 'hurdle', 'Aro': 'ring',
+  'Balón': 'ball', 'Fitball': 'vball', 'Cono': 'cone', 'BOSU': 'marker',
+  'Banderín': 'flag', 'Chino': 'target', 'Pica coloreable': 'pica',
+  'Pértiga / poste': 'pole', 'Maniquí individual': 'mannequin',
+  'Barrera de maniquíes': 'mannequin_row', 'Miniportería': 'minigoal',
+  'Portería grande': 'goal', 'Valla': 'hurdle', 'Aro': 'ring',
   'Escalera': 'ladder', 'Minitrampolín': 'trampoline', 'Peto': 'peto',
-  'Chaleco lastrado': 'chaleco', 'BOSU': 'bosu',
+  'Chaleco lastrado': 'chaleco', 'Mancuerna / pesa': 'dumbbell',
 };
 const DRAW_TYPE: Record<string, string> = {
   'Línea': 'line', 'Flecha (movimiento)': 'arrow', 'Flecha doble sentido': 'doubleArrow',
@@ -117,8 +118,39 @@ async function openBoard(page: Page): Promise<void> {
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
-  if (category) await page.locator('.tools-cat', { hasText: category }).click();
+  if (category) {
+    // FASE B: el catálogo persiste abierto; solo se abre si su herramienta no está
+    // visible (un re-toggle la cerraría).
+    if (!(await page.locator(`.rail-btn[title="${title}"]`).isVisible().catch(() => false))) {
+      await page.locator('.tools-cat', { hasText: category }).click();
+    }
+  }
+  if (title === 'Jugador propio' || title === 'Jugador rival') {
+    const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
+    await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+    await closeCatalogPanel(page);
+    return;
+  }
   await page.locator(`.rail-btn[title="${title}"]`).click();
+  // FASE B: minimizar el catálogo para liberar el campo (los puntos izquierdos/quedan
+  // bajo el panel persistente).
+  await closeCatalogPanel(page);
+}
+
+/** Abre un catálogo lateral solo si no está ya abierto (idempotente, FASE B). */
+async function openCatalog(page: Page, category: string): Promise<void> {
+  const probe = category === 'Jugadores' ? '.side-panel-left[aria-label="Jugadores"]' : '.side-panel-left.tools-panel-side';
+  if (await page.locator(probe).isVisible().catch(() => false)) return;
+  await page.locator('.tools-cat', { hasText: category }).click();
+}
+
+/** Minimiza el catálogo lateral abierto con su X (no desarma la herramienta). */
+async function closeCatalogPanel(page: Page): Promise<void> {
+  const panel = page.locator('.side-panel');
+  if (await panel.isVisible().catch(() => false)) {
+    const close = panel.first().locator('.panel-close');
+    if (await close.isVisible().catch(() => false)) await close.click();
+  }
 }
 
 async function drawShape(page: Page, from: [number, number], to: [number, number]): Promise<void> {
@@ -139,7 +171,7 @@ async function cleanScene(page: Page): Promise<void> {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(120);
   await page.evaluate(() => {
-    document.querySelectorAll('.context-bar, .tools-panel-backdrop, .top-pop, .side-panel').forEach((el) => {
+    document.querySelectorAll('.context-bar, .top-pop, .side-panel').forEach((el) => {
       (el as HTMLElement).style.display = 'none';
     });
   });
@@ -203,12 +235,16 @@ async function expectNewPlayer(page: Page, pred: PlayerPred, action: () => Promi
 async function placeMaterial(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
   const type = MATERIAL_TYPE[title];
   expect(type, `tipo de material conocido: ${title}`).toBeTruthy();
-  await page.locator('.tools-cat', { hasText: 'Material' }).click();
   const input = page.locator('.tools-search-input');
+  // FASE B: abrir Material solo si no está ya abierto (evitar re-toggle).
+  if (!(await input.isVisible().catch(() => false))) {
+    await page.locator('.tools-cat', { hasText: 'Material' }).click();
+  }
   await input.fill('');
   await input.fill(title);
   await page.waitForTimeout(80);
   await page.locator(`.rail-btn[title="${title}"]`).click();
+  await closeCatalogPanel(page);
   const p = normToScreen(nx, ny, host, fit);
   await expectNewElement(page, type, () => page.mouse.click(p.x, p.y));
   recordPlaced('materials', title);
@@ -229,29 +265,34 @@ async function placeText(page: Page, host: Box, fit: Fit, content: string, nx: n
 }
 
 async function placeRealPlayer(page: Page, host: Box, fit: Fit, name: string, pid: string, nx: number, ny: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
+  await openCatalog(page, 'Jugadores');
   await page.locator('.roster-item', { hasText: name }).click();
+  await closeCatalogPanel(page);
   const p = normToScreen(nx, ny, host, fit);
   await expectNewPlayer(page, { playerId: pid }, () => page.mouse.click(p.x, p.y));
   recordPlaced('players', name);
 }
 
 async function placeGenericByTitle(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
-  await page.locator(`.rail-btn[title="${title}"]`).click();
+  await openCatalog(page, 'Jugadores');
+  // FASE C: sin botones "Jugador propio/rival"; la diferenciación de equipos es por COLOR,
+  // así que ambos genéricos son side:'own' y se distinguen por su color.
+  const chip = title === 'Jugador rival' ? 'Rojo' : 'Azul';
+  await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
+  await closeCatalogPanel(page);
   const p = normToScreen(nx, ny, host, fit);
-  const pred: PlayerPred = title === 'Jugador rival'
-    ? { side: 'rival', kind: '', playerId: '' }
-    : { side: 'own', kind: '', playerId: '' };
+  const pred: PlayerPred = { side: 'own', kind: '', playerId: '' };
   await expectNewPlayer(page, pred, () => page.mouse.click(p.x, p.y));
   recordPlaced('players', title);
 }
 
 async function placeTrayPlayer(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
-  await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
+  await openCatalog(page, 'Jugadores');
   await page.locator(`.tray-player[title="${title}"]`).click();
+  await closeCatalogPanel(page);
   const p = normToScreen(nx, ny, host, fit);
-  const pred: PlayerPred = title === 'Portero' ? { kind: 'goalkeeper' } : { kind: 'neutral' };
+  // Las fichas de color colocan un jugador genérico SIN rol especial (kind vacío).
+  const pred: PlayerPred = { side: 'own', kind: '', playerId: '' };
   await expectNewPlayer(page, pred, () => page.mouse.click(p.x, p.y));
   recordPlaced('players', title);
 }
@@ -269,15 +310,15 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     fs.writeFileSync(MANIFEST, JSON.stringify({ materials: [], draw: [], players: [] }), 'utf8');
   });
 
-  test('catálogo de materiales (1/2) — 12 tipos ordenados con etiqueta', async ({ page }) => {
+  test('catálogo de materiales (1/2) — 10 tipos ordenados con etiqueta', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
     const host = await hostBox(page);
     const fit = await fitMode(page);
     const items = [
-      'Balón', 'Fitball', 'Balón morado', 'Cono', 'Marcador', 'Banderín',
-      'Diana', 'Marcador C', 'Pica coloreable', 'Pértiga / poste', 'Maniquí', 'Mini portería',
+      'Balón', 'Fitball', 'Cono', 'BOSU', 'Banderín',
+      'Chino', 'Pica coloreable', 'Pértiga / poste', 'Maniquí individual', 'Barrera de maniquíes',
     ];
     const cols = [0.2, 0.5, 0.8];
     const rows = [0.15, 0.33, 0.51, 0.69];
@@ -287,28 +328,28 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
       await placeMaterial(page, host, fit, items[i], cols[col], rows[row]);
       await placeText(page, host, fit, items[i], cols[col], rows[row] + 0.08);
     }
-    expect(loadManifest().materials.length, 'se colocaron los 12 materiales (1/2)').toBeGreaterThanOrEqual(12);
+    expect(loadManifest().materials.length, 'se colocaron los 10 materiales (1/2)').toBeGreaterThanOrEqual(10);
     await cleanScene(page);
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/catalogo-materiales-1.png` });
   });
 
-  test('catálogo de materiales (2/2) — 8 tipos restantes en 2 columnas, sin solapamiento', async ({ page }) => {
+  test('catálogo de materiales (2/2) — 9 tipos restantes en 2 columnas, sin solapamiento', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
     const host = await hostBox(page);
     const fit = await fitMode(page);
-    const items = ['Red', 'Valla', 'Aro', 'Escalera', 'Minitrampolín', 'Peto', 'Chaleco lastrado', 'BOSU'];
-    // 2 columnas anchas + 4 filas → etiquetas largas ("Chaleco lastrado") sin solaparse.
+    const items = ['Miniportería', 'Portería grande', 'Valla', 'Aro', 'Escalera', 'Minitrampolín', 'Peto', 'Chaleco lastrado', 'Mancuerna / pesa'];
+    // 2 columnas anchas + 5 filas → etiquetas largas ("Chaleco lastrado", "Mancuerna / pesa") sin solaparse.
     const cols = [0.28, 0.72];
-    const rows = [0.14, 0.32, 0.5, 0.68];
+    const rows = [0.1, 0.26, 0.42, 0.58, 0.74];
     for (let i = 0; i < items.length; i++) {
       const col = i % 2;
       const row = Math.floor(i / 2);
       await placeMaterial(page, host, fit, items[i], cols[col], rows[row]);
-      await placeText(page, host, fit, items[i], cols[col], rows[row] + 0.09);
+      await placeText(page, host, fit, items[i], cols[col], rows[row] + 0.08);
     }
-    expect(loadManifest().materials.length, 'se colocaron los 8 materiales (2/2)').toBeGreaterThanOrEqual(8);
+    expect(loadManifest().materials.length, 'se colocaron los 9 materiales (2/2)').toBeGreaterThanOrEqual(9);
     await cleanScene(page);
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/catalogo-materiales-2.png` });
   });
@@ -327,16 +368,16 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     await placeRealPlayer(page, host, fit, 'Pau', 'p2', spots[1][0], spots[1][1]);
     await placeGenericByTitle(page, host, fit, 'Jugador propio', spots[2][0], spots[2][1]);
     await placeGenericByTitle(page, host, fit, 'Jugador rival', spots[3][0], spots[3][1]);
-    await placeTrayPlayer(page, host, fit, 'Portero', spots[4][0], spots[4][1]);
-    await placeTrayPlayer(page, host, fit, 'Portero', spots[5][0], spots[5][1]);
+    await placeTrayPlayer(page, host, fit, 'Jugador Azul', spots[4][0], spots[4][1]);
+    await placeTrayPlayer(page, host, fit, 'Jugador Rojo', spots[5][0], spots[5][1]);
     // Etiquetas de familia bajo cada jugador (sin taparse entre sí ni el objeto).
     const labels: Array<[string, number, number]> = [
       ['Marcos (real)', spots[0][0], spots[0][1] + 0.11],
       ['Pau (real)', spots[1][0], spots[1][1] + 0.11],
       ['Propio', spots[2][0], spots[2][1] + 0.11],
       ['Rival', spots[3][0], spots[3][1] + 0.11],
-      ['Portero', spots[4][0], spots[4][1] + 0.11],
-      ['Portero', spots[5][0], spots[5][1] + 0.11],
+      ['Azul', spots[4][0], spots[4][1] + 0.11],
+      ['Rojo', spots[5][0], spots[5][1] + 0.11],
     ];
     for (const [text, lx, ly] of labels) await placeText(page, host, fit, text, lx, ly);
     expect(loadManifest().players.length, 'se colocaron los tipos de jugador').toBeGreaterThanOrEqual(5);
@@ -433,7 +474,7 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
 
     expect(missingMaterials, 'materiales del catálogo no cubiertos en las capturas').toEqual([]);
     expect(missingDraw, 'herramientas de dibujo del catálogo no cubiertas en las capturas').toEqual([]);
-    expect(materialTitles.length, 'catálogo de materiales no vacío').toBeGreaterThanOrEqual(20);
+    expect(materialTitles.length, 'catálogo de materiales no vacío').toBeGreaterThanOrEqual(19);
     expect(drawTitles.length, 'catálogo de dibujo no vacío').toBeGreaterThanOrEqual(9);
     expect(new Set(materialTitles).size, 'sin títulos de material duplicados').toBe(materialTitles.length);
     expect(new Set(drawTitles).size, 'sin títulos de dibujo duplicados').toBe(drawTitles.length);

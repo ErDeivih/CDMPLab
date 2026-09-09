@@ -89,6 +89,21 @@ describe('board-doc (operaciones puras del documento)', () => {
     }
   });
 
+  it('traslada (mover/duplicar) los tipos nuevos goal/mannequin_row/dumbbell — la copia NO queda superpuesta', () => {
+    const specs: Array<[CanvasElement['t'], number, number]> = [
+      ['goal', 0.5, 0.5],
+      ['mannequin_row', 0.5, 0.5],
+      ['dumbbell', 0.5, 0.5],
+    ];
+    for (const [t, x, y] of specs) {
+      const el = { id: `${t}-x`, t, x, y, assetKind: String(t) } as CanvasElement;
+      const moved = translateElement(el, 0.12, 0.08);
+      expect(moved.x, `se mueve ${t} en x`).toBeCloseTo(x + 0.12, 5);
+      expect(moved.y, `se mueve ${t} en y`).toBeCloseTo(y + 0.08, 5);
+      expect(moved.x === x && moved.y === y, `${t} no debe quedar en la misma posición`).toBe(false);
+    }
+  });
+
   it('calcula el centro geométrico de curva y mano alzada', () => {
     const curve = { id: 'c', t: 'curve' as const, x1: 0, y1: 0, c1x: 0.5, c1y: 0.5, x2: 1, y2: 0 };
     const c = elementCenter(curve);
