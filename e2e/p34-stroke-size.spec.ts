@@ -73,7 +73,8 @@ async function hostBox(page: Page): Promise<Box> {
 async function deselect(page: Page, box: Box): Promise<void> {
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(80);
+  // FASE G: observable — la herramienta vuelve a "Seleccionar" (rail-active).
+  await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
 }
 
 async function useDrawTool(page: Page, title: string): Promise<void> {

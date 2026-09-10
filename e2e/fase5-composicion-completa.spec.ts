@@ -82,7 +82,8 @@ async function hostBox(page: Page): Promise<Box> {
 async function deselect(page: Page): Promise<void> {
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(60);
+  // FASE G: observable — la herramienta vuelve a "Seleccionar" (rail-active).
+  await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
 }
 
 async function placePlayer(page: Page, title: string, nx: number, ny: number, tray = false): Promise<void> {
@@ -146,7 +147,8 @@ async function placeText(page: Page, nx: number, ny: number, value: string): Pro
   await ta.fill(value);
   await ta.dispatchEvent('change');
   await ta.evaluate((el) => (el as HTMLElement).blur());
-  await page.waitForTimeout(80);
+  // FASE G: observable — el texto se ha renderizado en el SVG antes de deseleccionar.
+  await expect.poll(async () => (await page.locator('.board-canvas svg').innerHTML()).includes(value.split('\n')[0]), { timeout: 4000 }).toBe(true);
   await deselect(page);
 }
 
@@ -204,7 +206,7 @@ test('composición completa: cada familia presente en el modelo, nada selecciona
 
   // 4) Nada seleccionado y sin paneles abiertos.
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(120);
+  // FASE G: los `toHaveCount(0)` siguientes son la condición observable (sin wait fijo).
   await expect(page.locator('.context-bar')).toHaveCount(0);
   await expect(page.locator('.studio-panel, .side-panel-left, .side-panel-right')).toHaveCount(0);
   await expect(page.locator('.reshandle')).toHaveCount(0);

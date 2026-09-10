@@ -78,7 +78,7 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(200);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));

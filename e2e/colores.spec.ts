@@ -34,11 +34,15 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
-  if (fill) { await page.locator('.field-fit-toggle').click(); await page.waitForTimeout(120); }
+  if (fill) {
+    await page.locator('.field-fit-toggle').click();
+    // FASE G: observable — el letterbox se espera con la ausencia de board-fill.
+    await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
+  }
 }
 // PALETTE = ['#1a73e8','#c0392b','#1f7a4d','#e67e22','#7d3c98','#b8860b','#111111','#f4f4f4']
 async function setPaletteColor(page: Page, hex: string, scope: '.tools-caption' | '.studio-panel .inspector'): Promise<void> {
@@ -80,15 +84,18 @@ test('color de línea: rojo → azul, undo/redo, duplicar, persiste en guardar/r
   await page.mouse.click(a[0], a[1], { button: 'right' });
   await expect(page.locator('.inspector')).toBeVisible();
   await setPaletteColor(page, '#1a73e8', '.studio-panel .inspector');
-  await page.waitForTimeout(150);
+  // FASE G: observable — el trazo ya es azul (no una espera fija).
+  await expect.poll(() => lineStroke(page), { timeout: 5000 }).toBe('#1a73e8');
   expect(await lineStroke(page), 'la línea pasa a azul').toBe('#1a73e8');
 
   // 6/7) Undo vuelve a rojo; redo vuelve a azul. (Fase 3: atajos Ctrl+Z / Ctrl+Y.)
   await page.keyboard.press('Control+z');
-  await page.waitForTimeout(80);
+  // FASE G: observable — el undo se espera con expect.poll del trazo.
+  await expect.poll(() => lineStroke(page), { timeout: 5000 }).toBe('#c0392b');
   expect(await lineStroke(page), 'undo recupera rojo').toBe('#c0392b');
   await page.keyboard.press('Control+y');
-  await page.waitForTimeout(80);
+  // FASE G: observable — el redo se espera con expect.poll del trazo.
+  await expect.poll(() => lineStroke(page), { timeout: 5000 }).toBe('#1a73e8');
   expect(await lineStroke(page), 'redo recupera azul').toBe('#1a73e8');
 
   // 8) Duplicar conserva azul (re-seleccionar la línea, ya que undo/redo limpió la selección).
@@ -109,7 +116,7 @@ test('color de línea: rojo → azul, undo/redo, duplicar, persiste en guardar/r
   await page.locator('.ex-card').first().hover();
   await page.locator('[title="Diseñar en pizarra"]').first().click();
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   expect(await lineStroke(page), 'tras reabrir la línea sigue azul').toBe('#1a73e8');
 
   // 10) Export PNG válido.

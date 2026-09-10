@@ -106,7 +106,7 @@ test.describe('Fase 5 — dibujo de UN solo gesto (pointerdown → preview → p
         await page.mouse.move(a.x, a.y);
         await page.mouse.down();
         await page.mouse.move(b.x, b.y, { steps: 6 });
-        await page.waitForTimeout(80); // dejar que Angular pinte la preview
+        // FASE G: la preview se espera con la aserción siguiente (observable) antes de soltar.
 
         // Nº de elementos del color de dibujo en el SVG (el campo está en blanco).
         await expect(page.locator('.board-canvas svg [stroke="#1f2933"]'), 'la preview del trazo es visible ANTES de soltar').not.toHaveCount(0);

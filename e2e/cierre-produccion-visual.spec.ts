@@ -110,7 +110,7 @@ async function dismissHelp(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   await dismissHelp(page);
 }
 

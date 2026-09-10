@@ -103,7 +103,7 @@ test.describe('Fase 1 — móvil en horizontal: la pizarra compacta es realmente
       if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) {
         await page.locator('.fill-hint-close').click();
       }
-      await page.waitForTimeout(120);
+      // FASE G: la pista se espera con el `toHaveCount(0)` siguiente (observable).
       await expect(page.locator('.fill-hint'), 'la pista de llenado se cierra').toHaveCount(0);
       await page.locator('.board-host').screenshot({ path: `${SHOTS}/pizarra-${W}x${H}-sin-pista.png` });
     });

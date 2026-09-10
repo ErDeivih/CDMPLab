@@ -12,6 +12,8 @@ import type { Page } from '@playwright/test';
 export async function longPress(page: Page, x: number, y: number): Promise<void> {
   await page.mouse.move(x, y);
   await page.mouse.down();
+  // La pulsación larga es el GESTO en sí: hay que mantener el puntero bajado durante los
+  // ~550 ms del umbral de la app para que se dispare. Es un hold intencional, no un settle.
   await page.waitForTimeout(600);
   await page.mouse.up();
 }
@@ -40,4 +42,18 @@ export async function fillBoardTitle(page: Page, title: string): Promise<void> {
     await titleField.waitFor({ state: 'visible', timeout: 4000 });
   }
   await titleField.fill(title);
+}
+
+/**
+ * FASE G — espera OBSERVABLE a que terminen las animaciones/transiciones CSS del elemento
+ * dado, en lugar de una espera fija antes de una captura. Si el elemento no existe o no
+ * tiene animaciones, resuelve de inmediato (no bloquea). Sustituye los `waitForTimeout`
+ * de las capturas de galerías (familia 5) por el estado real de la animación.
+ */
+export async function waitForTransitions(page: Page, selector: string): Promise<void> {
+  await page.waitForFunction((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return true;
+    return (el as Element).getAnimations().every((a) => a.playState !== 'running' && a.playState !== 'pending');
+  }, selector);
 }

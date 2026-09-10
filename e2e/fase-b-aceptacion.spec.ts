@@ -409,8 +409,9 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       const cb = (await card.boundingBox())!;
       const id = 93;
       await ptrItem(page, '.rail-btn[title="Cono"]', 'pointerdown', cb.x + cb.width / 2, cb.y + cb.height / 2, id);
-      // Mantener sin mover más de LONG_PRESS (550 ms).
-      await page.waitForTimeout(700);
+      // Mantener sin mover más de LONG_PRESS (550 ms): espera OBSERVABLE a que el
+      // temporizador abra el selector de variantes (no una espera fija).
+      await expect(page.locator('.bar-variant-pop')).toBeVisible();
       await ptrItem(page, '.rail-btn[title="Cono"]', 'pointerup', cb.x + cb.width / 2, cb.y + cb.height / 2, id);
       // Se abre el selector de variantes (bar-variant-pop) y NO se coloca nada.
       await expect(page.locator('.bar-variant-pop')).toBeVisible();

@@ -67,8 +67,8 @@ async function seed(page: Page): Promise<void> {
 async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  // Los hints flotantes se pintan tras el primer render: esperar antes de descartarlos.
-  await page.waitForTimeout(250);
+  // FASE G: observable — el campo se ha renderizado (SVG presente), no una espera fija.
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   if (await page.locator('.help-close').isVisible().catch(() => false)) {
     await page.locator('.help-close').click();
   }
@@ -208,7 +208,7 @@ async function drag(page: Page, x: number, y: number, dx: number, dy: number, id
   await ptr(page, 'pointerdown', x, y, id, true);
   await ptr(page, 'pointermove', x + dx, y + dy, id);
   await ptr(page, 'pointerup', x + dx, y + dy, id);
-  await page.waitForTimeout(60); // dejar que Angular pinte el movimiento
+  // FASE G: el movimiento se verifica en el llamador con `expect.poll(objectNorm/imageNorm)`.
 }
 
 /** Rota el elemento seleccionado con la manija: baja en la manija y mueve el puntero
@@ -220,7 +220,7 @@ async function rotateGesture(page: Page, handleScreen: Pt, centerScreen: Pt, id 
   await ptr(page, 'pointerdown', handleScreen.x, handleScreen.y, id, true);
   await ptr(page, 'pointermove', target.x, target.y, id);
   await ptr(page, 'pointerup', target.x, target.y, id);
-  await page.waitForTimeout(60);
+  // FASE G: helper sin uso actual; la rotación se verifica por `expect.poll(firstRot)` en quien la use.
 }
 
 // Selectores reutilizados.
@@ -287,14 +287,14 @@ test.describe('E1 — el panel Propiedades NO bloquea el movimiento en móvil (�
       const playerBefore = await objectNorm(page, PLAYER);
       await drag(page, playerScreen.x, playerScreen.y, -38, -26);
       await expect(page.locator('.studio-panel')).toHaveCount(0);          // mover NO abre
-      const playerAfter = await objectNorm(page, PLAYER);
-      expect(playerAfter.x - playerBefore.x, '[player] el jugador se mueve con el arrastre').toBeLessThan(-0.01);
+      // FASE G: observable — el jugador se movió (x disminuyó).
+      await expect.poll(async () => (await objectNorm(page, PLAYER)).x - playerBefore.x, { timeout: 4000 }).toBeLessThan(-0.01);
 
       const coneBefore = await imageNorm(page, CONE);
       await drag(page, coneScreen.x, coneScreen.y, 42, 22);
       await expect(page.locator('.studio-panel')).toHaveCount(0);          // mover NO abre
-      const coneAfter = await imageNorm(page, CONE);
-      expect(coneAfter.x - coneBefore.x, '[cone] el material se mueve con el arrastre').toBeGreaterThan(0.01);
+      // FASE G: observable — el material se movió (x aumentó).
+      await expect.poll(async () => (await imageNorm(page, CONE)).x - coneBefore.x, { timeout: 4000 }).toBeGreaterThan(0.01);
       if (W === 390 && H === 844) {
         await page.screenshot({ path: `${SHOTS}/movil-durante-movimiento-panel-cerrado.png`, fullPage: false });
       }
@@ -307,11 +307,12 @@ test.describe('E1 — el panel Propiedades NO bloquea el movimiento en móvil (�
       await expect(page.locator('.studio-panel')).toHaveCount(0);
       await expect(page.locator('.context-bar')).toBeVisible();
       const rotBefore = await firstRot(page);
+      const expected = (((rotBefore % 360) + 360) % 360 + 90) % 360;
       await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
-      await page.waitForTimeout(100); // dejar que Angular pinte el giro del cono
+      // FASE G: observable — la rotación se espera con expect.poll (no un wait fijo).
+      await expect.poll(() => firstRot(page), { timeout: 5000 }).toBeCloseTo(expected, 0);
       await expect(page.locator('.studio-panel')).toHaveCount(0);          // rotar NO abre
       const rotAfter = await firstRot(page);
-      const expected = (((rotBefore % 360) + 360) % 360 + 90) % 360;
       expect(rotAfter, '[rotate] la rotación gira a +90° desde la barra de contexto').toBeCloseTo(expected, 0);
       if (W === 390 && H === 844) {
         await page.screenshot({ path: `${SHOTS}/movil-manija-rotacion-visible.png`, fullPage: false });

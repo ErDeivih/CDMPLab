@@ -29,11 +29,15 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
-  if (fill) { await page.locator('.field-fit-toggle').click(); await page.waitForTimeout(120); }
+  if (fill) {
+    await page.locator('.field-fit-toggle').click();
+    // FASE G: el letterbox se espera con la ausencia de board-fill (sin wait fijo).
+    await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
+  }
 }
 async function armTool(page: Page, title: string): Promise<void> {
   // FASE B (paneles persistentes): elegir una herramienta de Dibujo ya NO cierra el
@@ -112,7 +116,7 @@ test('la memoria de color por herramienta persiste entre sesiones', async ({ pag
   // Recargar (nueva sesión): la preferencia local por herramienta se conserva.
   await page.reload();
   await page.locator('.board-host').waitFor({ state: 'visible' });
-  await page.waitForTimeout(250);
+  // FASE G: el armado espera a que el .rail-btn sea accionable (auto-wait); sin wait fijo.
   await armTool(page, 'Línea');
   await pickPaletteColor(page, '#c0392b');
   // (El primer armado + paleta ya usó el color recordado de Línea.)

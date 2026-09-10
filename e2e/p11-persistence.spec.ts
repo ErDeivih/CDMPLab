@@ -61,7 +61,8 @@ async function seed(page: Page): Promise<void> {
   });
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  // FASE G: observable — el campo se ha renderizado (SVG presente), no una espera fija.
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
@@ -93,7 +94,7 @@ async function reopen(page: Page): Promise<void> {
   await page.locator('[title="Diseñar en pizarra"]').first().click();
   await page.waitForURL('**/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(150);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
 }
 
 async function savedElements(page: Page): Promise<CanvasElement[]> {
@@ -178,7 +179,7 @@ async function dragMove(page: Page, el: CanvasElement, delta: [number, number]):
   await page.mouse.down();
   await page.mouse.move(x1 + dxs, y1 + dys, { steps: 6 });
   await page.mouse.up();
-  await page.waitForTimeout(60);
+  // FASE G: el movimiento se verifica post-guardado por el llamador (modelo persistido).
 }
 
 async function dragHandle(page: Page, from: [number, number], to: [number, number]): Promise<void> {
@@ -189,7 +190,7 @@ async function dragHandle(page: Page, from: [number, number], to: [number, numbe
   await page.mouse.down();
   await page.mouse.move(tx, ty, { steps: 5 });
   await page.mouse.up();
-  await page.waitForTimeout(60);
+  // FASE G: el resize se verifica post-guardado por el llamador (modelo persistido).
 }
 
 async function resizeSelected(page: Page, el: CanvasElement, kind: 'box' | 'point' | 'seg' | 'curve' | 'freehand'): Promise<void> {
@@ -243,7 +244,7 @@ async function rotateViaBar(page: Page, deg: 90 | -90, el: CanvasElement): Promi
   await longPress(page, x, y);
   await page.locator('.context-bar').waitFor({ state: 'visible' });
   await page.locator(`.context-bar ${sel}`).click();
-  await page.waitForTimeout(60);
+  // FASE G: la rotación se verifica post-guardado por el llamador (modelo persistido).
 }
 
 /** Undo / Redo transaccional (el elemento sigue existiendo en ambos estados). */
@@ -458,7 +459,8 @@ test.describe('Fase 11 — round-trip de modelo y persistencia por familia', () 
     await page.locator('.settings-row', { hasText: 'Importar respaldo' }).locator('input[type="file"]').setInputFiles(path!);
     await expect(page.locator('.settings-row', { hasText: 'Respaldo válido' })).toBeVisible();
     await page.locator('.settings-row', { hasText: 'Respaldo válido' }).locator('button', { hasText: 'Reemplazar' }).click();
-    await page.waitForTimeout(500);
+    // FASE G: observable — el ejercicio restaurado aparece en localStorage (no una espera fija).
+    await expect.poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]') as unknown[]).length), { timeout: 5000 }).toBeGreaterThanOrEqual(1);
     const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('entrenolab:exercises')!));
     expect(restored.length).toBeGreaterThanOrEqual(1);
     expect(restored[0].canvas.frames[0].elements.length).toBeGreaterThanOrEqual(1);

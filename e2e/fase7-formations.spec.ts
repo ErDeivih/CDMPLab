@@ -61,7 +61,8 @@ test.describe('Fase 7 — formaciones rápidas', () => {
     // Colocar manualmente un jugador de plantilla (el primero) → 1 elemento.
     await openJugadores(page);
     await page.locator('.side-panel-left .roster-item').first().click();
-    await page.waitForTimeout(120);
+    // FASE G: la colocación se espera con el `toHaveText('1')` siguiente (observable);
+    // el wait fijo post-arma era redundante.
     const host = (await page.locator('.board-host').boundingBox())!;
     await page.mouse.click(host.x + host.width / 2, host.y + host.height / 2);
     await expect(page.locator('.field-count')).toHaveText('1');

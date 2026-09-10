@@ -92,8 +92,8 @@ async function closeCatalogPanelIfOpen(page: Page): Promise<void> {
 async function openProps(page: Page): Promise<void> {
   if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
   await page.locator('button[aria-label="Propiedades"]').click();
+  // FASE G: el panel se espera con el `.toBeVisible()` siguiente (observable); sin wait fijo.
   await expect(page.locator('.studio-panel')).toBeVisible();
-  await page.waitForTimeout(60);
 }
 
 /**
@@ -113,7 +113,8 @@ async function panByDrag(page: Page, dx: number, dy: number): Promise<void> {
   await page.mouse.move(sx + dx, sy + dy, { steps: 6 });
   await page.mouse.up();
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
-  await page.waitForTimeout(80);
+  // FASE G: observable — la herramienta vuelve a "Seleccionar" (rail-active).
+  await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
 }
 
 /** Abre el menú "Exportar" (unificado) y pulsa una de sus acciones por título. */
@@ -633,7 +634,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     expect(dims.h).toBe(480);
   });
 
-  test('cambia el tipo de jugador y la opacidad desde el inspector', async ({ page }) => {
+  test('el inspector de jugador NO ofrece Tipo/Portero y sí permite cambiar la opacidad', async ({ page }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -647,9 +648,8 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
     await page.mouse.click(x, y);
 
-    const tipo = page.locator('.inspector .field', { hasText: 'Tipo' }).locator('select');
-    await tipo.selectOption('goalkeeper');
-    await expect(tipo).toHaveValue('goalkeeper');
+    // FASE C: el inspector de jugador ya NO ofrece el control "Tipo" (ni la opción Portero).
+    await expect(page.locator('.inspector .field', { hasText: 'Tipo' })).toHaveCount(0);
 
     const op = page.locator('.inspector .field', { hasText: 'Opacidad' }).locator('input[type="range"]');
     await op.fill('0.5');
@@ -1882,7 +1882,8 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.locator('.settings', { hasText: 'Importar respaldo' }).locator('input[type="file"]').setInputFiles({ name: 'b.json', mimeType: 'application/json', buffer: buf });
     await expect(page.locator('.settings', { hasText: 'Respaldo válido' })).toBeVisible();
     await page.locator('.settings', { hasText: 'Respaldo válido' }).getByRole('button', { name: 'Reemplazar' }).click();
-    await page.waitForTimeout(600);
+    // FASE G: observable — el equipo exportado ya está restaurado en localStorage (no espera fija).
+    await expect.poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem('entrenolab:teams') ?? '[]') as unknown[]).length), { timeout: 5000 }).toBeGreaterThan(0);
     // El equipo exportado sigue presente (fuente de verdad: localStorage) y la app recargada.
     const teams = await page.evaluate(() => JSON.parse(localStorage.getItem('entrenolab:teams') ?? '[]'));
     expect(teams.length).toBeGreaterThan(0);

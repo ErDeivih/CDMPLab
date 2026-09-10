@@ -34,7 +34,9 @@ async function canvas(page: Page): Promise<CanvasDocument> {
   // Guardar para persistir el modelo y poder leerlo desde localStorage.
   await fillBoardTitle(page, 'Formaciones');
   await page.locator('.chip-icon-primary').first().click().catch(() => void 0);
-  await page.waitForTimeout(250);
+  // FASE G: condición observable — el guardado es async; esperamos a que el ejercicio
+  // esté persistido en localStorage en lugar de un wait fijo.
+  await expect.poll(async () => (await page.evaluate(() => JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]').length))).toBeGreaterThan(0);
   const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!);
   return ex[0].canvas;
 }
@@ -52,9 +54,10 @@ async function applyForm(page: Page, mirror: boolean, f: string): Promise<void> 
   if (mirror) await mirrorBox.check();
   else await mirrorBox.uncheck();
   await page.locator(`.formation-btn`, { hasText: f }).click();
-  await page.waitForTimeout(120);
+  // FASE G: la colocación de la formación ya se espera en cada llamador con
+  // `expect.poll(count)`; cerrar el panel (¡no la deshace) se hace de inmediato. Los
+  // waits fijos post-clic eran redundantes.
   await page.locator('.side-panel-left .panel-close').first().click().catch(() => void 0);
-  await page.waitForTimeout(80);
 }
 
 test.describe('Fase 4 — formaciones correctas e idempotentes', () => {
@@ -98,7 +101,7 @@ test.describe('Fase 4 — formaciones correctas e idempotentes', () => {
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left').first().waitFor();
     await page.locator('.side-panel-left .roster-item').first().click(); // p1 (primer roster visible)
-    await page.waitForTimeout(100);
+    // FASE G: la colocación se espera con el `toHaveText('1')` siguiente (observable).
     const host = (await page.locator('.board-host').boundingBox())!;
     await page.mouse.click(host.x + host.width / 2, host.y + host.height / 2);
     await expect(page.locator('.field-count')).toHaveText('1');
@@ -134,7 +137,9 @@ test.describe('Fase 4 — formaciones correctas e idempotentes', () => {
     await applyForm(page, true, '4-4-2');
     await expect.poll(() => count(page), { timeout: 5000 }).toBe(11);
     const doc = await canvas(page);
-    const rivals = doc.frames[0].elements.filter((e) => e.t === 'player' && e.side === 'rival');
+    // FASE C: la diferenciación es por COLOR (rojo = rival), no por `side` (las formaciones
+    // ya no asignan side). Los 11 rivales son del color rojo.
+    const rivals = doc.frames[0].elements.filter((e) => e.t === 'player' && e.c === '#c0392b');
     expect(rivals.length, 'máximo 11 rivales').toBe(11);
   });
 });

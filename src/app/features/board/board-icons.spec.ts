@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TOOLS, MATERIALS } from './board.component';
+import { visibleMaterials } from '../../core/material-registry';
 
 // Ligaduras que la fuente autoalojada "Material Symbols Outlined" NO contiene:
 // si se usan, el navegador las pinta como texto literal (no como glifo).
@@ -30,5 +31,18 @@ describe('Board icons — ligaduras válidas en la fuente autoalojada', () => {
   it('cada herramienta define un icono no vacío', () => {
     const empty = all.filter((t) => !t.icon);
     expect(empty).toEqual([]);
+  });
+
+  it('FASE F: TOOLS NO duplica los materiales (fuente única = registro canónico)', () => {
+    const materialIds = new Set(visibleMaterials().map((m) => m.id));
+    // No existe una segunda lista de materiales dentro de TOOLS (las propias de la app).
+    const dupInTools = TOOLS.map((t) => t.id).filter((id) => materialIds.has(id as string));
+    expect(dupInTools, 'TOOLS no debe enumerar materiales').toEqual([]);
+    // El panel (MATERIALS) deriva EXACTAMENTE de visibleMaterials(): mismos ids, cada uno UNA vez.
+    const matIds = MATERIALS.map((m) => m.id as string);
+    expect(new Set(matIds).size, 'ids de material únicos en MATERIALS').toBe(matIds.length);
+    expect([...matIds].sort(), 'MATERIALS == visibleMaterials (ids)').toEqual(
+      [...visibleMaterials().map((m) => m.id)].sort()
+    );
   });
 });

@@ -35,11 +35,15 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
-  if (fill) { await page.locator('.field-fit-toggle').click(); await page.waitForTimeout(120); }
+  if (fill) {
+    await page.locator('.field-fit-toggle').click();
+    // FASE G: el letterbox se espera con la ausencia de board-fill.
+    await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
+  }
 }
 async function placeMaterial(page: Page, host: Box, title: string, nx: number, ny: number): Promise<void> {
   // FASE B (paneles persistentes): abrir la categoría Material es IDEMPOTENTE. Si el panel
@@ -49,7 +53,8 @@ async function placeMaterial(page: Page, host: Box, title: string, nx: number, n
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
   }
   const input = page.locator('.tools-search-input');
-  await input.fill(''); await input.fill(title); await page.waitForTimeout(80);
+  await input.fill(''); await input.fill(title);
+  // FASE G: el rail-btn filtrado por búsqueda se espera en el click siguiente (auto-wait).
   await page.locator(`.rail-btn[title="${title}"]`).click();
   const p = normToScreen(nx, ny, host);
   await page.mouse.click(p[0], p[1]);
@@ -73,14 +78,16 @@ test('colocar materiales y una línea: modelo 1:1, sin textos, sin nombres en el
   const mats = ['Cono', 'Balón', 'Maniquí individual', 'Aro', 'Valla', 'BOSU'];
   for (let i = 0; i < mats.length; i++) await placeMaterial(page, host, mats[i], 0.2 + 0.14 * i, 0.35);
   await page.keyboard.press('Escape'); // cerrar panel Propiedades
-  await page.waitForTimeout(120);
+  // FASE G: observable — el panel de Propiedades se cierra.
+  await expect(page.locator('.studio-panel')).toHaveCount(0);
   // Una línea.
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Línea"]').click();
   const a = normToScreen(0.3, 0.6, host); const b = normToScreen(0.7, 0.6, host);
   await page.mouse.move(a[0], a[1]); await page.mouse.down(); await page.mouse.move(b[0], b[1], { steps: 5 }); await page.mouse.up();
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(120);
+  // FASE G: observable — el panel de Propiedades se cierra.
+  await expect(page.locator('.studio-panel')).toHaveCount(0);
 
   const total = await page.locator('.board-canvas svg [data-el-type]').count();
   const textEls = await page.locator('.board-canvas svg [data-el-type="text"]').count();
@@ -97,7 +104,8 @@ test('colocar materiales y una línea: modelo 1:1, sin textos, sin nombres en el
   await page.locator('.ex-card').first().hover();
   await page.locator('[title="Diseñar en pizarra"]').first().click();
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  // FASE G: observable — esperamos a que el modelo reabierto tenga los 7 objetos.
+  await expect.poll(() => page.locator('.board-canvas svg [data-el-type]').count(), { timeout: 5000 }).toBe(7);
   const total2 = await page.locator('.board-canvas svg [data-el-type]').count();
   const textEls2 = await page.locator('.board-canvas svg [data-el-type="text"]').count();
   expect(total2, 'tras reabrir el modelo sigue siendo 7').toBe(7);
@@ -113,7 +121,8 @@ test('export PNG: no contiene nombres automáticos de materiales ni controles', 
   const host = (await page.locator('.board-host').boundingBox())!;
   await placeMaterial(page, host, 'Cono', 0.5, 0.5);
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(120);
+  // FASE G: observable — el panel de Propiedades se cierra.
+  await expect(page.locator('.studio-panel')).toHaveCount(0);
   const dlPromise = page.waitForEvent('download');
   await page.locator('[aria-label="Exportar"]').click();
   await page.locator('.rail-btn[title="Descargar PNG"]').click();

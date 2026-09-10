@@ -87,7 +87,8 @@ async function placeMaterial(page: Page, box: Box, tool: string, nx: number, ny:
   // que el siguiente clic en el campo no se traguen el panel.
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(80);
+  // FASE G: observable — la herramienta vuelve a "Seleccionar" (rail-active).
+  await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
 }
 
 async function save(page: Page): Promise<void> {
@@ -182,7 +183,8 @@ test.describe('Fase 3 — escala del material y selección táctil robusta', () 
     // ~44 px): D1 lo considera FUERA del cuerpo → NO se selecciona.
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(80);
+    // FASE G: observable — la herramienta vuelve a "Seleccionar" (rail-active).
+    await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
     await tapSelect(page, box, 0.4, 0.5 - 0.06);
     await expect(page.locator('.inspector')).not.toBeVisible();
 
@@ -224,7 +226,9 @@ test.describe('Fase 3 — escala del material y selección táctil robusta', () 
     await ctxRot.click();
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(150);
+    // FASE G: condición observable — el <image> del cono queda rotado (g rotate) en el SVG;
+    // esperamos esa señal en lugar de un wait fijo.
+    await expect.poll(async () => (await page.locator('.entrenolab-board').innerHTML()).includes('rotate(90 ')).toBe(true);
 
     // El <image> del cono ROTA (g rotate). Fase 1: NO crece por Tamaño.
     const svg = await page.locator('.entrenolab-board').innerHTML();
@@ -246,10 +250,10 @@ test.describe('Fase 3 — escala del material y selección táctil robusta', () 
     // Duplicar el cono → la copia conserva rot (menú contextual por pulsación larga).
     await longPress(page, ...normToScreen(0.3, 0.5, (await page.locator('.board-host').boundingBox())!));
     await page.locator('.context-bar [aria-label="Duplicar"]').click();
-    await page.waitForTimeout(80);
+    // FASE G: la duplicación se espera con el `toHaveText('3')` siguiente (observable);
+    // los waits fijos post-clic eran redundantes.
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(80);
     await expect(page.locator('.field-count')).toHaveText('3');
     await save(page);
     const cones = (await canvasElements(page)).filter((e) => e.t === 'cone');

@@ -91,7 +91,8 @@ test.describe('Fase 6 — nombre/número del jugador: ±90° upright, persistenc
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await page.locator('.side-panel-left').first().waitFor();
       await page.locator('.roster-item', { hasText: 'Sergio' }).click();
-      await page.waitForTimeout(120);
+      // FASE G: la colocación se espera con el `toHaveText('1')` siguiente (observable);
+      // el wait fijo post-arma era redundante.
       const c = await centerOfPlaced(page);
       await page.mouse.click(c.x, c.y);
       await expect(page.locator('.field-count')).toHaveText('1');
@@ -122,16 +123,19 @@ test.describe('Fase 6 — nombre/número del jugador: ±90° upright, persistenc
       await longPress(page, c1.x, c1.y);
       await expect(page.locator('.context-bar')).toBeVisible();
       await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
-      await page.waitForTimeout(150);
+      // FASE G: observable — el SVG ya renderiza la rotación (no una espera fija).
+      await expect.poll(() => page.locator('.board-canvas svg').first().innerHTML(), { timeout: 5000 }).toContain('rotate(-90 0 0)');
       let html = await page.locator('.board-canvas svg').innerHTML();
       expect(html, 'texto del jugador upright a +90° (contrarrotado a -90)').toContain('rotate(-90 0 0)');
 
       // Undo (vuelve a 0) y girar a la IZQUIERDA (−90): el texto se contrarrota a -rot y queda upright.
       await page.keyboard.press('Control+z');
-      await page.waitForTimeout(150);
+      // FASE G: observable — el undo revierte la contrarrotación del +90.
+      await expect.poll(async () => !(await page.locator('.board-canvas svg').innerHTML()).includes('rotate(-90 0 0)'), { timeout: 5000 }).toBe(true);
       await longPress(page, c1.x, c1.y);
       await expect(page.locator('.context-bar')).toBeVisible();
       await page.locator('.context-bar [aria-label="Girar 90° a la izquierda"]').click();
+      // La contrarrotación del -90 usa una forma propia (la verificamos con `upright` más abajo).
       await page.waitForTimeout(150);
       html = await page.locator('.board-canvas svg').innerHTML();
       // El dorsal queda upright: el <text> vive dentro de un grupo contrarrotado (-rot).
@@ -170,7 +174,8 @@ test.describe('Fase 6 — nombre/número del jugador: ±90° upright, persistenc
       await expect(page.locator('.field-count')).toHaveText('1');
       // El render del tablero (mismo SVG que se inlina en el PNG) no conserva controles.
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(120);
+      // FASE G: observable — el SVG no conserva controles de edición antes de exportar.
+      await expect(page.locator('.entrenolab-board .text-edit-rect, .entrenolab-board .text-edit, .entrenolab-board .reshandle, .entrenolab-board .context-bar')).toHaveCount(0);
       const buf = await exportPngBuf(page);
       const p = `${SHOTS}/jugador-horizontal.png`;
       fs.writeFileSync(p, buf);

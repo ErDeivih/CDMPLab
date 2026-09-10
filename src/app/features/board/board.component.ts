@@ -32,7 +32,6 @@ type Tool =
   | 'select'
   | 'hand'
   | 'player'
-  | 'player_rival'
   | 'ball'
   | 'cone'
   | 'mannequin'
@@ -75,41 +74,23 @@ type Tool =
 
 /** Herramientas de colocación de un solo uso: pulsar la herramienta ARMA el
  *  emplazamiento (la posición la decide el clic en el campo) en lugar de
- *  colocarla de inmediato. Dibujo (arrastre) y Erase quedan fuera. */
-const PLACEMENT_TOOLS: ReadonlySet<Tool> = new Set([
+ *  colocarla de inmediato. Dibujo (arrastre) y Erase quedan fuera.
+ *  FASE F: los materiales se derivan de los IDs VISIBLES del registro canónico
+ *  (no se repiten a mano); solo se añaden aquí las puntuales no materiales
+ *  (player/text). */
+const PLACEMENT_TOOLS: ReadonlySet<Tool> = new Set<Tool>([
   'player',
-  'player_rival',
-  'ball',
-  'cone',
-  'mannequin',
-  'mannequin_row',
-  'minigoal',
-  'goal',
-  'pole',
-  'marker',
-  'hurdle',
-  'ring',
-  'ladder',
-  'flag',
-  'trampoline',
-  'target',
-  'net',
-  'vball',
-  'coachC',
-  'peto',
-  'chaleco',
-  'bosu',
-  'fitball',
-  'pica',
-  'dumbbell',
   'text',
+  ...visibleMaterials().map((m) => m.id as Tool),
 ]);
 
-/** Spec de un jugador a colocar (jugador de plantilla o genérico). */
+/** Spec de un jugador a colocar (jugador de plantilla o genérico). SIN `side`/`type` en los
+ *  genéricos (la diferenciación es por color); los reales de plantilla conservan su
+ *  `side`/`type` para compatibilidad de documento. */
 interface PlayerPlacement {
   n?: number; // dorsal (si no, se usa nextNumber)
   c: string;
-  side: 'own' | 'rival';
+  side?: 'own' | 'rival';
   type?: 'player' | 'goalkeeper' | 'neutral';
   playerId?: string; // jugador de Plantilla (no duplicable)
   label?: string;
@@ -119,7 +100,7 @@ interface PlayerPlacement {
  *  siguiente clic sobre el campo lo coloca. Sin emplazamiento armado el clic
  *  sobre el campo no crea nada (y Escape vuelve a Seleccionar). */
 type ArmedPlacement = {
-  tool: Tool; // categoría activa ('player' | 'player_rival' | material | 'text')
+  tool: Tool; // categoría activa ('player' | material | 'text')
   label: string; // nombre mostrado en la pista
   player?: PlayerPlacement; // solo para colocación de jugadores
 };
@@ -192,34 +173,13 @@ interface TouchPending {
   begun: boolean;
 }
 
+// Herramientas PROPIAS de la aplicación (no materiales). Los materiales se derivan del
+// registro canónico (material-registry.ts → `MATERIALS`); aquí NO se vuelve a enumerar
+// ningún material para no duplicar la fuente (FASE F).
 export const TOOLS: ToolDef[] = [
   { id: 'select', icon: 'near_me', title: 'Seleccionar y mover' },
   { id: 'hand', icon: 'pan_tool', title: 'Desplazar campo' },
-  { id: 'player', icon: 'person', title: 'Jugador propio' },
-  { id: 'player_rival', icon: 'sports', title: 'Jugador rival' },
-  { id: 'ball', icon: 'sports_soccer', title: 'Balón' },
-  { id: 'cone', icon: 'change_history', title: 'Cono' },
-  { id: 'mannequin', icon: 'accessibility_new', title: 'Maniquí individual' },
-  { id: 'mannequin_row', icon: 'accessibility_new', title: 'Barrera de maniquíes' },
-  { id: 'minigoal', icon: 'sports', title: 'Miniportería' },
-  { id: 'goal', icon: 'sports', title: 'Portería grande' },
-  { id: 'pole', icon: 'straighten', title: 'Pértiga / poste' },
-  { id: 'marker', icon: 'label', title: 'BOSU' },
-  { id: 'hurdle', icon: 'looks_one', title: 'Valla' },
-  { id: 'ring', icon: 'radio_button_unchecked', title: 'Aro' },
-  { id: 'ladder', icon: 'format_list_numbered', title: 'Escalera' },
-  { id: 'flag', icon: 'flag', title: 'Banderín' },
-  { id: 'trampoline', icon: 'airline_seat_flat', title: 'Minitrampolín' },
-  { id: 'target', icon: 'radio_button_checked', title: 'Chino' },
-  { id: 'net', icon: 'grid_on', title: 'Red' },
-  { id: 'vball', icon: 'sports_volleyball', title: 'Fitball' },
-  { id: 'coachC', icon: 'pin', title: 'Marcador C' },
-  { id: 'peto', icon: 'checkroom', title: 'Peto' },
-  { id: 'chaleco', icon: 'checkroom', title: 'Chaleco lastrado' },
-  { id: 'bosu', icon: 'landscape', title: 'BOSU' },
-  { id: 'fitball', icon: 'sports_soccer', title: 'Fitball' },
-  { id: 'pica', icon: 'straighten', title: 'Pica coloreable' },
-  { id: 'dumbbell', icon: 'fitness_center', title: 'Mancuerna / pesa' },
+  { id: 'player', icon: 'person', title: 'Jugador' },
   { id: 'rect', icon: 'check_box_outline_blank', title: 'Rectángulo' },
   { id: 'ellipse', icon: 'circle', title: 'Círculo / elipse' },
   { id: 'arrow', icon: 'trending_flat', title: 'Flecha (movimiento)' },
@@ -238,27 +198,22 @@ const VB_H = 80;
 
 const PALETTE = ['#1a73e8', '#c0392b', '#1f7a4d', '#e67e22', '#7d3c98', '#b8860b', '#111111', '#f4f4f4'];
 
-export const MATERIALS: ToolDef[] = [
-  { id: 'ball', icon: 'sports_soccer', title: 'Balón', group: 'Balones' },
-  { id: 'vball', icon: 'sports_volleyball', title: 'Fitball', group: 'Balones' },
-  { id: 'cone', icon: 'change_history', title: 'Cono', group: 'Señalización' },
-  { id: 'marker', icon: 'label', title: 'BOSU', group: 'Señalización' },
-  { id: 'flag', icon: 'flag', title: 'Banderín', group: 'Señalización' },
-  { id: 'target', icon: 'radio_button_checked', title: 'Chino', group: 'Señalización' },
-  { id: 'pica', icon: 'straighten', title: 'Pica coloreable', group: 'Señalización' },
-  { id: 'pole', icon: 'straighten', title: 'Pértiga / poste', group: 'Porterías y redes' },
-  { id: 'mannequin', icon: 'accessibility_new', title: 'Maniquí individual', group: 'Porterías y redes' },
-  { id: 'mannequin_row', icon: 'accessibility_new', title: 'Barrera de maniquíes', group: 'Porterías y redes' },
-  { id: 'minigoal', icon: 'sports', title: 'Miniportería', group: 'Porterías y redes' },
-  { id: 'goal', icon: 'sports', title: 'Portería grande', group: 'Porterías y redes' },
-  { id: 'hurdle', icon: 'looks_one', title: 'Valla', group: 'Coordinación' },
-  { id: 'ring', icon: 'radio_button_unchecked', title: 'Aro', group: 'Coordinación' },
-  { id: 'ladder', icon: 'format_list_numbered', title: 'Escalera', group: 'Coordinación' },
-  { id: 'trampoline', icon: 'airline_seat_flat', title: 'Minitrampolín', group: 'Coordinación' },
-  { id: 'peto', icon: 'checkroom', title: 'Peto', group: 'Preparación física' },
-  { id: 'chaleco', icon: 'checkroom', title: 'Chaleco lastrado', group: 'Preparación física' },
-  { id: 'dumbbell', icon: 'fitness_center', title: 'Mancuerna / pesa', group: 'Preparación física' },
-];
+/** Catálogo de Material del panel, DERIVADO del registro canónico (material-registry.ts,
+ *  `visibleMaterials`). Fuente única (FASE F): id/título/grupo/icono; NO se mantiene una
+ *  lista MATERIALS manual duplicada. Los retirados (`hidden`) no aparecen. */
+export const MATERIALS: ToolDef[] = visibleMaterials().map((m) => ({
+  id: m.id as Tool,
+  icon: m.icon ?? 'category',
+  title: m.title,
+  group: m.group,
+}));
+
+/** Título visible de una herramienta. Para los materiales consulta el catálogo canónico
+ *  (`MATERIALS`, derivado del registro); para el resto (selección/mano/jugador/dibujo)
+ *  consulta `TOOLS`. Fuente única: un material SIEMPRE se resuelve desde el registro. */
+function toolTitle(id: Tool): string {
+  return MATERIALS.find((m) => m.id === id)?.title ?? TOOLS.find((t) => t.id === id)?.title ?? '';
+}
 
 const MATERIAL_GROUPS = ['Balones', 'Señalización', 'Porterías y redes', 'Coordinación', 'Preparación física', 'Otros'] as const;
 
@@ -268,11 +223,6 @@ const MATERIAL_GROUPS = ['Balones', 'Señalización', 'Porterías y redes', 'Coo
 const MATERIAL_GROUP_MAP: Record<string, string> = Object.fromEntries(
   visibleMaterials().map((m) => [m.id, m.group])
 );
-
-/** Ids de herramienta de la categoría MATERIAL, derivados del REGISTRO CANÓNICO
- *  (material-registry.ts) en lugar de mantener la lista a mano. Coinciden con el
- *  catálogo visible (los retirados se ocultan de la UI). */
-const MATERIAL_TOOL_IDS: ReadonlySet<string> = new Set(visibleMaterials().map((m) => m.id));
 
 /** Formaciones rápidas (Fase 7): posiciones normalizadas 0..1 (espacio canónico) del
  *  equipo PROPIO atacando hacia la derecha. Para el rival se refleja la X (1-x).
@@ -412,7 +362,7 @@ export class BoardComponent {
   }
   protected readonly materialGroupList = computed<Array<{ label: string; items: ToolDef[] }>>(() => {
     const q = this.normalizeFx(this.materialQuery());
-    const matTools = TOOLS.filter((t) => MATERIALS.some((m) => m.id === t.id));
+    const matTools = MATERIALS; // FASE F: catálogo del panel derivado del registro, sin duplicar TOOLS.
     return MATERIAL_GROUPS.map((g) => ({
       label: g,
       items: matTools.filter((t) => MATERIAL_GROUP_MAP[t.id] === g && (!q || this.normalizeFx(t.title).includes(q))),
@@ -454,14 +404,14 @@ export class BoardComponent {
   }
 
   protected activeToolTitle(): string {
-    return TOOLS.find((t) => t.id === this.tool())?.title ?? '';
+    return toolTitle(this.tool());
   }
   protected readonly toolGroups: Array<{ id: 'jugadores' | 'material' | 'dibujo'; label: string; items: ToolDef[] }> = [
-    { id: 'jugadores', label: 'Jugadores', items: TOOLS.filter((t) => t.id === 'player' || t.id === 'player_rival') },
+    { id: 'jugadores', label: 'Jugadores', items: [] },
     {
       id: 'material',
       label: 'Material',
-      items: TOOLS.filter((t) => MATERIAL_TOOL_IDS.has(t.id)),
+      items: MATERIALS, // FASE F: derivado del registro canónico (visibleMaterials), no de TOOLS.
     },
     {
       id: 'dibujo',
@@ -1907,7 +1857,8 @@ export class BoardComponent {
   }
   /** Título de la paleta de color: la herramienta PULSADA (no la activa). */
   protected barColorTitle(): string {
-    return TOOLS.find((t) => t.id === this.barColor())?.title ?? '';
+    const id = this.barColor();
+    return id ? toolTitle(id) : '';
   }
   protected barToolClick(id: Tool): void {
     this.endBarPress();
@@ -2300,13 +2251,11 @@ export class BoardComponent {
   /** Arma la colocación al elegir una herramienta de un solo uso desde un panel. */
   protected armForTool(id: Tool): void {
     if (id === 'player') {
-      this.armed.set({ tool: 'player', label: 'Jugador propio', player: { c: '#1a73e8', side: 'own' } });
-    } else if (id === 'player_rival') {
-      this.armed.set({ tool: 'player_rival', label: 'Jugador rival', player: { n: 0, c: '#c0392b', side: 'rival' } });
+      this.armed.set({ tool: 'player', label: 'Jugador', player: { c: '#1a73e8' } });
     } else if (id === 'text') {
       this.armed.set({ tool: 'text', label: 'Texto' });
     } else {
-      this.armed.set({ tool: id, label: TOOLS.find((t) => t.id === id)?.title ?? '' });
+      this.armed.set({ tool: id, label: toolTitle(id) });
     }
   }
 
@@ -2597,9 +2546,9 @@ export class BoardComponent {
    *  cuyo color es el elegido. La diferenciación es por color, no por concepto comodín. */
   protected readonly quickGenericColors = QUICK_GENERIC_COLORS;
 
-  /** Spec de arrastre de una ficha rápida genérica. */
+  /** Spec de arrastre de una ficha rápida genérica (sin nombre, dorsal, side ni type). */
   protected genericDragSpec(c: string, label: string): PanelDragSpec {
-    return { tool: 'player', label: `Jugador ${label.toLowerCase()}`, player: { c, side: 'own' } };
+    return { tool: 'player', label: `Jugador ${label.toLowerCase()}`, player: { c } };
   }
   /** Spec de arrastre de un jugador de plantilla (no duplicable). */
   protected rosterDragSpec(p: Player): PanelDragSpec {
@@ -2618,7 +2567,7 @@ export class BoardComponent {
   }
   /** Spec de arrastre de un material (usa la variante/color recordados). */
   protected materialDragSpec(id: Tool): PanelDragSpec {
-    return { tool: id, label: TOOLS.find((t) => t.id === id)?.title ?? '' };
+    return { tool: id, label: toolTitle(id) };
   }
   protected armGenericColor(c: string, label: string): void {
     // El color elegido se RECUERDA: lo usan las formaciones (genericColor) y la
@@ -2633,7 +2582,7 @@ export class BoardComponent {
     // Defecto 1: un toque corto TÁCTIL sobre un color genérico actualiza el color empleado
     // por las formaciones pero NO deja un jugador armado (solo un arrastre coloca).
     if (tapTouch) return;
-    this.armed.set({ tool: 'player', label: `Jugador ${label.toLowerCase()}`, player: { c, side: 'own' } });
+    this.armed.set({ tool: 'player', label: `Jugador ${label.toLowerCase()}`, player: { c } });
     this.setTool('player');
     // FASE B (paneles persistentes): elegir un jugador genérico NO cierra el panel
     // Jugadores; queda desplegado para poder seguir eligiendo colores/materiales o
@@ -2680,15 +2629,16 @@ export class BoardComponent {
     this.beginHistory();
     const keptIds = new Set<string>();
     for (let i = 0; i < specs.length; i++) {
-      const { x, y, n, c, side: s } = specs[i];
+      const { x, y, c } = specs[i];
       const rex = existing[i];
       if (rex) {
-        // Recoloca el genérico existente del color (idempotencia) con su dorsal.
-        this.updateElement(rex.id, { x, y, c, n, side: s });
+        // Recoloca el genérico existente del color (idempotencia) y le limpia cualquier
+        // dorsal/side antiguo (las formaciones actuales no asignan rol ni lado).
+        this.updateElement(rex.id, { x, y, c, n: undefined, side: undefined, type: undefined });
         keptIds.add(rex.id);
       } else {
-        // Crea el genérico (sin playerId ni label): CÍRCULO simple del color elegido.
-        const spec: PlayerPlacement = { n, c, side: s };
+        // Crea el genérico (sin playerId ni label, sin dorsal ni side): CÍRCULO del color.
+        const spec: PlayerPlacement = { c };
         const elId = this.placePlayerElement({ x, y }, spec);
         keptIds.add(elId!);
       }
@@ -2711,7 +2661,7 @@ export class BoardComponent {
       t: 'player',
       x: this.clampStrip(p.x),
       y: this.clampStrip(p.y),
-      n: spec.n ?? this.nextNumber(),
+      n: spec.n,
       c: spec.c,
       side: spec.side,
       type: spec.type,
@@ -2730,8 +2680,7 @@ export class BoardComponent {
     const map: Partial<Record<Tool, string>> = {
       select: 'Selecciona y mueve elementos (arrastra para mover; la rueda hace zoom; la rotación ±90° desde la barra de contexto)',
       hand: 'Arrastra para desplazar el campo (pellizca con dos dedos para acercar)',
-      player: 'Clic para colocar un jugador propio',
-      player_rival: 'Clic para colocar un jugador rival',
+      player: 'Clic para colocar un jugador',
       ball: 'Clic para colocar el balón',
       cone: 'Clic para colocar un cono',
       mannequin: 'Clic para colocar un maniquí',
@@ -2931,17 +2880,6 @@ export class BoardComponent {
 
   protected setSelLineStyle(style: 'solid' | 'dashed' | 'dotted'): void {
     this.editSelected({ lineStyle: style });
-  }
-
-  protected setSelType(type: 'player' | 'goalkeeper'): void {
-    this.editSelected({ type });
-  }
-
-  protected toggleSelSide(): void {
-    const el = this.selectedElement();
-    if (!el) return;
-    const rival = el.side !== 'own';
-    this.editSelected({ side: rival ? 'own' : 'rival', c: rival ? '#1a73e8' : '#c0392b' });
   }
 
   protected duplicateSelected(): void {
@@ -3354,7 +3292,6 @@ export class BoardComponent {
         break;
       }
       case 'player':
-      case 'player_rival':
       case 'ball':
       case 'cone':
       case 'mannequin':
@@ -4040,10 +3977,7 @@ export class BoardComponent {
     };
     switch (t) {
       case 'player':
-        el = { id: uid(), t: 'player', x: p.x, y: p.y, n: this.nextNumber(), c: '#1a73e8', side: 'own' };
-        break;
-      case 'player_rival':
-        el = { id: uid(), t: 'player', x: p.x, y: p.y, n: 0, c: '#c0392b', side: 'rival' };
+        el = { id: uid(), t: 'player', x: p.x, y: p.y, c: this.armed()?.player?.c ?? '#1a73e8' };
         break;
       case 'ball':
         el = withMaterial({ id: uid(), t: 'ball', x: p.x, y: p.y, c: '#ffffff' }, 'ball');

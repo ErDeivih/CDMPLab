@@ -1,15 +1,26 @@
 // =============================================================
 // EntrenoLab — Registro canónico de materiales (B1).
 //
-// Fuente ÚNICA de: identificador visible (title), resource, tamaño base
-// (recolorable), grupo, si está RETIRADO del catálogo nuevo, y la tabla de
-// ALIAS de compatibilidad (ids/elementos antiguos → presentación nueva).
+// Fuente ÚNICA del CATÁLOGO VISIBLE de materiales. Para cada material define:
+//   - id            (clave canónica del elemento/assetKind)
+//   - title         (nombre visible)
+//   - group         (grupo visual del panel)
+//   - icon          (icono del panel, Material Symbols)
+//   - help          (texto de ayuda/tooltip)
+//   - visibility    (`hidden` = retirado del catálogo nuevo: se oculta, pero el
+//                    documento antiguo sigue abriendo y renderizándose)
+//   - colorability  (`colorable`/`colorDefault` para los recoloreables)
+//   - point         (todos los materiales son puntuales: sin cuadro/asas de resize)
 //
-// La UI (panel de Material), el render, la IA y los tests consumen este
-// registro en lugar de listas duplicadas. Los ids de ELEMENTO (`t`/assetKind)
-// NO cambian: un ejercicio antiguo con `vball`/`marker`/`target`/`coachC`/
-// `net`/`fitball` sigue abriendo y renderizándose; solo se PRESENTA con el
-// nombre canónico nuevo.
+// NO es la fuente de los RECURSOS GRÁFICOS (PNG/SVG) ni de los TAMAÑOS de render.
+// Esos viven en `tactic-assets.ts` (`materialAsset` / `materialBaseSize`), que es la
+// fuente de recursos y tamaños. El producto los referencia por id (la UI del panel,
+// el render y la IA ya lo hacen a través de `tactic-assets`/helpers, no duplicando
+// listas de materiales en `board.component.ts` o en el menú de la IA).
+//
+// Los ids de ELEMENTO (`t`/assetKind) NO cambian: un ejercicio antiguo con `vball`/
+// `marker`/`target`/`coachC`/`net`/`fitball` sigue abriendo y renderizándose; solo se
+// PRESENTA con el nombre canónico nuevo.
 //
 // Compatibilidad (documentos antiguos → presentación):
 //   vball      → Fitball
@@ -29,6 +40,12 @@ export interface CanonicalMaterial {
   title: string;
   /** Grupo visual. */
   group: string;
+  /** Icono del panel (Material Symbols). */
+  icon: string;
+  /** Texto de ayuda (tooltip del panel). */
+  help: string;
+  /** true = material PUNTUAL (sin cuadro/asas de redimensionado). Todos los materiales lo son. */
+  point: boolean;
   /** Si admite cambio de color. */
   colorable?: boolean;
   /** Color inicial si es recoloreable. */
@@ -39,34 +56,34 @@ export interface CanonicalMaterial {
   scale?: number;
 }
 
-/** Catálogo visible final (B1). Los `hidden` se ocultan de la UI pero sus
+/** Catálogo canónico (B1). Los `hidden` se ocultan de la UI pero sus
  *  documentos/gestos antiguos siguen siendo válidos. */
 export const CANONICAL_MATERIALS: readonly CanonicalMaterial[] = [
-  { id: 'ball', title: 'Balón', group: 'Balones' },
-  { id: 'vball', title: 'Fitball', group: 'Balones' },
-  { id: 'cone', title: 'Cono', group: 'Señalización', scale: 1 },
-  { id: 'target', title: 'Chino', group: 'Señalización', colorable: true, colorDefault: '#2c7be5', scale: 0.8 },
-  { id: 'flag', title: 'Banderín', group: 'Señalización' },
-  { id: 'pica', title: 'Pica coloreable', group: 'Señalización' },
-  { id: 'pole', title: 'Pértiga / poste', group: 'Porterías y redes' },
-  { id: 'mannequin', title: 'Maniquí individual', group: 'Porterías y redes' },
-  { id: 'mannequin_row', title: 'Barrera de maniquíes', group: 'Porterías y redes' },
-  { id: 'minigoal', title: 'Mini portería', group: 'Porterías y redes' },
-  { id: 'goal', title: 'Portería grande', group: 'Porterías y redes' },
-  { id: 'ladder', title: 'Escalera', group: 'Coordinación' },
-  { id: 'hurdle', title: 'Valla', group: 'Coordinación' },
-  { id: 'ring', title: 'Aro', group: 'Coordinación', colorable: true, colorDefault: '#e8c3c9' },
-  { id: 'trampoline', title: 'Minitrampolín', group: 'Coordinación' },
-  { id: 'peto', title: 'Peto', group: 'Preparación física' },
-  { id: 'chaleco', title: 'Chaleco lastrado', group: 'Preparación física' },
-  { id: 'marker', title: 'BOSU', group: 'Preparación física' },
-  { id: 'dumbbell', title: 'Mancuerna / pesa', group: 'Preparación física' },
+  { id: 'ball', title: 'Balón', group: 'Balones', icon: 'sports_soccer', help: 'Balón de fútbol', point: true },
+  { id: 'vball', title: 'Fitball', group: 'Balones', icon: 'sports_volleyball', help: 'Fitball', point: true },
+  { id: 'cone', title: 'Cono', group: 'Señalización', icon: 'change_history', help: 'Cono de señalización', point: true, scale: 1 },
+  { id: 'target', title: 'Chino', group: 'Señalización', icon: 'radio_button_checked', help: 'Chino recoloreable', point: true, colorable: true, colorDefault: '#2c7be5', scale: 0.8 },
+  { id: 'flag', title: 'Banderín', group: 'Señalización', icon: 'flag', help: 'Banderín', point: true },
+  { id: 'pica', title: 'Pica coloreable', group: 'Señalización', icon: 'straighten', help: 'Pica coloreable', point: true, colorable: true, colorDefault: '#ffffff' },
+  { id: 'pole', title: 'Pértiga / poste', group: 'Porterías y redes', icon: 'straighten', help: 'Pértiga o poste', point: true },
+  { id: 'mannequin', title: 'Maniquí individual', group: 'Porterías y redes', icon: 'accessibility_new', help: 'Maniquí individual', point: true },
+  { id: 'mannequin_row', title: 'Barrera de maniquíes', group: 'Porterías y redes', icon: 'accessibility_new', help: 'Barrera de maniquíes', point: true },
+  { id: 'minigoal', title: 'Miniportería', group: 'Porterías y redes', icon: 'sports', help: 'Miniportería', point: true },
+  { id: 'goal', title: 'Portería grande', group: 'Porterías y redes', icon: 'sports', help: 'Portería grande', point: true },
+  { id: 'ladder', title: 'Escalera', group: 'Coordinación', icon: 'format_list_numbered', help: 'Escalera de coordinación', point: true },
+  { id: 'hurdle', title: 'Valla', group: 'Coordinación', icon: 'looks_one', help: 'Valla de entrenamiento', point: true },
+  { id: 'ring', title: 'Aro', group: 'Coordinación', icon: 'radio_button_unchecked', help: 'Aro recoloreable', point: true, colorable: true, colorDefault: '#e8c3c9' },
+  { id: 'trampoline', title: 'Minitrampolín', group: 'Coordinación', icon: 'airline_seat_flat', help: 'Minitrampolín', point: true },
+  { id: 'peto', title: 'Peto', group: 'Preparación física', icon: 'checkroom', help: 'Peto', point: true },
+  { id: 'chaleco', title: 'Chaleco lastrado', group: 'Preparación física', icon: 'checkroom', help: 'Chaleco lastrado', point: true },
+  { id: 'marker', title: 'BOSU', group: 'Preparación física', icon: 'label', help: 'BOSU', point: true },
+  { id: 'dumbbell', title: 'Mancuerna / pesa', group: 'Preparación física', icon: 'fitness_center', help: 'Mancuerna o pesa', point: true },
   // Retirados (compatibilidad): se ocultan, pero sus documentos siguen abriendo.
-  { id: 'fitball', title: 'Fitball', group: 'Otros', hidden: true },
-  { id: 'coachC', title: 'Marcador C', group: 'Otros', hidden: true },
-  { id: 'net', title: 'Red', group: 'Otros', hidden: true },
-  { id: 'ring_flat', title: 'Aro plano', group: 'Otros', hidden: true },
-  { id: 'bosu', title: 'BOSU', group: 'Otros', hidden: true },
+  { id: 'fitball', title: 'Fitball', group: 'Otros', icon: 'sports_soccer', help: 'Fitball', point: true, hidden: true },
+  { id: 'coachC', title: 'Marcador C', group: 'Otros', icon: 'pin', help: 'Marcador C', point: true, hidden: true },
+  { id: 'net', title: 'Red', group: 'Otros', icon: 'grid_on', help: 'Red', point: true, hidden: true },
+  { id: 'ring_flat', title: 'Aro plano', group: 'Otros', icon: 'radio_button_unchecked', help: 'Aro plano', point: true, hidden: true },
+  { id: 'bosu', title: 'BOSU', group: 'Otros', icon: 'landscape', help: 'BOSU', point: true, hidden: true },
 ];
 
 /** Título canónico de un id de material (o el id si no se conoce). */

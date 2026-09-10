@@ -73,35 +73,31 @@ export const FORMATIONS: Formation[] = [
   },
 ];
 
-/** Resultado puro de la colocación de una formación: specs de jugadores genéricos. */
+/** Resultado puro de la colocación de una formación: specs de jugadores genéricos.
+ *  Sin `n` (sin dorsal), sin `side` (la diferenciación es por color) y sin `type`.
+ *  `reflectRival` solo ESpeja las posiciones en X (la geometría del lado contrario). */
 export interface FormationPlayerSpec {
   x: number;
   y: number;
-  n: number;
   c: string;
-  side: 'own' | 'rival';
 }
 
 /**
  * Genera la especificación de los 11 CÍRCULOS GENÉRICOS de una formación.
- * - Todos (índice 0..10) usan el color `color` recibido y su dorsal `n = i+1`.
- * - NINGUNO lleva `type: 'goalkeeper'` ni label: no hay "POR" ni rol visible.
- * - `reflectRival` refleja las posiciones en X (1-x) y fija `side: 'rival'`;
- *   con `false` se deja la geometría original y `side: 'own'`. La
- *   diferenciación propia/rival es por color; el espejo es solo geometría.
+ * - Todos (índice 0..10) usan el color `color` recibido.
+ * - NINGUNO asigna nombre, dorsal, `side` ni `type: 'goalkeeper'`: no hay "POR" ni rol.
+ * - `reflectRival` refleja las posiciones en X (1-x): la geometría del lado contrario.
+ *   La diferenciación propia/rival es por color; el espejo es solo geometría.
  * No depende de la plantilla: devuelve SIEMPRE 11 (o menos si la formación
  * tuviera menos posiciones, cosa que no ocurre en FORMATIONS).
  */
 export function buildFormationPlayers(color: string, formationId: string, reflectRival = false): FormationPlayerSpec[] | null {
   const f = FORMATIONS.find((x) => x.id === formationId);
   if (!f) return null;
-  const side = reflectRival ? 'rival' : 'own';
-  return f.positions.map(([x, y], i) => ({
+  return f.positions.map(([x, y]) => ({
     x: reflectRival ? 1 - x : x,
     y,
-    n: i + 1,
     c: color,
-    side,
   }));
 }
 

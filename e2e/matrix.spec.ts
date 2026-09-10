@@ -231,8 +231,8 @@ async function useTool(page: Page, title: string, category?: string): Promise<vo
 async function openProps(page: Page): Promise<void> {
   if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
   await page.locator('button[aria-label="Propiedades"]').click();
+  // FASE G: el panel se espera con el `.toBeVisible()` siguiente (observable); sin wait fijo.
   await expect(page.locator('.studio-panel')).toBeVisible();
-  await page.waitForTimeout(60);
 }
 
 async function save(page: Page): Promise<void> {
@@ -246,7 +246,7 @@ async function reopen(page: Page): Promise<void> {
   await page.locator('[title="Diseñar en pizarra"]').first().click();
   await page.waitForURL('**/board');
   await page.waitForSelector('.board-host');
-  await page.waitForTimeout(250); // dejar que la pizarra renderice el elemento antes de interactuar
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
 }
 
 async function canvas(page: Page): Promise<CanvasDocument> {

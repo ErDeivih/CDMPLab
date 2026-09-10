@@ -18,8 +18,8 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(200);
-  // Abrir el panel izquierdo de Jugadores.
+  // FASE G: el clic siguiente (`.tools-cat`) espera a que el panel esté accionable;
+  // el wait fijo post-carga era redundante.
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
 }
 

@@ -174,9 +174,9 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await page.locator('.formation-mirror input').check();
     await page.locator('.formation-btn', { hasText: '4-4-2' }).click();
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(22);
-    // 11 propios + 11 rivales (por data-side en el <g> que envuelve cada jugador).
-    const own = await page.locator('.entrenolab-board [data-side="own"] circle[r="2.5"]').count();
-    const rival = await page.locator('.entrenolab-board [data-side="rival"] circle[r="2.5"]').count();
+    // FASE C: 11 propios (azul) + 11 rivales (rojo) diferenciados por COLOR (ya no por data-side).
+    const own = await page.locator('.entrenolab-board circle[r="2.5"][fill="#1a73e8"]').count();
+    const rival = await page.locator('.entrenolab-board circle[r="2.5"][fill="#c0392b"]').count();
     expect(own).toBe(11);
     expect(rival).toBe(11);
 

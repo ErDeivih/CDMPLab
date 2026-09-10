@@ -84,7 +84,8 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   await page.goto('/board/draft');
   await expect(page.locator('.board-host')).toBeVisible();
   await dismissHelp(page);
-  await page.waitForTimeout(400);
+  // FASE G: observable — esperamos a que el borrador compile su composición (≥25 elementos).
+  await expect.poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 }).toBeGreaterThanOrEqual(25);
 
   const total = Number(await page.locator('.field-count').innerText());
   expect(total, 'se abrió la composición del borrador').toBeGreaterThanOrEqual(25);
@@ -93,7 +94,7 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   // Abrir el panel de Propiedades para leer los metadatos del borrador.
   await page.locator('button[aria-label="Propiedades"]').click();
   await expect(page.locator('.studio-panel')).toBeVisible();
-  await page.waitForTimeout(150);
+  // FASE G: los metadatos se esperan con los `toHaveValue`/`toBeChecked` siguientes (observables).
 
   // Metadatos en el panel "Datos del ejercicio" (por aria-label).
   await expect(page.locator('[aria-label="Título del ejercicio"]')).toHaveValue('Salida de balón 4-3-3');
@@ -128,7 +129,8 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   // 5) El draft se CONSUMIÓ: recargar /board/draft sin draft pendiente NO lo reabre (va a /board vacío).
   await page.goto('/board/draft');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(300);
+  // FASE G: observable — sin draft pendiente el board queda vacío (0).
+  await expect.poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 }).toBe(0);
   const emptyCount = Number(await page.locator('.field-count').innerText());
   expect(emptyCount, 'sin draft pendiente el borrador no se reabre').toBe(0);
 
@@ -137,7 +139,8 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   await page.goto('/board/draft');
   await expect(page.locator('.board-host')).toBeVisible();
   await dismissHelp(page);
-  await page.waitForTimeout(300);
+  // FASE G: observable — esperamos a que el borrador compile (≥25) antes de guardar.
+  await expect.poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 }).toBeGreaterThanOrEqual(25);
   await page.locator('.chip-icon-primary[aria-label="Guardar"]').click();
   await page.waitForURL('**/library');
   expect(await exercisesCount(page), 'guardar tras confirmación crea el ejercicio').toBe(1);
@@ -147,10 +150,12 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   await page.locator('[title="Diseñar en pizarra"]').first().click();
   await page.waitForURL('**/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(400);
+  // FASE G: observable — esperamos a que los elementos del borrador se conserven (≥25).
+  await expect.poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 }).toBeGreaterThanOrEqual(25);
   await page.locator('button[aria-label="Propiedades"]').click();
   await expect(page.locator('.studio-panel')).toBeVisible();
-  await page.waitForTimeout(150);
+  // FASE G: observable — el título guardado se espera con toHaveValue.
+  await expect(page.locator('[aria-label="Título del ejercicio"]')).toHaveValue('Salida de balón 4-3-3');
   const savedTitle = await page.locator('[aria-label="Título del ejercicio"]').inputValue();
   expect(savedTitle, 'el título guardado se conserva').toBe('Salida de balón 4-3-3');
   await expect(page.locator('[aria-label="Descripción"]')).toHaveValue(/Posesión y salida limpia/);

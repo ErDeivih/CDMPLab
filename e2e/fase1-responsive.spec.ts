@@ -168,11 +168,11 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
     ];
     for (const [, trigger] of openers) {
       await page.locator(trigger).click();
-      await page.waitForTimeout(60);
-      expect(await visibleMainPanels(page)).toBe(1);
+      // FASE G: observable — esperamos a que haya exactamente UN panel principal visible.
+      await expect.poll(() => visibleMainPanels(page), { timeout: 4000 }).toBe(1);
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(60);
-      expect(await visibleMainPanels(page)).toBe(0);
+      // FASE G: observable — esperamos a que NO haya paneles principales visibles.
+      await expect.poll(() => visibleMainPanels(page), { timeout: 4000 }).toBe(0);
     }
   });
 

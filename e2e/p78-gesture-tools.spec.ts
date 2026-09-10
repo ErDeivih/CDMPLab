@@ -390,7 +390,8 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await page.mouse.move(obj.x + 80, obj.y - 40, { steps: 6 });
     await expect(page.locator('.board-host')).toHaveClass(/cursor-grabbing/);
     await page.mouse.up();
-    await page.waitForTimeout(120);
+    // FASE G: observable — el paneo se espera con expect.poll del panX (no un wait fijo).
+    await expect.poll(async () => Math.abs((await readView(page)).panX - v0.panX), { timeout: 5000 }).toBeGreaterThan(5);
     const v1 = await readView(page);
     expect(Math.abs(v1.panX - v0.panX), 'la herramienta Mano PANEA (panX cambia)').toBeGreaterThan(5);
     // El objeto NO se mueve ni se selecciona.

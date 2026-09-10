@@ -202,7 +202,7 @@ test.describe('Fase 3 — texto usable', () => {
 
     // Seleccionar el multilínea y capturar (seleccionado).
     await page.mouse.click(...normToScreen(0.35, 0.55, box));
-    await page.waitForTimeout(200);
+    // FASE G: observable — la aserción de abajo ya espera el inspector; sin espera fija.
     await expect(page.locator('.inspector')).toBeVisible();
     await page.screenshot({ path: `${SHOTS}/p3-text-multiline-selected.png` });
   });
@@ -253,7 +253,8 @@ test.describe('Fase 3 — texto usable', () => {
     const ta = page.locator('.studio-panel .inspector textarea');
     await ta.fill('Corto');
     await ta.dispatchEvent('change');
-    await page.waitForTimeout(120);
+    // FASE G: el panel se espera con el `toHaveValue('30')` siguiente (observable);
+    // el wait fijo era redundante.
 
     const ancho = page.locator('.studio-panel .inspector .field', { hasText: 'Ancho' }).locator('input');
     const alto = page.locator('.studio-panel .inspector .field', { hasText: 'Alto' }).locator('input');
@@ -278,7 +279,9 @@ test.describe('Fase 3 — texto usable', () => {
     const fitBtn = page.locator('.inspector-actions button', { hasText: 'Ajustar al contenido' });
     await expect(fitBtn).toBeVisible();
     await fitBtn.click();
-    await page.waitForTimeout(100);
+    // FASE G: condición observable — esperamos a que "Ajustar al contenido" encaje el
+    // cuadro (ancho por debajo de 30) en lugar de un wait fijo.
+    await expect.poll(async () => Number((await ancho.inputValue()).replace(',', '.'))).toBeLessThan(30);
     const anchoAjustado = Number((await ancho.inputValue()).replace(',', '.'));
     expect(anchoAjustado).toBeLessThan(30); // "Corto" ocupa mucho menos del 30 % por defecto
     const dec = (await ancho.inputValue()).split('.')[1]?.length ?? 0;

@@ -45,7 +45,8 @@ async function setField(page: Page, field: string): Promise<void> {
   const sel = page.locator('.studio-panel select[aria-label="Campo base"]');
   if (!(await sel.isVisible().catch(() => false))) await openProps(page);
   await sel.selectOption(field);
-  await page.waitForTimeout(120);
+  // FASE G: el cambio se espera en cada llamador con `expect.poll(fieldValue)` o con el
+  // diálogo `.toBeVisible()`; el wait fijo post-select era redundante.
 }
 
 /** Campo real de la señal, expuesto en `data-field` del host. */

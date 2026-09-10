@@ -112,7 +112,7 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
 }
@@ -276,12 +276,14 @@ async function placeRealPlayer(page: Page, host: Box, fit: Fit, name: string, pi
 async function placeGenericByTitle(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
   await openCatalog(page, 'Jugadores');
   // FASE C: sin botones "Jugador propio/rival"; la diferenciación de equipos es por COLOR,
-  // así que ambos genéricos son side:'own' y se distinguen por su color.
+  // y los genéricos ya no llevan `side` (solo el color distingue propio/rival).
   const chip = title === 'Jugador rival' ? 'Rojo' : 'Azul';
   await page.locator(`.tray-player[title="Jugador ${chip}"]`).click();
   await closeCatalogPanel(page);
   const p = normToScreen(nx, ny, host, fit);
-  const pred: PlayerPred = { side: 'own', kind: '', playerId: '' };
+  // FASE C: el genérico ya NO lleva side (la diferenciación es por color); solo se exige
+  // que sea genérico (sin rol especial ni playerId).
+  const pred: PlayerPred = { kind: '', playerId: '' };
   await expectNewPlayer(page, pred, () => page.mouse.click(p.x, p.y));
   recordPlaced('players', title);
 }
@@ -291,8 +293,8 @@ async function placeTrayPlayer(page: Page, host: Box, fit: Fit, title: string, n
   await page.locator(`.tray-player[title="${title}"]`).click();
   await closeCatalogPanel(page);
   const p = normToScreen(nx, ny, host, fit);
-  // Las fichas de color colocan un jugador genérico SIN rol especial (kind vacío).
-  const pred: PlayerPred = { side: 'own', kind: '', playerId: '' };
+  // Las fichas de color colocan un jugador genérico SIN side, rol especial (kind vacío) ni playerId.
+  const pred: PlayerPred = { kind: '', playerId: '' };
   await expectNewPlayer(page, pred, () => page.mouse.click(p.x, p.y));
   recordPlaced('players', title);
 }

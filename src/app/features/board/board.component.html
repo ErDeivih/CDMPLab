@@ -193,17 +193,9 @@
             }
             @switch (selectedElement()!.t) {
               @case ('player') {
-                <div class="field-row">
-                  <div class="field">
-                    <label>Dorsal</label>
-                    <input type="number" min="0" max="99" [value]="selectedElement()!.n ?? ''" (change)="setSelNumber($event)" />
-                  </div>
-                  <div class="field">
-                    <label>Lado</label>
-                    <button class="btn btn-ghost btn-sm" style="justify-content:center;width:100%" (click)="toggleSelSide()">
-                      {{ selectedElement()!.side === 'own' ? 'Propio' : 'Rival' }}
-                    </button>
-                  </div>
+                <div class="field">
+                  <label>Dorsal</label>
+                  <input type="number" min="0" max="99" [value]="selectedElement()!.n ?? ''" (change)="setSelNumber($event)" />
                 </div>
                 <div class="field">
                   <label>Etiqueta</label>
@@ -223,14 +215,6 @@
                       ></button>
                     }
                   </div>
-                </div>
-                <div class="field">
-                  <label>Tipo</label>
-                  <select [value]="selectedElement()!.type ?? 'player'" (change)="setSelType($any($event.target).value)">
-                    <option value="player">Jugador</option>
-                    <option value="goalkeeper">Portero</option>
-                    <!-- Fase 13: se retira el Comodín (el entrenador asigna otro color a un jugador). -->
-                  </select>
                 </div>
               }
               @case ('text') {

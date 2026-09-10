@@ -28,8 +28,8 @@ async function dismissHelp(page: Page): Promise<void> {
 async function openProps(page: Page): Promise<void> {
   if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
   await page.locator('button[aria-label="Propiedades"]').click();
+  // FASE G: el panel se espera con el `.toBeVisible()` siguiente (observable); sin wait fijo.
   await expect(page.locator('.studio-panel')).toBeVisible();
-  await page.waitForTimeout(60);
 }
 
 type Geom = ReturnType<typeof fieldGeometry>;
@@ -64,7 +64,12 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     await openProps(page);
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('half');
     await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="horizontal"]').click();
-    await page.waitForTimeout(300);
+    // FASE G: observable — esperamos a que el medio campo horizontal renderice con la
+    // proporción 52,5/68 (no un wait fijo).
+    await expect.poll(async () => {
+      const b = await page.locator('.entrenolab-grass').boundingBox();
+      return b ? b.width / b.height : 0;
+    }, { timeout: 5000 }).toBeCloseTo(52.5 / 68, 1);
     await expect(page.locator('.entrenolab-grass')).toBeVisible();
     const b = (await page.locator('.entrenolab-grass').boundingBox())!;
     expect(b, 'el medio campo debe renderizarse').not.toBeNull();
@@ -80,7 +85,12 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     await openProps(page);
     // Seleccionar el medio campo lo pone por defecto en VERTICAL (portería arriba).
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('half');
-    await page.waitForTimeout(300);
+    // FASE G: observable — esperamos a que el medio campo vertical renderice con la
+    // proporción 68/52,5 (no un wait fijo).
+    await expect.poll(async () => {
+      const b = await page.locator('.entrenolab-grass').boundingBox();
+      return b ? b.width / b.height : 0;
+    }, { timeout: 5000 }).toBeCloseTo(68 / 52.5, 1);
     await expect(page.locator('.entrenolab-grass')).toBeVisible();
     const b = (await page.locator('.entrenolab-grass').boundingBox())!;
     expect(b, 'el medio campo vertical debe renderizarse').not.toBeNull();
@@ -95,7 +105,8 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     await openProps(page);
     const g = fieldGeometry('half', 'vertical');
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('half');
-    await page.waitForTimeout(300);
+    // FASE G: la colocación se espera con el `toHaveText('1')` siguiente (observable);
+    // el wait fijo post-campo era redundante.
     const box = (await page.locator('.board-host').boundingBox())!;
     // Colocar un jugador Portero en el punto norm (0.25, 0.35).
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
@@ -121,7 +132,8 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     await dismissHelp(page);
     await openProps(page);
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('f7');
-    await page.waitForTimeout(250);
+    // FASE G: observable — el SVG ya renderiza el medio campo F7 (apaisado, alto 46), no una espera fija.
+    await expect.poll(() => page.locator('.board-canvas svg').first().innerHTML(), { timeout: 5000 }).toContain('height="46"');
     const svg = await page.locator('.board-canvas svg').first().innerHTML();
     // FASE 4/8b: el F7 usa el medio campo F11 APISAADO (68 m en X, 52,5 m en Y → 46 de alto).
     expect(svg).toContain('height="46"'); // rect del medio campo F11 (apaisado)

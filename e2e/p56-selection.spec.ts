@@ -44,7 +44,7 @@ async function seed(page: Page): Promise<void> {
 async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   await expect(page.locator('.board-host')).toBeVisible();
@@ -224,7 +224,7 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.move(a.x, a.y);
       await page.mouse.down();
       await page.mouse.move(b.x, b.y, { steps: 5 });
-      await page.waitForTimeout(60);
+      // FASE G: el preview se espera con la aserción siguiente (observable) antes de soltar.
       await expect(page.locator(`.board-canvas svg [stroke="${DRAW}"]`), 'preview visible ANTES de soltar').not.toHaveCount(0);
       await page.mouse.up();
       await expect(page.locator('.field-count')).toHaveText('1');
@@ -245,8 +245,8 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
 
       // +90° → rot exacta 90; un Undo la devuelve a 0.
       await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
-      await page.waitForTimeout(80);
-      expect(await firstRot(page), 'la rotación aplicada es exactamente +90°').toBeCloseTo(90, 0);
+      // FASE G: condición observable — la rotación se espera con expect.poll.
+      await expect.poll(() => firstRot(page), { timeout: 4000 }).toBeCloseTo(90, 0);
       await page.keyboard.press('Control+z');
       await expect.poll(async () => firstRot(page), { timeout: 4000 }).toBeCloseTo(0, 0);
 
@@ -281,8 +281,8 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
 
     // +45° → rot exacta 45.
     await page.locator('.context-bar [aria-label="Girar 45° a la derecha"]').click();
-    await page.waitForTimeout(80);
-    expect(await firstRot(page), 'la rotación aplicada es exactamente +45°').toBeCloseTo(45, 0);
+    // FASE G: condición observable — la rotación se espera con expect.poll.
+    await expect.poll(() => firstRot(page), { timeout: 4000 }).toBeCloseTo(45, 0);
     // Un Undo la devuelve a 0 (una sola operación de historial).
     await page.keyboard.press('Control+z');
     await expect.poll(() => firstRot(page), { timeout: 4000 }).toBeCloseTo(0, 0);
@@ -291,8 +291,8 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
     await selectAt(page, 0.45, 0.4);
     await expect(page.locator('.context-bar')).toBeVisible();
     await page.locator('.context-bar [aria-label="Girar 45° a la izquierda"]').click();
-    await page.waitForTimeout(80);
-    expect(await firstRot(page), 'la rotación -45° se normaliza a 315°').toBeCloseTo(315, 0);
+    // FASE G: condición observable — la rotación se espera con expect.poll.
+    await expect.poll(() => firstRot(page), { timeout: 4000 }).toBeCloseTo(315, 0);
   });
 
   test('D2: el DOBLE CLIC de ratón abre el menú contextual sobre el elemento y no duplica/mueve', async ({ page }) => {
@@ -343,7 +343,8 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.down();
       await page.mouse.move(to.x, to.y, { steps: 5 });
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      // FASE G: observable — el rectángulo crece (w) en el SVG.
+      await expect.poll(async () => (await rectGeom(page, rectSel)).w, { timeout: 4000 }).toBeGreaterThan(before.w + 2);
       const after = await rectGeom(page, rectSel);
       expect(after.w).toBeGreaterThan(before.w + 2);
       expect(after.h).toBeGreaterThan(before.h + 2);
@@ -372,9 +373,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.down();
       await page.mouse.move(to.x, to.y, { steps: 5 });
       await page.mouse.up();
-      await page.waitForTimeout(100);
       await page.keyboard.press('Escape'); // deseleccionar: el trazo vuelve a su color (#1f2933)
-      await page.waitForTimeout(60);
+      // FASE G: observable — el extremo x2 del trazo DESeleccionado se mueve.
+      await expect.poll(async () => (await lineEnds(page, lineSel)).x2, { timeout: 4000 }).toBeGreaterThan(before.x2 + 2);
       const after = await lineEnds(page, lineSel);
       expect(after.x2).toBeGreaterThan(before.x2 + 2);
       expect(after.y2).toBeGreaterThan(before.y2 + 2);
@@ -403,7 +404,8 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.down();
       await page.mouse.move(to.x, to.y, { steps: 4 });
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      // FASE G: observable — el atributo `d` de la curva cambia (C1 movido).
+      await expect.poll(async () => (await page.locator(pathSel).first().getAttribute('d')), { timeout: 4000 }).not.toBe(beforeD);
       const afterD = await page.locator(pathSel).first().getAttribute('d');
       expect(afterD, 'la curva cambió (C1 se movió)').not.toBe(beforeD);
     });
@@ -429,7 +431,8 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.down();
       await page.mouse.move(to.x, to.y, { steps: 4 });
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      // FASE G: observable — los puntos de la mano alzada cambian tras reescalar.
+      await expect.poll(() => polyPoints(page, polySel), { timeout: 4000 }).not.toBe(before);
       const after = await polyPoints(page, polySel);
       expect(after, 'la nube de puntos se reescaló').not.toBe(before);
     });
@@ -456,7 +459,8 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.down();
       await page.mouse.move(to.x, to.y, { steps: 4 });
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      // FASE G: observable — el material NO se redimensiona (size constante).
+      await expect.poll(() => imageWidth(page, coneSel), { timeout: 4000 }).toBe(before);
       const after = await imageWidth(page, coneSel);
       expect(after, 'el material no se redimensiona (size constante)').toBe(before);
     });
@@ -474,8 +478,8 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       const beforeRotResize = await rectGeom(page, rectSel);
       // Rotar +90.
       await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
-      await page.waitForTimeout(80);
-      expect(await elementRot(page, rectSel)).toBeCloseTo(90, 0);
+      // FASE G: condición observable — la rotación se espera con expect.poll.
+      await expect.poll(() => elementRot(page, rectSel), { timeout: 4000 }).toBeCloseTo(90, 0);
       // Redimensionar tras rotar.
       await hideOverlays(page);
       const host = await hostBox(page);
@@ -486,7 +490,8 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.down();
       await page.mouse.move(to.x, to.y, { steps: 4 });
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      // FASE G: observable — el rect rotado crece en w tras redimensionar.
+      await expect.poll(async () => (await rectGeom(page, rectSel)).w, { timeout: 4000 }).toBeGreaterThan(beforeRotResize.w + 10);
       const afterRotResize = await rectGeom(page, rectSel);
       // Creció respecto al ancho previo a redimensionar (y la rotación se conserva).
       expect(afterRotResize.w).toBeGreaterThan(beforeRotResize.w + 10);

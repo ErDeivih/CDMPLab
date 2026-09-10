@@ -65,7 +65,8 @@ test.describe('Fase 7 — capturas (identidad CDM Pizarrales, F7 compuesto, lín
     await dismissHelp(page);
     await openProps(page);
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('f7');
-    await page.waitForTimeout(250);
+    // FASE G: observable — el SVG ya renderiza el medio campo F7 (alto 46).
+    await expect.poll(() => page.locator('.board-canvas svg').first().innerHTML(), { timeout: 5000 }).toContain('height="46"');
     const svg = await page.locator('.board-canvas svg').first().innerHTML();
     expect(svg).toContain('height="46"'); // FASE 4/8b: F7 sobre el medio campo F11 apaisado (46 de alto)
     expect(svg).not.toContain('<ellipse'); // sin círculo central del F7
@@ -82,7 +83,8 @@ test.describe('Fase 7 — capturas (identidad CDM Pizarrales, F7 compuesto, lín
     await dismissHelp(page);
     await openProps(page);
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('f7');
-    await page.waitForTimeout(250);
+    // FASE G: observable — el SVG ya renderiza el medio campo F7 (alto 46).
+    await expect.poll(() => page.locator('.board-canvas svg').first().innerHTML(), { timeout: 5000 }).toContain('height="46"');
     await page.locator('.studio-panel [aria-label="Cerrar panel"]').click();
     await expect(page.locator('.studio-panel')).toHaveCount(0);
     await page.screenshot({ path: `${SHOTS}/f7-composite-mobile.png` });

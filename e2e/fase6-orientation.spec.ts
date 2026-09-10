@@ -46,7 +46,8 @@ test.describe('Fase 6 — aviso de orientación móvil', () => {
     await openBoard(page);
     await expect(page.locator('.orient-hint')).toBeVisible();
     await page.setViewportSize({ width: 844, height: 390 });
-    await page.waitForTimeout(200);
+    // FASE G: al girar el aviso se oculta; el `.toBeHidden()` siguiente es la condición
+    // observable (el wait fijo era redundante).
     await expect(page.locator('.orient-hint')).toBeHidden();
   });
 
@@ -58,7 +59,8 @@ test.describe('Fase 6 — aviso de orientación móvil', () => {
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left').first().waitFor();
     await page.locator('.tray-player[title="Jugador Azul"]').click();
-    await page.waitForTimeout(120);
+    // FASE G: la colocación se espera con el `toHaveText('1')` final (observable);
+    // el wait fijo post-arma era redundante.
     // FASE B (regla C): en móvil vertical (390x844) el panel persistente tapa el centro
     // del campo; lo cerramos con su botón X (.panel-close) para poder tocar el punto de
     // colocación. Cerrar el panel NO desarma la colocación ya armada.

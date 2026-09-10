@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CANONICAL_MATERIALS, visibleMaterials, canonicalTitle, isRetiredMaterial, MATERIAL_ALIAS, chinoSvg, dumbbellSvg, hurdleSvg, CHINO_COLORS } from './material-registry';
+import { materialAsset } from './tactic-assets';
 import { isKnownElementType } from './models';
 
 describe('material-registry (B1) — catálogo canónico y compatibilidad', () => {
@@ -104,5 +105,21 @@ describe('material-registry (B1) — catálogo canónico y compatibilidad', () =
     expect(isKnownElementType('mannequin_row')).toBe(true);
     // Ya no hay título "Portería grande" colgado del id fantasma `ladder_yellow`.
     expect(visibleMaterials().some((m) => m.id === 'ladder_yellow' || m.title === 'Portería grande' && m.id === 'ladder')).toBe(false);
+  });
+
+  it('FASE F: cada material canónico define help (texto de ayuda) y es puntual (sin asas)', () => {
+    for (const m of CANONICAL_MATERIALS) {
+      expect(m.help, `${m.id} help`).toBeTruthy();
+      expect(m.point, `${m.id} es puntual`).toBe(true);
+    }
+  });
+
+  it('FASE F (profundo): los objetivos que antes fallaron tienen recurso visual real (goal/mannequin_row/dumbbell)', () => {
+    // El recurso que consume el PRODUCTO es `materialAsset` (tactic-assets); el registro es
+    // la fuente canónica de ids/títulos. No hay una fachada artificial solo para tests.
+    expect(materialAsset('cone')?.kind).toBe('cone_red');
+    expect(materialAsset('goal')?.label).toBe('Portería grande');
+    expect(materialAsset('mannequin_row')?.kind).toBe('mannequin_row');
+    expect(materialAsset('dumbbell')?.label).toBe('Mancuerna / pesa');
   });
 });

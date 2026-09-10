@@ -80,7 +80,8 @@ test.describe('Fase 8 — el nombre/número del jugador se contrarrota al girar 
       await page.goto('/board/draft');
       await expect(page.locator('.board-host')).toBeVisible();
       await dismissHelp(page);
-      await page.waitForTimeout(400);
+      // FASE G: el borrador se espera con el `toHaveText('1')` siguiente (observable);
+      // el wait fijo de apertura era redundante.
 
       // El jugador con nombre y dorsal está colocado.
       await expect(page.locator('.field-count')).toHaveText('1');
@@ -104,7 +105,9 @@ test.describe('Fase 8 — el nombre/número del jugador se contrarrota al girar 
       await longPress(page, c.x, c.y);
       await expect(page.locator('.context-bar')).toBeVisible();
       await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
-      await page.waitForTimeout(150);
+      // FASE G: condición observable — esperamos a que la marca quede girada +90° en el
+      // SVG en lugar de un wait fijo.
+      await expect.poll(async () => (await page.locator('.board-canvas svg').innerHTML()).includes('rotate(90')).toBe(true);
 
       // La marca gira +90° y el texto se contrarrota para quedar DERECHO por pantalla.
       // En horizontal, el texto compensa solo la rotación del jugador: -(0 + 90) = -90.

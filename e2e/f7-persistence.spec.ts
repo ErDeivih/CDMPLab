@@ -35,13 +35,14 @@ async function hasF7(page: Page): Promise<boolean> {
 async function openBoardClean(page: Page): Promise<void> {
   await page.waitForURL('**/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
     await page.locator('.field-fit-toggle').click();
-    await page.waitForTimeout(120);
+    // FASE G: el letterbox se espera con la ausencia de board-fill.
+    await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
 }
 
@@ -54,10 +55,12 @@ async function currentField(page: Page): Promise<string> {
   await page.locator('button[aria-label="Propiedades"]').click();
   const sel = page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select');
   await sel.waitFor({ state: 'visible' });
-  await page.waitForTimeout(150);
+  // FASE G: observable — esperamos a que el select tenga el valor seleccionado.
+  await expect.poll(async () => (await sel.inputValue()).trim(), { timeout: 5000 }).not.toBe('');
   const val = await sel.inputValue();
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(120);
+  // FASE G: observable — el panel se cierra al pulsar Escape.
+  await expect(page.locator('.studio-panel')).toHaveCount(0);
   return val;
 }
 
@@ -67,7 +70,8 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await seed(page);
     await page.goto('/library');
     await expect(page.locator('body')).toBeVisible();
-    await page.waitForTimeout(400);
+    // FASE G: observable — la biblioteca ha cargado el botón "Crear tarea".
+    await expect(page.locator('button', { hasText: 'Crear tarea' }).first()).toBeVisible();
 
     // Crear ejercicio → Diseñar.
     await page.locator('button', { hasText: 'Crear tarea' }).first().click();
@@ -78,15 +82,16 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     // Seleccionar F7 → el SVG renderiza las marcas azules F7.
     await page.locator('button[aria-label="Propiedades"]').click();
     await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('f7');
-    await page.waitForTimeout(150);
+    // FASE G: observable — las marcas F7 ya están en el SVG (no una espera fija).
+    await expect.poll(() => hasF7(page), { timeout: 5000 }).toBe(true);
     expect(await hasF7(page), 'F7 visible al seleccionarlo').toBe(true);
 
     // Colocar un cono y guardar.
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
+    // FASE G: observable — el panel de Propiedades se cierra.
+    await expect(page.locator('.studio-panel')).toHaveCount(0);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
-    await page.waitForTimeout(100);
     const host = await page.locator('.board-host').boundingBox();
     await page.mouse.click(host!.x + host!.width * 0.5, host!.y + host!.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
@@ -119,12 +124,12 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await openBoardClean(page);
     await page.locator('button[aria-label="Propiedades"]').click();
     await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('f7');
-    await page.waitForTimeout(150);
+    await expect.poll(() => hasF7(page), { timeout: 5000 }).toBe(true);
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
+    // FASE G: observable — el panel de Propiedades se cierra.
+    await expect(page.locator('.studio-panel')).toHaveCount(0);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
-    await page.waitForTimeout(100);
     const host = await page.locator('.board-host').boundingBox();
     await page.mouse.click(host!.x + host!.width * 0.5, host!.y + host!.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
@@ -136,7 +141,8 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await page.locator('.ex-card').first().hover();
     await page.locator('.ex-more-btn').first().click();
     await page.locator('.ex-more-item[title="Duplicar"]').first().click();
-    await page.waitForTimeout(300);
+    // FASE G: observable — esperamos a que haya 2 ejercicios en localStorage.
+    await expect.poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]') as unknown[]).length), { timeout: 5000 }).toBe(2);
     const copies = await page.evaluate(() => JSON.parse(localStorage.getItem('entrenolab:exercises')!));
     expect(copies).toHaveLength(2);
     const copy = copies[1];
@@ -159,12 +165,12 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await openBoardClean(page);
     await page.locator('button[aria-label="Propiedades"]').click();
     await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('f7');
-    await page.waitForTimeout(150);
+    await expect.poll(() => hasF7(page), { timeout: 5000 }).toBe(true);
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
+    // FASE G: observable — el panel de Propiedades se cierra.
+    await expect(page.locator('.studio-panel')).toHaveCount(0);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
-    await page.waitForTimeout(100);
     const host = await page.locator('.board-host').boundingBox();
     await page.mouse.click(host!.x + host!.width * 0.5, host!.y + host!.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
@@ -185,7 +191,8 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await page.locator('.settings-row', { hasText: 'Importar respaldo' }).locator('input[type="file"]').setInputFiles(path!);
     await expect(page.locator('.settings-row', { hasText: 'Respaldo válido' })).toBeVisible();
     await page.locator('.settings-row', { hasText: 'Respaldo válido' }).locator('button', { hasText: 'Reemplazar' }).click();
-    await page.waitForTimeout(500);
+    // FASE G: observable — esperamos a que el respaldo restaurado conserve el campo f7.
+    await expect.poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]') as Array<{ canvas?: { field?: string } }>)[0]?.canvas?.field), { timeout: 5000 }).toBe('f7');
     const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('entrenolab:exercises')!));
     expect(restored[0].canvas.field, 'respaldo importado conserva field f7').toBe('f7');
     expect(restored[0].canvas.frames[0].elements).toHaveLength(1);

@@ -21,8 +21,8 @@ async function seed(page: Page): Promise<void> {
 async function openProps(page: Page): Promise<void> {
   if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
   await page.locator('button[aria-label="Propiedades"]').click();
+  // FASE G: el panel se espera con el `.toBeVisible()` siguiente (observable); sin wait fijo.
   await expect(page.locator('.studio-panel')).toBeVisible();
-  await page.waitForTimeout(60);
 }
 
 /** Devuelve los shapes (paths del campo) cuyo bbox es "gigante" (arcos mal escalados).
@@ -74,7 +74,9 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     // para medir el arco del área (pendiente) en el eje X.
     await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('half');
     await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="horizontal"]').click();
-    await page.waitForTimeout(250);
+    // FASE G: condición observable — el medio campo tiene arcos (corner/penalti: paths con
+    // 'A'); esperamos a que estén renderizados en lugar de un wait fijo.
+    await expect.poll(async () => page.evaluate(() => [...document.querySelectorAll('.board-canvas path')].filter((p) => (p.getAttribute('d') ?? '').includes('A')).length)).toBeGreaterThan(0);
 
     // El medio campo 52,5×68 se dibuja en el rect canónico {4,4,46,59.58}; el borde lejano
     // del área grande desde la portería (l=16,5/52,5) está en x = 4 + (16,5/52,5)*46.
@@ -104,7 +106,9 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     // El campo base F7 se elige desde el selector y dibuja la plantilla compuesta
     // (medio campo F11 + F7 perpendicular): aparece la portería del F11 y el rect del F7.
     await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('f7');
-    await page.waitForTimeout(250);
+    // FASE G: condición observable — esperamos a que el SVG renderice el medio campo F11
+    // apaisado (height="46") en lugar de un wait fijo.
+    await expect.poll(async () => (await page.locator('.board-canvas svg').first().innerHTML()).includes('height="46"')).toBe(true);
     await expect(page.locator('.board-canvas svg').first()).toBeVisible();
     const svg = await page.locator('.board-canvas svg').first().innerHTML();
     // FASE 4/8b: el F7 usa el medio campo F11 APISAADO (68 m en X, 52,5 m en Y → 46 de alto).
@@ -135,7 +139,9 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     await page.goto('/board');
     await openProps(page);
     await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('blank');
-    await page.waitForTimeout(200);
+    // FASE G: condición observable — un campo "blank" no dibuja círculos; esperamos a que
+    // el conteo llegue a 0 en lugar de un wait fijo.
+    await expect.poll(() => page.locator('.board-canvas circle').count()).toBe(0);
     // La capa de puntos de ajuste (snapDots) fue RETIRADA por decisión del dueño.
     // En un lienzo "blank" (sin líneas) no hay marcas reglamentarias ni snap dots,
     // así que NO debe haber ningún círculo.
@@ -153,7 +159,9 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     // de penalti (r=0.35) y el círculo central. NO los puntos de ajuste/snap que antes se
     // dibujaban con la cuadrícula activada o por defecto.
     await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('full');
-    await page.waitForTimeout(200);
+    // FASE G: condición observable — el campo completo dibuja exactamente los 2 puntos de
+    // penalti; esperamos a que el conteo llegue a 2 en lugar de un wait fijo.
+    await expect.poll(() => page.locator('.board-canvas circle').count()).toBe(2);
     const circleCount = await page.evaluate(() => document.querySelectorAll('.board-canvas circle').length);
     // El campo completo dibuja exactamente los 2 puntos de penalti (los extrados del
     // punto central los dibuja el círculo central, que es una <ellipse>). Con snapDots

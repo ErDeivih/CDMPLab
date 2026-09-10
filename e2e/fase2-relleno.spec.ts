@@ -30,11 +30,15 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  await page.waitForTimeout(250);
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
   if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
-  if (fill) { await page.locator('.field-fit-toggle').click(); await page.waitForTimeout(120); }
+  if (fill) {
+    await page.locator('.field-fit-toggle').click();
+    // FASE G: condición observable — el letterbox se espera con la ausencia de board-fill.
+    await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
+  }
 }
 const PALETTE = ['#1a73e8', '#c0392b', '#1f7a4d', '#e67e22', '#7d3c98', '#b8860b', '#111111', '#f4f4f4'];
 // El caption tiene DOS contenedores de swatches: 0 = color del perímetro, 1 = color del relleno.

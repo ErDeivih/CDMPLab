@@ -87,7 +87,7 @@ test.describe('CIERRE — nombres y dorsales horizontales en horizontal y vertic
       await page.goto('/board/draft');
       await expect(page.locator('.board-host')).toBeVisible();
       await dismissHelp(page);
-      await page.waitForTimeout(400);
+      // FASE G: el borrador se espera con el `toHaveText('2')` siguiente (observable).
       await expect(page.locator('.field-count')).toHaveText('2');
 
       // Nombre y dorsal HORIZONTALES (matriz de transformación del texto sin giro 90°).
@@ -113,7 +113,7 @@ test.describe('CIERRE — nombres y dorsales horizontales en horizontal y vertic
     await page.goto('/board/draft');
     await expect(page.locator('.board-host')).toBeVisible();
     await dismissHelp(page);
-    await page.waitForTimeout(400);
+    // FASE G: la formación se espera con el `toHaveText('22')` siguiente (observable).
     await expect(page.locator('.field-count')).toHaveText('22');
 
     // Los dorsales (números 1..11) de propia y rival quedan horizontales (matriz del texto).
