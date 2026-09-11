@@ -26,7 +26,7 @@
         <div class="session-main">
           <div class="session-title">{{ s.title }}</div>
           <div class="session-meta">
-            <span class="meta-item"><span class="msi">calendar_today</span> {{ s.date }}</span>
+            <span class="meta-item"><span class="msi">calendar_today</span> {{ formatDate(s.date) }}</span>
             <span class="meta-item"><span class="msi">list</span> {{ s.tasks.length }} tareas</span>
             <span class="meta-item"><span class="msi">schedule</span> {{ sessionTotal(s) }} min</span>
           </div>
@@ -89,6 +89,12 @@
               <div class="task">
                 <div class="task-order">{{ i + 1 }}</div>
                 <div class="task-title">{{ t.title }}</div>
+                @if (t.exerciseId === null && t.title) {
+                  <span class="task-badge" title="El ejercicio se borró de la biblioteca: la tarea conserva su título, su duración y su material.">Ejercicio eliminado de biblioteca</span>
+                }
+                @if (isTaskOutdated(t)) {
+                  <span class="task-badge task-badge-info" title="El ejercicio se editó en la biblioteca después de añadirlo: la tarea conserva la versión de entonces.">Actualizado en biblioteca</span>
+                }
                 <input
                   class="task-dur"
                   type="number"
@@ -115,43 +121,51 @@
               <p class="panel-hint" style="color:var(--text-muted)">Sin tareas todavía. Añade ejercicios de la biblioteca.</p>
             }
           </div>
+
+          <!-- Picker EN LÍNEA (antes era un modal encima del editor): así se pueden
+               añadir varios ejercicios seguidos sin abrir y cerrar el diálogo cada vez,
+               y «Guardar sesión» sigue accesible. -->
+          @if (pickerOpen()) {
+            <div class="picker-inline" role="region" aria-label="Añadir ejercicio">
+              <div class="picker-inline-head">
+                <span class="picker-inline-title">Añadir ejercicio</span>
+                <span class="picker-inline-hint">Puedes añadir varios seguidos</span>
+                <button class="btn btn-ghost btn-sm" (click)="closePicker()">Listo</button>
+              </div>
+              <div class="search">
+                <span class="msi">search</span>
+                <input
+                  placeholder="Buscar ejercicio…"
+                  [value]="pickerSearch()"
+                  (input)="pickerSearch.set(onSearchInput($event))"
+                  aria-label="Buscar ejercicio"
+                />
+              </div>
+              <div class="picker-list">
+                @for (ex of pickerExercises(); track ex.id) {
+                  <button class="picker-item" (click)="addExercise(ex)">
+                    <span class="picker-title">{{ ex.title }}</span>
+                    <span class="picker-meta">
+                      {{ ex.category }}@if (ex.durationMinutes) { · {{ ex.durationMinutes }} min }
+                      @if (timesInSession(ex.id)) { · <strong>en la sesión ×{{ timesInSession(ex.id) }}</strong> }
+                    </span>
+                  </button>
+                }
+                @if (pickerExercises().length === 0) {
+                  <p class="panel-hint" style="color:var(--text-muted)">No hay ejercicios. Créalos en la Biblioteca primero.</p>
+                }
+              </div>
+            </div>
+          }
         </div>
+        @if (formError()) {
+          <p class="form-error" role="alert">{{ formError() }}</p>
+        }
         <div class="modal-foot">
           <button class="btn" (click)="closeEditor()">Cancelar</button>
           <button class="btn btn-primary" [disabled]="!form().title.trim()" (click)="save()">
             Guardar sesión
           </button>
-        </div>
-      </div>
-    </div>
-  }
-
-  <!-- Picker de ejercicios -->
-  @if (pickerOpen()) {
-    <div class="modal-backdrop" (click)="pickerOpen.set(false)">
-      <div class="modal modal-lg" (click)="$event.stopPropagation()">
-        <div class="modal-head">
-          <h3>Añadir ejercicio</h3>
-          <button class="btn btn-ghost btn-icon" (click)="pickerOpen.set(false)" title="Cerrar">
-            <span class="msi">close</span>
-          </button>
-        </div>
-        <div class="modal-body">
-          <div class="search">
-            <span class="msi">search</span>
-            <input placeholder="Buscar ejercicio…" (input)="pickerSearch.set(onSearchInput($event))" />
-          </div>
-          <div class="picker-list">
-            @for (ex of pickerExercises(); track ex.id) {
-              <button class="picker-item" (click)="addExercise(ex)">
-                <span class="picker-title">{{ ex.title }}</span>
-                <span class="picker-meta">{{ ex.category }}@if (ex.durationMinutes) { · {{ ex.durationMinutes }} min }</span>
-              </button>
-            }
-            @if (pickerExercises().length === 0) {
-              <p class="panel-hint" style="color:var(--text-muted)">No hay ejercicios. Créalos en “Tareas” primero.</p>
-            }
-          </div>
         </div>
       </div>
     </div>

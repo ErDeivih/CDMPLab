@@ -14,6 +14,8 @@
     "test:e2e:prod": "ng build && playwright test --config=playwright.prod.config.ts",
     "test:e2e:pages": "node scripts/build-pages.mjs && playwright test --config=playwright.pages.config.ts",
     "test:e2e:supabase-real": "ng build && playwright test --config=playwright.supabase-real.config.ts",
+    "lint": "node scripts/lint-check.mjs",
+    "format:check": "node scripts/format-check.mjs",
     "validate:migration": "node scripts/validate-migration.mjs"
   },
   "private": true,
@@ -32,11 +34,15 @@
     "@angular/build": "^22.1.5",
     "@angular/cli": "^22.1.5",
     "@angular/compiler-cli": "^22.1.0",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
+    "angular-eslint": "^22.5.0",
+    "eslint": "^10.10.0",
     "jsdom": "^28.0.0",
     "libpg-query": "^17.7.4",
     "prettier": "^3.8.1",
     "typescript": "~6.0.2",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^4.0.8"
   }
 }

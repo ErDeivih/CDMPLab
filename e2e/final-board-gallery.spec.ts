@@ -1087,7 +1087,8 @@ function assertTextSvg(svg: string, el: CanvasElement, created: CanvasElement): 
 
 function findArrowLine(svg: string, el: CanvasElement): number {
   const x1 = vbX(el.x1!), y1 = vbY(el.y1!);
-  const col = el.c ?? '#1f2933';
+  // Documento antiguo sin `c`: el render usa su color por defecto (blanco).
+  const col = el.c ?? '#ffffff';
   const re = /<line\b[^>]*>/g;
   let m: RegExpExecArray | null;
   let best = -1, bestD = Infinity;

@@ -1,16 +1,84 @@
-import { Component, computed, effect, inject, signal, viewChild, ElementRef, HostListener, ChangeDetectorRef } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+  ElementRef,
+  HostListener,
+  ChangeDetectorRef,
+} from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { StoreService, uid } from '../../core/store.service';
-import { CanvasDocument, CanvasElement, CanvasFrame, FieldType, Player, Position, Exercise, ExerciseCategory, EXERCISE_CATEGORIES, MATERIAL_OPTIONS, F7Overlay } from '../../core/models';
-import { FIELD_RECT, FIELD_BASE_SPECS, fieldGeometry, fieldSvg, FIELD_LINE_WIDTH, fieldObjectScale, orientationLabel } from '../../core/field';
-import { tacticAsset, materialAsset, TacticalKind, materialBaseSize } from '../../core/tactic-assets';
-import { renderBoardSvg, hitTestElement, textColor as textColorFn, svgZigzag, screenToNorm, DEFAULT_TEXT_SIZE, DEFAULT_TEXT_W, DEFAULT_TEXT_H, autoTextBoxH, normalizedToPct, pctToNormalized, parseLocalizedNumber, clampNorm, fitTextToContent, Geometry, DEFAULT_STROKE_WIDTH, DEFAULT_SHAPE_STROKE, MIN_STROKE_WIDTH, MAX_STROKE_WIDTH, arrowHeadSize, materialSize, MATERIAL_BOX, SEL_HANDLE_STROKE, MARGIN_STRIP, screenPxToNormTolerance } from '../../core/render';
+import {
+  CanvasDocument,
+  CanvasElement,
+  CanvasFrame,
+  FieldType,
+  Player,
+  Position,
+  Exercise,
+  ExerciseCategory,
+  EXERCISE_CATEGORIES,
+  MATERIAL_OPTIONS,
+  F7Overlay,
+} from '../../core/models';
+import {
+  FIELD_RECT,
+  FIELD_BASE_SPECS,
+  fieldGeometry,
+  fieldSvg,
+  FIELD_LINE_WIDTH,
+  fieldObjectScale,
+  orientationLabel,
+} from '../../core/field';
+import {
+  tacticAsset,
+  materialAsset,
+  TacticalKind,
+  materialBaseSize,
+} from '../../core/tactic-assets';
+import {
+  renderBoardSvg,
+  hitTestElement,
+  textColor as textColorFn,
+  svgZigzag,
+  screenToNorm,
+  DEFAULT_TEXT_SIZE,
+  DEFAULT_TEXT_W,
+  DEFAULT_TEXT_H,
+  autoTextBoxH,
+  normalizedToPct,
+  pctToNormalized,
+  parseLocalizedNumber,
+  clampNorm,
+  fitTextToContent,
+  Geometry,
+  DEFAULT_STROKE_WIDTH,
+  DEFAULT_SHAPE_STROKE,
+  MIN_STROKE_WIDTH,
+  MAX_STROKE_WIDTH,
+  arrowHeadSize,
+  materialSize,
+  MATERIAL_BOX,
+  SEL_HANDLE_STROKE,
+  MARGIN_STRIP,
+  screenPxToNormTolerance,
+  DEFAULT_ELEMENT_COLOR,
+  COLORABLE_ELEMENT_TYPES,
+} from '../../core/render';
 import { colorName, colorNamePlural } from '../../core/color-name';
 import { generateThumbnail } from '../../core/canvas-export';
 import { inlineSvgAssets } from '../../core/asset-inline';
 import { BoardSessionService } from '../../core/board-session.service';
-import { FORMATIONS as FORMATIONS_PURE, buildFormationPlayers, Formation, QUICK_GENERIC_COLORS } from './formations';
+import {
+  FORMATIONS as FORMATIONS_PURE,
+  buildFormationPlayers,
+  Formation,
+  QUICK_GENERIC_COLORS,
+} from './formations';
 import { ConfirmService } from '../../core/confirm.service';
 import { HistoryService, HistorySnapshot } from '../../core/history.service';
 import { normalizeCanvas, CANVAS_SCHEMA_VERSION } from '../../core/canvas';
@@ -22,11 +90,23 @@ import {
   layerShiftFrames,
   translateElement,
 } from './board-doc';
-import { transformFramesHalfToFull, transformFramesFullToHalf, mapFramesToTwoHalves } from '../../core/field-transform';
+import {
+  transformFramesHalfToFull,
+  transformFramesFullToHalf,
+  mapFramesToTwoHalves,
+} from '../../core/field-transform';
 import { pngFileName } from '../../core/sanitize-file-name';
-import { selCenter, elementOutline, isPointLike as isPointLikeFn, isMaterial as isMaterialFn, resizeHandles, normalizeRotation, pointLikeResizeHalf } from './board-selection';
+import {
+  selCenter,
+  elementOutline,
+  isPointLike as isPointLikeFn,
+  isMaterial as isMaterialFn,
+  resizeHandles,
+  normalizeRotation,
+  pointLikeResizeHalf,
+} from './board-selection';
 import { ExportDialogComponent } from './export-dialog.component';
-import { visibleMaterials } from '../../core/material-registry';
+import { visibleMaterials, CANONICAL_MATERIALS } from '../../core/material-registry';
 
 type Tool =
   | 'select'
@@ -161,6 +241,9 @@ interface TouchPending {
   startClient: { x: number; y: number };
   /** Posición normalizada del punto de bajada. */
   startNorm: { x: number; y: number };
+  /** `timeStamp` del EVENTO de bajada (reloj del navegador), para medir gestos por el
+   *  tiempo del gesto y no por cuándo llegó a ejecutarse el manejador. */
+  stamp: number;
   tool: Tool;
   armed: ArmedPlacement | null;
   shift: boolean;
@@ -196,7 +279,27 @@ export const TOOLS: ToolDef[] = [
 const VB_W = 100;
 const VB_H = 80;
 
-const PALETTE = ['#1a73e8', '#c0392b', '#1f7a4d', '#e67e22', '#7d3c98', '#b8860b', '#111111', '#f4f4f4'];
+/** Paleta de la pizarra. `#ffffff` (blanco) se añadió al FINAL para que el color por
+ *  defecto (`DEFAULT_ELEMENT_COLOR`) sea una muestra seleccionable y el control de color
+ *  marque la activa. Añadir al final, nunca reordenar: hay pruebas E2E que eligen la
+ *  muestra por ÍNDICE, y reordenar cambiaría el color que eligen sin avisar. */
+export const PALETTE = [
+  '#1a73e8',
+  '#c0392b',
+  '#1f7a4d',
+  '#e67e22',
+  '#7d3c98',
+  '#b8860b',
+  '#111111',
+  '#f4f4f4',
+  '#ffffff',
+];
+
+/** Margen (px) que se deja entre la barra de contexto y los bordes del host. */
+const CONTEXT_BAR_MARGIN = 8;
+
+/** Hueco (px) entre la barra de contexto y el objeto seleccionado. */
+const CONTEXT_BAR_GAP = 8;
 
 /** Catálogo de Material del panel, DERIVADO del registro canónico (material-registry.ts,
  *  `visibleMaterials`). Fuente única (FASE F): id/título/grupo/icono; NO se mantiene una
@@ -215,13 +318,56 @@ function toolTitle(id: Tool): string {
   return MATERIALS.find((m) => m.id === id)?.title ?? TOOLS.find((t) => t.id === id)?.title ?? '';
 }
 
-const MATERIAL_GROUPS = ['Balones', 'Señalización', 'Porterías y redes', 'Coordinación', 'Preparación física', 'Otros'] as const;
+/** Ayuda de las herramientas propias de la app (no materiales): selección, mano, jugador
+ *  y el dibujo. Los MATERIALES NO se listan aquí (ver `toolHintFor`). */
+const APP_TOOL_HINTS: Partial<Record<Tool, string>> = {
+  select:
+    'Selecciona y mueve elementos (arrastra para mover; la rueda hace zoom; la rotación ±90° desde la barra de contexto)',
+  hand: 'Arrastra para desplazar el campo (pellizca con dos dedos para acercar)',
+  player: 'Clic para colocar un jugador',
+  rect: 'Arrastra para dibujar un rectángulo',
+  ellipse: 'Arrastra para dibujar un círculo / elipse',
+  arrow: 'Arrastra para dibujar una flecha',
+  doubleArrow: 'Arrastra para dibujar una flecha de doble sentido',
+  curve_left: 'Arrastra para dibujar una curva a la izquierda',
+  curve_right: 'Arrastra para dibujar una curva a la derecha',
+  dribble: 'Arrastra para dibujar una conducción (zigzag)',
+  line: 'Arrastra para dibujar una línea',
+  freehand: 'Arrastra para dibujar a mano alzada',
+  text: 'Clic para colocar un texto',
+  erase: 'Clic sobre un elemento para borrarlo',
+};
+
+/** Texto de ayuda de una herramienta.
+ *
+ *  Los MATERIALES lo toman del REGISTRO canónico (`help`): así un material nuevo tiene
+ *  ayuda sin tocar ninguna lista. Antes había aquí un mapa con los 22 materiales escritos
+ *  a mano, de modo que un material añadido al registro se quedaba SIN ayuda (y el texto
+ *  podía divergir del registrado). Se incluyen también los RETIRADOS (`hidden`), porque
+ *  sus documentos antiguos siguen abriéndose.
+ *
+ *  Función PURA y exportada: la prueba unitaria comprueba que toda herramienta tiene
+ *  texto sin necesidad de instanciar el componente. */
+export function toolHintFor(id: Tool): string {
+  const material = CANONICAL_MATERIALS.find((m) => m.id === id);
+  if (material) return `Clic para colocar: ${material.help}`;
+  return APP_TOOL_HINTS[id] ?? '';
+}
+
+const MATERIAL_GROUPS = [
+  'Balones',
+  'Señalización',
+  'Porterías y redes',
+  'Coordinación',
+  'Preparación física',
+  'Otros',
+] as const;
 
 /** id de herramienta → grupo al que pertenece (para agrupar el panel de Material).
  *  Se deriva del REGISTRO CANÓNICO (`visibleMaterials`) para no mantener el grupo a mano
  *  (fuente ÚNICA). El orden de grupos lo define MATERIAL_GROUPS. */
 const MATERIAL_GROUP_MAP: Record<string, string> = Object.fromEntries(
-  visibleMaterials().map((m) => [m.id, m.group])
+  visibleMaterials().map((m) => [m.id, m.group]),
 );
 
 /** Formaciones rápidas (Fase 7): posiciones normalizadas 0..1 (espacio canónico) del
@@ -358,16 +504,23 @@ export class BoardComponent {
   }
   /** Normaliza un texto para búsqueda insensible a mayúsculas y acentos. */
   private normalizeFx(s: string): string {
-    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    return s
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
   }
-  protected readonly materialGroupList = computed<Array<{ label: string; items: ToolDef[] }>>(() => {
-    const q = this.normalizeFx(this.materialQuery());
-    const matTools = MATERIALS; // FASE F: catálogo del panel derivado del registro, sin duplicar TOOLS.
-    return MATERIAL_GROUPS.map((g) => ({
-      label: g,
-      items: matTools.filter((t) => MATERIAL_GROUP_MAP[t.id] === g && (!q || this.normalizeFx(t.title).includes(q))),
-    })).filter((g) => g.items.length > 0);
-  });
+  protected readonly materialGroupList = computed<Array<{ label: string; items: ToolDef[] }>>(
+    () => {
+      const q = this.normalizeFx(this.materialQuery());
+      const matTools = MATERIALS; // FASE F: catálogo del panel derivado del registro, sin duplicar TOOLS.
+      return MATERIAL_GROUPS.map((g) => ({
+        label: g,
+        items: matTools.filter(
+          (t) => MATERIAL_GROUP_MAP[t.id] === g && (!q || this.normalizeFx(t.title).includes(q)),
+        ),
+      })).filter((g) => g.items.length > 0);
+    },
+  );
 
   protected setToolCategory(c: 'jugadores' | 'material' | 'dibujo'): void {
     if (this.panelCat() === c) {
@@ -398,15 +551,19 @@ export class BoardComponent {
     if (typeof window === 'undefined') return false;
     const w = window.innerWidth;
     const h = window.innerHeight;
-    if (w <= 700) return true;               // vertical
-    if (h <= 480 && w <= 1000) return true;  // horizontal (girado)
+    if (w <= 700) return true; // vertical
+    if (h <= 480 && w <= 1000) return true; // horizontal (girado)
     return false;
   }
 
   protected activeToolTitle(): string {
     return toolTitle(this.tool());
   }
-  protected readonly toolGroups: Array<{ id: 'jugadores' | 'material' | 'dibujo'; label: string; items: ToolDef[] }> = [
+  protected readonly toolGroups: Array<{
+    id: 'jugadores' | 'material' | 'dibujo';
+    label: string;
+    items: ToolDef[];
+  }> = [
     { id: 'jugadores', label: 'Jugadores', items: [] },
     {
       id: 'material',
@@ -416,7 +573,10 @@ export class BoardComponent {
     {
       id: 'dibujo',
       label: 'Dibujo y formas',
-      items: TOOLS.filter((t) => ['rect', 'ellipse', 'arrow', 'doubleArrow', 'curve_left', 'curve_right', 'dribble', 'line', 'freehand', 'text'].includes(t.id)),
+      // Derivado de `TOOLS` por EXCLUSIÓN (fuente única): así una herramienta nueva
+      // aparece sola en el panel. Antes era una lista de 10 ids escrita a mano, y por eso
+      // "Borrar elemento" (`erase`) existía en TOOLS pero NO se ofrecía en ninguna parte.
+      items: TOOLS.filter((t) => !['select', 'hand', 'player'].includes(t.id)),
     },
   ];
 
@@ -459,7 +619,7 @@ export class BoardComponent {
     if (a.player) {
       const col = a.player.c ?? (a.player.side === 'rival' ? '#c0392b' : '#1a73e8');
       const isGk = a.player.type === 'goalkeeper';
-      const label = isGk ? 'POR' : (a.player.n != null && a.player.n > 0 ? String(a.player.n) : '');
+      const label = isGk ? 'POR' : a.player.n != null && a.player.n > 0 ? String(a.player.n) : '';
       const ring = isGk ? ' stroke="#fff" stroke-width="1" stroke-dasharray="2,1.4"' : '';
       html = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
         <circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 4}" fill="${col}"${ring}></circle>
@@ -769,7 +929,9 @@ export class BoardComponent {
   /** Enfoca el input de título en el panel de Propiedades (validación de guardado). */
   protected focusTitleField(): void {
     setTimeout(() => {
-      const el = document.querySelector<HTMLInputElement>('input[aria-label="Título del ejercicio"]');
+      const el = document.querySelector<HTMLInputElement>(
+        'input[aria-label="Título del ejercicio"]',
+      );
       el?.focus();
       el?.select();
     }, 0);
@@ -825,7 +987,8 @@ export class BoardComponent {
    *  constructor), de modo que nunca pierde tiempo mientras la ayuda general la tapa. */
   private maybeShowFillHint(): void {
     if (!this.fillScreen()) return;
-    if (typeof localStorage !== 'undefined' && localStorage.getItem(this.fillHintKey) === '1') return;
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(this.fillHintKey) === '1')
+      return;
     this.fillHint.set(true);
     try {
       localStorage.setItem(this.fillHintKey, '1'); // solo una vez, en cualquier dispositivo
@@ -857,7 +1020,8 @@ export class BoardComponent {
    *  móvil/portrait, salvo que el usuario lo haya descartado («Continuar en vertical»). */
   private maybeShowOrientHint(): void {
     if (!this.isPortraitMobile()) return;
-    if (typeof localStorage !== 'undefined' && localStorage.getItem(this.orientHintKey) === '1') return;
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(this.orientHintKey) === '1')
+      return;
     this.orientHint.set(true);
   }
   /** «Continuar en vertical»: descarta el aviso (persistido) y deja usar la pizarra en vertical. */
@@ -941,12 +1105,30 @@ export class BoardComponent {
     if (v.trim()) this.setMetaMaterials([...others, 'Otro']);
     else this.setMetaMaterials(others.filter((m) => m !== 'Otro'));
   }
-  protected setMetaTitle(v: string): void { this.metaTitle.set(v); this.markDirty(); }
-  protected setMetaCategory(v: string): void { this.metaCategory.set(v as ExerciseCategory); this.markDirty(); }
-  protected setMetaDuration(v: string): void { this.metaDuration.set(this.numOrNull(v)); this.markDirty(); }
-  protected setMetaMin(v: string): void { this.metaMinPlayers.set(this.numOrNull(v)); this.markDirty(); }
-  protected setMetaMax(v: string): void { this.metaMaxPlayers.set(this.numOrNull(v)); this.markDirty(); }
-  protected setMetaFolder(v: string): void { this.metaFolder.set(v || null); this.markDirty(); }
+  protected setMetaTitle(v: string): void {
+    this.metaTitle.set(v);
+    this.markDirty();
+  }
+  protected setMetaCategory(v: string): void {
+    this.metaCategory.set(v as ExerciseCategory);
+    this.markDirty();
+  }
+  protected setMetaDuration(v: string): void {
+    this.metaDuration.set(this.numOrNull(v));
+    this.markDirty();
+  }
+  protected setMetaMin(v: string): void {
+    this.metaMinPlayers.set(this.numOrNull(v));
+    this.markDirty();
+  }
+  protected setMetaMax(v: string): void {
+    this.metaMaxPlayers.set(this.numOrNull(v));
+    this.markDirty();
+  }
+  protected setMetaFolder(v: string): void {
+    this.metaFolder.set(v || null);
+    this.markDirty();
+  }
   protected numOrNull(v: string): number | null {
     if (v.trim() === '') return null;
     const n = Number(v);
@@ -954,7 +1136,9 @@ export class BoardComponent {
   }
   protected readonly exportOpen = signal(false);
 
-  protected readonly view = computed<CanvasElement[]>(() => this.frames()[this.current()]?.elements ?? []);
+  protected readonly view = computed<CanvasElement[]>(
+    () => this.frames()[this.current()]?.elements ?? [],
+  );
 
   /** Borrador de dibujo en curso. Es una SEÑAL para que `boardSafe` (computed) se
    *  re-evalúe con cada pointerdown/move y la preview se muestre EN VIVO durante el
@@ -972,7 +1156,8 @@ export class BoardComponent {
   private resizeStartSize: number | null = null;
   /** `points` iniciales al redimensionar un trazo a mano alzada (bbox proporcional). */
   private resizeStartPoints: [number, number][] | null = null;
-  private gestureBase: BoardSnapshot | null = null;  /** Inicio de un gesto de PANEO (solo con la herramienta "Mano"; Seleccionar ya NO panea,
+  private gestureBase: BoardSnapshot | null =
+    null; /** Inicio de un gesto de PANEO (solo con la herramienta "Mano"; Seleccionar ya NO panea,
    *  ni sobre vacío ni sobre un objeto). `null` cuando no hay paneo activo. Distingue
    *  pantalla‑objeto: con Seleccionar, si el puntero baja sobre un elemento se MUEVE el
    *  elemento; sobre vacío solo deselecciona. Con "Mano", el arrastre (sobre objeto o no)
@@ -1015,7 +1200,12 @@ export class BoardComponent {
   /** Tolerancia (px de pantalla) de movimiento de la pulsación larga: superarla la cancela. */
   private readonly LONG_PRESS_SLOP = 8;
   /** Contexto de la pulsación larga en curso (null si no hay ninguna). */
-  private lp: { pointerId: number; start: { x: number; y: number }; targetId: string | null; fired: boolean } | null = null;
+  private lp: {
+    pointerId: number;
+    start: { x: number; y: number };
+    targetId: string | null;
+    fired: boolean;
+  } | null = null;
   private lpTimer: ReturnType<typeof setTimeout> | null = null;
   /** BLOQUE D2: detección de DOBLE CLIC a nivel de puntero (ratón, herramienta
    *  Seleccionar). Dos taps de ratón sobre el MISMO elemento dentro de ~350 ms abren el
@@ -1036,12 +1226,24 @@ export class BoardComponent {
   protected setFillOpacity(o: number | undefined): void {
     this.fillOpacity.set(o);
   }
-  /** Color activo de las herramientas de dibujo (el de la herramienta actual). */
-  protected readonly drawColor = signal('#1f2933');
+  /** Color activo de las herramientas de dibujo (el de la herramienta actual).
+   *  Por defecto es BLANCO (`DEFAULT_ELEMENT_COLOR`): es el color con el que el campo
+   *  dibuja sus marcas y el que mejor contrasta sobre el césped (~4,7:1 frente a ~3,1:1
+   *  del negro anterior). Además el negro antiguo (`#1f2933`) no estaba en `PALETTE`,
+   *  así que el control de color no marcaba ninguna muestra como activa. */
+  protected readonly drawColor = signal(DEFAULT_ELEMENT_COLOR);
   /** Herramientas que admiten color de trazo/texto (para la paleta por pulsación larga). */
   protected readonly colorableTools: ReadonlySet<Tool> = new Set([
-    'line', 'arrow', 'doubleArrow', 'curve_left', 'curve_right', 'dribble', 'freehand',
-    'rect', 'ellipse', 'text',
+    'line',
+    'arrow',
+    'doubleArrow',
+    'curve_left',
+    'curve_right',
+    'dribble',
+    'freehand',
+    'rect',
+    'ellipse',
+    'text',
   ]);
   /** Memoria INDEPENDIENTE de color por herramienta (Fase 1): cambiar el color de
    *  Línea no debe cambiar el de Flecha ni de Rectángulo. Se persiste por dispositivo
@@ -1055,13 +1257,16 @@ export class BoardComponent {
   private static readonly legacyToolColorKey = 'entrenolab:tool-colors';
   private loadToolColors(): Record<string, string> {
     try {
-      const raw = localStorage.getItem(BoardComponent.toolColorKey)
-        ?? localStorage.getItem(BoardComponent.legacyToolColorKey);
+      const raw =
+        localStorage.getItem(BoardComponent.toolColorKey) ??
+        localStorage.getItem(BoardComponent.legacyToolColorKey);
       if (!raw) return {};
       const parsed = JSON.parse(raw) as Record<string, string>;
       // Solo en la primera lectura: vuelca la preferencia antigua a la clave nueva.
-      if (!localStorage.getItem(BoardComponent.toolColorKey)
-        && localStorage.getItem(BoardComponent.legacyToolColorKey)) {
+      if (
+        !localStorage.getItem(BoardComponent.toolColorKey) &&
+        localStorage.getItem(BoardComponent.legacyToolColorKey)
+      ) {
         localStorage.setItem(BoardComponent.toolColorKey, JSON.stringify(parsed));
         localStorage.removeItem(BoardComponent.legacyToolColorKey);
       }
@@ -1071,7 +1276,7 @@ export class BoardComponent {
     }
   }
   protected colorFor(tool: Tool): string {
-    return this.toolColor()[tool] ?? '#1f2933';
+    return this.toolColor()[tool] ?? DEFAULT_ELEMENT_COLOR;
   }
   /** E/Bloque E — preferencia de trazo (continuo/discontinuo) POR HERRAMIENTA de dibujo
    *  (Línea y Flecha independientes). Se persiste localmente bajo una clave CDMPLab
@@ -1080,7 +1285,10 @@ export class BoardComponent {
   private static readonly toolLineStyleKey = 'cdmplab:tool-line-style:v1';
   private loadToolLineStyle(): Record<string, string> {
     try {
-      return JSON.parse(localStorage.getItem(BoardComponent.toolLineStyleKey) ?? '{}') as Record<string, string>;
+      return JSON.parse(localStorage.getItem(BoardComponent.toolLineStyleKey) ?? '{}') as Record<
+        string,
+        string
+      >;
     } catch {
       return {};
     }
@@ -1130,7 +1338,7 @@ export class BoardComponent {
         orientation: this.orientation(),
         grass: this.grass(),
         f7: this.f7(),
-      })
+      }),
     );
   });
 
@@ -1150,13 +1358,56 @@ export class BoardComponent {
   protected onBoardContextMenu(evt: Event): void {
     evt.preventDefault();
   }
-  /** Posición (px relativos al `.board-host`) de la barra de contexto, centrada sobre
-   *  el objeto y por ENCIMA de él; si no cabe arriba, pasa DEBAJO; siempre dentro del
-   *  host y lejos de los bordes (para no tapar menús ni salirse de pantalla). */
-  protected readonly contextBarPos = computed<{ left: number; top: number; below: boolean }>(() => {
+  /**
+   * Tamaño REAL de la barra de contexto, MEDIDO en el DOM. No se calcula desde constantes:
+   * antes había una copia en TypeScript de la geometría del CSS (`CTX_GEOM`: 8 botones de
+   * 40, huecos, separador…) que se quedaba obsoleta en cuanto cambiaba la barra.
+   * `null` mientras no se ha medido (primer fotograma tras abrirse).
+   */
+  private readonly ctxBarBox = signal<{ w: number; h: number } | null>(null);
+
+  /** La barra de contexto del DOM (para medirla de verdad, no para suponerla). */
+  private readonly ctxBarRef = viewChild<ElementRef<HTMLElement>>('ctxBar');
+
+  /**
+   * Mide la barra con `ResizeObserver`: cualquier cambio real de tamaño (envolver en dos
+   * filas en móvil, más botones, otra tipografía, cambio de ancho del host) llega aquí solo.
+   */
+  private readonly ctxBarMeasurer = effect((onCleanup) => {
+    const el = this.ctxBarRef()?.nativeElement;
+    if (!el) {
+      this.ctxBarBox.set(null);
+      return;
+    }
+    const measure = () => {
+      const b = el.getBoundingClientRect();
+      const prev = this.ctxBarBox();
+      // Solo se escribe si cambia de verdad (evita bucles de render).
+      if (!prev || Math.abs(prev.w - b.width) > 0.5 || Math.abs(prev.h - b.height) > 0.5) {
+        this.ctxBarBox.set({ w: b.width, h: b.height });
+      }
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    onCleanup(() => ro.disconnect());
+  });
+
+  /** Posición (px relativos al `.board-host`) de la barra de contexto, centrada sobre el
+   *  objeto y por ENCIMA de él; si no cabe arriba, pasa DEBAJO; siempre dentro del host.
+   *
+   *  Se ancla por el borde que TOCA al objeto (`bottom` si va encima, `top` si va debajo),
+   *  así la separación es siempre el hueco exacto sin necesitar la altura. La altura MEDIDA
+   *  solo decide si cabe encima, y el ancho medido evita salirse del host. */
+  protected readonly contextBarPos = computed<{
+    left: number;
+    top: number | null;
+    bottom: number | null;
+    below: boolean;
+  }>(() => {
     const el = this.selectedElement();
     const hostEl = this.host()?.nativeElement as HTMLElement | undefined;
-    if (!el || !hostEl) return { left: 0, top: 0, below: false };
+    if (!el || !hostEl) return { left: 0, top: 0, bottom: null, below: false };
     const r = hostEl.getBoundingClientRect();
     const bb = this.elNormBBox(el);
     const tl = this.normToScreenDisplay(bb.x0, bb.y0);
@@ -1164,22 +1415,24 @@ export class BoardComponent {
     const centerX = (tl.x + br.x) / 2;
     const top = Math.min(tl.y, br.y);
     const bottom = Math.max(tl.y, br.y);
-    const barW = 356; // 8 botones compactos (Deshacer/Rehacer, ±45°, ±90°, Duplicar, Eliminar) + huecos
-    const barH = 40;
-    const margin = 8;
-    let left = centerX - barW / 2;
-    let below = false;
-    let barTop = top - barH - 8;
-    if (barTop < margin) {
-      below = true;
-      barTop = bottom + 8;
-    }
-    left = Math.max(margin, Math.min(left, r.width - barW - margin));
-    if (barTop + barH > r.height - margin) {
-      below = false;
-      barTop = Math.max(margin, top - barH - 8);
-    }
-    return { left, top: barTop, below };
+    const box = this.ctxBarBox();
+    const margin = CONTEXT_BAR_MARGIN;
+    const gap = CONTEXT_BAR_GAP;
+
+    let left = centerX - (box ? box.w / 2 : 0);
+    if (box) left = Math.max(margin, Math.min(left, Math.max(margin, r.width - box.w - margin)));
+
+    // Sin medir todavía se asume que cabe encima: al llegar la medición (mismo fotograma o
+    // el siguiente) la posición se corrige sola.
+    const fitsAbove = box ? top - box.h - gap >= margin : true;
+    let below = !fitsAbove;
+    // Si tampoco cabe debajo, se queda encima pegado al borde superior (nunca fuera).
+    if (below && box && bottom + gap + box.h > r.height - margin) below = false;
+
+    if (below) return { left, top: bottom + gap, bottom: null, below };
+    // Anclada por ABAJO: deja el borde inferior de la barra a `gap` del objeto sin usar su
+    // altura (por eso un cambio de tamaño de la barra no puede taparlo).
+    return { left, top: null, bottom: r.height - top + gap, below };
   });
 
   protected readonly selectedId = signal<string | null>(null);
@@ -1195,17 +1448,18 @@ export class BoardComponent {
     return colorNamePlural(c);
   }
 
-  /** Herramientas que usan color de trazo/figura (para mostrar el control de color). */
+  /** Herramientas que usan color de trazo/figura (para mostrar el control de color).
+   *  Deriva de `colorableTools`: antes era una lista paralela con los mismos 10 ids. */
   protected isColorTool(): boolean {
-    return ['rect', 'ellipse', 'arrow', 'doubleArrow', 'curve_left', 'curve_right', 'line', 'dribble', 'freehand', 'text'].includes(this.tool());
+    return this.colorableTools.has(this.tool());
   }
   /** El inspector muestra el selector de Color solo para elementos cuyo `c` se renderiza
-   *  (no para materiales PNG, cuya imagen no cambia con `c`, ni para jugadores, que tienen el suyo). */
+   *  (no para materiales PNG, cuya imagen no cambia con `c`, ni para jugadores, que tienen
+   *  el suyo). Fuente única: `render.COLORABLE_ELEMENT_TYPES` (antes era una tercera lista
+   *  escrita a mano que se dejaba fuera el Aro, coloreable según el registro canónico). */
   protected showInspectorColor(): boolean {
-    const t = this.selectedElement()?.t;
-    // 'curve' es el TIPO de elemento de las herramientas curve_left/curve_right (se guarda
-    // como t:'curve'); las curvas son coloreables, así que deben ofrecer el campo Color.
-    return !!t && ['rect', 'ellipse', 'line', 'arrow', 'doubleArrow', 'curve', 'dribble', 'freehand', 'text', 'peto', 'pica', 'target'].includes(t);
+    const el = this.selectedElement();
+    return !!el && COLORABLE_ELEMENT_TYPES.has(el.t);
   }
   protected setShapeFill(v: boolean): void {
     this.shapeFill.set(v);
@@ -1221,7 +1475,7 @@ export class BoardComponent {
   }
 
   protected readonly selectedElement = computed(
-    () => this.view().find((e) => e.id === this.lastSelectedId()) ?? null
+    () => this.view().find((e) => e.id === this.lastSelectedId()) ?? null,
   );
 
   private lastSelectedId(): string | null {
@@ -1279,7 +1533,9 @@ export class BoardComponent {
         this.f7.set(doc.f7 ?? null);
       }
     }
-    const ex = this.editExerciseId ? this.store.exercises().find((e) => e.id === this.editExerciseId) : undefined;
+    const ex = this.editExerciseId
+      ? this.store.exercises().find((e) => e.id === this.editExerciseId)
+      : undefined;
     // Inicializar metadatos desde el ejercicio (si se edita) para que sean editables y se guarden.
     this.metaTitle.set(ex?.title ?? '');
     this.metaCategory.set(ex?.category ?? 'Técnica');
@@ -1302,12 +1558,19 @@ export class BoardComponent {
       this.metaDuration.set(m.durationMinutes);
       this.metaMinPlayers.set(m.minPlayers);
       this.metaMaxPlayers.set(m.maxPlayers);
-      this.metaMaterials.set(m.materials ? (m.materials.split(',')
-        .map((x) => x.trim()).filter(Boolean)) : []);
+      this.metaMaterials.set(
+        m.materials
+          ? m.materials
+              .split(',')
+              .map((x) => x.trim())
+              .filter(Boolean)
+          : [],
+      );
     }
     // Modo de pantalla: usa la preferencia guardada; si no existe, en móvil el
     // default es "Llenar pantalla" (la mayor área táctil usable del campo).
-    const fillStored = typeof localStorage !== 'undefined' ? localStorage.getItem(this.fillPrefKey) : null;
+    const fillStored =
+      typeof localStorage !== 'undefined' ? localStorage.getItem(this.fillPrefKey) : null;
     const mobileDefault = this.isCompactViewport();
     this.fillScreen.set(fillStored === null ? mobileDefault : fillStored === '1');
     this.maybeShowFillHint(); // pista única de "Llenar pantalla" (solo la primera vez)
@@ -1361,7 +1624,13 @@ export class BoardComponent {
     const hostEl = this.host()?.nativeElement as HTMLElement | undefined;
     if (hostEl) {
       const r = hostEl.getBoundingClientRect();
-      if (evt.clientX >= r.left && evt.clientX <= r.right && evt.clientY >= r.top && evt.clientY <= r.bottom) return;
+      if (
+        evt.clientX >= r.left &&
+        evt.clientX <= r.right &&
+        evt.clientY >= r.top &&
+        evt.clientY <= r.bottom
+      )
+        return;
     }
     const anyOpen =
       this.panelOpen() ||
@@ -1462,7 +1731,16 @@ export class BoardComponent {
     // El fit ('height' en llenar pantalla) cambia el letterboxing del SVG y debe
     // coincidir con cómo se dimensiona el canvas: así las coordenadas siguen siendo
     // correctas en AMBOS modos (ver round-trip en render.spec).
-    return screenToNorm(clientX, clientY, r, g, this.panX(), this.panY(), this.zoom(), this.fillScreen() ? 'height' : 'contain');
+    return screenToNorm(
+      clientX,
+      clientY,
+      r,
+      g,
+      this.panX(),
+      this.panY(),
+      this.zoom(),
+      this.fillScreen() ? 'height' : 'contain',
+    );
   }
 
   /** norm → pantalla RELATIVA al host (inversa exacta de `normForClient`): devuelve
@@ -1500,14 +1778,22 @@ export class BoardComponent {
    *  tolerancia en px CSS: ratón ~4, táctil ~8–10. Sustituye el 0.045 normalizado fijo que
    *  hacía crecer la zona de selección con la magnificación. Replica el cálculo de `scale`
    *  de `normToScreenDisplay` (COVER en llenar pantalla) para coincidir con el render. */
-  private hitTestNorm(p: { x: number; y: number }, view: CanvasElement[], screenPx: number): string | null {
+  private hitTestNorm(
+    p: { x: number; y: number },
+    view: CanvasElement[],
+    screenPx: number,
+  ): string | null {
     const hostEl = this.host()?.nativeElement as HTMLElement | undefined;
     if (!hostEl) return null;
     const r = hostEl.getBoundingClientRect();
     const g = this.geo();
     const fit = this.fillScreen() ? 'height' : 'contain';
     const s = fit === 'height' ? this.fillScale(r, g) : Math.min(r.width / g.vbW, r.height / g.vbH);
-    return hitTestElement(p, view, g.rect, this.objectScale(), { screenPx, zoom: this.zoom(), scale: s });
+    return hitTestElement(p, view, g.rect, this.objectScale(), {
+      screenPx,
+      zoom: this.zoom(),
+      scale: s,
+    });
   }
 
   /** Caja envolvente (normalizada 0..1) de un elemento, por familia. Se usa para
@@ -1519,12 +1805,23 @@ export class BoardComponent {
       const h = el.h ?? 0;
       return { x0: el.x ?? 0, y0: el.y ?? 0, x1: (el.x ?? 0) + w, y1: (el.y ?? 0) + h };
     }
-    if (t === 'line' || t === 'arrow' || t === 'doubleArrow' || t === 'measure' || t === 'dribble') {
+    if (
+      t === 'line' ||
+      t === 'arrow' ||
+      t === 'doubleArrow' ||
+      t === 'measure' ||
+      t === 'dribble'
+    ) {
       const x1 = el.x1 ?? 0;
       const y1 = el.y1 ?? 0;
       const x2 = el.x2 ?? 0;
       const y2 = el.y2 ?? 0;
-      return { x0: Math.min(x1, x2), y0: Math.min(y1, y2), x1: Math.max(x1, x2), y1: Math.max(y1, y2) };
+      return {
+        x0: Math.min(x1, x2),
+        y0: Math.min(y1, y2),
+        x1: Math.max(x1, x2),
+        y1: Math.max(y1, y2),
+      };
     }
     if (t === 'curve') {
       const x1 = el.x1 ?? 0;
@@ -1533,7 +1830,12 @@ export class BoardComponent {
       const y2 = el.y2 ?? 0;
       const cx = el.c1x ?? (x1 + x2) / 2;
       const cy = el.c1y ?? (y1 + y2) / 2;
-      return { x0: Math.min(x1, x2, cx), y0: Math.min(y1, y2, cy), x1: Math.max(x1, x2, cx), y1: Math.max(y1, y2, cy) };
+      return {
+        x0: Math.min(x1, x2, cx),
+        y0: Math.min(y1, y2, cy),
+        x1: Math.max(x1, x2, cx),
+        y1: Math.max(y1, y2, cy),
+      };
     }
     if (t === 'freehand') {
       const pts = el.points ?? [];
@@ -1545,8 +1847,8 @@ export class BoardComponent {
     // Puntual (material/jugador): caja del material alrededor del centro.
     const r = this.geo().rect;
     const size = materialSize(el);
-    const hw = (MATERIAL_BOX * size / 2) / r.w;
-    const hh = (MATERIAL_BOX * size / 2) / r.h;
+    const hw = (MATERIAL_BOX * size) / 2 / r.w;
+    const hh = (MATERIAL_BOX * size) / 2 / r.h;
     const cx = el.x ?? 0;
     const cy = el.y ?? 0;
     return { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
@@ -1675,7 +1977,12 @@ export class BoardComponent {
   /** Calcula panX/panY para que el punto normalizado `anchor` quede exactamente bajo
    *  (screenX, screenY) con el `zoom` dado. Es la inversa de screenToNorm (el round-trip
    *  norm→pantalla→norm es la identidad), teniendo en cuenta letterboxing y orientación. */
-  private panToKeepAnchor(anchor: { x: number; y: number }, screenX: number, screenY: number, zoom: number): { panX: number; panY: number } {
+  private panToKeepAnchor(
+    anchor: { x: number; y: number },
+    screenX: number,
+    screenY: number,
+    zoom: number,
+  ): { panX: number; panY: number } {
     const hostEl = this.host()?.nativeElement as HTMLElement | undefined;
     if (!hostEl) return { panX: this.panX(), panY: this.panY() };
     const r = hostEl.getBoundingClientRect();
@@ -1725,6 +2032,23 @@ export class BoardComponent {
     return field === 'half' || field === 'vertical_half' || field === 'f7';
   }
 
+  /** Orientación que se aplicará al ELEGIR `f`, en un único sitio: la usan la acción
+   *  (`setField`) y la miniatura de la tarjeta (`fieldPreviewSafe`), de modo que la tarjeta no
+   *  puede prometer una orientación distinta de la que aplica. Regla vigente: un campo de media
+   *  extensión se pone VERTICAL («portería arriba») en escritorio/tablet; en móvil un ejercicio
+   *  NUEVO conserva la orientación actual (decisión de usabilidad del dueño) y al editar un
+   *  documento existente se respeta la que traía. `f7` es una plantilla compuesta y no la fuerza. */
+  private orientationForField(f: FieldType): 'horizontal' | 'vertical' {
+    if (
+      this.isHalfGeometry(f) &&
+      f !== 'f7' &&
+      (!this.isCompactViewport() || this.editExerciseId)
+    ) {
+      return 'vertical';
+    }
+    return this.orientation();
+  }
+
   protected setField(f: FieldType): void {
     const prev = this.field();
     const wasHalf = this.isHalfGeometry(prev);
@@ -1747,7 +2071,8 @@ export class BoardComponent {
     // orientación guardada (el constructor la lee de `doc.orientation`).
     // (A4: `f7` es una plantilla compuesta y NO fuerza vertical automáticamente.)
     if (this.isHalfGeometry(f) && f !== 'f7') {
-      if (!this.isCompactViewport() || this.editExerciseId) this.orientation.set('vertical');
+      const o = this.orientationForField(f);
+      if (o !== this.orientation()) this.orientation.set(o);
     }
     // FASE 5/A4: al pasar de un campo de media extensión a un campo COMPLETO, el
     // ejercicio se coloca en la mitad equivalente (superior en vertical, primera mitad
@@ -1784,11 +2109,16 @@ export class BoardComponent {
   /** Variantes (color/tipo) de cada material; la elegida se usa en la próxima colocación.
    *  BLOQUE E: se persiste localmente bajo una clave CDMPLab versionada para que la
    *  preferencia de variante sobreviva a recargas/cambios de sesión. */
-  protected readonly materialVariant = signal<Record<string, TacticalKind>>(this.loadMaterialVariants());
+  protected readonly materialVariant = signal<Record<string, TacticalKind>>(
+    this.loadMaterialVariants(),
+  );
   private static readonly materialVariantKey = 'cdmplab:material-variant:v1';
   private loadMaterialVariants(): Record<string, TacticalKind> {
     try {
-      return JSON.parse(localStorage.getItem(BoardComponent.materialVariantKey) ?? '{}') as Record<string, TacticalKind>;
+      return JSON.parse(localStorage.getItem(BoardComponent.materialVariantKey) ?? '{}') as Record<
+        string,
+        TacticalKind
+      >;
     } catch {
       return {};
     }
@@ -1862,7 +2192,10 @@ export class BoardComponent {
   }
   protected barToolClick(id: Tool): void {
     this.endBarPress();
-    if (this.panelDragClickConsumed()) { this.panelTapTouch = false; return; } // fue un arrastre al campo (ya colocó)
+    if (this.panelDragClickConsumed()) {
+      this.panelTapTouch = false;
+      return;
+    } // fue un arrastre al campo (ya colocó)
     const tapTouch = this.consumePanelTapTouch();
     if (this.barLongPressed) {
       this.barLongPressed = false;
@@ -1964,7 +2297,8 @@ export class BoardComponent {
         inner = `<path d="M-1.6 2 L-1.2 -1.8 L-0.2 -1.2 L0.2 -1.2 L1.2 -1.8 L1.6 2 Z" fill="${c}" stroke="#20242a" stroke-width="0.2"/><rect x="-0.7" y="-0.4" width="1.4" height="1" fill="#ffffff" opacity="0.3"/>`;
         break;
       case 'bosu':
-        inner = `<path d="M-1.6 0 A1.6 1.6 0 0 1 1.6 0 Z" fill="${c}" stroke="#20242a" stroke-width="0.2"/><ellipse cx="0" cy="0" rx="1.6" ry="0.5" fill="#10151a" opacity="0.55"/>`;        break;
+        inner = `<path d="M-1.6 0 A1.6 1.6 0 0 1 1.6 0 Z" fill="${c}" stroke="#20242a" stroke-width="0.2"/><ellipse cx="0" cy="0" rx="1.6" ry="0.5" fill="#10151a" opacity="0.55"/>`;
+        break;
       case 'marker':
         inner = `<path d="M-1.6 0 A1.6 1.6 0 0 1 1.6 0 Z" fill="${c}" stroke="#20242a" stroke-width="0.2"/><ellipse cx="0" cy="0" rx="1.6" ry="0.5" fill="#10151a" opacity="0.55"/>`;
         break;
@@ -1997,20 +2331,29 @@ export class BoardComponent {
   /** HTML seguro de la miniatura vectorial (usa el mismo sanitizador que el campo). */
   protected materialVectorThumbSafe(id: string): SafeHtml {
     const svg = this.materialVectorThumb(id);
-    return this.sanitizer.bypassSecurityTrustHtml(svg || `<span class="msi">${this.materialIcon(id)}</span>`);
+    return this.sanitizer.bypassSecurityTrustHtml(
+      svg || `<span class="msi">${this.materialIcon(id)}</span>`,
+    );
   }
 
   /** Miniatura SVG de un campo base (solo las líneas, sin fichas) con la geometría REAL.
    *  Usa el mismo renderizador y la misma geometría que el campo activo, de modo que la
-   *  miniatura no puede quedar desactualizada respecto al campo (FASE 3). */
+   *  miniatura no puede quedar desactualizada respecto al campo (FASE 3).
+   *
+   *  La orientación de la miniatura es la que se APLICARÍA al elegir esa tarjeta
+   *  (`orientationForField`), no la actual sin más: antes el «Medio campo» se dibujaba con la
+   *  orientación de ese momento y, al pulsarlo, el campo se ponía en vertical, así que en
+   *  escritorio la tarjeta prometía algo distinto de lo que hacía. */
   protected fieldPreviewSafe(field: FieldType): SafeHtml {
-    const o = this.orientation();
+    const o = this.orientationForField(field);
     const geo = fieldGeometry(field, o);
     const fieldStr = fieldSvg(field, geo.rect, o);
     const svg =
       `<svg class="field-preview-svg" viewBox="0 0 ${geo.vbW} ${geo.vbH}" xmlns="http://www.w3.org/2000/svg">` +
       `<g fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" stroke-linecap="round">` +
-      (o === 'vertical' ? `<g transform="translate(${geo.vbW / 2 + (geo.rect.y + geo.rect.h / 2)} 0) rotate(90)">${fieldStr}</g>` : fieldStr) +
+      (o === 'vertical'
+        ? `<g transform="translate(${geo.vbW / 2 + (geo.rect.y + geo.rect.h / 2)} 0) rotate(90)">${fieldStr}</g>`
+        : fieldStr) +
       `</g></svg>`;
     return this.sanitizer.bypassSecurityTrustHtml(svg);
   }
@@ -2024,7 +2367,6 @@ export class BoardComponent {
   private materialIcon(id: string): string {
     return MATERIALS.find((m) => m.id === id)?.icon ?? 'category';
   }
-
 
   // Fase 5 — se elimina el selector Propio/Rival: la diferenciación entre
   // equipos es SOLO por color. `genericColor` es el color de la última ficha de
@@ -2053,7 +2395,9 @@ export class BoardComponent {
     // Solo registrar en el historial si el gesto realmente modificó el documento.
     // Un clic para seleccionar (sin arrastrar) no debe crear una entrada de undo.
     const current = this.docSnapshot();
-    const changed = !!(this.gestureBase && JSON.stringify(this.gestureBase) !== JSON.stringify(current));
+    const changed = !!(
+      this.gestureBase && JSON.stringify(this.gestureBase) !== JSON.stringify(current)
+    );
     if (changed) {
       this.history.commit(current);
       this.markDirty();
@@ -2087,7 +2431,12 @@ export class BoardComponent {
   @HostListener('window:keydown', ['$event'])
   onKeydown(evt: KeyboardEvent): void {
     const t = evt.target as HTMLElement | null;
-    const editing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+    const editing =
+      !!t &&
+      (t.tagName === 'INPUT' ||
+        t.tagName === 'TEXTAREA' ||
+        t.tagName === 'SELECT' ||
+        t.isContentEditable);
     const ctrl = evt.ctrlKey || evt.metaKey;
     // Atajos globales de la pizarra que también funcionan mientras se edita texto:
     // Ctrl+Z/Y deshacen/rehacen la pizarra (la edición del texto no crea entradas
@@ -2270,12 +2619,22 @@ export class BoardComponent {
   //   - RATÓN/LÁPIZ ("escritorio"): se conserva la colocación CONTINUADA (la herramienta
   //     sigue armada; el siguiente arrastre/click coloca otra).
   // `pointerType` se conserva en el estado del arrastre para decidir la regla al soltar.
-  protected readonly panelDrag = signal<{ spec: PanelDragSpec; pointerId: number; overHost: boolean; pointerType: string } | null>(null);
+  protected readonly panelDrag = signal<{
+    spec: PanelDragSpec;
+    pointerId: number;
+    overHost: boolean;
+    pointerType: string;
+  } | null>(null);
   /** Gestión PENDIENTE del puntero bajado sobre un elemento del panel: todavía NO se
    *  arrastra (ni se arma la herramienta ni se captura el puntero). Solo al superar el
    *  umbral de movimiento se convierte en un arrastre real; mientras tanto la pulsación
    *  larga (variantes/color) y el scroll del panel siguen funcionando. */
-  private panelDragPending: { spec: PanelDragSpec; pointerId: number; startClient: { x: number; y: number }; pointerType: string } | null = null;
+  private panelDragPending: {
+    spec: PanelDragSpec;
+    pointerId: number;
+    startClient: { x: number; y: number };
+    pointerType: string;
+  } | null = null;
   /** Elemento del panel que inició el gesto (destino de `setPointerCapture`). Se captura
    *  desde la BAJADA para que el arrastre siga aunque salga del panel; el estado sigue
    *  PENDIENTE (no arma ni coloca nada) hasta superar el umbral de movimiento. */
@@ -2335,19 +2694,33 @@ export class BoardComponent {
   /** Convierte la gestión pendiente en un arrastre REAL: arma la colocación (para la
    *  previsualización y el tap sobre el campo), captura el puntero para seguir el
    *  movimiento aunque salga del panel y cancela cualquier pulsación larga en curso. */
-  private beginActivePanelDrag(pend: { spec: PanelDragSpec; pointerId: number; startClient: { x: number; y: number }; pointerType: string }, evt: PointerEvent): void {
+  private beginActivePanelDrag(
+    pend: {
+      spec: PanelDragSpec;
+      pointerId: number;
+      startClient: { x: number; y: number };
+      pointerType: string;
+    },
+    evt: PointerEvent,
+  ): void {
     const { spec, pointerId } = pend;
     this.panelDragPending = null;
     // Un arrastre real cancela cualquier pulsación larga pendiente (variantes/color).
     this.endBarPress();
-    this.armed.set(spec.player ? { tool: spec.tool, label: spec.label, player: spec.player } : { tool: spec.tool, label: spec.label });
+    this.armed.set(
+      spec.player
+        ? { tool: spec.tool, label: spec.label, player: spec.player }
+        : { tool: spec.tool, label: spec.label },
+    );
     this.setTool(spec.tool);
     this.panelDrag.set({ spec, pointerId, overHost: false, pointerType: pend.pointerType });
     this.cursorScreen.set({ x: pend.startClient.x, y: pend.startClient.y });
     // Con pointerId sintético (e2e que despachan PointerEvents a mano) setPointerCapture
     // puede lanzar; sin captura el gesto sigue siendo usable.
     try {
-      (this.panelDragSourceEl ?? evt.currentTarget as Element | null)?.setPointerCapture?.(pointerId);
+      (this.panelDragSourceEl ?? (evt.currentTarget as Element | null))?.setPointerCapture?.(
+        pointerId,
+      );
     } catch {
       /* setPointerCapture no disponible/no válido: no bloquea el arrastre */
     }
@@ -2432,7 +2805,9 @@ export class BoardComponent {
     if (!hostEl) return false;
     const r = hostEl.getBoundingClientRect();
     if (x < r.left || x > r.right || y < r.top || y > r.bottom) return false;
-    const overlays = document.querySelectorAll<HTMLElement>('.side-panel, .top-pop, .tools-panel-side');
+    const overlays = document.querySelectorAll<HTMLElement>(
+      '.side-panel, .top-pop, .tools-panel-side',
+    );
     for (const el of Array.from(overlays)) {
       const rr = el.getBoundingClientRect();
       if (x >= rr.left && x <= rr.right && y >= rr.top && y <= rr.bottom) return false;
@@ -2495,7 +2870,10 @@ export class BoardComponent {
    *  panel Jugadores (FASE B: paneles persistentes). Conserva la regla de UNA instancia
    *  por playerId y el color/rol reales del jugador. */
   protected armRosterPlayer(p: Player): void {
-    if (this.panelDragClickConsumed()) { this.panelTapTouch = false; return; } // fue un arrastre al campo
+    if (this.panelDragClickConsumed()) {
+      this.panelTapTouch = false;
+      return;
+    } // fue un arrastre al campo
     if (this.placedPlayerIds().has(p.id)) return; // un jugador de plantilla, una sola instancia
     // Defecto 1: un toque corto TÁCTIL sobre un jugador de plantilla NO arma la colocación
     // (solo un arrastre completo lo coloca); en escritorio (ratón/teclado) sí arma.
@@ -2536,7 +2914,7 @@ export class BoardComponent {
       this.frames().map((f) => ({
         ...f,
         elements: f.elements.map((e) => (e.t === 'player' && e.playerId === id ? { ...e, c } : e)),
-      }))
+      })),
     );
     this.rosterColorOpen.set(null);
   }
@@ -2622,19 +3000,27 @@ export class BoardComponent {
     // Jugadores GENÉRICOS ya colocados del color de la formación (sin playerId):
     // se recolocan (idempotencia), nunca se duplican. Los reales de plantilla
     // (con playerId) se IGNORAN por completo.
-    const existing = this.view().filter(
-      (e) => e.t === 'player' && !e.playerId && (e.c ?? '') === color
+    const genericsOfColor = this.view().filter(
+      (e) => e.t === 'player' && !e.playerId && (e.c ?? '') === color,
     );
+    // BLOQUEADO = intocable: los genéricos bloqueados del color no se recolocan, no se
+    // borran como sobrantes y su hueco NO lo ocupa otro jugador (si no, aplicar una
+    // formación movería justo lo que el usuario bloqueó a propósito).
+    const locked = genericsOfColor.filter((e) => e.locked);
+    const existing = genericsOfColor.filter((e) => !e.locked);
+    const specsToFill = Math.max(0, specs.length - locked.length);
 
     this.beginHistory();
     const keptIds = new Set<string>();
-    for (let i = 0; i < specs.length; i++) {
+    for (let i = 0; i < specsToFill; i++) {
       const { x, y, c } = specs[i];
       const rex = existing[i];
       if (rex) {
-        // Recoloca el genérico existente del color (idempotencia) y le limpia cualquier
-        // dorsal/side antiguo (las formaciones actuales no asignan rol ni lado).
-        this.updateElement(rex.id, { x, y, c, n: undefined, side: undefined, type: undefined });
+        // Recoloca el genérico existente del color (idempotencia) y limpia SOLO los campos
+        // del modelo antiguo (rol/lado). El DORSAL (`n`) y la ETIQUETA que haya escrito el
+        // usuario NO se tocan: son suyos, y la formación no asigna ninguno (antes se
+        // borraba el dorsal al reaplicar).
+        this.updateElement(rex.id, { x, y, c, side: undefined, type: undefined });
         keptIds.add(rex.id);
       } else {
         // Crea el genérico (sin playerId ni label, sin dorsal ni side): CÍRCULO del color.
@@ -2677,45 +3063,7 @@ export class BoardComponent {
   }
 
   protected toolHint(): string {
-    const map: Partial<Record<Tool, string>> = {
-      select: 'Selecciona y mueve elementos (arrastra para mover; la rueda hace zoom; la rotación ±90° desde la barra de contexto)',
-      hand: 'Arrastra para desplazar el campo (pellizca con dos dedos para acercar)',
-      player: 'Clic para colocar un jugador',
-      ball: 'Clic para colocar el balón',
-      cone: 'Clic para colocar un cono',
-      mannequin: 'Clic para colocar un maniquí',
-      minigoal: 'Clic para colocar una mini portería',
-      goal: 'Clic para colocar una portería grande',
-      mannequin_row: 'Clic para colocar una barrera de maniquíes',
-      pole: 'Clic para colocar una pértiga / poste',
-      marker: 'Clic para colocar un BOSU',
-      hurdle: 'Clic para colocar una valla',
-      ring: 'Clic para colocar un aro',
-      ladder: 'Clic para colocar una escalera',
-      flag: 'Clic para colocar un banderín',
-      trampoline: 'Clic para colocar un minitrampolín',
-      target: 'Clic para colocar un chino',
-      net: 'Clic para colocar una red',
-      vball: 'Clic para colocar un fitball',
-      coachC: 'Clic para colocar un marcador C',
-      peto: 'Clic para colocar un peto',
-      chaleco: 'Clic para colocar un chaleco lastrado',
-      bosu: 'Clic para colocar un BOSU',
-      fitball: 'Clic para colocar un fitball',
-      pica: 'Clic para colocar una pica coloreable',
-      rect: 'Arrastra para dibujar un rectángulo',
-      ellipse: 'Arrastra para dibujar un círculo / elipse',
-      arrow: 'Arrastra para dibujar una flecha',
-      doubleArrow: 'Arrastra para dibujar una flecha de doble sentido',
-      curve_left: 'Arrastra para dibujar una curva a la izquierda',
-      curve_right: 'Arrastra para dibujar una curva a la derecha',
-      dribble: 'Arrastra para dibujar una conducción (zigzag)',
-      line: 'Arrastra para dibujar una línea',
-      freehand: 'Arrastra para dibujar a mano alzada',
-      text: 'Clic para colocar un texto',
-      erase: 'Clic sobre un elemento para borrarlo',
-    };
-    return map[this.tool()] ?? '';
+    return toolHintFor(this.tool());
   }
 
   protected positionLabel(pos: Position): string {
@@ -2770,7 +3118,10 @@ export class BoardComponent {
     // Auto-crece el alto del cuadro (solo crece, nunca encoge) para que ninguna
     // línea quede recortada, SIEMPRE que el usuario no haya fijado el cuadro a mano.
     if (el && el.t === 'text' && el.w && el.autoH !== false) {
-      patch.h = Math.max(el.h ?? DEFAULT_TEXT_H, this.autoHForText(v, el.size ?? DEFAULT_TEXT_SIZE, el.w));
+      patch.h = Math.max(
+        el.h ?? DEFAULT_TEXT_H,
+        this.autoHForText(v, el.size ?? DEFAULT_TEXT_SIZE, el.w),
+      );
     }
     // Edición EN VIVO (con cada tecla) para que el texto se refleje al instante
     // en el campo. No crea una entrada de historial por tecla: la edición se
@@ -2875,7 +3226,11 @@ export class BoardComponent {
 
   protected setSelStrokeWidth(evt: Event): void {
     const v = parseFloat((evt.target as HTMLInputElement).value);
-    this.editSelected({ strokeWidth: Number.isNaN(v) ? DEFAULT_STROKE_WIDTH : Math.max(MIN_STROKE_WIDTH, Math.min(MAX_STROKE_WIDTH, v)) });
+    this.editSelected({
+      strokeWidth: Number.isNaN(v)
+        ? DEFAULT_STROKE_WIDTH
+        : Math.max(MIN_STROKE_WIDTH, Math.min(MAX_STROKE_WIDTH, v)),
+    });
   }
 
   protected setSelLineStyle(style: 'solid' | 'dashed' | 'dotted'): void {
@@ -2933,7 +3288,11 @@ export class BoardComponent {
     return `<g>${s}</g>`;
   }
 
-  private resizeHandleAt(el: CanvasElement, p: { x: number; y: number }, screenPx = 10): string | null {
+  private resizeHandleAt(
+    el: CanvasElement,
+    p: { x: number; y: number },
+    screenPx = 10,
+  ): string | null {
     // FASE 9: la tolerancia del asa se define EN PANTALLA (px) y se convierte según zoom,
     // con un área táctil CONSTANTE en px (ratón ~10, táctil ~16) en vez del 0.045 norm,
     // que crecía con la magnificación y hacía que asas próximas se solaparan entre sí.
@@ -2972,7 +3331,8 @@ export class BoardComponent {
         const el = this.view().find((e) => e.id === id);
         return !!el && el.locked;
       });
-      if (anyLocked) this.notify('Elemento bloqueado: desbloquéalo desde Propiedades para eliminarlo.');
+      if (anyLocked)
+        this.notify('Elemento bloqueado: desbloquéalo desde Propiedades para eliminarlo.');
       return;
     }
     this.beginHistory();
@@ -3055,7 +3415,9 @@ export class BoardComponent {
       if (this.editExerciseId) {
         const existing = this.store.exercises().find((e) => e.id === this.editExerciseId);
         if (!existing) {
-          this.notify('No se encontró el ejercicio a actualizar. Reintenta o vuelve a la biblioteca.');
+          this.notify(
+            'No se encontró el ejercicio a actualizar. Reintenta o vuelve a la biblioteca.',
+          );
           this.saving.set(false);
           return false; // no navegar, no limpiar dirty
         }
@@ -3103,7 +3465,9 @@ export class BoardComponent {
       }
     } catch (err) {
       // No abandonar ni limpiar el estado sucio si falla la persistencia.
-      this.notify('No se pudo guardar el ejercicio. Revisa el almacenamiento del navegador e inténtalo de nuevo.');
+      this.notify(
+        'No se pudo guardar el ejercicio. Revisa el almacenamiento del navegador e inténtalo de nuevo.',
+      );
       this.saving.set(false);
       return false;
     }
@@ -3127,10 +3491,7 @@ export class BoardComponent {
         grid: this.fieldGrid(),
         guide: this.guide(),
         grass: this.grass(),
-      }).replace(
-        'class="entrenolab-board"',
-        `width="${w}" height="${h}" class="entrenolab-board"`
-      )
+      }).replace('class="entrenolab-board"', `width="${w}" height="${h}" class="entrenolab-board"`),
     );
     const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     const img = new Image();
@@ -3172,7 +3533,11 @@ export class BoardComponent {
       /* setPointerCapture no disponible/no válido: no bloquea el gesto */
     }
     // Registrar el puntero activo (independientemente de la herramienta).
-    this.activePointers.set(evt.pointerId, { x: evt.clientX, y: evt.clientY, type: evt.pointerType });
+    this.activePointers.set(evt.pointerId, {
+      x: evt.clientX,
+      y: evt.clientY,
+      type: evt.pointerType,
+    });
 
     // SEGUNDO DEDO durante un gesto de PANEL (Defecto 2): se cancela el gesto del panel
     // (sin colocar, sin armar, a Cursor) y NO se mezcla en un pinch. Un puntero del panel +
@@ -3210,14 +3575,28 @@ export class BoardComponent {
     }
 
     // Mouse / lápiz: comportamiento inmediato (se ejecuta en el propio pointerdown).
-    this.beginSinglePointerDown(evt.clientX, evt.clientY, this.toNorm(evt), evt.shiftKey, evt.pointerId);
+    this.beginSinglePointerDown(
+      evt.clientX,
+      evt.clientY,
+      this.toNorm(evt),
+      evt.shiftKey,
+      evt.pointerId,
+      evt.timeStamp,
+    );
   }
 
   /** Ejecuta la acción de UN puntero al BAJAR (colocar/seleccionar/empezar a mover/
    *  dibujar/rotar/redimensionar/patear). `clientX/clientY` son las de PANTALLA y `p`
    *  la normalizada del MISMO punto: así un gesto táctil diferido puede arrancar desde
    *  el punto ORIGINAL de bajada en vez del punto al que ya se movió. */
-  private beginSinglePointerDown(clientX: number, clientY: number, p: { x: number; y: number }, shift: boolean, pointerId: number): void {
+  private beginSinglePointerDown(
+    clientX: number,
+    clientY: number,
+    p: { x: number; y: number },
+    shift: boolean,
+    pointerId: number,
+    eventStamp: number,
+  ): void {
     // Fase 3: cualquier interacción sobre el campo cierra el menú contextual (tocar fuera).
     this.closeCtxMenu();
 
@@ -3242,8 +3621,12 @@ export class BoardComponent {
           this.resizing = true;
           this.resizeKey = rKey;
           this.moveStart = { x: p.x, y: p.y };
-          this.resizeStartSize = selEl.t !== 'text' && this.isPointLike(selEl.t) ? (selEl.size ?? materialSize(selEl)) : null;
-          this.resizeStartPoints = selEl.t === 'freehand' ? ((selEl.points ?? []) as [number, number][]) : null;
+          this.resizeStartSize =
+            selEl.t !== 'text' && this.isPointLike(selEl.t)
+              ? (selEl.size ?? materialSize(selEl))
+              : null;
+          this.resizeStartPoints =
+            selEl.t === 'freehand' ? ((selEl.points ?? []) as [number, number][]) : null;
           break;
         }
         // Los elementos bloqueados siguen siendo SELECCIONABLES (para poder
@@ -3269,10 +3652,20 @@ export class BoardComponent {
             this.movingIds = this.unlockedSelectedIds();
             this.moveStart = { x: p.x, y: p.y };
             // BLOQUE D2: DOBLE CLIC con ratón/pluma → abrir el menú contextual del elemento.
-            // Dos taps sobre el MISMO elemento dentro del umbral abren el menú (en vez de
-            // solo seleccionar). Un click lento/simple no dispara nada adicional.
-            const now = performance.now();
-            if (this.dblClick && this.dblClick.id === hit && now - this.dblClick.time <= BoardComponent.DBL_CLICK_MS) {
+            // Dos clics sobre el MISMO elemento dentro del umbral abren el menú (en vez de
+            // solo seleccionar). Un clic lento/simple no dispara nada adicional.
+            //
+            // El instante se toma del EVENTO (`timeStamp`), no del momento en que corre el
+            // manejador: si el hilo principal está ocupado (el primer clic abre el inspector
+            // y repinta), medir `performance.now()` aquí hacía que dos clics REALMENTE
+            // seguidos se vieran como dos clics sueltos y el menú no se abría. Era la
+            // intermitencia que aparecía solo en la suite completa.
+            const now = eventStamp;
+            if (
+              this.dblClick &&
+              this.dblClick.id === hit &&
+              now - this.dblClick.time <= BoardComponent.DBL_CLICK_MS
+            ) {
               this.dblClick = null;
               this.openCtxMenu();
             } else {
@@ -3287,7 +3680,23 @@ export class BoardComponent {
           // Fase 5: vacío (ni objeto ni asa) en Seleccionar → DESELECCIONAR. NUNCA se
           // inicia paneo (panGestureStart NO se fija): arrastrar desde vacío no mueve
           // la vista, aunque el campo sea mayor que la pantalla o el zoom >100 %.
-          this.clearSelection();
+          //
+          // Doble clic ROBUSTO: si este segundo clic no acierta ningún objeto (el hit-test
+          // de materiales es fino) pero cae DENTRO de la caja actual del MISMO objeto del
+          // clic anterior, sigue siendo un doble clic SOBRE ESE objeto —aunque la
+          // disposición haya cambiado entre ambos clics—. No se relaja la condición: el
+          // punto tiene que estar DENTRO de su caja, no «cerca».
+          const pend = this.dblClick;
+          const pendEl = pend ? this.view().find((e) => e.id === pend.id) : undefined;
+          const bb = pendEl ? this.elNormBBox(pendEl) : null;
+          const inside = !!bb && p.x >= bb.x0 && p.x <= bb.x1 && p.y >= bb.y0 && p.y <= bb.y1;
+          if (pend && pendEl && inside && eventStamp - pend.time <= BoardComponent.DBL_CLICK_MS) {
+            this.dblClick = null;
+            this.setSingleSelection(pend.id);
+            this.openCtxMenu();
+          } else {
+            this.clearSelection();
+          }
         }
         break;
       }
@@ -3317,7 +3726,9 @@ export class BoardComponent {
       case 'dumbbell':
         this.beginHistory();
         const armedBefore = this.armed();
-        const id = armedBefore?.player ? this.placePlayerElement(p, armedBefore.player) : this.addAt(p);
+        const id = armedBefore?.player
+          ? this.placePlayerElement(p, armedBefore.player)
+          : this.addAt(p);
         this.endHistory();
         // Fase 3 (COLOCACIÓN CONTINUA): tras emplazar, el material/jugador genérico
         // SIGUE armado y NO se pasa a Seleccionar, NI se auto-selecciona (no abre
@@ -3387,6 +3798,7 @@ export class BoardComponent {
       pointerId: evt.pointerId,
       startClient: { x: evt.clientX, y: evt.clientY },
       startNorm: p,
+      stamp: evt.timeStamp,
       tool,
       armed,
       shift,
@@ -3404,13 +3816,24 @@ export class BoardComponent {
    *  cancela el gesto, se aborta. Solo aplica a los planes que tocan un objeto. */
   private maybeStartTouchLongPress(gp: TouchPending): void {
     if (gp.tool !== 'select') return;
-    if (gp.plan.kind !== 'selectMove' && gp.plan.kind !== 'selectMultiShift' && gp.plan.kind !== 'moveGroup') return;
-    const hit = gp.plan.kind === 'moveGroup' ? this.hitTestNorm(gp.startNorm, this.view(), 9) : gp.plan.hitId;
+    if (
+      gp.plan.kind !== 'selectMove' &&
+      gp.plan.kind !== 'selectMultiShift' &&
+      gp.plan.kind !== 'moveGroup'
+    )
+      return;
+    const hit =
+      gp.plan.kind === 'moveGroup' ? this.hitTestNorm(gp.startNorm, this.view(), 9) : gp.plan.hitId;
     if (hit) this.startLongPress(gp.pointerId, gp.startClient.x, gp.startClient.y, hit);
   }
 
   /** Decide QUÉ hará el gesto de un dedo, sin ejecutarlo aún (solo lo clasifica). */
-  private computeTouchPlan(p: { x: number; y: number }, tool: Tool, armed: ArmedPlacement | null, shift: boolean): TouchPlan {
+  private computeTouchPlan(
+    p: { x: number; y: number },
+    tool: Tool,
+    armed: ArmedPlacement | null,
+    shift: boolean,
+  ): TouchPlan {
     switch (tool) {
       case 'select': {
         const selEl = this.selectedElement();
@@ -3496,7 +3919,12 @@ export class BoardComponent {
 
   /** Empieza la cuenta atrás de una pulsación larga sobre el objeto `targetId`. Un solo
    *  temporizador a la vez; cancelar uno anterior no afecta a nada (solo lo reemplaza). */
-  private startLongPress(pointerId: number, clientX: number, clientY: number, targetId: string | null): void {
+  private startLongPress(
+    pointerId: number,
+    clientX: number,
+    clientY: number,
+    targetId: string | null,
+  ): void {
     this.cancelLongPress(pointerId);
     if (targetId == null) return;
     this.lp = { pointerId, start: { x: clientX, y: clientY }, targetId, fired: false };
@@ -3547,7 +3975,22 @@ export class BoardComponent {
       return;
     }
     lp.fired = true;
-    this.consumeLongPressGesture(lp.pointerId);
+    // RATÓN/LÁPIZ: se abre el menú pero NO se DESARMA el arrastre. Antes se llamaba aquí a
+    // `consumeLongPressGesture` (que vacía `movingIds` y `moveStart`) y eso convertía una
+    // carrera del temporizador en un fallo funcional: si los 550 ms vencían antes de que el
+    // primer `pointermove` llegara al navegador —máquina cargada: el `down` y el `move` son
+    // dos llamadas distintas—, el arrastre que el usuario ya estaba haciendo no movía NADA.
+    // De ahí salieron dos intermitencias de la suite completa: la papelera que no aparecía y
+    // «la selección múltiple se mueve como un GRUPO» con `movedA = 0`. Con el arrastre armado,
+    // el gesto funciona igual tanto si el menú llega a abrirse como si no.
+    // TÁCTIL: se conserva el consumo (si no, el `pointerup` volvería a ejecutar el tap).
+    if (ap.type === 'touch') {
+      this.consumeLongPressGesture(lp.pointerId);
+    } else {
+      this.panGestureStart = null;
+      this.panMoved = false;
+      this.handDragging.set(false);
+    }
     // Seleccionar el objeto y abrir el menú contextual (sin duplicar ni mover).
     this.setSingleSelection(el.id);
     this.ctxMenuOpen.set(true);
@@ -3592,7 +4035,14 @@ export class BoardComponent {
   private beginTouchGesture(gp: TouchPending): void {
     const k = gp.plan.kind;
     if (k === 'place' || k === 'erase' || k === 'none') return; // el arrastre cancela: no coloca/borra
-    this.beginSinglePointerDown(gp.startClient.x, gp.startClient.y, gp.startNorm, gp.shift, gp.pointerId);
+    this.beginSinglePointerDown(
+      gp.startClient.x,
+      gp.startClient.y,
+      gp.startNorm,
+      gp.shift,
+      gp.pointerId,
+      gp.stamp,
+    );
   }
 
   /** Confirma un TAP táctil (se levantó sin superar el umbral y con un solo dedo):
@@ -3618,7 +4068,9 @@ export class BoardComponent {
       } else {
         this.beginHistory();
         const armedBefore = gp.armed;
-        const id = armedBefore?.player ? this.placePlayerElement(p, armedBefore.player) : this.addAt(p);
+        const id = armedBefore?.player
+          ? this.placePlayerElement(p, armedBefore.player)
+          : this.addAt(p);
         this.endHistory();
         // Fase 3 (COLOCACIÓN CONTINUA): el material/jugador genérico sigue armado y
         // NO se auto-selecciona (no abre Propiedades ni muestra asas). Cada toque ya
@@ -3652,11 +4104,14 @@ export class BoardComponent {
     // moveGroup / rotate / resize / draw → un tap NO hace nada (son gestos de arrastre).
   }
 
-
   onPointerMove(evt: PointerEvent): void {
     // Actualizar la posición del puntero activo (base del cálculo del pinch).
     if (this.activePointers.has(evt.pointerId)) {
-      this.activePointers.set(evt.pointerId, { x: evt.clientX, y: evt.clientY, type: evt.pointerType });
+      this.activePointers.set(evt.pointerId, {
+        x: evt.clientX,
+        y: evt.clientY,
+        type: evt.pointerType,
+      });
     }
     // Fase 4: previsualización junto al cursor. Solo para jugadores genéricos/materiales
     // armados (el texto es de un solo uso y no muestra preview); nunca en tool==select/hand.
@@ -3682,7 +4137,10 @@ export class BoardComponent {
     // y deja que el bloque de abajo aplique el movimiento desde el ORIGEN de la bajada.
     const gp = this.touchPending;
     if (evt.pointerType === 'touch' && gp && gp.pointerId === evt.pointerId) {
-      gp.movedDist = Math.max(gp.movedDist, Math.hypot(evt.clientX - gp.startClient.x, evt.clientY - gp.startClient.y));
+      gp.movedDist = Math.max(
+        gp.movedDist,
+        Math.hypot(evt.clientX - gp.startClient.x, evt.clientY - gp.startClient.y),
+      );
       if (!gp.begun) {
         if (gp.movedDist > this.TOUCH_TAP_SLOP) {
           gp.begun = true;
@@ -3745,7 +4203,12 @@ export class BoardComponent {
     const el = this.trashEl()?.nativeElement;
     if (!el) return false;
     const r = el.getBoundingClientRect();
-    return evt.clientX >= r.left && evt.clientX <= r.right && evt.clientY >= r.top && evt.clientY <= r.bottom;
+    return (
+      evt.clientX >= r.left &&
+      evt.clientX <= r.right &&
+      evt.clientY >= r.top &&
+      evt.clientY <= r.bottom
+    );
   }
 
   private applyResize(el: CanvasElement, key: string, p: { x: number; y: number }): void {
@@ -3781,10 +4244,19 @@ export class BoardComponent {
         patch = { x: fx, y: fy, w, h, autoH: false };
       }
       this.updateElement(el.id, patch);
-    } else if (t === 'line' || t === 'arrow' || t === 'curve' || t === 'doubleArrow' || t === 'measure' || t === 'dribble') {
+    } else if (
+      t === 'line' ||
+      t === 'arrow' ||
+      t === 'curve' ||
+      t === 'doubleArrow' ||
+      t === 'measure' ||
+      t === 'dribble'
+    ) {
       if (key === 'x1') this.updateElement(el.id, { x1: this.clamp01(p.x), y1: this.clamp01(p.y) });
-      else if (key === 'x2') this.updateElement(el.id, { x2: this.clamp01(p.x), y2: this.clamp01(p.y) });
-      else if (key === 'c1') this.updateElement(el.id, { c1x: this.clamp01(p.x), c1y: this.clamp01(p.y) });
+      else if (key === 'x2')
+        this.updateElement(el.id, { x2: this.clamp01(p.x), y2: this.clamp01(p.y) });
+      else if (key === 'c1')
+        this.updateElement(el.id, { c1x: this.clamp01(p.x), c1y: this.clamp01(p.y) });
     } else if (t === 'freehand') {
       // Escala PROPORCIONAL del trazo desde sus esquinas: se reescala la nube de
       // puntos alrededor del centro del bbox original guardado al empezar.
@@ -3801,15 +4273,18 @@ export class BoardComponent {
         const d0 = Math.hypot(maxX - cx, maxY - cy) || 1;
         const d = Math.hypot(p.x - cx, p.y - cy);
         const s = Math.max(0.15, Math.min(8, d / d0));
-        const scaled = pts0.map(([px2, py2]) => [
-          Math.max(0, Math.min(1, cx + (px2 - cx) * s)),
-          Math.max(0, Math.min(1, cy + (py2 - cy) * s)),
-        ] as [number, number]);
+        const scaled = pts0.map(
+          ([px2, py2]) =>
+            [
+              Math.max(0, Math.min(1, cx + (px2 - cx) * s)),
+              Math.max(0, Math.min(1, cy + (py2 - cy) * s)),
+            ] as [number, number],
+        );
         this.updateElement(el.id, { points: scaled });
       }
     } else if (this.isPointLike(t)) {
       // Escala UNIFORME de un material/jugador desde sus esquinas (persistida en `size`).
-      const size0 = this.resizeStartSize ?? (el.size ?? materialSize(el));
+      const size0 = this.resizeStartSize ?? el.size ?? materialSize(el);
       const r = this.geo().rect;
       const cx = el.x ?? 0;
       const cy = el.y ?? 0;
@@ -3870,8 +4345,18 @@ export class BoardComponent {
       // Herramientas de dibujo de un solo uso: tras crear, volver a Seleccionar.
       this.setTool('select');
     }
-    // Soltar sobre la papelera elimina el/los objetos movidos.
-    if (this.movingIds.length && this.isOverTrash(evt ?? ({} as PointerEvent))) {
+    // Soltar sobre la papelera elimina el/los objetos movidos. Se exige además que el gesto
+    // HAYA MOVIDO algo (`moveGestureBegun`, que solo se pone cuando un pointermove cambia de
+    // verdad la posición): sin esa condición, un CLIC sin arrastre sobre un objeto que cae
+    // dentro de la caja de la papelera la borraba de golpe. La papelera existe SIEMPRE en el
+    // DOM (oculta con `opacity: 0`) y su caja está en norm (0.5, 0.965): medido con un clic
+    // simple sobre un objeto en (0.5, 0.92), el contador pasaba de 1 a 0 sin que el usuario
+    // arrastrara nada. Un clic es una SELECCIÓN; borrar exige arrastrar hasta la papelera.
+    if (
+      this.movingIds.length &&
+      this.moveGestureBegun &&
+      this.isOverTrash(evt ?? ({} as PointerEvent))
+    ) {
       if (!this.moveGestureBegun) {
         this.beginHistory();
         this.moveGestureBegun = true;
@@ -3965,7 +4450,8 @@ export class BoardComponent {
   private addAt(p: { x: number; y: number }): string | null {
     const t = this.tool();
     let el: CanvasElement | null = null;
-    const materialKind = (tool: string): TacticalKind => this.materialVariant()[tool] ?? this.defaultKindFor(tool);
+    const materialKind = (tool: string): TacticalKind =>
+      this.materialVariant()[tool] ?? this.defaultKindFor(tool);
     const withMaterial = (e: CanvasElement, tool: string): CanvasElement => {
       const kind = materialKind(tool);
       const a = tacticAsset(kind);
@@ -3989,7 +4475,10 @@ export class BoardComponent {
         el = withMaterial({ id: uid(), t: 'mannequin', x: p.x, y: p.y, c: '#e8edf2' }, 'mannequin');
         break;
       case 'mannequin_row':
-        el = withMaterial({ id: uid(), t: 'mannequin_row', x: p.x, y: p.y, c: '#f6c945' }, 'mannequin_row');
+        el = withMaterial(
+          { id: uid(), t: 'mannequin_row', x: p.x, y: p.y, c: '#f6c945' },
+          'mannequin_row',
+        );
         break;
       case 'minigoal':
         el = withMaterial({ id: uid(), t: 'minigoal', x: p.x, y: p.y, c: '#ffffff' }, 'minigoal');
@@ -4016,7 +4505,10 @@ export class BoardComponent {
         el = withMaterial({ id: uid(), t: 'flag', x: p.x, y: p.y, c: '#f6c945' }, 'flag');
         break;
       case 'trampoline':
-        el = withMaterial({ id: uid(), t: 'trampoline', x: p.x, y: p.y, c: '#e8edf2' }, 'trampoline');
+        el = withMaterial(
+          { id: uid(), t: 'trampoline', x: p.x, y: p.y, c: '#e8edf2' },
+          'trampoline',
+        );
         break;
       case 'dumbbell':
         el = withMaterial({ id: uid(), t: 'dumbbell', x: p.x, y: p.y, c: '#20242a' }, 'dumbbell');
@@ -4031,19 +4523,40 @@ export class BoardComponent {
         el = withMaterial({ id: uid(), t: 'vball', x: p.x, y: p.y, c: '#c98ab0' }, 'vball');
         break;
       case 'coachC':
-        el = { id: uid(), t: 'coachC', x: p.x, y: p.y, c: '#e6b800', size: materialBaseSize('coachC') };
+        el = {
+          id: uid(),
+          t: 'coachC',
+          x: p.x,
+          y: p.y,
+          c: '#e6b800',
+          size: materialBaseSize('coachC'),
+        };
         break;
       case 'peto':
         el = { id: uid(), t: 'peto', x: p.x, y: p.y, c: '#f6c945', size: materialBaseSize('peto') };
         break;
       case 'chaleco':
-        el = { id: uid(), t: 'chaleco', x: p.x, y: p.y, c: '#e74c3c', size: materialBaseSize('chaleco') };
+        el = {
+          id: uid(),
+          t: 'chaleco',
+          x: p.x,
+          y: p.y,
+          c: '#e74c3c',
+          size: materialBaseSize('chaleco'),
+        };
         break;
       case 'bosu':
         el = { id: uid(), t: 'bosu', x: p.x, y: p.y, c: '#3056d3', size: materialBaseSize('bosu') };
         break;
       case 'fitball':
-        el = { id: uid(), t: 'fitball', x: p.x, y: p.y, c: '#e67e22', size: materialBaseSize('fitball') };
+        el = {
+          id: uid(),
+          t: 'fitball',
+          x: p.x,
+          y: p.y,
+          c: '#e67e22',
+          size: materialBaseSize('fitball'),
+        };
         break;
       case 'pica':
         el = { id: uid(), t: 'pica', x: p.x, y: p.y, c: '#ffffff', size: materialBaseSize('pica') };
@@ -4058,7 +4571,16 @@ export class BoardComponent {
         let y = this.clamp01(p.y);
         if (x + DEFAULT_TEXT_W > 1) x = Math.max(0, 1 - DEFAULT_TEXT_W);
         if (y + DEFAULT_TEXT_H > 1) y = Math.max(0, 1 - DEFAULT_TEXT_H);
-        el = { id: uid(), t: 'text', x, y, v: 'Texto', size: DEFAULT_TEXT_SIZE, w: DEFAULT_TEXT_W, h: DEFAULT_TEXT_H };
+        el = {
+          id: uid(),
+          t: 'text',
+          x,
+          y,
+          v: 'Texto',
+          size: DEFAULT_TEXT_SIZE,
+          w: DEFAULT_TEXT_W,
+          h: DEFAULT_TEXT_H,
+        };
         break;
       }
       default:
@@ -4077,15 +4599,69 @@ export class BoardComponent {
     // Bloque E: preferencia de trazo (continuo/discontinuo) de la herramienta actual.
     const style = this.lineStyleFor(t);
     if (t === 'arrow') {
-      this.addElement({ id: uid(), t: 'arrow', x1: d.x0, y1: d.y0, x2: d.x1, y2: d.y1, style, c: col, strokeWidth: DEFAULT_STROKE_WIDTH });
+      this.addElement({
+        id: uid(),
+        t: 'arrow',
+        x1: d.x0,
+        y1: d.y0,
+        x2: d.x1,
+        y2: d.y1,
+        style,
+        c: col,
+        strokeWidth: DEFAULT_STROKE_WIDTH,
+      });
     } else if (t === 'doubleArrow') {
-      this.addElement({ id: uid(), t: 'doubleArrow', x1: d.x0, y1: d.y0, x2: d.x1, y2: d.y1, style, c: col, strokeWidth: DEFAULT_STROKE_WIDTH });
+      this.addElement({
+        id: uid(),
+        t: 'doubleArrow',
+        x1: d.x0,
+        y1: d.y0,
+        x2: d.x1,
+        y2: d.y1,
+        style,
+        c: col,
+        strokeWidth: DEFAULT_STROKE_WIDTH,
+      });
     } else if (t === 'measure') {
-      this.addElement({ id: uid(), t: 'measure', x1: d.x0, y1: d.y0, x2: d.x1, y2: d.y1, v: '15 m', style, c: col, strokeWidth: DEFAULT_STROKE_WIDTH });
+      // NO ALCANZABLE desde la interfaz: 'measure' no está en TOOLS ni en ningún panel
+      // (decisión: se retira de la UI y se conserva el RENDER para los documentos
+      // antiguos). Si algún día se expone, `v` NO puede ser el literal '15 m': hay que
+      // calcular la longitud real con la escala del campo, o la etiqueta miente.
+      this.addElement({
+        id: uid(),
+        t: 'measure',
+        x1: d.x0,
+        y1: d.y0,
+        x2: d.x1,
+        y2: d.y1,
+        v: '15 m',
+        style,
+        c: col,
+        strokeWidth: DEFAULT_STROKE_WIDTH,
+      });
     } else if (t === 'dribble') {
-      this.addElement({ id: uid(), t: 'dribble', x1: d.x0, y1: d.y0, x2: d.x1, y2: d.y1, c: col, strokeWidth: DEFAULT_STROKE_WIDTH });
+      this.addElement({
+        id: uid(),
+        t: 'dribble',
+        x1: d.x0,
+        y1: d.y0,
+        x2: d.x1,
+        y2: d.y1,
+        c: col,
+        strokeWidth: DEFAULT_STROKE_WIDTH,
+      });
     } else if (t === 'line') {
-      this.addElement({ id: uid(), t: 'line', x1: d.x0, y1: d.y0, x2: d.x1, y2: d.y1, style, c: col, strokeWidth: DEFAULT_STROKE_WIDTH });
+      this.addElement({
+        id: uid(),
+        t: 'line',
+        x1: d.x0,
+        y1: d.y0,
+        x2: d.x1,
+        y2: d.y1,
+        style,
+        c: col,
+        strokeWidth: DEFAULT_STROKE_WIDTH,
+      });
     } else if (t === 'rect' || t === 'ellipse') {
       const fill = this.shapeFill();
       const x = Math.min(d.x0, d.x1);
@@ -4093,7 +4669,18 @@ export class BoardComponent {
       const w = Math.abs(d.x1 - d.x0);
       const h = Math.abs(d.y1 - d.y0);
       if (w < 0.004 || h < 0.004) return; // no crear una figura de grosor/caída cero
-      this.addElement({ id: uid(), t, x, y, w, h, c: col, fill, fillColor: col, fillOpacity: this.fillOpacity() });
+      this.addElement({
+        id: uid(),
+        t,
+        x,
+        y,
+        w,
+        h,
+        c: col,
+        fill,
+        fillColor: col,
+        fillOpacity: this.fillOpacity(),
+      });
     } else if (t === 'curve_left' || t === 'curve_right') {
       // Fase 5: dos curvaturas opuestas, mismo ElementType 'curve' (puntos de control
       // con signo opuesto). curve_left se dobla hacia un lado y curve_right al contrario.
@@ -4114,8 +4701,16 @@ export class BoardComponent {
       // Un borrador de mano alzada necesita al menos 2 puntos distintos.
       if (this.freehandPts.length < 2) return;
       const pts = this.freehandPts;
-      this.addElement({ id: uid(), t: 'freehand', points: pts, c: col, strokeWidth: DEFAULT_STROKE_WIDTH });
+      this.addElement({
+        id: uid(),
+        t: 'freehand',
+        points: pts,
+        c: col,
+        strokeWidth: DEFAULT_STROKE_WIDTH,
+      });
     } else if (t === 'zone') {
+      // NO ALCANZABLE desde la interfaz (misma decisión que 'measure': fuera de la UI,
+      // render conservado). La zona era en la práctica un rectángulo relleno.
       const w = Math.abs(d.x1 - d.x0);
       const h = Math.abs(d.y1 - d.y0);
       if (w < 0.004 || h < 0.004) return; // no crear una zona de grosor cero
@@ -4144,10 +4739,57 @@ export class BoardComponent {
       const ay = d.y0 * g.h + g.y;
       return `<circle cx="${ax}" cy="${ay}" r="1.1" fill="${this.drawColor()}"/>`;
     }
-    if (t === 'arrow') return this.svgLine(d.x0, d.y0, d.x1, d.y1, 'end', this.drawColor(), false, DEFAULT_STROKE_WIDTH, this.lineStyleFor('arrow'), g);
-    if (t === 'doubleArrow') return this.svgLine(d.x0, d.y0, d.x1, d.y1, 'both', this.drawColor(), false, DEFAULT_STROKE_WIDTH, this.lineStyleFor('doubleArrow'), g);
-    if (t === 'dribble') return svgZigzag(d.x0, d.y0, d.x1, d.y1, this.drawColor(), false, DEFAULT_STROKE_WIDTH, 'solid', g);
-    if (t === 'line') return this.svgLine(d.x0, d.y0, d.x1, d.y1, 'none', this.drawColor(), false, DEFAULT_STROKE_WIDTH, this.lineStyleFor('line'), g);
+    if (t === 'arrow')
+      return this.svgLine(
+        d.x0,
+        d.y0,
+        d.x1,
+        d.y1,
+        'end',
+        this.drawColor(),
+        false,
+        DEFAULT_STROKE_WIDTH,
+        this.lineStyleFor('arrow'),
+        g,
+      );
+    if (t === 'doubleArrow')
+      return this.svgLine(
+        d.x0,
+        d.y0,
+        d.x1,
+        d.y1,
+        'both',
+        this.drawColor(),
+        false,
+        DEFAULT_STROKE_WIDTH,
+        this.lineStyleFor('doubleArrow'),
+        g,
+      );
+    if (t === 'dribble')
+      return svgZigzag(
+        d.x0,
+        d.y0,
+        d.x1,
+        d.y1,
+        this.drawColor(),
+        false,
+        DEFAULT_STROKE_WIDTH,
+        'solid',
+        g,
+      );
+    if (t === 'line')
+      return this.svgLine(
+        d.x0,
+        d.y0,
+        d.x1,
+        d.y1,
+        'none',
+        this.drawColor(),
+        false,
+        DEFAULT_STROKE_WIDTH,
+        this.lineStyleFor('line'),
+        g,
+      );
     if (t === 'curve_left' || t === 'curve_right') {
       const bend = t === 'curve_left' ? -0.14 : 0.14;
       const cxd = (d.x0 + d.x1) / 2;
@@ -4167,7 +4809,12 @@ export class BoardComponent {
       return s;
     }
     if (t === 'freehand') {
-      const pts = this.freehandPts.length ? this.freehandPts : [[d.x0, d.y0], [d.x1, d.y1]];
+      const pts = this.freehandPts.length
+        ? this.freehandPts
+        : [
+            [d.x0, d.y0],
+            [d.x1, d.y1],
+          ];
       const p = pts.map(([pxx, pyy]) => `${pxx * g.w + g.x},${pyy * g.h + g.y}`).join(' ');
       return `<polyline points="${p}" fill="none" stroke="${this.drawColor()}" stroke-width="${DEFAULT_STROKE_WIDTH}"/>`;
     }
@@ -4189,7 +4836,18 @@ export class BoardComponent {
     return '';
   }
 
-  private svgLine(x1: number, y1: number, x2: number, y2: number, arrow: 'none' | 'end' | 'both', color: string, _sel = false, width = DEFAULT_STROKE_WIDTH, lineStyle: 'solid' | 'dashed' = 'solid', _r?: unknown): string {
+  private svgLine(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    arrow: 'none' | 'end' | 'both',
+    color: string,
+    _sel = false,
+    width = DEFAULT_STROKE_WIDTH,
+    lineStyle: 'solid' | 'dashed' = 'solid',
+    _r?: unknown,
+  ): string {
     const g = this.geo().rect;
     const ax1 = x1 * g.w + g.x;
     const ay1 = y1 * g.h + g.y;
@@ -4214,7 +4872,11 @@ export class BoardComponent {
   }
 
   private nextNumber(): number {
-    const used = new Set(this.view().filter((e) => e.t === 'player').map((e) => e.n ?? 0));
+    const used = new Set(
+      this.view()
+        .filter((e) => e.t === 'player')
+        .map((e) => e.n ?? 0),
+    );
     for (let i = 1; i <= 99; i++) {
       if (!used.has(i)) return i;
     }

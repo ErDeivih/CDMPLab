@@ -8,8 +8,10 @@
 // borrado por papelera con undo/redo.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
 import { longPress } from './gesture-helpers';
-import { seedBoard, openBoard, hostBox, fitMode, fieldCount, normToScreen, showCategory, hideOverlays } from './board-helpers';
+import { seedBoard, openBoard, hostBox, fitMode, fieldCount, normToScreen, showCategory, hideOverlays, dragDraw } from './board-helpers';
 
 /** Selecciona en un punto (pulsación larga: abre el menú contextual). */
 async function selectAt(page: Page, nx: number, ny: number): Promise<void> {
@@ -91,7 +93,9 @@ test.describe('FASE H — selección, asas, resize y rotación', () => {
     await seedBoard(page); await openBoard(page);
     await drawShape(page, 'Línea', [0.25, 0.4], [0.6, 0.4]);
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
-    const lineSel = '.board-canvas svg line[stroke="#1f2933"]';
+    // Selector SEMÁNTICO (el `data-el-type` va en el grupo): antes se buscaba por el color
+    // de trazo por defecto, así que estas pruebas estaban acopladas a ese color.
+    const lineSel = '.board-canvas svg g[data-el-type="line"] line';
     const before = await page.locator(lineSel).first().evaluate((el) => ({
       x1: parseFloat(el.getAttribute('x1') ?? '0'), x2: parseFloat(el.getAttribute('x2') ?? '0'),
       y1: parseFloat(el.getAttribute('y1') ?? '0'), y2: parseFloat(el.getAttribute('y2') ?? '0'),
@@ -302,6 +306,10 @@ test.describe('FASE H — Cursor/Mano, zoom y papelera', () => {
     const c = normToScreen(0.5, 0.5, host, fit);
     await page.mouse.move(c.x, c.y);
     await page.mouse.down();
+    // El propio pointerdown SELECCIONA el cono: se comprueba ANTES de arrastrar, para que
+    // un fallo de hit-test se vea como tal y no como "no aparece la papelera" (en el suite
+    // completo este test falló una vez, de forma intermitente y sin reproducirse aislado).
+    await expect(page.locator('.studio-panel .inspector'), 'el cono queda seleccionado al pulsarlo').toBeVisible();
     // La papelera aparece al empezar a mover; el objeto llega VISUALMENTE a ella.
     await page.mouse.move(c.x + 20, c.y + 20, { steps: 3 });
     await expect(page.locator('.board-trash.trash-visible'), 'la papelera aparece al arrastrar').toBeVisible();
@@ -317,5 +325,94 @@ test.describe('FASE H — Cursor/Mano, zoom y papelera', () => {
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
     await page.keyboard.press('Control+y');
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(0);
+  });
+
+  test('móvil: Deshacer/Rehacer alcanzables SIN pulsación larga (menú «Más»)', async ({ page }) => {
+    // En táctil, deshacer exigía abrir el menú contextual con una pulsación larga sobre
+    // el objeto o sobre el campo. El menú «Más» (barra superior) los ofrece a dos toques.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedBoard(page); await openBoard(page);
+    // Armado del trazo con el MISMO patrón que `p5-draw-gesture` (que sí funciona a
+    // 390×844): abrir la categoría, pulsar la herramienta y MINIMIZAR el panel —que en
+    // móvil tapa la mitad del campo— antes del gesto. Sin `hideOverlays` aquí.
+    await showCategory(page, 'Dibujo');
+    await page.locator('.rail-btn[title="Línea"]').click();
+    const closePanel = page.locator('.side-panel-left .panel-close');
+    if (await closePanel.isVisible().catch(() => false)) await closePanel.first().click();
+    // Coordenadas DENTRO del campo visible: en modo `board-fill` el campo mide ~1240 px de
+    // ancho en un móvil de 390 (se panea con los indicadores de borde), así que x=0,25 y
+    // x=0,70 caen FUERA del viewport y el gesto no dibuja. Rango probado: 0,35–0,65.
+    await dragDraw(page, [0.35, 0.4], [0.65, 0.6]);
+    await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
+
+    const mas = page.locator('.edge-btn[aria-label="Más"]');
+    await mas.click();
+    const undo = page.locator('.top-pop-mas .rail-btn[aria-label="Deshacer"]');
+    await expect(undo, 'Deshacer debe estar en «Más» (sin pulsación larga)').toBeVisible();
+    await expect(undo).toBeEnabled();
+    await undo.click();
+    await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(0);
+
+    await mas.click();
+    const redo = page.locator('.top-pop-mas .rail-btn[aria-label="Rehacer"]');
+    await expect(redo).toBeVisible();
+    await expect(redo).toBeEnabled();
+    await redo.click();
+    await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
+  });
+});
+
+// ============================================================================
+// Hoja de contacto de la galería FASE H. Va en el ÚLTIMO spec de la fase (orden
+// alfabético) para que las capturas que genera el resto ya estén regeneradas: antes se
+// componía a mano y dejó de reflejar las capturas en cuanto una cambió. Patrón del
+// repositorio (galerias.spec.ts / capturas-finales.spec.ts): HTML con las imágenes
+// incrustadas y una captura `fullPage`.
+// ============================================================================
+test.describe('Galería FASE H — hoja de contacto', () => {
+  test('genera docs/screenshots/fase-h/contact-sheet.png desde las capturas reales', async ({ page }) => {
+    const dir = path.resolve('docs/screenshots/fase-h');
+    const orden = [
+      'escritorio-completo.png',
+      'escritorio-materiales.png',
+      'escritorio-dibujos.png',
+      'escritorio-formaciones.png',
+      'movil-horizontal-jugadores.png',
+      'movil-horizontal-material.png',
+      'movil-horizontal-dibujo.png',
+      'movil-gesto-arrastre.png',
+      'campos-contact-sheet.png',
+      'ejercicio-exportado.png',
+    ];
+    const pie: Record<string, string> = {
+      'escritorio-completo.png': 'Escritorio · recorrido completo (panel + campo + barra)',
+      'escritorio-materiales.png': 'Escritorio · materiales colocados',
+      'escritorio-dibujos.png': 'Escritorio · los 12 dibujos EN EL CAMPO',
+      'escritorio-formaciones.png': 'Escritorio · dos formaciones (propia + rival)',
+      'movil-horizontal-jugadores.png': 'Móvil · jugadores desde el panel',
+      'movil-horizontal-material.png': 'Móvil · material',
+      'movil-horizontal-dibujo.png': 'Móvil · dibujo',
+      'movil-gesto-arrastre.png': 'Móvil · arrastre real (pointerdown → moves → pointerup)',
+      'campos-contact-sheet.png': 'Los 9 campos renderizados',
+      'ejercicio-exportado.png': 'PNG exportado (sin controles del editor)',
+    };
+    const faltan = orden.filter((f) => !fs.existsSync(path.join(dir, f)));
+    expect(faltan, 'capturas que faltan para la hoja de contacto').toEqual([]);
+    const rows = orden
+      .map((f) => {
+        const b64 = fs.readFileSync(path.join(dir, f)).toString('base64');
+        return `<figure><img src="data:image/png;base64,${b64}" alt="${pie[f]}"><figcaption>${f}<br><span>${pie[f]}</span></figcaption></figure>`;
+      })
+      .join('\n');
+    const html =
+      '<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Inter,sans-serif;margin:12px;background:#111;color:#eee}h1{font-size:16px}figure{display:inline-block;margin:10px;text-align:center;vertical-align:top}figure img{max-width:420px;border:1px solid #555}figcaption{font-size:12px;margin-top:4px;max-width:420px}figcaption span{color:#9aa0a6}</style></head><body><h1>CDMPLab · FASE H (auditoría de usabilidad)</h1>' +
+      rows +
+      '</body></html>';
+    const htmlPath = path.join(dir, 'contact-sheet.html');
+    fs.writeFileSync(htmlPath, html, 'utf8');
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.goto('file:///' + htmlPath.replace(/\\/g, '/'));
+    await page.locator('h1').waitFor({ state: 'visible' });
+    await page.screenshot({ path: path.join(dir, 'contact-sheet.png'), fullPage: true });
   });
 });

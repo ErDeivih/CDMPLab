@@ -105,6 +105,22 @@ export type FieldType =
   | 'blank'
   | 'two_halves'; // A2: dos medios campos (izquierda/derecha o arriba/abajo)
 
+/**
+ * Fuente ÚNICA y comprobable de los tipos de CAMPO ADMITIDOS. La usa la validación de
+ * respaldo (`store.service`) y las pruebas de catálogo para no divergir: si se añade un
+ * campo al catálogo (`field.FIELD_BASE_SPECS`) sin añadirlo aquí, un respaldo con ese campo
+ * se rechaza ENTERO como "canvas inválido". Ya pasó dos veces (con `f7` y con `two_halves`,
+ * que existían en el catálogo y no en la lista local del validador).
+ *
+ * Esta lista es la de los ADMITIDOS, no la de los OFRECIDOS: incluye `vertical_half`, que
+ * ya NO se ofrece como tarjeta (su render es idéntico al de `half` con orientación
+ * vertical) pero debe seguir validando los documentos antiguos. El normalizador de canvas
+ * lo migra a `half` + orientación vertical.
+ */
+export const FIELD_TYPES: ReadonlySet<string> = new Set([
+  'full', 'half', 'vertical_half', 'third', 'box', 'futsal', 'f7', 'two_halves', 'blank',
+]);
+
 export type ElementType =
   | 'player'
   | 'ball'

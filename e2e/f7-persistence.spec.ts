@@ -70,11 +70,11 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await seed(page);
     await page.goto('/library');
     await expect(page.locator('body')).toBeVisible();
-    // FASE G: observable — la biblioteca ha cargado el botón "Crear tarea".
-    await expect(page.locator('button', { hasText: 'Crear tarea' }).first()).toBeVisible();
+    // FASE G: observable — la biblioteca ha cargado el botón "Crear ejercicio".
+    await expect(page.locator('button', { hasText: 'Crear ejercicio' }).first()).toBeVisible();
 
     // Crear ejercicio → Diseñar.
-    await page.locator('button', { hasText: 'Crear tarea' }).first().click();
+    await page.locator('button', { hasText: 'Crear ejercicio' }).first().click();
     await page.locator('.modal input[name="title"]').fill('Rondo F7');
     await page.locator('.modal-foot button', { hasText: 'Diseñar' }).click();
     await openBoardClean(page);

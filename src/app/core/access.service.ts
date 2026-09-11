@@ -173,6 +173,17 @@ export class AccessService {
     await repo.cancelInvitation(invitationId);
   }
 
+  /**
+   * Rechazar la invitación PROPIA. Va por su propia RPC (`decline_team_invitation`):
+   * `cancel_team_invitation` es del propietario del equipo y al invitado le
+   * devolvía 'forbidden: not team owner'.
+   */
+  async declineInvitation(invitationId: string): Promise<void> {
+    const repo = await this.ensureRepo();
+    if (!repo) throw new Error('No hay sesión.');
+    await repo.declineInvitation(invitationId);
+  }
+
   async revokeMember(userId: string): Promise<void> {
     const repo = await this.ensureRepo();
     if (!repo || !repo.teamId) throw new Error('No hay equipo de contexto.');

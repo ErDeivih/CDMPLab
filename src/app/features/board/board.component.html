@@ -96,10 +96,12 @@
         }
         @if (ctxMenuOpen()) {
           <div
+            #ctxBar
             class="context-bar"
             [class.context-bar-below]="contextBarPos().below"
-            [style.left]="contextBarPos().left + 'px'"
-            [style.top]="contextBarPos().top + 'px'"
+            [style.left.px]="contextBarPos().left"
+            [style.top.px]="contextBarPos().top"
+            [style.bottom.px]="contextBarPos().bottom"
             role="menu"
             aria-label="Menú contextual del elemento"
             (pointerdown)="$event.stopPropagation()"
@@ -505,7 +507,7 @@
               @if (rosterColorOpen() === p.id) {
                 <div class="roster-color-menu" (click)="$event.stopPropagation()" role="menu" [attr.aria-label]="'Paleta de color de ' + p.name">
                   @for (c of palette; track c) {
-                    <button class="swatch" [style.background]="c" [class.swatch-active]="p.color === c" [attr.aria-label]="'Color ' + colorName(c)" title="'Color ' + colorName(c)" (click)="setRosterColor(p.id, c, $event)"></button>
+                    <button class="swatch" [style.background]="c" [class.swatch-active]="p.color === c" [attr.aria-label]="'Color ' + colorName(c)" [title]="'Color ' + colorName(c)" (click)="setRosterColor(p.id, c, $event)"></button>
                   }
                 </div>
               }
@@ -665,6 +667,18 @@
         <div class="tools-panel-title">Más</div>
         <button class="panel-close" aria-label="Cerrar panel" (click)="closeMas()"><span class="msi">close</span></button>
       </div>
+      <!-- Lote B: Deshacer/Rehacer también aquí, para que en TÁCTIL no haya que mantener
+           pulsado el objeto para abrir el menú contextual. NO se devuelven a la barra
+           persistente (`.tools-persist`): en 360 px sus 7 controles ya ocupan una única
+           fila y dos botones más de 40 px la harían desbordar (ver board.component.scss). -->
+      <button class="rail-btn rail-row" [disabled]="!canUndo()" title="Deshacer (Ctrl+Z)" aria-label="Deshacer" (click)="undo(); closeMas()">
+        <span class="msi">undo</span>
+        <span class="rail-label">Deshacer</span>
+      </button>
+      <button class="rail-btn rail-row" [disabled]="!canRedo()" title="Rehacer (Ctrl+Y)" aria-label="Rehacer" (click)="redo(); closeMas()">
+        <span class="msi">redo</span>
+        <span class="rail-label">Rehacer</span>
+      </button>
       <button class="rail-btn rail-row btn-danger-row" title="Limpiar pizarra" aria-label="Limpiar pizarra" (click)="clearAll(); closeMas()">
         <span class="msi">cleaning_services</span>
         <span class="rail-label">Limpiar pizarra</span>
@@ -677,7 +691,8 @@
   <nav class="studio-tools" aria-label="Herramientas">
     <div class="tools-persist">
       <!-- Fase 3: Deshacer/Rehacer se retiran de la barra permanente y pasan al menú
-           contextual (pulsación larga / clic derecho). Se conservan Ctrl+Z / Ctrl+Y. -->
+           contextual (pulsación larga / clic derecho) y al menú «Más». Se conservan
+           Ctrl+Z / Ctrl+Y. En móvil, «Más» es la vía sin pulsación larga. -->
       <button class="rail-btn" [class.rail-active]="tool() === 'select'" title="Seleccionar y mover" aria-label="Seleccionar y mover" (click)="setTool('select')">
         <span class="msi">near_me</span>
       </button>
@@ -800,7 +815,7 @@
   }
 
   @if (fieldDialogOpen()) {
-    <div class="unsaved-backdrop" (click)="decideFieldChange('cancel')">
+    <div class="unsaved-backdrop" (click)="decideFieldChange('cancel')" (document:keydown.escape)="decideFieldChange('cancel')">
       <div class="unsaved field-change-dialog" role="dialog" aria-modal="true" aria-label="Cambiar de campo" (click)="$event.stopPropagation()">
         <div class="unsaved-head">
           <h3>Cambiar a medio campo</h3>
@@ -824,7 +839,7 @@
   }
 
   @if (unsavedOpen()) {
-    <div class="unsaved-backdrop" (click)="closeUnsaved()">
+    <div class="unsaved-backdrop" (click)="closeUnsaved()" (document:keydown.escape)="closeUnsaved()">
       <div class="unsaved" role="dialog" aria-modal="true" aria-label="Cambios sin guardar" (click)="$event.stopPropagation()">
         <div class="unsaved-head">
           <h3>Cambios sin guardar</h3>

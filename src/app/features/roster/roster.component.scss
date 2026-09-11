@@ -98,54 +98,106 @@
 }
 
 // ---------- Modal ----------
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(23, 25, 28, 0.4);
-  display: grid;
-  place-items: center;
-  z-index: 50;
-}
-
+// La base (fondo, caja, cabecera, cuerpo, pie) es GLOBAL (styles.scss). Aquí solo lo
+// propio: este modal es más estrecho que el de Biblioteca/Sesiones.
 .modal {
   width: 420px;
-  max-width: calc(100vw - 32px);
-  background: var(--surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
 }
 
-.modal-head {
+// ---------- Filtros de la plantilla ----------
+// Se envuelven solos: en 390 px la table ya scrollea, pero la fila de filtros no debe
+// provocar desborde horizontal (lo comprueba `responsive.spec.ts`).
+.roster-filters {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  font-size: 13px;
+  color: var(--text-muted);
+}
 
-  h3 {
+.roster-filters .search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  height: 34px;
+  min-width: 200px;
+  flex: 1 1 200px;
+  max-width: 320px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+
+  input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .msi {
+    font-size: 18px;
+    color: var(--text-muted);
+  }
+}
+
+.search-clear {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  .msi {
     font-size: 16px;
   }
 }
 
-.modal-body {
-  padding: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+.pos-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  select {
+    height: 34px;
+    padding: 0 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+  }
 }
 
-.modal-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--border);
+.result-count {
+  font-weight: 600;
+  color: var(--text);
 }
 
-.field-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
+.result-total {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+// Motivo por el que no se puede guardar el jugador (dorsal repetido, sin posición…).
+.form-error {
+  margin: 0 var(--space-5);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  border: 1px solid #e6b5af;
+  color: var(--danger);
+  font-size: 13px;
 }

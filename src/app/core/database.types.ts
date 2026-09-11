@@ -16,6 +16,10 @@
 //     is_platform_admin / revoke_team_member / cancel_team_invitation /
 //     list_team_members / my_team_invitations / admin_list_profiles /
 //     create_my_team (migraciones 00000..00005).
+//   · decline_team_invitation (migración 20260910000000): rechazo de la invitación
+//     POR EL INVITADO. Declarada aquí porque `rpc()` está tipado: sin esta entrada
+//     el cliente no compila. Catálogo remoto comprobado (la función no existe todavía);
+//     MIGRACIÓN AÚN NO APLICADA, así que el remoto no la sirve hasta que se aplique.
 //
 // Verificado contra el catálogo remoto de vgwfjkhvzprsoixpzruq el 2026-08-28.
 // La generación oficial de tipos confirmó tablas, relaciones y las firmas de
@@ -423,6 +427,7 @@ export interface Database {
       admin_set_profile_status: { Args: { p_status: string; p_user_id: string }; Returns: undefined };
       cancel_team_invitation: { Args: { p_invitation_id: string }; Returns: undefined };
       create_my_team: { Args: { p_accent_color?: string; p_name: string }; Returns: string };
+      decline_team_invitation: { Args: { p_invitation_id: string }; Returns: undefined };
       import_team_dataset: { Args: { p_payload: Json; p_team_id: string }; Returns: Json };
       invite_team_member: { Args: { p_email: string; p_team_id: string }; Returns: string };
       is_platform_admin: { Args: never; Returns: boolean };

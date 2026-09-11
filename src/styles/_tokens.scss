@@ -52,6 +52,12 @@
   // Estado
   --danger: #c0392b;
   --danger-soft: #fbeae8;
+  // Éxito y aviso: el mensaje de éxito de auth estaba pintado con el rojo de peligro
+  // (rgba(200,16,46,...)), de modo que un "hecho" parecía un error.
+  --success: #1f7a4d;
+  --success-soft: #e8f3ed;
+  --warn: #a16207;
+  --warn-soft: #fdf3e3;
 
   // Pizarra
   --pitch: #2e7d45;

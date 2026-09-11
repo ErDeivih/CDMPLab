@@ -22,22 +22,20 @@ export interface FieldSpec {
   label: string;
 }
 
-export const FIELD_SPECS: FieldSpec[] = [
-  { type: 'full', label: 'Campo completo' },
-  { type: 'half', label: 'Medio campo' },
-  { type: 'vertical_half', label: 'Medio campo vertical' },
-  { type: 'third', label: 'Tercio de campo' },
-  { type: 'box', label: 'Área y portería' },
-  { type: 'futsal', label: 'Futsal' },
-  { type: 'two_halves', label: 'Dos medios campos' },
-  { type: 'blank', label: 'Lienzo' },
-];
-
-/** Campos base del complemento: solo estos se ofrecen en el selector (galería visual). */
+/** Campos que se OFRECEN en el selector (galería visual). La orientación de cada uno se
+ *  elige con los controles «Portería izquierda» / «Portería arriba».
+ *
+ *  Decisión de producto (auditoría final): «Medio campo» es UNA sola tarjeta. Antes había
+ *  además «Medio campo vertical», pero su geometría y su SVG son EXACTAMENTE los de `half`
+ *  con orientación vertical, así que se ofrecían dos tarjetas para el mismo campo.
+ *  `vertical_half` sigue ADMITIDO como alias de compatibilidad para documentos antiguos
+ *  (`models.FIELD_TYPES`) y el normalizador lo migra a `half` + orientación vertical.
+ *
+ *  `store.spec.ts` comprueba que la galería es un subconjunto de los admitidos y que la
+ *  diferencia entre ambas listas es EXACTAMENTE la de alias de compatibilidad. */
 export const FIELD_BASE_SPECS: FieldSpec[] = [
   { type: 'full', label: 'Campo completo' },
   { type: 'half', label: 'Medio campo' },
-  { type: 'vertical_half', label: 'Medio campo vertical' },
   { type: 'third', label: 'Tercio de campo' },
   { type: 'box', label: 'Área y portería' },
   { type: 'futsal', label: 'Fútbol sala' },

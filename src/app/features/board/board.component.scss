@@ -13,7 +13,8 @@
   display: flex;
   flex-direction: column;
   font-family: var(--font-base);
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
 }
 
 // ---------- Barra superior ----------
@@ -100,7 +101,9 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .edge-btn {
@@ -197,6 +200,33 @@
   border: 1px solid #2b3947;
   border-radius: 10px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  // En un host estrecho (móvil de 360 px) los 8 botones + separador no caben: sin
+  // estas dos líneas la barra desbordaba por la derecha y los últimos botones
+  // (Duplicar / Eliminar) quedaban fuera. Al envolver en dos filas, la barra CRECE en
+  // alto: la colocación MIDE la barra ya renderizada (`ResizeObserver` sobre este
+  // elemento en `board.component.ts`), así que el alto real entra en el cálculo y no hay
+  // ninguna copia de esta geometría en TypeScript que se pueda quedar obsoleta.
+  //
+  // `width: max-content` NO es decorativo: en una caja absoluta con `width: auto` el ancho es
+  // «shrink-to-fit» y se calcula como `ancho del contenedor − left`. Como `left` sale del centro
+  // del objeto, con el objeto pegado al borde DERECHO la barra se comprimía a una sola columna de
+  // botones: medido en 360×800 con el objeto en el borde derecho, 82×358 px, que además se salía
+  // por arriba del host. Con `max-content` el ancho depende solo del contenido y el `max-width` lo
+  // limita, así que envuelve en FILAS como se pretende.
+  width: max-content;
+  max-width: calc(100% - 16px);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+// Separador visual del menú (Deshacer/Rehacer | giros | duplicar/eliminar). La clase
+// estaba en la plantilla SIN ninguna regla: se renderizaba como un hueco vacío.
+.ctx-sep {
+  width: 1px;
+  height: 24px;
+  margin: 0 2px;
+  background: #2b3947;
+  flex-shrink: 0;
 }
 
 .ctx-btn {
@@ -408,7 +438,9 @@
   justify-content: center;
   color: #8a97a3;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 
   .msi {
     font-size: 18px;
@@ -999,12 +1031,18 @@
     min-height: 0;
     padding: 0 2px;
 
+    // En móvil el aviso NO se oculta (antes desaparecía: el usuario no tenía forma de
+    // saber si su dibujo se había guardado). Se TRUNCA para no empujar la fila.
     .field-hint {
-      display: none;
+      max-width: 44vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .save-state {
-      display: none;
+      flex-shrink: 0;
+      font-size: 11px;
     }
   }
 }

@@ -106,6 +106,38 @@ export const MIN_STROKE_WIDTH = 0.1;
 /** Máximo editable habitual del grosor de trazo (coherente con el inspector). */
 export const MAX_STROKE_WIDTH = 2.5;
 
+/**
+ * Color por defecto de los elementos de DIBUJO (línea, flecha, curva, zigzag, texto,
+ * figuras y mano alzada) cuando el elemento no trae color propio (documentos antiguos
+ * sin `c`) o cuando la herramienta no tiene preferencia guardada.
+ *
+ * Es BLANCO porque es el color con el que el propio campo dibuja sus marcas
+ * (`field.ts` usa `#ffffff` en todas las líneas del campo): sobre el césped oficial
+ * (`OFFICIAL_PITCH_COLOR`, `#31834a`) el blanco da ~4,7:1 de contraste y el negro
+ * anterior (`#1f2933`) solo ~3,1:1, es decir, justo en el mínimo de WCAG para objetos
+ * gráficos y por debajo en las franjas oscuras del césped. Además `#1f2933` NO estaba
+ * en la paleta de la pizarra, así que el control de color no marcaba ninguna muestra
+ * activa. `DEFAULT_ELEMENT_COLOR` es miembro de `PALETTE` (candado en las pruebas).
+ */
+export const DEFAULT_ELEMENT_COLOR = '#ffffff';
+
+/**
+ * Tipos de elemento (de dibujo o material) cuyo color de render sale de `el.c`.
+ * Es la fuente ÚNICA para decidir si el inspector ofrece el selector de "Color": si el
+ * render no usa `el.c` (p. ej. los materiales con PNG), ofrecer color sería mentir.
+ *
+ * Antes había TRES listas equivalentes y divergentes en `board.component.ts`
+ * (`colorableTools`, `isColorTool()` y `showInspectorColor()`); la del inspector se
+ * dejaba fuera el ARO, que el registro canónico declara `colorable` y que el render
+ * pinta con `el.c` (ver el caso `ring`).
+ */
+export const COLORABLE_ELEMENT_TYPES: ReadonlySet<string> = new Set([
+  // Dibujo (el `t` de la herramienta correspondiente).
+  'rect', 'ellipse', 'line', 'arrow', 'doubleArrow', 'curve', 'dribble', 'freehand', 'text',
+  // Materiales de render vectorial que usan `el.c`.
+  'peto', 'pica', 'target', 'ring', 'ring_flat', 'marker', 'ladder', 'pole',
+]);
+
 /** Relación punta-de-flecha ↔ grosor de trazo: con el default (0.4) la punta
  *  mide 1.4 u de viewBox (antes 2.8 con 0.8). Así la punta es proporcional al
  *  trazo y base reduce con él. */
@@ -841,7 +873,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
           return `<tspan x="${x + Math.min(1.2, size * 0.15)}" ${yPos}>${esc(ln)}</tspan>`;
         })
         .join('');
-      const t = `<text font-size="${size}" fill="${el.c ?? '#1f2933'}" font-weight="700" font-family="Inter, system-ui, sans-serif">${ts}</text>`;
+      const t = `<text font-size="${size}" fill="${el.c ?? DEFAULT_ELEMENT_COLOR}" font-weight="700" font-family="Inter, system-ui, sans-serif">${ts}</text>`;
       let body = t;
       if (hasBox) {
         // El clip es una red de seguridad (el layout ya no deja líneas cortadas).
@@ -866,7 +898,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const cx = gx((x1 + x2) / 2);
       const cy = gy((y1 + y2) / 2);
       const ls = el.lineStyle ?? el.style ?? 'solid';
-      return rotWrap(svgLine(x1, y1, x2, y2, 'end', el.c ?? '#1f2933', selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r), el.rot, cx, cy);
+      return rotWrap(svgLine(x1, y1, x2, y2, 'end', el.c ?? DEFAULT_ELEMENT_COLOR, selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r), el.rot, cx, cy);
     }
     case 'line': {
       const x1 = el.x1 ?? 0;
@@ -876,7 +908,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const cx = gx((x1 + x2) / 2);
       const cy = gy((y1 + y2) / 2);
       const ls = el.lineStyle ?? el.style ?? 'solid';
-      return rotWrap(svgLine(x1, y1, x2, y2, 'none', el.c ?? '#1f2933', selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r), el.rot, cx, cy);
+      return rotWrap(svgLine(x1, y1, x2, y2, 'none', el.c ?? DEFAULT_ELEMENT_COLOR, selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r), el.rot, cx, cy);
     }
     case 'doubleArrow': {
       const x1 = el.x1 ?? 0;
@@ -886,7 +918,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const cx = gx((x1 + x2) / 2);
       const cy = gy((y1 + y2) / 2);
       const ls = el.lineStyle ?? el.style ?? 'solid';
-      const col = el.c ?? '#1f2933';
+      const col = el.c ?? DEFAULT_ELEMENT_COLOR;
       const w = el.strokeWidth ?? DEFAULT_STROKE_WIDTH;
       // Doble sentido: una punta en CADA extremo (svgLine con 'both'), simétricas y
       // proporcionales al grosor. Ya no se superpone una segunda línea sin punta.
@@ -901,7 +933,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const cx = gx((x1 + x2) / 2);
       const cy = gy((y1 + y2) / 2);
       const ls = el.lineStyle ?? el.style ?? 'solid';
-      const col = el.c ?? '#1f2933';
+      const col = el.c ?? DEFAULT_ELEMENT_COLOR;
       const s = svgLine(x1, y1, x2, y2, 'none', col, selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r);
       const label = el.v ?? '15 m';
       const mx = gx((x1 + x2) / 2);
@@ -916,7 +948,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const y2 = el.y2 ?? 0;
       const cx = gx((x1 + x2) / 2);
       const cy = gy((y1 + y2) / 2);
-      return rotWrap(svgZigzag(x1, y1, x2, y2, el.c ?? '#1f2933', selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, el.lineStyle ?? 'solid', r), el.rot, cx, cy);
+      return rotWrap(svgZigzag(x1, y1, x2, y2, el.c ?? DEFAULT_ELEMENT_COLOR, selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, el.lineStyle ?? 'solid', r), el.rot, cx, cy);
     }
     case 'zone':
     case 'rect':
@@ -948,7 +980,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
     }
     case 'freehand': {
       const pts = (el.points ?? []).map(([px, py]) => `${gx(px)},${gy(py)}`).join(' ');
-      const c = el.c ?? '#1f2933';
+      const c = el.c ?? DEFAULT_ELEMENT_COLOR;
       const poly = `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${el.strokeWidth ?? DEFAULT_STROKE_WIDTH}" stroke-linejoin="round" stroke-linecap="round" opacity="${el.opacity ?? 1}"/>`;
       const cc = elementCenter(el);
       return rotWrap(poly, el.rot, gx(cc.x), gy(cc.y));
@@ -962,7 +994,7 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const cy = gy(el.c1y ?? cyd);
       const x2 = gx(el.x2 ?? 0);
       const y2 = gy(el.y2 ?? 0);
-      const c = el.c ?? '#1f2933';
+      const c = el.c ?? DEFAULT_ELEMENT_COLOR;
       const width = el.strokeWidth ?? DEFAULT_STROKE_WIDTH;
       let s = `<path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${c}" stroke-width="${width}" stroke-linecap="round"/>`;
       const ang = Math.atan2(y2 - cy, x2 - cx);
@@ -1186,7 +1218,11 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
     `<g>${els}</g>` +
     sel +
     (opts.handles ?? '') +
-    (opts.preview ?? '') +
+    // La preview del gesto de dibujo va en un grupo con clase ESTABLE: antes se insertaba
+    // suelta y las pruebas tenían que localizarla por su color de trazo (`stroke="#1f2933"`),
+    // es decir, quedaban acopladas al color por defecto (al cambiarlo a blanco dejaron de
+    // encontrar la preview). Se emite solo si hay preview, para no añadir un grupo vacío.
+    (opts.preview ? `<g class="board-preview">${opts.preview}</g>` : '') +
     `</g>` +
     `</svg>`
   );

@@ -64,9 +64,11 @@
   border: 1px solid var(--border);
 
   &.ok {
-    background: rgba(200, 16, 46, 0.08);
-    border-color: rgba(200, 16, 46, 0.3);
-    color: var(--text);
+    // Un mensaje de ÉXITO no puede pintarse con el rojo de peligro: usaba
+    // rgba(200,16,46,...), el rojo de la marca, así que un "hecho" parecía un error.
+    background: var(--success-soft);
+    border-color: rgba(31, 122, 77, 0.3);
+    color: var(--success);
   }
 
   &.err {

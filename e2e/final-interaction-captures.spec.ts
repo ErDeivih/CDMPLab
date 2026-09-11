@@ -355,7 +355,7 @@ test.describe('Fase 12 — capturas finales de interacción', () => {
     await page.mouse.down();
     await page.mouse.move(b.x, b.y, { steps: 5 });
     await page.waitForTimeout(60);
-    await expect(page.locator('.board-canvas svg [stroke="#1f2933"]'), 'preview visible antes de soltar').not.toHaveCount(0);
+    await expect(page.locator('.board-canvas svg .board-preview'), 'preview visible antes de soltar').not.toHaveCount(0);
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/preview-antes-soltar.png` });
     await page.mouse.up();
   });

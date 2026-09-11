@@ -274,6 +274,64 @@
   color: var(--text-faint);
 }
 
+// ---------- Contador de resultados + orden ----------
+.results-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.result-count {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.result-total {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.order {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+
+  select {
+    height: 30px;
+    padding: 0 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+  }
+}
+
+// Botón de limpiar la búsqueda (dentro del campo).
+.search-clear {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  .msi {
+    font-size: 16px;
+  }
+}
+
 // ---------- Grid ----------
 .grid {
   display: grid;
@@ -315,7 +373,10 @@
 .thumb-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  // `contain`, no `cover`: la miniatura es la pizarra COMPLETA (con su césped y márgenes)
+  // y con `cover` se recortaban los bordes, así que no se reconocía el ejercicio. El
+  // contenedor ya tiene el verde del campo, de modo que el letterbox no se nota.
+  object-fit: contain;
   display: block;
 }
 
@@ -480,29 +541,18 @@
   }
 }
 
-.meta-item .tag {
+// El tag de categoría es HERMANO de los `.meta-item`, no hijo: el selector anterior
+// (`.meta-item .tag`) no casaba nunca y el tag no se alineaba a la derecha.
+.ex-meta .tag {
   margin-left: auto;
 }
 
 // ---------- Modal ----------
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(23, 25, 28, 0.4);
-  display: grid;
-  place-items: center;
-  z-index: 50;
-}
-
+// La base (fondo, caja, cabecera, pie) es GLOBAL (styles.scss). Aquí solo lo propio: el
+// ancho (480), el alto máximo y el scroll interno del cuerpo.
 .modal {
   width: 480px;
-  max-width: calc(100vw - 32px);
   max-height: 92dvh;
-  background: var(--surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -511,32 +561,8 @@
   width: 360px;
 }
 
-.modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border);
-
-  h3 {
-    font-size: 16px;
-  }
-}
-
 .modal-body {
-  padding: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
   overflow-y: auto;
-}
-
-.modal-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--border);
 }
 
 .picker-item {
@@ -562,94 +588,13 @@
 }
 
 // ---------- Botones pequeños ----------
+// OJO: `styles.scss` define .btn-sm con height 32px; aquí se usa 28px a propósito (las
+// tarjetas de la Biblioteca son más densas). Es la ÚNICA diferencia de botones que queda
+// en este componente: el resto (.btn/.btn-primary/.btn-ghost/.btn-icon) es global.
 .btn-sm {
   height: 28px;
   padding: 0 10px;
   font-size: 12px;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 14px;
-  border-radius: var(--radius);
-  font-size: 14px;
-  font-weight: 500;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--surface-2);
-  }
-}
-
-.btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-
-  &:hover {
-    background: var(--accent-hover);
-  }
-}
-
-.btn-ghost {
-  border-color: transparent;
-  background: transparent;
-
-  &:hover {
-    background: var(--surface-2);
-  }
-}
-
-.btn-icon {
-  width: 36px;
-  padding: 0;
-  justify-content: center;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-
-  label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-muted);
-  }
-
-  input,
-  select,
-  textarea {
-    height: 36px;
-    padding: 0 10px;
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    background: var(--surface);
-    outline: none;
-
-    &:focus {
-      border-color: var(--accent);
-    }
-  }
-
-  textarea {
-    height: auto;
-    padding: 8px 10px;
-    resize: vertical;
-    min-height: 64px;
-  }
-}
-
-.field-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
 }
 
 .draft-banner {
@@ -682,22 +627,14 @@
   font-weight: 500;
 }
 
-.empty {
-  padding: 40px 16px;
-  text-align: center;
-  color: var(--text-muted);
+// ---------- Estado vacío ----------
+// `.empty` y `.field-row` son globales (styles.scss).
 
-  .empty-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 6px;
-  }
-}
-
+// El contenedor tiene DOS campos (jugadores min/max): con 3 columnas quedaba una
+// columna vacía y los dos inputs salían más estrechos de lo previsto.
 .field-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 

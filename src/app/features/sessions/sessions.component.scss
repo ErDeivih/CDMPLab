@@ -102,23 +102,9 @@
 }
 
 // ---------- Modal / editor ----------
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(23, 25, 28, 0.4);
-  display: grid;
-  place-items: center;
-  z-index: 50;
-}
-
+// La base (fondo, caja, cabecera, pie) es GLOBAL (styles.scss). Aquí solo lo propio.
 .modal {
   width: 480px;
-  max-width: calc(100vw - 32px);
-  background: var(--surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
 }
 
 .modal-lg {
@@ -128,38 +114,8 @@
   flex-direction: column;
 }
 
-.modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border);
-
-  h3 {
-    font-size: 16px;
-  }
-}
-
 .modal-body {
-  padding: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
   overflow: auto;
-}
-
-.modal-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--border);
-}
-
-.field-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
 }
 
 // ---------- Tareas ----------
@@ -224,6 +180,44 @@
   white-space: nowrap;
 }
 
+// Aviso honesto: la tarea perdió su ejercicio en la biblioteca, pero conserva el
+// snapshot persistido (título, duración y material) porque la sesión es histórico.
+.task-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(161, 98, 7, 0.3);
+  background: var(--warn-soft);
+  color: var(--warn);
+
+  @media (max-width: 700px) {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// Aviso informativo: el ejercicio de la biblioteca se editó después de añadirlo.
+.task-badge-info {
+  border-color: rgba(26, 115, 232, 0.3);
+  background: rgba(26, 115, 232, 0.12);
+  color: #1a5fb4;
+}
+
+// Motivo por el que no se puede guardar la sesión (fecha inválida, duración fuera de rango).
+.form-error {
+  margin: 0 var(--space-5);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  border: 1px solid #e6b5af;
+  color: var(--danger);
+  font-size: 13px;
+}
+
 .task-dur {
   width: 60px;
   height: 30px;
@@ -263,6 +257,37 @@
     outline: none;
     background: transparent;
   }
+}
+
+// ---------- Picker en línea ----------
+// Antes era un modal ENCIMA del editor: había que abrirlo y cerrarlo por cada ejercicio y
+// tapaba el botón de guardar. Ahora vive dentro del editor, con «Listo» para cerrarlo.
+.picker-inline {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.picker-inline-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.picker-inline-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.picker-inline-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-right: auto;
 }
 
 .picker-list {

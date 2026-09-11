@@ -466,9 +466,15 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
 
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
-    const drawTitles = await page.locator('.side-panel-left .rail-btn').evaluateAll((els) =>
-      els.map((e) => (e as HTMLElement).getAttribute('title') ?? '').filter(Boolean)
-    );
+    // El panel de Dibujo ofrece también BORRAR, que NO crea ningún elemento (es un modo de
+    // borrado), así que no puede "aparecer en una escena". La cobertura se exige a las
+    // herramientas que CREAN cosas; antes esto no saltaba porque borrar no se ofrecía.
+    const NON_DRAWING_TOOLS = ['Borrar elemento'];
+    const drawTitles = (
+      await page.locator('.side-panel-left .rail-btn').evaluateAll((els) =>
+        els.map((e) => (e as HTMLElement).getAttribute('title') ?? '').filter(Boolean)
+      )
+    ).filter((t) => !NON_DRAWING_TOOLS.includes(t));
 
     const placed = loadManifest();
     const missingMaterials = materialTitles.filter((t) => !placed.materials.includes(t));

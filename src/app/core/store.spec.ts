@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { StoreService } from './store.service';
-import { CanvasElement, ElementType } from './models';
+import { CanvasElement, ElementType, ELEMENT_TYPES, Exercise, FIELD_TYPES } from './models';
+import { CANONICAL_MATERIALS } from './material-registry';
+import { FIELD_BASE_SPECS } from './field';
 
 describe('StoreService', () => {
   let store: StoreService;
@@ -237,7 +239,7 @@ describe('StoreService', () => {
   });
 
   it('respaldo: un archivo inválido se rechaza sin tocar los datos actuales', () => {
-    const team = store.createTeam('Primer Equipo', '#3056d3');
+    store.createTeam('Primer Equipo', '#3056d3');
     expect(store.importBackup('esto no es json', 'replace').ok).toBe(false);
     expect(store.importBackup('{"version":99,"teams":[]}', 'replace').ok).toBe(false);
     expect(store.importBackup('{"version":1,"teams":"no-array"}', 'replace').ok).toBe(false);
@@ -323,6 +325,163 @@ describe('StoreService', () => {
       sessions: [],
     });
     expect(store.validateBackup(j).ok, 'respaldo con campo F7 debe ser válido').toBe(true);
+  });
+
+  it('respaldo: ACEPTA los 9 campos del catálogo real (candado contra la lista del validador)', () => {
+    // El bug real: el validador tenía su PROPIA lista de campos y se dejó fuera
+    // 'two_halves'. Guardar un ejercicio en "Dos medios campos" y exportar el respaldo
+    // hacía que el fichero ENTERO se rechazara como "canvas inválido". Este test recorre
+    // la galería real (FIELD_BASE_SPECS), no una lista escrita a mano aquí.
+    for (const spec of FIELD_BASE_SPECS) {
+      const j = JSON.stringify({
+        version: 1,
+        teams: [{ id: 't1', name: 'A', accentColor: '#111', createdAt: '2026-01-01' }],
+        players: [],
+        folders: [],
+        exercises: [
+          { id: 'x1', teamId: 't1', folderId: null, title: 'X', objectives: [], materials: [], canvas: { version: 2, schemaVersion: 3, field: spec.type, frames: [{ duration: 1000, elements: [{ id: 'e1', t: 'cone', x: 0.5, y: 0.5 }] }], orientation: 'horizontal' } },
+        ],
+        sessions: [],
+      });
+      expect(store.validateBackup(j).ok, `el campo ${spec.type} ("${spec.label}") debe ser válido`).toBe(true);
+    }
+  });
+
+  it('respaldo: todo campo OFRECIDO está admitido, y lo admitido de más son solo los alias', () => {
+    const gallery: string[] = FIELD_BASE_SPECS.map((s) => s.type);
+    // 1) La galería no puede ofrecer un campo que el validador rechace: si se añade uno a
+    //    `FIELD_BASE_SPECS` y se olvida en `models.FIELD_TYPES`, este test cae en vez de
+    //    romper los respaldos de los usuarios (pasó con `f7` y con `two_halves`).
+    for (const t of gallery) {
+      expect([...FIELD_TYPES], `falta ${t} en FIELD_TYPES`).toContain(t);
+    }
+    // 2) Lo admitido que NO se ofrece son ALIAS DE COMPATIBILIDAD, y hoy es exactamente
+    //    `vertical_half`: su render es el de `half` con orientación vertical, así que no
+    //    se ofrece como tarjeta propia pero debe seguir validando documentos antiguos.
+    const soloAdmitidos = [...FIELD_TYPES].filter((t) => !gallery.includes(t));
+    expect(soloAdmitidos, 'la diferencia son los alias de compatibilidad').toEqual(['vertical_half']);
+    // 3) Y un respaldo con ese alias sigue siendo válido (documento antiguo).
+    const j = JSON.stringify({
+      version: 1,
+      teams: [{ id: 't1', name: 'A', accentColor: '#111', createdAt: '2026-01-01' }],
+      players: [],
+      folders: [],
+      exercises: [
+        { id: 'x1', teamId: 't1', folderId: null, title: 'X', objectives: [], materials: [], canvas: { version: 2, schemaVersion: 3, field: 'vertical_half', frames: [{ duration: 1000, elements: [{ id: 'e1', t: 'cone', x: 0.5, y: 0.5 }] }], orientation: 'horizontal' } },
+      ],
+      sessions: [],
+    });
+    expect(store.validateBackup(j).ok, 'el alias vertical_half se sigue admitiendo').toBe(true);
+  });
+
+  it('respaldo: ELEMENT_TYPES cubre TODO el catálogo de materiales, retirados incluidos', () => {
+    for (const m of CANONICAL_MATERIALS) {
+      expect(ELEMENT_TYPES.has(m.id), `el material ${m.id} debe ser un tipo de elemento válido`).toBe(true);
+    }
+  });
+
+  it('respaldo: "Dos medios campos" (two_halves) sobrevive a exportar e importar', () => {
+    const team = store.createTeam('Primer Equipo', '#3056d3');
+    store.saveExercise({
+      id: 'ex-two', teamId: team.id, folderId: null, title: 'Dos medios', description: '', explanation: '',
+      category: 'Táctica', objectives: [], materials: [], durationMinutes: 15, minPlayers: null, maxPlayers: null,
+      loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null,
+      isTemplate: false, thumbnail: null, savedAt: new Date().toISOString(),
+      canvas: { version: 2, schemaVersion: 4, field: 'two_halves', orientation: 'horizontal', grass: 'stripes', frames: [{ duration: 1000, elements: [{ id: 'e1', t: 'cone', x: 0.5, y: 0.5 }] }] },
+    });
+    const json = store.exportBackup();
+    localStorage.clear();
+    localStorage.setItem('entrenolab:seeded', '1');
+    const fresh = new StoreService();
+    const res = fresh.importBackup(json, 'replace');
+    expect(res.ok, res.error ?? '').toBe(true);
+    expect(fresh.exercises()[0].canvas?.field).toBe('two_halves');
+  });
+
+  it('borrar un ejercicio usado en una sesión lo desvincula y el respaldo se puede reimportar', () => {
+    const team = store.createTeam('Primer Equipo', '#3056d3');
+    store.saveExercise({
+      id: 'ex1', teamId: team.id, folderId: null, title: 'Rondo de posesión', description: '', explanation: '',
+      category: 'Rondo', objectives: [], materials: [], durationMinutes: 15, minPlayers: null, maxPlayers: null,
+      loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null,
+      isTemplate: false, canvas: null, thumbnail: null, savedAt: new Date().toISOString(),
+    });
+    store.saveSession({
+      id: 's1', teamId: team.id, title: 'Sesión', date: '2026-01-01', durationMinutes: 60, notes: '',
+      createdAt: '2026-01-01', savedAt: '2026-01-01',
+      tasks: [{ id: 'tk1', exerciseId: 'ex1', title: 'Rondo de posesión', durationMinutes: 15, material: 'Conos', sortOrder: 0 }],
+    });
+
+    store.deleteExercise('ex1');
+
+    // La tarea NO se borra (la sesión es histórico): se desvincula y conserva su snapshot
+    // persistido (título/duración/material). Es lo que hace el servidor con el FK
+    // `on delete set null (exercise_id)`.
+    const task = store.sessions()[0].tasks[0];
+    expect(task.exerciseId).toBeNull();
+    expect(task.title, 'el título sobrevive al borrado').toBe('Rondo de posesión');
+    expect(task.durationMinutes).toBe(15);
+    expect(task.material).toBe('Conos');
+
+    // Antes de la corrección, este respaldo se rechazaba ENTERO con
+    // "Tarea de sesión con ejercicio inexistente".
+    const json = store.exportBackup();
+    localStorage.clear();
+    localStorage.setItem('entrenolab:seeded', '1');
+    const fresh = new StoreService();
+    const res = fresh.importBackup(json, 'replace');
+    expect(res.ok, res.error ?? '').toBe(true);
+    expect(fresh.sessions()[0].tasks[0].exerciseId).toBeNull();
+    expect(fresh.sessions()[0].tasks[0].title).toBe('Rondo de posesión');
+  });
+
+  it('recuerda el equipo elegido entre arranques y lo ignora si ya no existe', () => {
+    localStorage.clear();
+    localStorage.setItem('entrenolab:seeded', '1');
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([
+        { id: 't1', name: 'Primer Equipo', accentColor: '#111', createdAt: '2026-01-01' },
+        { id: 't2', name: 'Cadete A', accentColor: '#222', createdAt: '2026-01-02' },
+      ]),
+    );
+    localStorage.setItem('entrenolab:active-team', 't2');
+    const s = new StoreService();
+    // Al arrancar se respeta la elección guardada (antes se tomaba siempre el primero).
+    expect(s.activeTeam()?.id, 'arranca con el equipo recordado').toBe('t2');
+    // `resetToLocal()` es lo que corre el arranque en modo local: no debe pisarla.
+    s.resetToLocal();
+    expect(s.activeTeam()?.id, 'resetToLocal respeta la elección').toBe('t2');
+    // Si el equipo recordado ya no existe, se cae al primero.
+    localStorage.setItem('entrenolab:active-team', 't-inexistente');
+    s.resetToLocal();
+    expect(s.activeTeam()?.id, 'si el recordado no existe, el primero').toBe('t1');
+    // Y no se puede activar un equipo que no es del usuario.
+    s.setActiveTeam('t-nope');
+    expect(s.activeTeam()?.id).toBe('t1');
+  });
+
+  it('la copia automática queda disponible tras importar y se puede restaurar', () => {
+    const team = store.createTeam('Primer Equipo', '#3056d3');
+    const mk = (id: string, title: string): Exercise => ({
+      id, teamId: team.id, folderId: null, title, description: '', explanation: '',
+      category: 'Técnica', objectives: [], materials: [], durationMinutes: 10, minPlayers: null, maxPlayers: null,
+      loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null,
+      isTemplate: false, canvas: null, thumbnail: null, savedAt: new Date().toISOString(),
+    });
+    store.saveExercise(mk('x1', 'Uno'));
+    const respaldoConUno = store.exportBackup();
+    store.saveExercise(mk('x2', 'Dos'));
+    expect(store.autoBackupAvailable(), 'sin importar nada no hay copia automática').toBe(false);
+
+    // Importar deja una copia automática del estado ANTERIOR (los dos ejercicios).
+    expect(store.importBackup(respaldoConUno, 'replace').ok).toBe(true);
+    expect(store.autoBackupAvailable(), 'importar deja copia automática disponible').toBe(true);
+    expect(store.getExercisesForTeam(team.id)).toHaveLength(1);
+
+    // Y restaurarla devuelve al estado previo a la importación.
+    expect(store.restoreAutoBackup()).toBe(true);
+    expect(store.getExercisesForTeam(team.id)).toHaveLength(2);
   });
 
   it('respaldo: rechaza un valor de campo REALMENTE desconocido (no f7, no legacy)', () => {

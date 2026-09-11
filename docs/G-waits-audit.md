@@ -72,3 +72,111 @@ Espera que antecede a `page.screenshot(...)` para dejar asentar el render del SV
 ## Conclusión
 - 393 → **264** llamadas reales (−129). No quedan SUSTITUIBLES en funcionales con observable disponible; las conservadas son ESTABILIZACIÓN_VISUAL, TEMPORAL_REAL, VENTANA_INTENCIONADA, settles de helper/app o casos concretos documentados.
 - Puertas: ver informe final (FASE H).
+
+---
+
+## 3. FASE I — intermitencias de gesto, medidas antes de arreglarlas
+
+Ninguna de las dos se arregla con esperas nuevas ni relajando aserciones: primero se mide, y se
+dice qué lado estaba mal.
+
+### 3.1 Doble clic que no abría el menú (la causa era el reloj, no las coordenadas)
+
+- **Síntoma:** solo en la suite completa, el segundo clic sobre el mismo objeto no abría el menú.
+- **Hipótesis descartada midiendo:** que el inspector recentrara el lienzo entre los dos clics.
+  Con el inspector abierto y cerrado, la caja del host y la del cono son **idénticas**
+  (`host 1346×563` en ambos casos, misma caja del cono): el panel es una capa superpuesta, no
+  provoca reflujo. No se puede afirmar «se recentraba» sin esta medida.
+- **Causa real:** la ventana de 350 ms se medía con `performance.now()` **dentro** del manejador.
+  Si el hilo principal está ocupado repintando el inspector, el manejador del segundo clic corre
+  tarde y **dos clics realmente consecutivos** se veían como dos clics sueltos. Ahora se mide con
+  el `timeStamp` del EVENTO, que es el instante real del clic, no el de su procesamiento.
+- **Además:** el segundo clic ya no exige que el hit-test acierte. Si el punto cae **dentro de la
+  caja actual** del mismo objeto del clic anterior, sigue siendo un doble clic sobre él, aunque
+  la disposición haya cambiado entre ambos clics (zoom, «Llenar pantalla», borde del campo). No
+  se relaja la condición: el punto debe estar DENTRO de su caja, no «cerca».
+- **Verificación:** `e2e/fase-i-interaccion.spec.ts` ×50 con un worker → 50/50 en los 6 escenarios.
+
+### 3.2 Arrastre a la papelera que «no aparecía» (la causa era una pausa del propio test)
+
+Medido con un spec temporal (ya borrado), objeto junto al borde:
+
+| Instante | Papelera | Menú contextual | Objeto movido |
+|---|---|---|---|
+| Al bajar el botón | **visible** | cerrado | — |
+| 900 ms después, sin mover | **oculta** | **abierto** | — |
+| Tras mover 20 px | **oculta** | abierto | **0 px** |
+
+Es decir: bajar el botón ya arma el arrastre (la papelera se ve en ese mismo instante) y arma
+también la pulsación larga (550 ms). Si el objeto no se ha movido cuando vence el plazo,
+`commitLongPress` → `consumeLongPressGesture()` vacía `movingIds` y el arrastre posterior no hace
+nada. Latencia medida de una lectura `isVisible` (20 repeticiones): mín 39, mediana 65, p90 93,
+máx 138 ms — en una máquina cargada una ida y vuelta puede pasar de 550 ms.
+
+- **Lado equivocado: el TEST.** Ponía una aserción con sondeo entre bajar el botón y arrastrar,
+  dentro de una ventana que el producto cierra en 550 ms; cuando esa aserción tardaba más que el
+  plazo, el fallo se atribuía a la papelera. Arreglado moviendo la aserción **después** del primer
+  movimiento (mismo gesto, antes de soltar): no se pierde cobertura y el primer fallo sigue siendo
+  la selección si el hit-test falla. Afectaba a los 3 casos del test, no solo al del borde.
+- **Comportamiento del producto que queda fijado con test propio** (no es un defecto de la prueba,
+  y cambiarlo sería una decisión de producto, no del codificador): «sostener más de la pulsación
+  larga abre el menú contextual y consume el arrastre».
+- **El test no se rebaja:** siguen exigiéndose los 6 botones del menú, la papelera visible, el
+  resaltado al llegar a ella, borrado exacto, Deshacer y Rehacer.
+
+### 3.3 El gesto de doble clic estaba pegado al umbral (segunda causa, medida después)
+
+Tras arreglar 3.1, una repetición ×50 volvió a fallar 2 veces (498/500) en el escenario
+«normal (centro, panel cerrado)»: el objeto quedaba seleccionado pero sin menú. Traza temporal
+del componente (×50 y ×100 repeticiones) y medida del hueco REAL entre los dos `pointerdown`,
+con el mismo `event.timeStamp` que usa la app:
+
+| Gesto de la prueba | Hueco entre los dos clics (100 repeticiones) | Menús abiertos |
+|---|---|---|
+| `mouse.dblclick(x, y, { delay: 40 })` | mín 104 · media 143 · **máx 350,7 ms** | 100/100 en reposo; 2 fallos bajo carga |
+| `mouse.dblclick(x, y)` (sin retardo) | mín 0 · media 0,3 · máx 7,2 ms | **100/100** |
+
+La ventana del producto es `DBL_CLICK_MS = 350` ms. Con el retardo artificial de 40 ms que
+llevaba la prueba, el margen era prácticamente cero: **cualquier carga de la máquina empujaba
+el hueco por encima de 350 ms y la app veía dos clics sueltos, que es exactamente lo correcto**
+(para un usuario real los dos clics se sellan con la hora del hardware, no con la latencia de
+una herramienta de automatización, así que esto no le afecta).
+
+- **Lado equivocado: el TEST, otra vez, y por partida doble:** (1) el `delay: 40` artificial,
+  retirado; (2) nada comprobaba que el gesto cayera dentro de la ventana del producto. Ahora el
+  helper `doubleClick()` mide los `timeStamp` de los dos `pointerdown` y **falla con el hueco en
+  el mensaje** si el gesto se sale de la ventana, en vez de dejar un «el menú no se abre» sin
+  causa. La aserción del menú no se toca.
+- **Riesgo residual declarado:** en una máquina extremadamente cargada, el doble clic sintético
+  puede volver a superar los 350 ms. Por eso la repetición ×50 de la auditoría se ejecuta sin
+  procesos pesados en paralelo (las dos veces que falló, esta máquina estaba además instalando
+  dependencias y ejecutando ESLint y `tsc` a la vez).
+
+### 3.4 Cuarta intermitencia (esta vez en el PRODUCTO): la pulsación larga rompía el arrastre
+
+La suite completa (767 pruebas) falló una vez en `features.spec.ts` —«la selección múltiple se
+mueve como un GRUPO»— con `movedA = 0`: A no se movió nada. Antes de tocar nada se descartaron
+las hipótesis fáciles, por código y por medida:
+
+- **No era un resize:** `resizeHandles()` devuelve `[]` para los materiales (`isMaterial`), así
+  que un cono no tiene asas que puedan capturar el gesto.
+- **No era un fallo del hit-test ni de la selección:** una repetición instrumentada del escenario
+  exacto (12 veces, con traza de `hitTestNorm`, `selectedIds` y las cajas normalizadas) mostró el
+  camino sano en las 12: la bajada acierta A (`hit=A`, `sel=0`), el shift-clic acierta B
+  (`sel=1`) y el arrastre del grupo mueve A y B con el MISMO delta (`dx=0,0626 dy=0,0773`),
+  dejando C quieto.
+
+El único sitio que vacía el arrastre a mitad de gesto es `commitLongPress` →
+`consumeLongPressGesture()`, y su disparador es una carrera: el plazo de 550 ms puede vencer
+**antes** de que el primer `pointermove` llegue al navegador (en la prueba, el `down` y el `move`
+son dos llamadas distintas y con la máquina cargada se separan). Cuando eso pasa, el usuario
+arrastra y no ocurre nada. Es el mismo origen que 3.2, pero aquí el lado equivocado es el
+**producto**, no la prueba:
+
+- **Arreglo (producto):** en `commitLongPress`, para ratón/lápiz se abre el menú pero **no se
+  desarma el arrastre** (`movingIds`/`moveStart` se conservan). En táctil se mantiene el consumo
+  (si no, el `pointerup` volvería a ejecutar el tap).
+- **Prueba reescrita** (`fase-i-interaccion`, «sostener más de la pulsación larga abre el menú SIN
+  romper el arrastre»): la versión anterior exigía el comportamiento accidental —«el objeto no se
+  mueve»—; ahora exige que el menú se abra, que sostener no borre y que el arrastre posterior SÍ
+  mueva el objeto.

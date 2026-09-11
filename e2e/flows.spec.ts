@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import fs from 'node:fs';
 import { fillBoardTitle } from './gesture-helpers';
 
 // Sembramos un equipo con jugadores en localStorage para que los flujos
@@ -61,7 +62,7 @@ test.describe('EntrenoLab flujos', () => {
   test('crea una tarea desde la biblioteca y pasa a la pizarra', async ({ page }) => {
     await seed(page);
     await page.goto('/library');
-    await page.getByText('Crear tarea').first().click();
+    await page.getByText('Crear ejercicio').first().click();
     const titleInput = page.locator('.modal input[name="title"]');
     await titleInput.fill('Rondos de pase');
     await page.getByText('Diseñar').click();
@@ -73,7 +74,7 @@ test.describe('EntrenoLab flujos', () => {
     await seed(page);
     // Pre-creamos un ejercicio en la biblioteca.
     await page.goto('/library');
-    await page.getByText('Crear tarea').first().click();
+    await page.getByText('Crear ejercicio').first().click();
     await page.locator('.modal input[name="title"]').fill('Posesión 5x5');
     await page.getByText('Guardar').click();
     await expect(page.locator('.ex-card')).toHaveCount(1);
@@ -87,5 +88,97 @@ test.describe('EntrenoLab flujos', () => {
     await expect(page.locator('.task')).toHaveCount(1);
     await page.getByText('Guardar sesión').click();
     await expect(page.getByText('Sesión de posesión')).toBeVisible();
+  });
+
+  test('borrar un ejercicio usado en una sesión lo desvincula y avisa (la tarea no se pierde)', async ({ page }) => {
+    await seed(page);
+    // 1) Ejercicio en la biblioteca.
+    await page.goto('/library');
+    await page.getByText('Crear ejercicio').first().click();
+    await page.locator('.modal input[name="title"]').fill('Rondo de posesión');
+    await page.getByText('Guardar').click();
+    await expect(page.locator('.ex-card')).toHaveCount(1);
+
+    // 2) Sesión con ese ejercicio: la tarea se crea vinculada y sin aviso.
+    await page.goto('/sessions');
+    await page.getByText('Nueva sesión').click();
+    await page.locator('.modal input[name="title"]').fill('Sesión del martes');
+    await page.getByText('Añadir ejercicio').click();
+    await page.locator('.picker-item').first().click();
+    await expect(page.locator('.task')).toHaveCount(1);
+    await expect(page.locator('.task-badge')).toHaveCount(0);
+    await page.getByText('Guardar sesión').click();
+    await expect(page.locator('.session-card')).toHaveCount(1);
+
+    // 3) El ejercicio se borra de la biblioteca (paso por el diálogo de confirmación).
+    await page.goto('/library');
+    await page.locator('.ex-more-btn').first().click();
+    await page.getByRole('menuitem', { name: 'Eliminar' }).click();
+    await page.locator('.confirm .btn-danger-solid').click();
+    await expect(page.locator('.ex-card')).toHaveCount(0);
+
+    // 4) La sesión CONSERVA la tarea (es histórico) y avisa de que el ejercicio ya no
+    //    está en la biblioteca. Antes de la corrección, esto además dejaba el respaldo
+    //    exportado imposible de reimportar ("Tarea de sesión con ejercicio inexistente").
+    await page.goto('/sessions');
+    await page.locator('.session-card').getByTitle('Editar').click();
+    await expect(page.locator('.task')).toHaveCount(1);
+    await expect(page.locator('.task-title')).toHaveText('Rondo de posesión');
+    await expect(page.locator('.task-badge')).toBeVisible();
+    await expect(page.locator('.task-badge')).toHaveText('Ejercicio eliminado de biblioteca');
+  });
+
+  test('el respaldo exportado se puede reimportar aunque una tarea haya perdido su ejercicio', async ({ page }) => {
+    await seed(page);
+    // Ejercicio + sesión vinculada.
+    await page.goto('/library');
+    await page.getByText('Crear ejercicio').first().click();
+    await page.locator('.modal input[name="title"]').fill('Rondo de posesión');
+    await page.locator('.modal input[name="title"]').press('Enter');
+    await page.getByText('Guardar').click();
+    await page.goto('/sessions');
+    await page.getByText('Nueva sesión').click();
+    await page.locator('.modal input[name="title"]').fill('Sesión del martes');
+    await page.getByText('Añadir ejercicio').click();
+    await page.locator('.picker-item').first().click();
+    await page.getByText('Guardar sesión').click();
+
+    // Borrar el ejercicio deja la tarea desvinculada…
+    await page.goto('/library');
+    await page.locator('.ex-more-btn').first().click();
+    await page.getByRole('menuitem', { name: 'Eliminar' }).click();
+    await page.locator('.confirm .btn-danger-solid').click();
+    await expect(page.locator('.ex-card')).toHaveCount(0);
+
+    // …y el respaldo exportado se vuelve a importar sin errores (antes se rechazaba el
+    // fichero ENTERO con "Tarea de sesión con ejercicio inexistente").
+    await page.locator('button[aria-label="Ajustes"]').click();
+    const dlPromise = page.waitForEvent('download');
+    await page.locator('.settings-row', { hasText: 'Exportar respaldo' }).locator('button', { hasText: 'Exportar' }).click();
+    const path = await (await dlPromise).path();
+    const parsed = JSON.parse(fs.readFileSync(path!, 'utf8'));
+    expect(parsed.exercises, 'el ejercicio se borró de la biblioteca').toHaveLength(0);
+    expect(parsed.sessions[0].tasks[0].exerciseId, 'la tarea queda desvinculada').toBeNull();
+    expect(parsed.sessions[0].tasks[0].title, 'la tarea conserva su título').toBe('Rondo de posesión');
+
+    await page.locator('.settings-row', { hasText: 'Importar respaldo' }).locator('input[type="file"]').setInputFiles(path!);
+    await expect(page.locator('.settings-row', { hasText: 'Respaldo válido' })).toBeVisible();
+    await page.locator('.settings-row', { hasText: 'Respaldo válido' }).locator('button', { hasText: 'Reemplazar' }).click();
+    // FASE G: observable — el respaldo importado vuelve a estar en localStorage con la
+    // tarea desvinculada (antes este paso fallaba y no se importaba nada).
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (
+                JSON.parse(localStorage.getItem('entrenolab:sessions') ?? '[]') as Array<{
+                  tasks: Array<{ exerciseId: string | null; title: string }>;
+                }>
+              )[0]?.tasks[0]?.exerciseId,
+          ),
+        { timeout: 8000 },
+      )
+      .toBeNull();
   });
 });

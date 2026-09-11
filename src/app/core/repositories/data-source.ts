@@ -181,6 +181,8 @@ export interface DataSource {
   listTeamInvitations(teamId: string): Promise<TeamInvitationInfo[]>;
   inviteMember(teamId: string, email: string): Promise<TeamInvitationInfo>;
   cancelInvitation(invitationId: string): Promise<void>;
+  /** El INVITADO rechaza su propia invitación (no es el propietario del equipo). */
+  declineInvitation(invitationId: string): Promise<void>;
   revokeMember(teamId: string, userId: string): Promise<void>;
   myPendingInvitations(): Promise<TeamInvitationInfo[]>;
   acceptInvitation(invitationId: string): Promise<string>;

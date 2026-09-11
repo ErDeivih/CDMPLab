@@ -190,8 +190,10 @@ async function imageWidth(page: Page, selector: string): Promise<number> {
   return page.locator(selector).first().evaluate((el) => parseFloat(el.getAttribute('width') ?? '0'));
 }
 
-// El color de dibujo por defecto.
-const DRAW = '#1f2933';
+// La preview del gesto de dibujo tiene su propio grupo con clase estable
+// (`.board-preview`). Antes se localizaba por su color de trazo y estas pruebas quedaban
+// acopladas al color por defecto de dibujo.
+const PREVIEW = '.board-canvas svg .board-preview';
 
 // Vistas del dueño.
 const VIEWPORTS: Array<[number, number]> = [
@@ -225,7 +227,7 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.down();
       await page.mouse.move(b.x, b.y, { steps: 5 });
       // FASE G: el preview se espera con la aserción siguiente (observable) antes de soltar.
-      await expect(page.locator(`.board-canvas svg [stroke="${DRAW}"]`), 'preview visible ANTES de soltar').not.toHaveCount(0);
+      await expect(page.locator(PREVIEW), 'preview visible ANTES de soltar').not.toHaveCount(0);
       await page.mouse.up();
       await expect(page.locator('.field-count')).toHaveText('1');
 
@@ -328,7 +330,10 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await useDrawTool(page, 'Rectángulo');
       await drawShape(page, [0.2, 0.3], [0.5, 0.5]);
       await expect(page.locator('.field-count')).toHaveText('1');
-      const rectSel = '.board-canvas svg rect[fill="rgba(31,41,51,0.16)"]';
+      // Selector SEMÁNTICO (el `data-el-type` va en el grupo). Antes se localizaba el
+      // rectángulo por su relleno `rgba(31,41,51,0.16)`, es decir, por el color por
+      // defecto de dibujo: al cambiarlo a blanco la prueba dejó de encontrarlo.
+      const rectSel = '.board-canvas svg g[data-el-type="rect"] rect';
       const before = await rectGeom(page, rectSel);
       // Seleccionar el rectángulo.
       await selectAt(page, 0.35, 0.4);
@@ -360,7 +365,8 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await useDrawTool(page, 'Línea');
       await drawShape(page, [0.2, 0.3], [0.5, 0.4]);
       await expect(page.locator('.field-count')).toHaveText('1');
-      const lineSel = '.board-canvas svg line[stroke="#1f2933"]';
+      // El `data-el-type` va en el GRUPO; la geometría se lee de la línea de dentro.
+      const lineSel = '.board-canvas svg g[data-el-type="line"] line';
       const before = await lineEnds(page, lineSel);
       await selectAt(page, 0.35, 0.35);
       await expect(page.locator('.context-bar')).toBeVisible();
@@ -373,7 +379,7 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.down();
       await page.mouse.move(to.x, to.y, { steps: 5 });
       await page.mouse.up();
-      await page.keyboard.press('Escape'); // deseleccionar: el trazo vuelve a su color (#1f2933)
+      await page.keyboard.press('Escape'); // deseleccionar: el trazo deja de estar seleccionado
       // FASE G: observable — el extremo x2 del trazo DESeleccionado se mueve.
       await expect.poll(async () => (await lineEnds(page, lineSel)).x2, { timeout: 4000 }).toBeGreaterThan(before.x2 + 2);
       const after = await lineEnds(page, lineSel);
@@ -390,7 +396,7 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await useDrawTool(page, 'Curva derecha');
       await drawShape(page, [0.2, 0.3], [0.6, 0.4]);
       await expect(page.locator('.field-count')).toHaveText('1');
-      const pathSel = `.board-canvas svg path[stroke="${DRAW}"]`;
+      const pathSel = '.board-canvas svg g[data-el-type="curve"] path';
       const beforeD = await page.locator(pathSel).first().getAttribute('d');
       await selectAt(page, 0.4, 0.42); // punto medio real de la curva derecha (bend +0.14 → c1y=0.49)
       await expect(page.locator('.context-bar')).toBeVisible();
@@ -472,7 +478,10 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await useDrawTool(page, 'Rectángulo');
       await drawShape(page, [0.2, 0.3], [0.4, 0.45]);
       await expect(page.locator('.field-count')).toHaveText('1');
-      const rectSel = '.board-canvas svg rect[fill="rgba(31,41,51,0.16)"]';
+      // Selector SEMÁNTICO (el `data-el-type` va en el grupo). Antes se localizaba el
+      // rectángulo por su relleno `rgba(31,41,51,0.16)`, es decir, por el color por
+      // defecto de dibujo: al cambiarlo a blanco la prueba dejó de encontrarlo.
+      const rectSel = '.board-canvas svg g[data-el-type="rect"] rect';
       await selectAt(page, 0.3, 0.38);
       await expect(page.locator('.context-bar')).toBeVisible();
       const beforeRotResize = await rectGeom(page, rectSel);

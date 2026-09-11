@@ -111,7 +111,7 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
     await expect(page.locator('.tree-name', { hasText: `${PREFIX} Carpeta` })).toBeVisible();
 
     // Ejercicio.
-    await page.locator('button.btn.btn-primary', { hasText: 'Crear tarea' }).click();
+    await page.locator('button.btn.btn-primary', { hasText: 'Crear ejercicio' }).click();
     await page.locator('.modal input[name="title"]').fill(`${PREFIX} Ejercicio`);
     await page.locator('.modal button.btn.btn-primary', { hasText: 'Guardar' }).click();
     await expect(page.locator('.ex-card', { hasText: `${PREFIX} Ejercicio` })).toHaveCount(1);

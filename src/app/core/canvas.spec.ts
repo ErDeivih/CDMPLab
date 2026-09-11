@@ -17,6 +17,33 @@ describe('normalizeCanvas (schemaVersion/migrador)', () => {
     expect(doc.frames[0].elements.every((e) => e.id)).toBe(true);
   });
 
+  it('migra el campo antiguo `vertical_half` a `half` + orientación vertical SIN perder elementos', () => {
+    // Decisión de producto de la auditoría: «Medio campo» es una sola tarjeta y el medio
+    // campo vertical se expresa con `half` + orientación. Los documentos guardados con el
+    // tipo antiguo deben seguir abriéndose igual (medio campo vertical) y conservar TODO.
+    const raw = {
+      version: 2,
+      schemaVersion: 4,
+      field: 'vertical_half',
+      orientation: 'horizontal', // el tipo antiguo manda: significaba «vertical»
+      frames: [{ duration: 1000, elements: [el(0.3, 0.4), el(0.7, 0.6)] }],
+      f7: { enabled: false },
+      grass: 'stripes',
+    };
+    const doc = normalizeCanvas(raw);
+    expect(doc.field, 'un solo tipo de campo: half').toBe('half');
+    expect(doc.orientation, 'la orientación que significaba «vertical»').toBe('vertical');
+    expect(doc.frames, 'no se pierde ningún frame').toHaveLength(1);
+    expect(doc.frames[0].elements, 'no se pierde ningún elemento').toHaveLength(2);
+    expect(doc.frames[0].elements[0]).toMatchObject({ t: 'player', x: 0.3, y: 0.4 });
+    expect(doc.frames[0].elements[1]).toMatchObject({ t: 'player', x: 0.7, y: 0.6 });
+    // Y es idempotente: volver a normalizar el resultado no cambia nada.
+    const again = normalizeCanvas(doc);
+    expect(again.field).toBe('half');
+    expect(again.orientation).toBe('vertical');
+    expect(again.frames[0].elements).toHaveLength(2);
+  });
+
   it('asegura schemaVersion, duraciones e ids en un documento v2', () => {
     const raw = {
       version: 2,

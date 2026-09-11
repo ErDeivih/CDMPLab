@@ -21,7 +21,7 @@ async function seed(page: Page): Promise<void> {
 }
 
 async function createTask(page: Page, title: string): Promise<void> {
-  await page.getByText('Crear tarea').first().click();
+  await page.getByText('Crear ejercicio').first().click();
   await page.locator('.modal input[name="title"]').fill(title);
   await page.getByText('Guardar').click();}
 
@@ -338,8 +338,8 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.locator('.tree-inline').getByText('Crear').click();
     await expect(page.locator('.tree-name', { hasText: 'Posesión' })).toBeVisible();
 
-    // Crear tarea y moverla a la carpeta.
-    await page.getByText('Crear tarea').first().click();
+    // Crear ejercicio y moverla a la carpeta.
+    await page.getByText('Crear ejercicio').first().click();
     await page.locator('.modal input[name="title"]').fill('Rondos');
     await page.getByText('Guardar').click();
     await expect(page.locator('.ex-card')).toHaveCount(1);
@@ -1520,7 +1520,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   test('la biblioteca guarda y recupera descripción, material, duración y jugadores', async ({ page }) => {
     await seed(page);
     await page.goto('/library');
-    await page.getByText('Crear tarea').first().click();
+    await page.getByText('Crear ejercicio').first().click();
     await page.locator('.modal input[name="title"]').fill('Rondos');
     await page.locator('.modal textarea[name="description"]').fill('Conservación del balón');
     await page.locator('.modal textarea[name="explanation"]').fill('4 contra 2');
@@ -1545,7 +1545,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   test('la Biblioteca no guarda ni abre Diseñar cuando min > max', async ({ page }) => {
     await seed(page);
     await page.goto('/library');
-    await page.getByText('Crear tarea').first().click();
+    await page.getByText('Crear ejercicio').first().click();
     await page.locator('.modal input[name="title"]').fill('Rondos');
     await page.locator('.modal input[name="duration"]').fill('15');
     await page.locator('.modal input[name="minPlayers"]').fill('12');
@@ -1603,7 +1603,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await seed(page);
     // Crear una actividad y abrirla en la pizarra (navegación SPA pushState /library → /board).
     await page.goto('/library');
-    await page.getByText('Crear tarea').first().click();
+    await page.getByText('Crear ejercicio').first().click();
     await page.locator('.modal input[name="title"]').fill('Rondos');
     await page.getByText('Diseñar').click();
     await page.waitForURL('**/board');
@@ -1702,7 +1702,13 @@ test.describe('EntrenoLab funcionalidades', () => {
     await cone.evaluate((el, p) => {
       el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 5, pointerType: 'touch', isPrimary: true, clientX: p.x, clientY: p.y, button: 0, buttons: 1 }));
     }, { x: cx, y: cy });
-    await page.waitForTimeout(200);
+    // SIN dormir entre bajar y mover: la ventana de la pulsación larga de la barra es de 500 ms
+    // (`beginBarPress`) y aquí se comprueba justo que un movimiento la CANCELA antes de que
+    // venza. Un `waitForTimeout(200)` en medio se comía el 40 % del margen y, con la máquina
+    // cargada (el `dispatchEvent` es una ida y vuelta más), el temporizador llegaba a dispararse:
+    // fallo intermitente de la suite completa en `features.spec.ts` («long-press cancelado por
+    // movimiento … no abre el selector»). Los eventos se procesan en orden, así que mover
+    // enseguida es exactamente el escenario que la prueba quiere medir.
     // Se mueve > 10 px → cancelación por movimiento.
     await cone.evaluate((el, p) => {
       el.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 5, pointerType: 'touch', isPrimary: true, clientX: p.x, clientY: p.y, button: 0, buttons: 1 }));
@@ -1811,7 +1817,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   test('el guard conserva el destino original al salir sin guardar', async ({ page }) => {
     await seed(page);
     await page.goto('/library');
-    await page.getByText('Crear tarea').first().click();
+    await page.getByText('Crear ejercicio').first().click();
     await page.locator('.modal input[name="title"]').fill('Rondos');
     await page.getByText('Diseñar').click();
     await page.waitForURL('**/board');

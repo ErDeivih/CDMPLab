@@ -54,10 +54,12 @@ export class InvitationsComponent {
     this.busyId.set(inv.id);
     this.error.set(null);
     try {
-      await this.access.cancelInvitation(inv.id);
+      // RPC del INVITADO: `cancel_team_invitation` exige ser propietario del equipo y
+      // devolvía siempre 'forbidden: not team owner' (el botón no hacía nada).
+      await this.access.declineInvitation(inv.id);
       await this.load();
     } catch (e) {
-      this.error.set((e as Error)?.message ?? 'No se pudo rechazar la invitación.');
+      this.error.set(this.friendly((e as Error)?.message ?? 'No se pudo rechazar la invitación.'));
     } finally {
       this.busyId.set(null);
     }
@@ -73,6 +75,8 @@ export class InvitationsComponent {
 
   private friendly(msg: string): string {
     if (msg.includes('invitation_not_available')) return 'La invitación ya no está disponible (caducó, se rechazó o se aceptó).';
+    if (msg.includes('invitation_email_mismatch')) return 'Esta invitación pertenece a otra cuenta.';
+    if (msg.includes('owner_cannot_be_collaborator')) return 'Eres el propietario de ese equipo: esa invitación no es tuya.';
     if (msg.includes('profile_not_approved')) return 'Tu perfil todavía no ha sido aprobado.';
     if (msg.includes('email_not_confirmed')) return 'Confirma tu correo antes de aceptar la invitación.';
     return msg;

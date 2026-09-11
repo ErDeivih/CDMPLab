@@ -167,7 +167,7 @@ test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
     await page.mouse.down();
     await page.mouse.move(b.x, b.y, { steps: 6 });
     // ANTES de soltar: hay preview en el SVG y todavía NO hay elemento definitivo.
-    await expect(page.locator('.board-canvas svg [stroke="#1f2933"]'), 'preview visible antes de soltar').not.toHaveCount(0);
+    await expect(page.locator('.board-canvas svg .board-preview'), 'preview visible antes de soltar').not.toHaveCount(0);
     expect(await fieldCount(page), 'el documento no cambia hasta el pointerup').toBe(0);
     await page.mouse.up();
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);

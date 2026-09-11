@@ -1,7 +1,7 @@
 // =============================================================
 // EntrenoLab — Estilos globales
 // =============================================================
-@use "./styles/tokens";
+@use './styles/tokens';
 
 *,
 *::before,
@@ -80,7 +80,10 @@ select {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  transition: background 0.12s ease, border-color 0.12s ease;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
   white-space: nowrap;
 
   &:hover {
@@ -191,7 +194,9 @@ select {
   color: var(--text-muted);
   background: var(--surface);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 
   &:hover {
     background: var(--surface-2);
@@ -348,6 +353,62 @@ select {
   }
 }
 
+// ---------- Modales y rejillas de formulario (base COMPARTIDA) ----------
+// Estas reglas estaban copiadas literalmente en roster, library y sessions. La base vive
+// aquí (una sola vez) y cada componente declara solo lo suyo: su ANCHO, su altura máxima
+// y si su cuerpo scrollea. Si algo de aquí cambia, cambia en los tres modales a la vez.
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 25, 28, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+}
+
+.modal {
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+
+  h3 {
+    font-size: 16px;
+  }
+}
+
+.modal-body {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+// Fila de dos campos (Duración/Fecha, Dorsal/Posición…): idéntica en tres componentes.
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
 // ---------- Scrollbar discreta ----------
 ::-webkit-scrollbar {
   width: 10px;
@@ -426,35 +487,33 @@ select {
   gap: 6px;
 }
 
-// FASE 3: galería visual de campos. Lista horizontal desplazable en móvil y escritorio;
-// cada tarjeta muestra la miniatura real del campo y su estado seleccionado.
+// FASE 3 / auditoría final: galería visual de campos. Es una REJILLA que se ve entera.
+// Antes era una lista horizontal desplazable y, con 8 campos, medía 824 px dentro de un panel
+// de 271 px: solo se veían 2,6 tarjetas y había que desplazar en horizontal DENTRO de un panel
+// que ya se desplaza en vertical (el dueño lo describió como «no poder elegir»). Con la rejilla
+// el catálogo completo queda a la vista desplazando solo hacia abajo, y cada tarjeta sigue
+// mostrando la miniatura real del campo.
 .field-gallery {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
   gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 6px;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
-  // Contener el scroll horizontal DENTRO de la galería: no empuja el ancho del panel.
   width: 100%;
   min-width: 0;
   max-width: 100%;
 }
 
 .field-card {
-  flex: 0 0 auto;
-  width: 96px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   padding: 6px;
+  min-width: 0;
   border: 1px solid #2b3947;
   border-radius: 8px;
   background: #141b21;
   color: #cdd6df;
   cursor: pointer;
-  scroll-snap-align: start;
 
   &:hover {
     border-color: #3a4c5c;
@@ -473,7 +532,7 @@ select {
 }
 
 .field-card-thumb {
-  width: 84px;
+  width: 100%;
   height: 54px;
   display: grid;
   place-items: center;
@@ -529,7 +588,7 @@ select {
   min-width: 0;
   overflow: hidden;
 
-  input[type="checkbox"] {
+  input[type='checkbox'] {
     accent-color: #2563eb;
     flex-shrink: 0;
   }
@@ -548,7 +607,6 @@ select {
   margin-top: 2px;
   min-width: 0;
 }
-
 
 .edit-sep {
   width: 1px;
@@ -669,11 +727,19 @@ select {
 }
 
 .swatch {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   border-radius: 999px;
   border: 2px solid transparent;
   flex-shrink: 0;
+
+  // En táctil, un poco más grande (sigue sin llegar a los 44 px recomendados: eso
+  // exigiría desacoplar el punto de color del botón, y el tamaño visual del punto
+  // forma parte del diseño acordado).
+  @media (pointer: coarse) {
+    width: 36px;
+    height: 36px;
+  }
 
   &.swatch-active {
     border-color: var(--accent);
@@ -688,7 +754,9 @@ select {
   display: grid;
   place-items: center;
   color: #8a97a3;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
   flex-shrink: 0;
 
   .msi {
@@ -1067,7 +1135,9 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 
   &:hover {
     background: #2b3947;

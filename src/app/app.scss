@@ -176,12 +176,79 @@
   }
 }
 
+// Conmutador de equipo (solo aparece con más de un equipo).
+.team-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  .msi {
+    font-size: 18px;
+    color: var(--text-muted);
+  }
+
+  select {
+    height: 30px;
+    max-width: 220px;
+    padding: 0 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+  }
+}
+
+// Estado de sincronización (modo remoto). Estaba en el HTML sin ningún estilo:
+// aparecía como texto suelto con un icono.
+.sync-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+
+  .msi {
+    font-size: 18px;
+  }
+}
+
+// Aviso de conflicto de revisión: otro usuario editó el ejercicio. No es un error del
+// sistema (por eso no usa el rojo de peligro): es una decisión que debe tomar el usuario.
+.conflict-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--warn-soft);
+  border: 1px solid rgba(161, 98, 7, 0.3);
+  color: var(--warn);
+  font-size: 13px;
+
+  .msi {
+    font-size: 20px;
+  }
+}
+
+.conflict-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+// El fondo del modal y los botones son los GLOBALES (styles.scss): aquí solo se sube el
+// z-index, porque Ajustes debe quedar por encima de los modales de pantalla (50) y por
+// debajo de la confirmación (80).
 .modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(23, 25, 28, 0.4);
-  display: grid;
-  place-items: center;
   z-index: 60;
 }
 
@@ -219,6 +286,17 @@
   color: var(--text-muted);
 }
 
+// Error del respaldo: antes se pintaba con `.settings-note` (gris, igual que una
+// nota informativa), así que un fallo al importar parecía un comentario.
+.settings-error {
+  font-size: 13px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid #e6b5af;
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+}
+
 .settings-row {
   display: flex;
   align-items: center;
@@ -243,48 +321,8 @@
   flex-shrink: 0;
 }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 14px;
-  border-radius: var(--radius);
-  font-size: 14px;
-  font-weight: 500;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--surface-2);
-  }
-}
-
-.btn-ghost {
-  border-color: transparent;
-  background: transparent;
-
-  &:hover {
-    background: var(--surface-2);
-  }
-}
-
-.btn-icon {
-  width: 36px;
-  padding: 0;
-  justify-content: center;
-}
-
-.btn-danger {
-  color: var(--danger);
-  border-color: #e6b5af;
-
-  &:hover {
-    background: var(--danger-soft);
-  }
-}
+// Los botones (.btn, .btn-ghost, .btn-icon, .btn-danger) viven en styles.scss: estas
+// copias eran idénticas y solo servían para mantener dos listas en sync.
 
 // ---------- Móvil: barra de navegación inferior ----------
 @media (max-width: 768px) {

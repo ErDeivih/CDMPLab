@@ -20,6 +20,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Formato y lint van ANTES de los tests: son baratos y fallan pronto. Los dos son
+      # trinquetes de deuda previa: exigen impecable todo fichero nuevo o ya conforme en
+      # HEAD, y solo toleran (informando de cuánto queda) lo que ya venía mal.
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
       - name: Unit tests
         run: npm run test:unit
 
@@ -32,7 +41,8 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      # Conjunto E2E ESTABLE (los recorridos núcleo). El suite completo (≈520 tests)
-      # es pesado para CI; se ejecuta manualmente en desarrollo.
+      # Conjunto E2E ESTABLE (los recorridos núcleo). El suite completo (≈550 tests)
+      # es pesado para CI; se ejecuta de noche en `nightly.yml` y a mano en desarrollo.
+      # Se van sumando specs por lote (los nuevos del Lote C: fase-i-*).
       - name: E2E (estable)
-        run: npx playwright test f7-persistence p11-persistence mobile-toolbar accesibilidad galerias fields features --workers=1
+        run: npx playwright test f7-persistence p11-persistence mobile-toolbar accesibilidad galerias fields features fase-h-formaciones fase-i-biblioteca fase-i-plantilla fase-i-sesiones fase-i-ajustes fase-i-shell fase-i-estilos --workers=1

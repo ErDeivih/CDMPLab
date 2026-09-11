@@ -15,7 +15,7 @@
 // =============================================================
 
 import { Injectable, computed, signal } from '@angular/core';
-import { Exercise, ExerciseFolder, Player, Session, Team, ELEMENT_TYPES } from './models';
+import { Exercise, ExerciseFolder, Player, Session, Team, ELEMENT_TYPES, FIELD_TYPES } from './models';
 import { environment } from '../../environments/environment';
 import type { DataSource } from './repositories/data-source';
 import { DataError } from './repositories/data-source';
@@ -27,6 +27,8 @@ const KEY_FOLDERS = 'folders';
 const KEY_SESSIONS = 'sessions';
 const KEY_DRAFT_PREFIX = 'draft';
 const KEY_AUTO_BACKUP = 'backup-auto';
+/** Equipo activo elegido por el usuario (se recuerda entre recargas). */
+const KEY_ACTIVE_TEAM = 'active-team';
 
 export const BACKUP_VERSION = 1;
 
@@ -95,7 +97,9 @@ export class StoreService {
   readonly players = this._players.asReadonly();
 
   private readonly _activeTeamId = signal<string | null>(
-    load<{ id: string }>(this.key(KEY_TEAMS)).length ? null : 'team-1'
+    // El equipo activo ELEGIDO por el usuario se recuerda entre recargas; si no hay
+    // preferencia se mantiene el comportamiento anterior (el primero disponible).
+    this.readActiveTeamId() ?? (load<{ id: string }>(this.key(KEY_TEAMS)).length ? null : 'team-1')
   );
 
   readonly activeTeam = computed(() => {
@@ -123,23 +127,35 @@ export class StoreService {
   private readonly _lastError = signal<string | null>(null);
   readonly lastError = this._lastError.asReadonly();
 
+  /** ¿Hay una escritura fallida pendiente de reintentar? (ver `retryFailedWrite`). */
+  private readonly _canRetry = signal(false);
+
   /** Conflicto de revisión detectado (otro usuario modificó el ejercicio). */
   private readonly _lastConflict = signal<{ exerciseId: string; latest: Exercise; attempted: Exercise } | null>(null);
   readonly lastConflict = this._lastConflict.asReadonly();
+
+  /** ¿Hay una copia automática restaurable? Se escribe ANTES de cada importación, así que
+   *  la UI debe enterarse sin recargar: es una señal, no una lectura de localStorage. */
+  private readonly _autoBackup = signal(false);
 
   clearStorageError(): void {
     this._storageError.set(null);
   }
 
   clearLastError(): void {
+    // «Entendido» descarta el aviso Y la posibilidad de reintentar: el usuario ha decidido
+    // seguir sin esa escritura.
     this._lastError.set(null);
     this._lastConflict.set(null);
+    this.failedOp = null;
+    this._canRetry.set(false);
   }
 
   constructor() {
     onStorageError = (msg) => this._storageError.set(msg);
-    // Si ya hay equipos pero no hay seleccionado, toma el primero.
-    if (this._teams().length && !this._activeTeamId()) {
+    this._autoBackup.set(this.readAutoBackup());
+    // Si el equipo recordado ya no existe (o nunca hubo elección), se toma el primero.
+    if (this._teams().length && !this._teams().some((t) => t.id === this._activeTeamId())) {
       this._activeTeamId.set(this._teams()[0].id);
     }
     // Solo sembrar demo en builds de desarrollo (nunca en producción).
@@ -191,6 +207,9 @@ export class StoreService {
   }
 
   private hydrate(dataset: { team: Team | null; players: Player[]; folders: ExerciseFolder[]; exercises: Exercise[]; sessions: Session[] }, teamId: string): void {
+    // La copia automática vive bajo la clave usuario+equipo: al hidratar un contexto nuevo
+    // hay que recalcular si existe antes de que la UI la ofrezca.
+    this._autoBackup.set(this.readAutoBackup());
     this._teams.set(dataset.team ? [dataset.team] : []);
     this._players.set(dataset.players);
     this._folders.set(dataset.folders);
@@ -208,10 +227,25 @@ export class StoreService {
     this._folders.set(load<ExerciseFolder>(this.key(KEY_FOLDERS)));
     this._exercises.set(load<Exercise>(this.key(KEY_EXERCISES)));
     this._sessions.set(load<Session>(this.key(KEY_SESSIONS)));
-    this._activeTeamId.set(this._teams().length ? this._teams()[0].id : null);
+    // El equipo ELEGIDO por el usuario se respeta al arrancar en modo local; antes se
+    // tomaba siempre el primero, así que la elección del conmutador se perdía en cada
+    // recarga (el arranque llama aquí).
+    const remembered = this.readActiveTeamId();
+    this._activeTeamId.set(
+      remembered && this._teams().some((t) => t.id === remembered)
+        ? remembered
+        : this._teams().length
+          ? this._teams()[0].id
+          : null,
+    );
     this._pendingWrites.set(0);
     this._lastError.set(null);
     this._lastConflict.set(null);
+    this.failedOp = null;
+    this._canRetry.set(false);
+    // La clave de la copia automática depende de usuario+equipo: al cambiar de contexto
+    // hay que volver a mirar si existe.
+    this._autoBackup.set(this.readAutoBackup());
     try {
       localStorage.removeItem('entrenolab:remote-mode');
     } catch {
@@ -246,6 +280,12 @@ export class StoreService {
     },
     onDone?: (value: T) => void
   ): void {
+    // Cada operación remota recibe una GENERACIÓN. Una respuesta que llegue cuando ya ha
+    // empezado otra operación es TARDÍA: no puede ofrecer reintento, porque el estado que
+    // había antes de ella ya lo ha podido cambiar la operación nueva.
+    const seq = ++this.opSeq;
+    this.failedOp = null;
+    this._canRetry.set(false);
     this.beginWrite();
     optimistic();
     persist()
@@ -255,6 +295,62 @@ export class StoreService {
       })
       .catch((err) => {
         rollback();
+        if (seq === this.opSeq) {
+          this.failedOp = {
+            apply: optimistic,
+            call: () => persist() as Promise<unknown>,
+            rollback,
+            onOk: onDone ? (v: unknown) => onDone(v as T) : undefined,
+          };
+          this._canRetry.set(true);
+        }
+        this.endWrite(err);
+      });
+  }
+
+  /** Generación de la última operación remota lanzada (ver `applyRemote`). */
+  private opSeq = 0;
+
+  /** Última operación que falló contra el servidor (para «Reintentar»). */
+  private failedOp: {
+    apply: () => void;
+    call: () => Promise<unknown>;
+    rollback: () => void;
+    onOk?: (value: unknown) => void;
+  } | null = null;
+
+  /**
+   * ¿Se puede reintentar la última escritura fallida? Mientras es `true`, el aviso de
+   * error ofrece «Reintentar» en vez de solo «Entendido».
+   */
+  readonly canRetry = this._canRetry.asReadonly();
+
+  /**
+   * Reintenta la última escritura fallida: vuelve a aplicar el cambio local (se había
+   * revertido) y repite la llamada. Si vuelve a fallar, se revierte otra vez y el aviso
+   * sigue ahí con la opción de reintentar (siempre que no haya empezado otra operación).
+   */
+  retryFailedWrite(): void {
+    const op = this.failedOp;
+    if (!op) return;
+    // El propio reintento es una operación nueva: invalida a cualquier otra en vuelo.
+    const seq = ++this.opSeq;
+    this.failedOp = null;
+    this._canRetry.set(false);
+    this._lastError.set(null);
+    this.beginWrite();
+    op.apply();
+    op.call()
+      .then((value) => {
+        op.onOk?.(value);
+        this.endWrite();
+      })
+      .catch((err) => {
+        op.rollback();
+        if (seq === this.opSeq) {
+          this.failedOp = op;
+          this._canRetry.set(true);
+        }
         this.endWrite(err);
       });
   }
@@ -276,7 +372,21 @@ export class StoreService {
   }
 
   setActiveTeam(id: string): void {
+    if (!this._teams().some((t) => t.id === id)) return;
     this._activeTeamId.set(id);
+    try {
+      localStorage.setItem(this.key(KEY_ACTIVE_TEAM), id);
+    } catch {
+      /* sin persistencia: la elección vale solo para esta sesión */
+    }
+  }
+
+  private readActiveTeamId(): string | null {
+    try {
+      return localStorage.getItem(this.key(KEY_ACTIVE_TEAM)) || null;
+    } catch {
+      return null;
+    }
   }
 
   // ---------- Jugadores ----------
@@ -427,15 +537,38 @@ export class StoreService {
     );
   }
 
+  /**
+   * Borra un ejercicio. Las tareas de sesión que lo referenciaban NO se borran: la
+   * sesión es histórico. Se desvinculan (`exerciseId = null`) conservando el snapshot
+   * que ya llevan (`title`, `durationMinutes`, `material`), que es EXACTAMENTE lo que
+   * hace el servidor con el FK `on delete set null (exercise_id)`
+   * (20260827000000_entrenolab_schema.sql:192-195).
+   *
+   * Sin esto, la sesión quedaba con una referencia colgando y `validateBackup` rechazaba
+   * el respaldo ENTERO ("Tarea de sesión con ejercicio inexistente"): los datos seguían
+   * ahí, pero el usuario no podía volver a importar su propia copia.
+   */
   deleteExercise(id: string): void {
     const ds = this.dataSource;
-    const prev = this._exercises().find((e) => e.id === id);
+    const prevExercises = this._exercises();
+    const prevSessions = this._sessions();
+    /** Desvincula el ejercicio borrado de todas las tareas que lo usaban. */
+    const unlink = (list: Session[]): Session[] =>
+      list.map((s) =>
+        s.tasks.some((t) => t.exerciseId === id)
+          ? { ...s, tasks: s.tasks.map((t) => (t.exerciseId === id ? { ...t, exerciseId: null } : t)) }
+          : s,
+      );
     if (ds) {
       this.applyRemote(
-        () => this._exercises.update((list) => list.filter((e) => e.id !== id)),
+        () => {
+          this._exercises.update((list) => list.filter((e) => e.id !== id));
+          this._sessions.update(unlink);
+        },
         () => ds.deleteExercise(id),
         () => {
-          if (prev) this._exercises.update((list) => [...list, prev]);
+          this._exercises.set(prevExercises);
+          this._sessions.set(prevSessions);
         }
       );
       return;
@@ -443,6 +576,11 @@ export class StoreService {
     this._exercises.update((list) => {
       const next = list.filter((e) => e.id !== id);
       save(this.key(KEY_EXERCISES), next);
+      return next;
+    });
+    this._sessions.update((list) => {
+      const next = unlink(list);
+      save(this.key(KEY_SESSIONS), next);
       return next;
     });
   }
@@ -818,15 +956,16 @@ export class StoreService {
       for (const p of path) done.add(p);
     }
 
-    // Campos de pizarra admitidos. Incluye 'f7' (F7 transversal sobre medio campo
-    // F11), que es un campo de PRIMER nivel del producto. Sin él, un respaldo con un
-    // ejercicio F7 se rechazaría como "canvas inválido".
-    const KNOWN_FIELD = new Set(['full', 'half', 'third', 'box', 'futsal', 'blank', 'vertical_half', 'f7']);
+    // Campos de pizarra admitidos: fuente ÚNICA en `models.FIELD_TYPES` (incluye 'f7'
+    // —F7 transversal sobre medio campo F11— y 'two_halves' —dos medios campos—, que
+    // son campos de PRIMER nivel del producto). Con una lista local aquí, un respaldo
+    // con un campo que SÍ existe en el catálogo se rechazaba entero como "canvas
+    // inválido": pasó con 'f7' y volvió a pasar con 'two_halves'.
     const isValidCanvas = (c: unknown): boolean => {
       if (c === null) return true;
       if (!c || typeof c !== 'object') return false;
       const doc = c as any;
-      if (typeof doc.field !== 'string' || !KNOWN_FIELD.has(doc.field)) return false;
+      if (typeof doc.field !== 'string' || !FIELD_TYPES.has(doc.field)) return false;
       if (!isArr(doc.frames) || doc.frames.length === 0) return false;
       for (const fr of doc.frames) {
         if (!fr || !isArr((fr as any).elements)) return false;
@@ -896,6 +1035,7 @@ export class StoreService {
 
     // Copia automática recuperable del estado actual ANTES de importar.
     localStorage.setItem(this.key(KEY_AUTO_BACKUP), this.exportBackup());
+    this._autoBackup.set(true);
 
     // Snapshot para rollback si falla una escritura (cuota de localStorage).
     const prevRaw: Record<string, string | null> = {
@@ -948,9 +1088,16 @@ export class StoreService {
     return { ok: true, count };
   }
 
-  /** ¿Existe una copia de seguridad automática? (se genera antes de importar). */
-  hasAutoBackup(): boolean {
+  /** ¿Existe una copia de seguridad automática? (se genera antes de importar).
+   *  Reactivo: la UI necesita saberlo DESPUÉS de importar, sin recargar. */
+  readonly autoBackupAvailable = this._autoBackup.asReadonly();
+
+  private readAutoBackup(): boolean {
     return !!(typeof localStorage !== 'undefined' && localStorage.getItem(this.key(KEY_AUTO_BACKUP)));
+  }
+
+  hasAutoBackup(): boolean {
+    return this._autoBackup();
   }
 
   /** Restaura la copia automática creada antes de la última importación. */
@@ -959,6 +1106,26 @@ export class StoreService {
     if (!raw) return false;
     const res = this.importBackup(raw, 'replace');
     return res.ok;
+  }
+
+  // ---------- Conflicto de revisión (otro usuario modificó el ejercicio) ----------
+
+  /**
+   * «Guardar mi copia»: reenvía MI versión con la revisión que tiene el servidor, de modo
+   * que el guardado deja de chocar y se queda lo que el usuario tenía en pantalla. El
+   * servidor manda mientras el aviso está abierto: hasta que el usuario decide, su copia
+   * NO se ha escrito.
+   */
+  keepMyCopy(): void {
+    const c = this._lastConflict();
+    if (!c) return;
+    this._lastConflict.set(null);
+    this.saveExercise({ ...c.attempted, revision: c.latest.revision });
+  }
+
+  /** «Descartar»: se queda la versión del servidor y se cierra el aviso. */
+  discardMyCopy(): void {
+    this._lastConflict.set(null);
   }
 
   // ---------- Borrador (autoguardado / retomar) ----------

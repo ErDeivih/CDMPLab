@@ -172,12 +172,12 @@ test('no hay errores de consola ni peticiones fallidas en plantilla, biblioteca 
   await page.getByText('Guardar').click();
   await expect(page.getByText('Eric')).toBeVisible();
 
-  // Biblioteca: crear tarea, carpeta y reabrir.
+  // Biblioteca: Crear ejercicio, carpeta y reabrir.
   await page.goto('/library');
   await page.locator('.tree-add').click();
   await page.locator('.tree-inline input.folder-input').fill('Posesión');
   await page.locator('.tree-inline').getByText('Crear').click();
-  await page.getByText('Crear tarea').first().click();
+  await page.getByText('Crear ejercicio').first().click();
   await page.locator('.modal input[name="title"]').fill('Rondos');
   await page.locator('.modal textarea[name="description"]').fill('Conservación del balón');
   await page.getByText('Guardar').click();

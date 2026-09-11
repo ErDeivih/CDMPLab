@@ -1,8 +1,14 @@
 -- =============================================================
 -- EntrenoLab — Esquema PostgreSQL / Supabase
--- Aplicar en el PROYECTO SUPABASE NUEVO (no en el de ClubManager).
--- Enfoque: cada usuario pertenece a UN equipo (profiles.team_id).
--- La escritura y lectura están limitadas por RLS al equipo del usuario.
+--
+-- ⚠️  DEPRECADO — NO ES LA FUENTE DE VERDAD.
+-- Este fichero es un esquema INICIAL histórico, anterior al versionado. La fuente única
+-- del esquema es `supabase/migrations/` (aplicada en orden por nombre de fichero), que
+-- incluye el endurecimiento de permisos y las RPC posteriores. Usar este fichero para
+-- levantar una base nueva produce un esquema INCOMPLETO (sin las migraciones 00001..).
+-- Se conserva solo como referencia de lectura.
+--
+-- Enfoque (histórico): cada usuario pertenece a UN equipo (profiles.team_id).
 -- =============================================================
 
 -- ---------- Equipos ----------

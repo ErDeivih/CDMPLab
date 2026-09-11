@@ -43,12 +43,47 @@ export class RosterComponent {
     })
   );
 
+  // ---------- Filtros de la lista ----------
+  // Con plantillas de 20+ jugadores no había forma de encontrar a nadie ni de ver solo
+  // los de una posición.
+  protected readonly filterText = signal('');
+  protected readonly filterPos = signal<Position | 'all'>('all');
+
+  protected readonly visiblePlayers = computed(() => {
+    const q = this.filterText().trim().toLowerCase();
+    const pos = this.filterPos();
+    return this.players().filter((p) => {
+      if (pos !== 'all' && p.position !== pos) return false;
+      if (!q) return true;
+      return `${p.name} ${p.number ?? ''}`.toLowerCase().includes(q);
+    });
+  });
+
+  protected readonly hasPlayerFilters = computed(
+    () => this.filterText().trim().length > 0 || this.filterPos() !== 'all',
+  );
+
+  protected onPlayerSearch(evt: Event): void {
+    this.filterText.set((evt.target as HTMLInputElement).value);
+  }
+
+  protected setPositionFilter(evt: Event): void {
+    this.filterPos.set((evt.target as HTMLSelectElement).value as Position | 'all');
+  }
+
+  protected clearPlayerFilters(): void {
+    this.filterText.set('');
+    this.filterPos.set('all');
+  }
+
   protected readonly showCreateTeam = signal(false);
   protected readonly newTeamName = signal('');
   protected readonly newTeamColor = signal(PALETTE[0]);
 
   protected readonly editorOpen = signal(false);
   protected readonly draft = signal<Draft>({ id: null, name: '', number: null, position: 'MF', color: PALETTE[0] });
+  /** Motivo por el que no se puede guardar (vacío = todo correcto). */
+  protected readonly formError = signal('');
 
   // ---------- Crear equipo ----------
 
@@ -68,11 +103,13 @@ export class RosterComponent {
 
   openAdd(): void {
     const nextNumber = this.nextNumber();
+    this.formError.set('');
     this.draft.set({ id: null, name: '', number: nextNumber, position: 'MF', color: PALETTE[0] });
     this.editorOpen.set(true);
   }
 
   openEdit(p: Player): void {
+    this.formError.set('');
     this.draft.set({
       id: p.id,
       name: p.name,
@@ -84,13 +121,36 @@ export class RosterComponent {
   }
 
   closeEditor(): void {
+    this.formError.set('');
     this.editorOpen.set(false);
+  }
+
+  /**
+   * Valida el borrador ANTES de guardar y explica el motivo. Antes solo se exigía el
+   * nombre: se podía guardar un jugador SIN posición (la opción «—» del selector) y con
+   * un dorsal repetido (dos jugadores con el 10), y el campo Dorsal admitía 0.
+   */
+  private validateDraft(d: Draft): string | null {
+    if (!d.name.trim()) return 'El nombre es obligatorio.';
+    if (!d.position) return 'Elige una posición.';
+    const n = d.number;
+    if (n !== null) {
+      if (!Number.isInteger(n) || n < 1 || n > 99) return 'El dorsal tiene que ser un número del 1 al 99.';
+      const dup = this.players().find((p) => p.number === n && p.id !== d.id);
+      if (dup) return `El dorsal ${n} ya lo lleva ${dup.name}.`;
+    }
+    return null;
   }
 
   save(): void {
     const d = this.draft();
+    const err = this.validateDraft(d);
+    if (err) {
+      this.formError.set(err);
+      return;
+    }
+    this.formError.set('');
     const name = d.name.trim();
-    if (!name) return;
     if (d.id) {
       this.store.updatePlayer(d.id, {
         name,

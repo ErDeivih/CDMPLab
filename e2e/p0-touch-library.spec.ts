@@ -54,7 +54,7 @@ for (const [W, H] of [
       await page.goto('/library');
 
       // Crear una tarea nueva (táctil).
-      await page.getByText('Crear tarea').first().click();
+      await page.getByText('Crear ejercicio').first().click();
       await page.locator('.modal input[name="title"]').fill('Nuevo circuito');
       await page.locator('.modal-foot .btn', { hasText: 'Diseñar' }).click();
       await page.waitForURL('**/board');

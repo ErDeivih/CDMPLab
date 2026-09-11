@@ -48,7 +48,7 @@ test.describe('Responsive móvil (390×844)', () => {
 
     // Biblioteca.
     await page.goto('/library');
-    await expect(page.locator('button', { hasText: 'Crear tarea' }).first()).toBeVisible();
+    await expect(page.locator('button', { hasText: 'Crear ejercicio' }).first()).toBeVisible();
     await expectNoHorizontalScroll(page, '.content');
     await expectNoHorizontalScroll(page, '.library');
     // Una tarjeta con acciones pulsables.

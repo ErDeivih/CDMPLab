@@ -1,11 +1,11 @@
-<div class="export-backdrop" (click)="cancel()">
+<div class="export-backdrop" (click)="cancel()" (document:keydown.escape)="cancel()">
   <div
     class="export"
     role="dialog"
     aria-modal="true"
     aria-label="Exportar ejercicio"
+    tabindex="-1"
     (click)="keepOpen($event)"
-    (keydown.escape)="cancel()"
   >
     <div class="export-head">
       <h3>Exportar</h3>

@@ -108,6 +108,27 @@ npm run test:e2e:pages       # E2E local de esa build bajo /CDMPLab/
 La config `pages` usa `baseHref: /CDMPLab/` y un entorno inyectado por variables
 (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`).
 
+### 7. Formato y lint
+
+```bash
+npm run format:check   # Prettier (trinquete de deuda previa)
+npm run lint           # ESLint 10 + angular-eslint 22 (trinquete de deuda previa)
+```
+
+Los dos son **trinquetes**: comparan el fichero con su versión en `HEAD` y exigen
+impecable todo lo que ya lo estaba (en particular, cualquier fichero **nuevo**). Solo
+toleran —informando de cuánto queda— la deuda que ya existía antes de añadir la puerta;
+nunca crece. No hay reglas rebajadas ni `eslint-disable` masivos: si una regla salta en
+código nuevo, se arregla el código.
+
+- `scripts/format-check.mjs`: Prettier nunca se había aplicado al repositorio entero, así
+  que la mayoría de los ficheros ya existentes no cumplen. Reformatearlos en bloque sería
+  un cambio masivo ajeno al trabajo en curso.
+- `scripts/lint-check.mjs`: ESLint no existía en el proyecto. Compara regla por regla
+  contra `HEAD`, así que la deuda no puede crecer **ni siquiera en un fichero que ya venía
+  sucio**. `node scripts/lint-check.mjs --list-debt` la lista entera.
+- Ambas puertas se ejecutan en `.github/workflows/ci.yml` antes de los tests.
+
 ## GitHub Pages
 
 `.github/workflows/pages.yml` despliega en GitHub Pages bajo `/CDMPLab/` usando las
@@ -146,6 +167,23 @@ Los privilegios por defecto de objetos creados por nuestras migraciones (`postgr
 también quedaron endurecidos. Supabase no permite que `postgres` modifique los defaults
 del rol interno `supabase_admin`; esa limitación de la plataforma está documentada en la
 migración. El alta de cuentas, SMTP y la prueba multiusuario real siguen pendientes.
+
+### Migración pendiente de aplicar: rechazo de invitaciones
+
+`supabase/migrations/20260910000000_decline_team_invitation.sql` (rechazar una invitación
+de equipo) está **escrita y validada en estático, pero NO aplicada**. Antes de escribirla se
+consultó el catálogo del proyecto remoto y el resultado es este:
+
+- **catálogo remoto comprobado: la función de rechazo NO existe** (por eso la migración hace
+  falta y no es una duplicación);
+- las funciones de **aceptación** sí existen, y la columna `revoked` de `team_invitations`
+  admite el estado que usa el rechazo;
+- el diseño es coherente con lo que hay: función `SECURITY DEFINER` en un esquema privado
+  más envoltorio público, con los mismos endurecimientos de `search_path` y `grant` que las
+  funciones ya aplicadas.
+
+**La migración aún no está aplicada.** Aplicarla en el proyecto remoto es una decisión del
+propietario; `npm run validate:migration` solo hace análisis estático y no la ejecuta.
 
 ## Plantillas de campo
 
@@ -197,8 +235,27 @@ src/
       auth/          registro, login, aprobación, invitaciones, miembros
 e2e/                 tests Playwright (incluye capturas en e2e/shots, ignoradas por git)
 scripts/             validación de migraciones, build/serve de Pages, serve de producción
-supabase/migrations/ SQL versionado + RLS
+supabase/migrations/ SQL versionado + RLS (FUENTE ÚNICA del esquema)
+supabase/schema.sql  esquema inicial histórico: DEPRECADO (ver su cabecera)
 ```
+
+## Estado de las pruebas (números reales)
+
+- **Unitarias (Vitest)**: `npm run test:unit` → **432 pruebas en 27 ficheros**.
+- **E2E (Playwright)**: **97 ficheros** en `e2e/` (73 se ejecutan en la config de desarrollo;
+  el resto son opt-in: Supabase real, Pages y la build de producción). La pasada completa
+  final de la auditoría con `--workers=1`: **767 pruebas, 0 fallos, 30,6 min**.
+- **Auditoría de interacción**: `fase-i-interaccion` (doble clic y papelera, ×50 con un
+  worker = 600 pruebas) y `fase-i-barra` (barra contextual en 5 vistas × 5 posiciones y
+  sensibilidad al tamaño/número real de botones). Ambas en verde dentro de las 767.
+- **CI en cada push** (`.github/workflows/ci.yml`): `format:check` + `lint` + unitarias +
+  `validate:migration` + build de producción + un subconjunto **estable** de E2E
+  (14 ficheros: núcleo, persistencia, móvil, accesibilidad, galerías y los `fase-i-*`).
+- **Suite completo de noche** (`.github/workflows/nightly.yml`, 03:00 UTC y a mano):
+  el suite entero, para que una rotura fuera del subconjunto no quede escondida.
+- `npm run validate:migration` es **análisis estático**: parsea la sintaxis de las
+  migraciones y audita por texto las propiedades de seguridad del fichero de grants.
+  **No** consulta el catálogo remoto ni comprueba que los GRANT se apliquen.
 
 ## Arquitectura
 

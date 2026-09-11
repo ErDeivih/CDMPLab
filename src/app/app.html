@@ -6,7 +6,7 @@
     </div>
     @if (showNav()) {
       <nav class="nav">
-        @for (item of navItems; track item.href) {
+        @for (item of navItems(); track item.href) {
           <a
             [routerLink]="item.href"
             routerLinkActive="nav-active"
@@ -33,7 +33,22 @@
     <header class="topbar">
       <div class="topbar-left">
         <img class="topbar-shield" src="assets/brand/cdm-pizarrales-original.jpg" alt="CDM Pizarrales">
-        <span class="topbar-title">{{ activeTeam()?.name ?? 'Sin equipo' }}</span>
+        @if (teams().length > 1) {
+          <!-- Con más de un equipo, la cabecera permite cambiar (y recuerda la elección). -->
+          <label class="team-switch">
+            <span class="msi" aria-hidden="true">swap_horiz</span>
+            <!-- `[value]` en el <select> se aplica ANTES de que existan los <option>
+                 (los pinta el @for en el mismo ciclo) y el navegador se queda con el
+                 primero. Se marca `selected` en la opción que corresponde. -->
+            <select (change)="switchTeam($event)" aria-label="Cambiar de equipo">
+              @for (t of teams(); track t.id) {
+                <option [value]="t.id" [selected]="t.id === activeTeamId()">{{ t.name }}</option>
+              }
+            </select>
+          </label>
+        } @else {
+          <span class="topbar-title">{{ activeTeam()?.name ?? 'Sin equipo' }}</span>
+        }
       </div>
       <div class="topbar-right">
         @if (isAuthenticated()) {
@@ -57,11 +72,24 @@
         <div class="storage-error" role="alert">
           <span class="msi">sync_problem</span>
           <span>{{ syncError() }}</span>
+          @if (canRetry()) {
+            <button class="btn btn-ghost" (click)="retryWrite()">Reintentar</button>
+          }
           <button class="btn btn-ghost" (click)="clearSyncError()">Entendido</button>
         </div>
       }
       @if (pendingWrites() > 0) {
         <div class="sync-bar"><span class="msi">sync</span> Guardando en tu cuenta…</div>
+      }
+      @if (lastConflict()) {
+        <div class="conflict-bar" role="alert">
+          <span class="msi">merge_type</span>
+          <span>Otro usuario modificó «{{ conflictTitle() }}» mientras lo editabas. Tu copia NO se ha guardado.</span>
+          <div class="conflict-actions">
+            <button class="btn btn-ghost btn-sm" (click)="discardMyCopy()">Descartar mi copia</button>
+            <button class="btn btn-primary btn-sm" (click)="keepMyCopy()">Guardar mi copia</button>
+          </div>
+        </div>
       }
       <router-outlet />
     </main>
@@ -70,7 +98,7 @@
 
 <!-- Ajustes -->
 @if (settingsOpen()) {
-  <div class="modal-backdrop" (click)="closeSettings()">
+  <div class="modal-backdrop" (click)="closeSettings()" (document:keydown.escape)="closeSettings()">
     <div class="settings" (click)="$event.stopPropagation()">
       <div class="settings-head">
         <h3>Ajustes</h3>
@@ -80,7 +108,7 @@
       </div>
       <div class="settings-body">
         <p class="settings-note">
-          @if (isAuthenticated()) { Tus datos se guardan en tu cuenta (Supabase). }
+          @if (isAuthenticated()) { Tus datos se guardan en tu cuenta (Supabase). El respaldo de abajo es un archivo LOCAL de este navegador. }
           @else { Los datos se guardan localmente en este navegador. }
         </p>
         <div class="settings-row">
@@ -93,15 +121,28 @@
         <div class="settings-row">
           <div>
             <div class="settings-title">Importar respaldo</div>
-            <div class="settings-sub">Restaura desde un archivo JSON exportado antes. Se valida y nunca se pierden los datos actuales (copia automática).</div>
+            <div class="settings-sub">
+              @if (isAuthenticated()) { No disponible con tu cuenta: restaurar un JSON todavía no está implementado contra Supabase, y escribir solo en este navegador se perdería al recargar. Tus datos de la cuenta no se tocan. }
+              @else { Restaura desde un archivo JSON exportado antes. Se valida y nunca se pierden los datos actuales (copia automática). }
+            </div>
           </div>
-          <label class="btn">
-            Importar
-            <input type="file" accept=".json,application/json" (change)="onImportFile($event)" style="display:none" />
-          </label>
+          @if (isAuthenticated()) {
+            <button
+              class="btn"
+              disabled
+              title="En modo remoto la restauración aún no está implementada: lo importado se perdería al recargar."
+            >
+              Importar
+            </button>
+          } @else {
+            <label class="btn">
+              Importar
+              <input type="file" accept=".json,application/json" (change)="onImportFile($event)" style="display:none" />
+            </label>
+          }
         </div>
         @if (backupError()) {
-          <p class="settings-note" role="alert">{{ backupError() }}</p>
+          <p class="settings-error" role="alert">{{ backupError() }}</p>
         }
         @if (importJson()) {
           <div class="settings-row">
@@ -118,10 +159,24 @@
         <div class="settings-row">
           <div>
             <div class="settings-title">Restablecer datos</div>
-            <div class="settings-sub">Borra equipos, jugadores, ejercicios y sesiones guardados en este navegador.</div>
+            <div class="settings-sub">
+              @if (isAuthenticated()) { Borra la caché local de este navegador. Los datos de tu cuenta NO se tocan (volverán a cargarse al recargar). }
+              @else { Borra equipos, jugadores, ejercicios y sesiones guardados en este navegador. }
+            </div>
           </div>
           <button class="btn btn-danger" (click)="resetData()">Borrar</button>
         </div>
+        @if (autoBackupAvailable()) {
+          <div class="settings-row">
+            <div>
+              <div class="settings-title">Restaurar copia automática</div>
+              <div class="settings-sub">
+                Se guardó sola justo antes de la última importación de un respaldo. Restaurarla deja lo actual como la nueva copia automática.
+              </div>
+            </div>
+            <button class="btn" (click)="restoreAutoBackup()">Restaurar</button>
+          </div>
+        }
         <p class="settings-note">Gestión de equipo, invitaciones y colaboradores desde “Miembros”.</p>
       </div>
     </div>

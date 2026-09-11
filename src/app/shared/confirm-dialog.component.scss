@@ -47,25 +47,8 @@
   margin-top: 18px;
 }
 
-.btn {
-  height: 36px;
-  padding: 0 14px;
-  border-radius: var(--radius);
-  font-size: 14px;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--surface-2);
-  }
-}
-
+// Los botones (.btn y sus variantes) son GLOBALES (styles.scss). Aquí solo el botón de
+// confirmar en rojo sólido, que es propio de este diálogo.
 .btn-danger-solid {
   background: var(--danger);
   border-color: var(--danger);

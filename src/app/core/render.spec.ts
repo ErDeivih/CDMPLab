@@ -24,6 +24,7 @@ import {
   Geometry,
   DEFAULT_STROKE_WIDTH,
   DEFAULT_SHAPE_STROKE,
+  DEFAULT_ELEMENT_COLOR,
   arrowHeadSize,
   ARROW_HEAD_FACTOR,
   svgZigzag,
@@ -32,7 +33,7 @@ import {
 } from './render';
 import { CanvasElement } from './models';
 import { MATERIAL_SIZE_RATIO, TACTICAL_SIZE } from './tactic-assets';
-import { fieldGeometry, F7_LINE_COLOR, OFFICIAL_PITCH_COLOR, STRIP_FRAC } from './field';
+import { fieldGeometry, F7_LINE_COLOR, OFFICIAL_PITCH_COLOR } from './field';
 
 function mkPlayer(id: string, x: number, y: number, n = 9): CanvasElement {
   return { id, t: 'player', x, y, n, c: '#1a73e8', side: 'own' };
@@ -717,8 +718,27 @@ describe('render', () => {
 
   it('renderiza la flecha de doble sentido (dos puntas)', () => {
     const svg = renderBoardSvg('full', [{ id: 'd', t: 'doubleArrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3 }], {});
-    expect(svg).toContain('stroke="#1f2933"');
+    expect(svg).toContain(`stroke="${DEFAULT_ELEMENT_COLOR}"`);
     expect(svg).toContain('<path');
+  });
+
+  it('el color por defecto del dibujo contrasta sobre el césped oficial (y antes no)', () => {
+    const contrast = (a: string, b: string): number => {
+      const lum = (hex: string): number => {
+        const h = hex.replace('#', '');
+        const ch = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+        const lin = ch.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+      };
+      const [hi, lo] = [lum(a), lum(b)].sort((m, n) => n - m);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+    // El color por defecto es el MISMO blanco con el que el campo dibuja sus marcas.
+    expect(DEFAULT_ELEMENT_COLOR).toBe('#ffffff');
+    expect(contrast(DEFAULT_ELEMENT_COLOR, OFFICIAL_PITCH_COLOR), 'el default debe superar 4:1 sobre el césped').toBeGreaterThan(4);
+    // El default anterior (#1f2933) se quedaba en ~3,1:1: justo en el mínimo de WCAG
+    // para objetos gráficos y por debajo en las franjas oscuras del césped.
+    expect(contrast('#1f2933', OFFICIAL_PITCH_COLOR), 'el default anterior no llegaba (motivo del cambio)').toBeLessThan(4);
   });
 
   it('renderiza la herramienta de medición con su etiqueta', () => {
@@ -1185,8 +1205,6 @@ describe('geometría dinámica del medio campo (52,5×68) en render y screen↔n
 });
 
 describe('Fase 3/4 — trazo táctico fino y tamaño inicial reducido', () => {
-  const g = fieldGeometry('full', 'horizontal').rect;
-
   it('el trazo por defecto de cada herramienta de dibujo es ~la mitad (0.4)', () => {
     const cases: Array<[string, CanvasElement]> = [
       ['line', { id: 'x', t: 'line', x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.4 }],
@@ -1221,7 +1239,7 @@ describe('Fase 3/4 — trazo táctico fino y tamaño inicial reducido', () => {
     const headSize = (svg: string): number => {
       const m = /<polygon points="([^"]+)"/.exec(svg);
       expect(m, 'la punta de flecha (polygon) está en el SVG').not.toBeNull();
-      const [tip, p1, p2] = m![1].split(' ').map((pt) => pt.split(',').map(Number));
+      const [tip, p1] = m![1].split(' ').map((pt) => pt.split(',').map(Number));
       // En horizontal, la base retrocede en X el mismo tamaño que en la Y de la base.
       const dx = Math.abs(tip[0] - p1[0]);
       return dx / Math.cos(0.5);

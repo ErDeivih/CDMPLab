@@ -15,6 +15,7 @@
 
 import { Injectable, InjectionToken, computed, inject, signal } from '@angular/core';
 import type { AuthChangeEvent, Session, SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from './database.types';
 import { environment } from '../../environments/environment';
 
 /**
@@ -25,14 +26,17 @@ import { environment } from '../../environments/environment';
  * El `createClient` se importa dinámicamente para no meter @supabase/supabase-js
  * en el bundle inicial mientras la app no use autenticación.
  */
-export const SUPABASE_CLIENT = new InjectionToken<Promise<SupabaseClient | null>>('SUPABASE_CLIENT', {
+export const SUPABASE_CLIENT = new InjectionToken<Promise<SupabaseClient<Database> | null>>('SUPABASE_CLIENT', {
   providedIn: 'root',
   factory: async () => {
     const url = environment.supabaseUrl;
     const key = environment.supabasePublishableKey;
     if (!url || !key) return null;
     const { createClient } = await import('@supabase/supabase-js');
-    return createClient(url, key);
+    // Cliente TIPADO con el esquema (`database.types.ts`): así `from(...)` y `rpc(...)`
+    // se comprueban contra las tablas y funciones reales, y una RPC que aún no existe en
+    // los tipos no compila (pasó con `decline_team_invitation`).
+    return createClient<Database>(url, key);
   },
 });
 
@@ -75,7 +79,7 @@ export function buildAuthRedirectUrl(path = '', baseUri = document.baseURI): str
 @Injectable({ providedIn: 'root' })
 export class SupabaseService {
   private readonly clientPromise = inject(SUPABASE_CLIENT);
-  private client: SupabaseClient | null = null;
+  private client: SupabaseClient<Database> | null = null;
 
   private readonly _session = signal<Session | null>(null);
   private readonly _status = signal<AuthStatus>('resolving');
@@ -104,7 +108,7 @@ export class SupabaseService {
    * Devuelve el cliente tipado listo para usar (o null si la auth está
    * desactivada). Los repositorios lo usan para leer/escribir datos.
    */
-  async getClient(): Promise<SupabaseClient | null> {
+  async getClient(): Promise<SupabaseClient<Database> | null> {
     return this.requireClient();
   }
 
@@ -151,7 +155,7 @@ export class SupabaseService {
   }
 
   /** Devuelve el cliente listo para usar, o null si la auth está desactivada. */
-  private async requireClient(): Promise<SupabaseClient | null> {
+  private async requireClient(): Promise<SupabaseClient<Database> | null> {
     if (!this.client) this.client = await this.clientPromise;
     return this.client;
   }

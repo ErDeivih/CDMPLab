@@ -584,6 +584,16 @@ export class SupabaseRepository implements DataSource {
     if (error) throw errorToDataError(error, 'invitation_cancel');
   }
 
+  /**
+   * Rechaza una invitación PROPIA (el invitado). NO usa `cancel_team_invitation`,
+   * que exige ser propietario del equipo: al invitado le devolvía siempre
+   * 'forbidden: not team owner' y "Rechazar" no hacía nada.
+   */
+  async declineInvitation(invitationId: string): Promise<void> {
+    const { error } = await this.client.rpc('decline_team_invitation', { p_invitation_id: invitationId });
+    if (error) throw errorToDataError(error, 'invitation_decline');
+  }
+
   async revokeMember(teamId: string, userId: string): Promise<void> {
     const { error } = await this.client.rpc('revoke_team_member', { p_team_id: teamId, p_user_id: userId });
     if (error) throw errorToDataError(error, 'member_revoke');

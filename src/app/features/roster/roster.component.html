@@ -63,6 +63,42 @@
     </div>
   }
 
+  <!-- Filtros de la plantilla (nombre/dorsal + posición) -->
+  @if (team() && players().length > 0) {
+    <div class="roster-filters">
+      <div class="search">
+        <span class="msi">search</span>
+        <input
+          placeholder="Buscar por nombre o dorsal…"
+          [value]="filterText()"
+          (input)="onPlayerSearch($event)"
+          aria-label="Buscar jugador por nombre o dorsal"
+        />
+        @if (filterText()) {
+          <button class="search-clear" type="button" aria-label="Limpiar búsqueda" title="Limpiar búsqueda" (click)="clearPlayerFilters()">
+            <span class="msi">close</span>
+          </button>
+        }
+      </div>
+      <label class="pos-filter">
+        <span>Posición</span>
+        <select [value]="filterPos()" (change)="setPositionFilter($event)" aria-label="Filtrar por posición">
+          <option value="all">Todas</option>
+          @for (pos of positions; track pos) {
+            <option [value]="pos">{{ positionLabel(pos) }}</option>
+          }
+        </select>
+      </label>
+      <span class="result-count" role="status">
+        {{ visiblePlayers().length }} {{ visiblePlayers().length === 1 ? 'jugador' : 'jugadores' }}
+        @if (hasPlayerFilters()) { <span class="result-total">de {{ players().length }}</span> }
+      </span>
+      @if (hasPlayerFilters()) {
+        <button class="btn btn-ghost btn-sm" type="button" (click)="clearPlayerFilters()">Limpiar filtros</button>
+      }
+    </div>
+  }
+
   <!-- Tabla de jugadores -->
   @if (team()) {
     <div class="card table-card">
@@ -77,7 +113,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (p of players(); track p.id) {
+          @for (p of visiblePlayers(); track p.id) {
             <tr>
               <td>
                 <span
@@ -101,10 +137,12 @@
           }
         </tbody>
       </table>
-      @if (players().length === 0) {
+      @if (visiblePlayers().length === 0) {
         <div class="empty">
-          <div class="empty-title">Aún no hay jugadores</div>
-          <div class="empty-sub">Añade el primer jugador de la plantilla.</div>
+          <div class="empty-title">{{ hasPlayerFilters() ? 'Ningún jugador con esos filtros' : 'Aún no hay jugadores' }}</div>
+          <div class="empty-sub">
+            {{ hasPlayerFilters() ? 'Quita el filtro de posición o vacía la búsqueda.' : 'Añade el primer jugador de la plantilla.' }}
+          </div>
         </div>
       }
     </div>
@@ -128,7 +166,7 @@
           <div class="field-row">
             <div class="field">
               <label>Dorsal</label>
-              <input type="number" min="0" max="99" [(ngModel)]="draft().number" name="number" />
+              <input type="number" min="1" max="99" [(ngModel)]="draft().number" name="number" />
             </div>
             <div class="field">
               <label>Posición</label>
@@ -157,6 +195,9 @@
             </div>
           </div>
         </div>
+        @if (formError()) {
+          <p class="form-error" role="alert">{{ formError() }}</p>
+        }
         <div class="modal-foot">
           <button class="btn" (click)="closeEditor()">Cancelar</button>
           <button class="btn btn-primary" [disabled]="!draft().name.trim()" (click)="save()">

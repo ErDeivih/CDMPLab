@@ -1,0 +1,46 @@
+name: Nightly (suite completo)
+
+# El CI de cada push corre solo el subconjunto ESTABLE. Este workflow ejecuta el suite
+# E2E COMPLETO una vez al día para que una rotura fuera de ese subconjunto no se quede
+# escondida semanas (hasta ahora el suite completo no corría en ningún sitio).
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC
+  workflow_dispatch: # y a mano cuando haga falta
+
+jobs:
+  full-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.3
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Validate migrations
+        run: npm run validate:migration
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # `test:e2e:dev` compila la build de desarrollo y ejecuta TODO el suite con un
+      # solo worker (los recorridos comparten localStorage y órdenes de gestos).
+      - name: E2E (suite completo)
+        run: npm run test:e2e:dev -- --workers=1
+
+      - name: Subir el informe si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

@@ -23,7 +23,7 @@
           <button class="tree-item" [class.tree-active]="folderFilter() === row.folder.id" (click)="setFolderFilter(row.folder.id)">
             <span class="msi">folder</span>
             <span class="tree-name">{{ row.folder.name }}</span>
-            <span class="tree-count tnum">{{ folderCount(row.folder.id) }}</span>
+            <span class="tree-count tnum">{{ folderCountOf(row.folder.id) }}</span>
           </button>
           <div class="tree-actions">
             <button class="icon-btn tree-more-btn" [attr.aria-label]="'Más opciones para la carpeta ' + row.folder.name" (click)="toggleFolderMenu(row.folder.id)">
@@ -75,7 +75,7 @@
   <div class="lib-main">
     <div class="page-head">
       <div>
-        <h1 class="page-title">Tareas y ejercicios</h1>
+        <h1 class="page-title">Biblioteca de ejercicios</h1>
         <p class="page-sub">Diseña, guarda y encuentra tus ejercicios.</p>
       </div>
       <div class="page-actions">
@@ -83,7 +83,7 @@
           <span class="msi">folder_open</span> Carpetas
         </button>
         <button class="btn btn-primary" (click)="createNew()">
-          <span class="msi">add</span> Crear tarea
+          <span class="msi">add</span> Crear ejercicio
         </button>
       </div>
     </div>
@@ -91,7 +91,12 @@
     <div class="filters">
       <div class="search">
         <span class="msi">search</span>
-        <input placeholder="Buscar por título…" (input)="onSearch($event)" />
+        <input placeholder="Buscar por título…" [value]="searchInput()" (input)="onSearch($event)" aria-label="Buscar ejercicio por título" />
+        @if (searchInput()) {
+          <button class="search-clear" type="button" aria-label="Limpiar búsqueda" title="Limpiar búsqueda" (click)="clearSearch()">
+            <span class="msi">close</span>
+          </button>
+        }
       </div>
       <div class="chips">
         <button class="chip" [class.chip-active]="categoryFilter() === 'Todas'" (click)="setFilter('Todas')">Todas</button>
@@ -111,14 +116,34 @@
       </nav>
     }
 
+    <!-- Contador de resultados + orden + limpiar filtros: antes no había ni contador ni
+         forma de quitar todos los filtros de golpe. -->
+    <div class="results-bar">
+      <span class="result-count" role="status">
+        {{ resultCount() }} {{ resultCount() === 1 ? 'ejercicio' : 'ejercicios' }}
+        @if (hasFilters()) { <span class="result-total">de {{ totalCount() }}</span> }
+      </span>
+      <label class="order">
+        <span>Ordenar</span>
+        <select [value]="order()" (change)="setOrder($event)" aria-label="Ordenar ejercicios">
+          <option value="recent">Recientes</option>
+          <option value="az">A – Z</option>
+          <option value="duration">Duración</option>
+        </select>
+      </label>
+      @if (hasFilters()) {
+        <button class="btn btn-ghost btn-sm" type="button" (click)="clearFilters()">Limpiar filtros</button>
+      }
+    </div>
+
     <div class="grid">
       @for (ex of exercises(); track ex.id) {
         <div class="card ex-card">
           <div class="ex-thumb">
             @if (ex.thumbnail) {
               <img class="thumb-img" [src]="ex.thumbnail" alt="" />
-            } @else if (preview(ex)) {
-              <div class="diagram" [innerHTML]="preview(ex)"></div>
+            } @else if (previewOf(ex)) {
+              <div class="diagram" [innerHTML]="previewOf(ex)"></div>
             } @else {
               <div class="diagram placeholder">
                 <span class="msi">sports_soccer</span>
@@ -158,24 +183,24 @@
 
     @if (exercises().length === 0) {
       <div class="empty">
-        <div class="empty-title">Aún no hay tareas aquí</div>
+        <div class="empty-title">Aún no hay ejercicios aquí</div>
         <div class="empty-sub">
-          {{ team() ? 'Crea la primera tarea y diséñala en la pizarra.' : 'Crea un equipo para empezar.' }}
+          {{ team() ? 'Crea el primer ejercicio y diséñalo en la pizarra.' : 'Crea un equipo para empezar.' }}
         </div>
         @if (team()) {
           <button class="btn btn-primary" style="margin-top:16px" (click)="createNew()">
-            <span class="msi">add</span> Crear tarea
+            <span class="msi">add</span> Crear ejercicio
           </button>
         }
       </div>
     }
 
-    <!-- Editor / crear tarea -->
+    <!-- Editor / crear ejercicio -->
     @if (editorOpen()) {
       <div class="modal-backdrop" (click)="closeEditor()">
         <div class="modal" (click)="$event.stopPropagation()">
           <div class="modal-head">
-            <h3>{{ form().id ? 'Editar tarea' : 'Nueva tarea' }}</h3>
+            <h3>{{ form().id ? 'Editar ejercicio' : 'Nuevo ejercicio' }}</h3>
             <button class="btn btn-ghost btn-icon" (click)="closeEditor()" title="Cerrar">
               <span class="msi">close</span>
             </button>

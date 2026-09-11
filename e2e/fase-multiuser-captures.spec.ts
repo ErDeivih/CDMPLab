@@ -109,7 +109,7 @@ test.describe('Fase multiusuario — capturas del estado actual', () => {
     await page.screenshot({ path: `${SHOTS}/team.png` });
 
     await page.goto('/library');
-    await expect(page.locator('.page-title')).toHaveText('Tareas y ejercicios');
+    await expect(page.locator('.page-title')).toHaveText('Biblioteca de ejercicios');
     await expect(page.locator('.ex-card')).toHaveCount(1);
     await page.waitForTimeout(250);
     await page.screenshot({ path: `${SHOTS}/library.png` });

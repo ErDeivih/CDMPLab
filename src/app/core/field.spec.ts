@@ -656,13 +656,20 @@ describe('field — arcos de esquina (FASE 7)', () => {
     expect(parseFloat(f7Rect![3]), 'el F7 cruza todo el ancho (68 m) del medio campo apaisado').toBeCloseTo(68 * (92 / 105), 4);
   });
 
-  it('FASE 3: la galería expone TODOS los campos base requeridos y cada uno tiene geometría propia', () => {
-    const required = ['full', 'half', 'vertical_half', 'third', 'box', 'futsal', 'f7', 'blank'];
+  it('AUDITORÍA: la galería ofrece los campos base sin duplicar el medio campo', () => {
+    const required = ['full', 'half', 'third', 'box', 'futsal', 'f7', 'blank'];
     const types = FIELD_BASE_SPECS.map((s) => s.type);
     for (const r of required) expect(types, `falta ${r} en la galería`).toContain(r);
-    // 'vertical_half' es hoy un alias orientado de 'half' (comparten geometría 52,5×68),
-    // así que NO se exige que todos los SVG sean únicos. Los campos VISUALMENTE distintos
-    // deben renderizarse cada uno con su propio dibujo real (no alternativos).
+    // DECISIÓN DE PRODUCTO (auditoría final): `vertical_half` NO se ofrece como tarjeta
+    // propia porque su SVG es EXACTAMENTE el de `half` con orientación vertical: eran dos
+    // tarjetas para el mismo campo. Sigue ADMITIDO para documentos antiguos
+    // (`models.FIELD_TYPES`) y el normalizador lo migra a `half` + orientación vertical.
+    expect(types, 'la galería no duplica el medio campo').not.toContain('vertical_half');
+    // Y sigue pintándose igual que un medio campo (compatibilidad de render).
+    expect(fieldSvg('vertical_half' as FieldType, H, 'vertical'), 'el alias conserva su render').toBe(
+      fieldSvg('half' as FieldType, H, 'vertical'),
+    );
+    // Los campos VISUALMENTE distintos deben renderizarse cada uno con su propio dibujo real.
     const svg = (t: string) => fieldSvg(t as FieldType, H, 'horizontal');
     expect(new Set([svg('full'), svg('half'), svg('third'), svg('box'), svg('futsal'), svg('f7')]).size, 'los campos visualmente distintos se renderizan cada uno distinto').toBe(6);
     // 'blank' (lienzo) no dibuja ninguna marca.

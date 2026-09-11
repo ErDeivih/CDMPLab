@@ -34,13 +34,36 @@ export class SessionsComponent {
   protected readonly sessions = computed(() => {
     const teamId = this.team()?.id;
     if (!teamId) return [];
-    return this.store.getSessionsForTeam(teamId).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+    // Orden por la FECHA de la sesión (la más reciente primero) y `savedAt` solo como
+    // desempate. Antes ordenaba por fecha de guardado: una sesión de la semana pasada
+    // editada hoy aparecía la primera, por delante de la de mañana.
+    return this.store
+      .getSessionsForTeam(teamId)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.savedAt.localeCompare(a.savedAt));
   });
+
+  /** Fecha de la sesión en formato español (dd/mm/aaaa). */
+  protected formatDate(iso: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '');
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso ?? '');
+  }
+
+  /** ¿La tarea se quedó atrás respecto al ejercicio de la biblioteca? Se compara el
+   *  `savedAt` del snapshot (la copia que se guardó al añadirla) con el del ejercicio
+   *  vivo. Sin snapshot (p. ej. tras recargar en modo remoto, donde no se persiste) NO
+   *  se avisa de nada: preferimos no decir nada a decirlo mal. */
+  protected isTaskOutdated(t: SessionTask): boolean {
+    if (!t.exerciseId || !t.snapshot) return false;
+    const live = this.store.getExercisesForTeam(this.team()?.id ?? '').find((e) => e.id === t.exerciseId);
+    return !!live && live.savedAt !== t.snapshot.savedAt;
+  }
 
   // ---------- Editor ----------
   protected readonly editorOpen = signal(false);
   protected readonly form = signal<SessionDraft>(this.emptyForm());
   protected readonly saving = signal(false);
+  /** Motivo por el que no se puede guardar la sesión (vacío = todo correcto). */
+  protected readonly formError = signal('');
 
   // ---------- Picker de ejercicios ----------
   protected readonly pickerOpen = signal(false);
@@ -73,11 +96,13 @@ export class SessionsComponent {
   }
 
   protected createNew(): void {
+    this.formError.set('');
     this.form.set(this.emptyForm());
     this.editorOpen.set(true);
   }
 
   protected edit(s: Session): void {
+    this.formError.set('');
     this.form.set({
       id: s.id,
       title: s.title,
@@ -90,6 +115,7 @@ export class SessionsComponent {
   }
 
   protected closeEditor(): void {
+    this.formError.set('');
     this.editorOpen.set(false);
     this.pickerOpen.set(false);
   }
@@ -99,6 +125,16 @@ export class SessionsComponent {
   protected openPicker(): void {
     this.pickerSearch.set('');
     this.pickerOpen.set(true);
+  }
+
+  /** Cierra el picker en línea (botón «Listo»). */
+  protected closePicker(): void {
+    this.pickerOpen.set(false);
+  }
+
+  /** Cuántas veces está ya ese ejercicio en la sesión (una sesión puede repetirlo). */
+  protected timesInSession(exerciseId: string): number {
+    return this.form().tasks.filter((t) => t.exerciseId === exerciseId).length;
   }
 
   protected addExercise(ex: Exercise): void {
@@ -113,11 +149,12 @@ export class SessionsComponent {
           durationMinutes: ex.durationMinutes,
           material: '',
           sortOrder: f.tasks.length,
-          snapshot: JSON.parse(JSON.stringify(ex)) as Exercise,
+          snapshot: structuredClone(ex),
         },
       ],
     }));
-    this.pickerOpen.set(false);
+    // NO se cierra el picker: añadir 8 ejercicios a una sesión eran 8 aperturas y cierres
+    // del diálogo. Se cierra con «Listo» (o al cerrar el editor).
   }
 
   protected moveTask(index: number, dir: -1 | 1): void {
@@ -144,11 +181,37 @@ export class SessionsComponent {
     }));
   }
 
+  /**
+   * Valida el borrador ANTES de guardar y explica el motivo. Antes solo se exigía el
+   * título: se podía guardar una sesión con fecha vacía o mal formada (que luego ordena
+   * mal y no se puede filtrar) y con duraciones negativas.
+   */
+  private validateForm(f: SessionDraft): string | null {
+    if (!f.title.trim()) return 'El título de la sesión es obligatorio.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) return 'La fecha no es válida.';
+    const dur = f.durationMinutes;
+    if (dur !== null && (!Number.isFinite(dur) || dur < 0 || dur > 600)) {
+      return 'La duración de la sesión tiene que estar entre 0 y 600 minutos.';
+    }
+    for (const t of f.tasks) {
+      const d = t.durationMinutes;
+      if (d !== null && (!Number.isFinite(d) || d < 0 || d > 600)) {
+        return 'La duración de una tarea no puede ser negativa ni superar 600 minutos.';
+      }
+    }
+    return null;
+  }
+
   protected save(): void {
     const teamId = this.team()?.id;
     if (!teamId) return;
     const f = this.form();
-    if (!f.title.trim()) return;
+    const err = this.validateForm(f);
+    if (err) {
+      this.formError.set(err);
+      return;
+    }
+    this.formError.set('');
     this.saving.set(true);
     const existing = f.id ? this.store.sessions().find((s) => s.id === f.id) : undefined;
     const session: Session = {

@@ -163,6 +163,53 @@ try {
     fail(`no existe la migración de endurecimiento ${PERMS_FILE}`);
   }
 
+  // ---------- RPC del INVITADO: decline_team_invitation ----------
+  // `validate:migration` NO comprueba el catálogo remoto ni que los GRANT se apliquen:
+  // aquí se verifica que las PROPIEDADES DE SEGURIDAD estén ESCRITAS en el fichero
+  // (definer con search_path vacío, wrapper invoker, revocaciones y grants mínimos).
+  const DECLINE_FILE = '20260910000000_decline_team_invitation.sql';
+  const declinePath = path.join('supabase/migrations', DECLINE_FILE);
+  if (fs.existsSync(declinePath)) {
+    const sql = fs.readFileSync(declinePath, 'utf8');
+    console.log(`\nRPC del invitado (${DECLINE_FILE}):`);
+
+    const privDefiner =
+      has(sql, 'create or replace function private.decline_team_invitation(p_invitation_id uuid)') &&
+      has(sql, 'security definer') &&
+      has(sql, "set search_path = ''");
+    privDefiner ? ok('privada: SECURITY DEFINER con search_path vacío') : fail('la función privada no es DEFINER con search_path vacío');
+
+    const pubInvoker =
+      has(sql, 'create or replace function public.decline_team_invitation(p_invitation_id uuid)') &&
+      has(sql, 'security invoker');
+    pubInvoker ? ok('pública: SECURITY INVOKER (delega)') : fail('la función pública no es SECURITY INVOKER');
+
+    const revokedPublic = has(sql, 'revoke execute on function public.decline_team_invitation(uuid) from public, anon');
+    const revokedPrivate = has(sql, 'revoke execute on function private.decline_team_invitation(uuid) from public, anon');
+    revokedPublic && revokedPrivate
+      ? ok('EXECUTE revocado a public/anon en las dos funciones')
+      : fail('falta revocar EXECUTE a public/anon (pública y/o privada)');
+
+    const grantedPublic = has(sql, 'grant execute on function public.decline_team_invitation(uuid) to authenticated');
+    const grantedPrivate = has(sql, 'grant execute on function private.decline_team_invitation(uuid) to authenticated');
+    grantedPublic && grantedPrivate
+      ? ok('EXECUTE concedido solo a authenticated en las dos funciones (la pública es INVOKER)')
+      : fail('falta el GRANT a authenticated (pública y/o privada)');
+
+    // La identidad se comprueba por el correo de la cuenta: el invitado solo puede
+    // rechazar SU invitación.
+    has(sql, 'inv.email_normalized <> caller_email')
+      ? ok('comprueba que la invitación es del que llama (email)')
+      : fail('no comprueba que la invitación pertenezca al que llama');
+
+    // El estado de destino debe existir en el CHECK de la tabla.
+    has(sql, "set status = 'revoked'")
+      ? ok("marca la invitación como 'revoked' (estado admitido por el CHECK)")
+      : fail("no marca la invitación como 'revoked'");
+  } else {
+    console.log(`\n[aviso] no existe ${DECLINE_FILE}: la app llama a decline_team_invitation y fallará en remoto.`);
+  }
+
   if (failed > 0) {
     console.error(`\nVALIDACIÓN ESTÁTICA CON ${failed} PROBLEMA(S).`);
     process.exit(1);

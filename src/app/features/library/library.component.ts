@@ -3,12 +3,10 @@ import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { StoreService, uid } from '../../core/store.service';
-import { Exercise, ExerciseCategory, ExerciseFolder } from '../../core/models';
+import { Exercise, ExerciseCategory, ExerciseFolder, EXERCISE_CATEGORIES } from '../../core/models';
 import { renderBoardSvg } from '../../core/render';
 import { BoardSessionService } from '../../core/board-session.service';
 import { ConfirmService } from '../../core/confirm.service';
-
-const CATEGORIES: ExerciseCategory[] = ['Técnica', 'Táctica', 'Físico', 'Portero', 'Calentamiento', 'Partido'];
 
 interface EditorForm {
   id: string | null;
@@ -37,12 +35,25 @@ export class LibraryComponent implements OnDestroy {
   private readonly sessionSvc = inject(BoardSessionService);
   private readonly confirmSvc = inject(ConfirmService);
 
-  protected readonly categories = CATEGORIES;
+  // Fuente ÚNICA de categorías (`models.EXERCISE_CATEGORIES`). Antes había una lista
+  // local de 6 categorías frente a las 14 del modelo: los ejercicios creados en la
+  // pizarra como "Rondo", "Posesión" o "Finalización" NO se podían filtrar aquí.
+  protected readonly categories = EXERCISE_CATEGORIES;
 
   protected readonly team = this.store.activeTeam;
 
+  /** Lo que el usuario ha escrito (inmediato: el input no se bloquea). */
+  protected readonly searchInput = signal('');
+  /** Valor EFECTIVO con el que se filtra, con retardo (ver `onSearch`). */
   protected readonly search = signal('');
+  /** Retardo de la búsqueda: escribir no re-renderiza la lista ni regenera las
+   *  miniaturas en cada pulsación. */
+  private static readonly SEARCH_DELAY_MS = 200;
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly categoryFilter = signal<ExerciseCategory | 'Todas'>('Todas');
+
+  /** Orden de la lista. `recent` (por defecto) = lo último guardado primero. */
+  protected readonly order = signal<'recent' | 'az' | 'duration'>('recent');
 
   protected readonly folders = computed(() => {
     const teamId = this.team()?.id;
@@ -105,11 +116,36 @@ export class LibraryComponent implements OnDestroy {
     return parts;
   });
 
-  protected folderCount(folderId: string): number {
+  /**
+   * Nº de ejercicios por carpeta (incluye los de sus subcarpetas), calculado en UNA
+   * pasada y cacheado. Antes `folderCount(id)` se llamaba una vez por fila del árbol y,
+   * en cada ciclo de detección de cambios, recorría el subárbol Y filtraba TODOS los
+   * ejercicios del equipo: coste O(carpetas × ejercicios) por render.
+   */
+  private readonly folderCounts = computed<Map<string, number>>(() => {
+    const totals = new Map<string, number>();
     const teamId = this.team()?.id;
-    if (!teamId) return 0;
-    const ids = this.subtreeFolderIds(folderId);
-    return this.store.getExercisesForTeam(teamId).filter((e) => ids.has(e.folderId as string)).length;
+    if (!teamId) return totals;
+    const direct = new Map<string, number>();
+    for (const e of this.store.getExercisesForTeam(teamId)) {
+      const id = e.folderId as string | null;
+      if (id) direct.set(id, (direct.get(id) ?? 0) + 1);
+    }
+    const parentOf = new Map(this.folders().map((f) => [f.id, f.parentId]));
+    for (const f of this.folders()) {
+      // El directo de cada carpeta suma a ella misma y a TODOS sus ancestros.
+      let cur: string | null = f.id;
+      let guard = 0;
+      while (cur && guard++ < 100) {
+        totals.set(cur, (totals.get(cur) ?? 0) + (direct.get(f.id) ?? 0));
+        cur = parentOf.get(cur) ?? null;
+      }
+    }
+    return totals;
+  });
+
+  protected folderCountOf(folderId: string): number {
+    return this.folderCounts().get(folderId) ?? 0;
   }
 
   // ---------- Crear / renombrar / borrar / duplicar carpeta ----------
@@ -180,15 +216,40 @@ export class LibraryComponent implements OnDestroy {
     const q = this.search().trim().toLowerCase();
     const cat = this.categoryFilter();
     const folder = this.folderFilter();
-    return this.store
+    const subtree = folder === 'all' || folder === 'none' ? null : this.subtreeFolderIds(folder);
+    const list = this.store
       .getExercisesForTeam(teamId)
       .filter((e) => (cat === 'Todas' ? true : e.category === cat))
       .filter((e) =>
-        folder === 'all' ? true : folder === 'none' ? !e.folderId : this.subtreeFolderIds(folder).has(e.folderId as string)
+        folder === 'all' ? true : folder === 'none' ? !e.folderId : (subtree as Set<string>).has(e.folderId as string)
       )
-      .filter((e) => (q ? `${e.title} ${e.description ?? ''} ${e.explanation ?? ''} ${e.category}`.toLowerCase().includes(q) : true))
-      .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+      .filter((e) => (q ? `${e.title} ${e.description ?? ''} ${e.explanation ?? ''} ${e.category}`.toLowerCase().includes(q) : true));
+    const by = this.order();
+    if (by === 'az') return list.sort((a, b) => a.title.localeCompare(b.title, 'es'));
+    if (by === 'duration') return list.sort((a, b) => (b.durationMinutes ?? 0) - (a.durationMinutes ?? 0));
+    // Por defecto, lo último guardado primero.
+    return list.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
   });
+
+  /** Nº de ejercicios que se están mostrando (contador visible). */
+  protected readonly resultCount = computed(() => this.exercises().length);
+
+  /** Total del equipo, sin filtros (para el contador y el botón de limpiar). */
+  protected readonly totalCount = computed(() => {
+    const teamId = this.team()?.id;
+    return teamId ? this.store.getExercisesForTeam(teamId).length : 0;
+  });
+
+  /** ¿Hay algún filtro puesto? (búsqueda, categoría o carpeta). */
+  protected readonly hasFilters = computed(
+    () => this.search().trim().length > 0 || this.categoryFilter() !== 'Todas' || this.folderFilter() !== 'all',
+  );
+
+  protected clearFilters(): void {
+    this.clearSearch();
+    this.categoryFilter.set('Todas');
+    this.folderFilter.set('all');
+  }
 
   // ---------- Editor ----------
   protected readonly editorOpen = signal(false);
@@ -204,16 +265,55 @@ export class LibraryComponent implements OnDestroy {
 
   private draftTimer: ReturnType<typeof setTimeout> | null = null;
 
-  protected preview(ex: Exercise): SafeHtml | null {
-    const field = ex.canvas?.field ?? 'full';
+  /** Caché de miniaturas. La clave guarda lo que cambia el dibujo, así que filtrar,
+   *  ordenar o escribir NO vuelve a renderizar: antes `preview(ex)` llamaba a
+   *  `renderBoardSvg` para CADA tarjeta y en CADA ciclo de detección de cambios. */
+  private readonly previewCache = new Map<string, { key: string; html: SafeHtml | null }>();
+
+  private renderPreview(ex: Exercise): SafeHtml | null {
     const els = ex.canvas?.frames?.[0]?.elements ?? [];
     if (els.length === 0) return null;
+    const field = ex.canvas?.field ?? 'full';
     return this.sanitizer.bypassSecurityTrustHtml(renderBoardSvg(field, els, { selectedId: null }));
+  }
+
+  protected previewOf(ex: Exercise): SafeHtml | null {
+    const key = `${ex.savedAt}|${ex.canvas?.field ?? ''}|${ex.canvas?.orientation ?? ''}|${ex.canvas?.frames?.[0]?.elements?.length ?? 0}`;
+    const hit = this.previewCache.get(ex.id);
+    if (hit && hit.key === key) return hit.html;
+    const html = this.renderPreview(ex);
+    this.previewCache.set(ex.id, { key, html });
+    // Poda: la caché no debe crecer con ejercicios que ya no existen.
+    if (this.previewCache.size > 200) {
+      const live = new Set(this.store.getExercisesForTeam(this.team()?.id ?? '').map((e) => e.id));
+      for (const id of [...this.previewCache.keys()]) if (!live.has(id)) this.previewCache.delete(id);
+    }
+    return html;
   }
 
   protected onSearch(evt: Event): void {
     const el = evt.target as HTMLInputElement;
-    this.search.set(el.value);
+    this.setSearch(el.value);
+  }
+
+  /** Vacía la búsqueda (botón de la lupa). */
+  protected clearSearch(): void {
+    this.setSearch('');
+  }
+
+  protected setOrder(evt: Event): void {
+    const v = (evt.target as HTMLSelectElement).value as 'recent' | 'az' | 'duration';
+    this.order.set(v);
+  }
+
+  /** Aplica la búsqueda con RETARDO: escribir no re-renderiza la lista en cada tecla. */
+  private setSearch(value: string): void {
+    this.searchInput.set(value);
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => {
+      this.searchTimer = null;
+      this.search.set(value);
+    }, LibraryComponent.SEARCH_DELAY_MS);
   }
 
   protected playerCount(ex: Exercise): string {
@@ -459,5 +559,9 @@ export class LibraryComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.clearDraftTimer();
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+    }
   }
 }

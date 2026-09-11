@@ -108,8 +108,10 @@ test.describe('Fase 5 — dibujo de UN solo gesto (pointerdown → preview → p
         await page.mouse.move(b.x, b.y, { steps: 6 });
         // FASE G: la preview se espera con la aserción siguiente (observable) antes de soltar.
 
-        // Nº de elementos del color de dibujo en el SVG (el campo está en blanco).
-        await expect(page.locator('.board-canvas svg [stroke="#1f2933"]'), 'la preview del trazo es visible ANTES de soltar').not.toHaveCount(0);
+        // La preview del gesto vive en su propio grupo con clase estable (`.board-preview`).
+        // Antes se localizaba por su color de trazo, lo que acoplaba la prueba al color
+        // por defecto de dibujo.
+        await expect(page.locator('.board-canvas svg .board-preview'), 'la preview del trazo es visible ANTES de soltar').not.toHaveCount(0);
         // El documento NO ha modificado su contador (solo hay preview, no objeto definitivo).
         expect(await fieldCount(page), 'el objeto NO entra en el documento hasta el pointerup').toBe(0);
 

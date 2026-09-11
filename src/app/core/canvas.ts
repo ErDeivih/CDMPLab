@@ -155,7 +155,14 @@ export function normalizeCanvas(raw: unknown): CanvasDocument {
 
   if (raw && typeof raw === 'object') {
     const r = raw as Record<string, unknown>;
-    const field = (r['field'] as FieldType) || 'full';
+    const rawField = (r['field'] as FieldType) || 'full';
+    // COMPATIBILIDAD (auditoría final): `vertical_half` era una tarjeta aparte, pero su
+    // geometría y su render son EXACTAMENTE los de `half` con orientación vertical. Se
+    // migra al modelo nuevo —`half` + orientación vertical— para que los documentos
+    // nuevos y los antiguos hablen el mismo idioma. NO se toca ningún elemento: solo
+    // cambian el campo y la orientación del documento.
+    const legacyVerticalHalf = rawField === 'vertical_half';
+    const field: FieldType = legacyVerticalHalf ? 'half' : rawField;
     const framesRaw = r['frames'];
     let frames: CanvasFrame[] = [];
     if (Array.isArray(framesRaw) && framesRaw.length > 0) {
@@ -173,7 +180,9 @@ export function normalizeCanvas(raw: unknown): CanvasDocument {
       schemaVersion: CANVAS_SCHEMA_VERSION,
       field,
       frames,
-      orientation: (r['orientation'] as CanvasDocument['orientation']) ?? 'horizontal',
+      orientation: legacyVerticalHalf
+        ? 'vertical'
+        : ((r['orientation'] as CanvasDocument['orientation']) ?? 'horizontal'),
       backgroundColor: (r['backgroundColor'] as string) ?? undefined,
       lineColor: (r['lineColor'] as string) ?? undefined,
       grass: (r['grass'] as CanvasDocument['grass']) ?? 'stripes',
