@@ -306,31 +306,46 @@ const penaltyArc = (r: Rect, o: Orientation, left: boolean, lenFrac: (m: number)
   return `<path d="M ${x1} ${y1} A ${rxP} ${ryP} 0 0 ${sweep} ${x2} ${y2}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
 };
 
-/** Arcos de esquina (radio 1,2 m) por las cuatro esquinas del campo.
+/** Esquinas del rect canónico de contenido: `l0`/`l1` son los extremos del eje longitud y
+ *  `w0`/`w1` los del eje anchura. Un campo RECORTADO (medio campo, tercio) solo tiene
+ *  esquinas de verdad en el extremo de su LÍNEA DE PORTERÍA: en el otro extremo el campo
+ *  continúa, así que no hay córner que dibujar (antes el medio campo pintaba los cuatro y el
+ *  «dos medios campos» solo los de una mitad). */
+type CornerId = 'l0w0' | 'l0w1' | 'l1w0' | 'l1w1';
+const ALL_CORNERS: CornerId[] = ['l0w0', 'l0w1', 'l1w0', 'l1w1'];
+
+const CORNER_SPEC: Record<CornerId, [number, number, number, number]> = {
+  l0w0: [0, 0, 1, 1],
+  l0w1: [0, 1, 1, -1],
+  l1w0: [1, 0, -1, 1],
+  l1w1: [1, 1, -1, -1],
+};
+
+/** Arcos de esquina (radio 1,2 m) por las esquinas indicadas del campo.
  *  `lenFrac`/`widFrac` convierten metros a FRACCIÓN de longitud/anchura del campo
  *  (full usa 105/68; medio campo usa 52,5/68) para que el radio sea idéntico en
  *  metros y el arco conserve su proporción en cada tipo de campo. */
-const cornerArcs = (r: Rect, o: Orientation, lenFrac: (m: number) => number = lf, widFrac: (m: number) => number = wf) => {
+const cornerArcs = (
+  r: Rect,
+  o: Orientation,
+  lenFrac: (m: number) => number = lf,
+  widFrac: (m: number) => number = wf,
+  which: CornerId[] = ALL_CORNERS,
+) => {
   const rl = lenFrac(1.2); // radio en fracción de longitud
   const rw = widFrac(1.2); // radio en fracción de anchura
   const rlx = o === 'vertical' ? rw : rl;
   const rly = o === 'vertical' ? rl : rw;
-  // Esquinas (l, w) con las direcciones hacia el interior en cada eje.
-  const corners: Array<[number, number, number, number]> = [
-    [0, 0, 1, 1],
-    [1, 0, -1, 1],
-    [0, 1, 1, -1],
-    [1, 1, -1, -1],
-  ];
   let s = '';
-  for (const [cl, cw, dl, dw] of corners) {
+  for (const id of which) {
+    const [cl, cw, dl, dw] = CORNER_SPEC[id];
     const [x0, y0] = at(r, o, cl, cw);
     // Puntos sobre los dos bordes: a lo largo del eje L y del eje W.
     const [xEdgeL, yEdgeL] = at(r, o, cl + dl * rl, cw);
     const [xEdgeW, yEdgeW] = at(r, o, cl, cw + dw * rw);
     // El sentido del arco depende de la orientación y de la esquina.
     const sweep = o === 'horizontal' ? (dw > 0 ? 1 : 0) : dl > 0 ? 0 : 1;
-    s += `<path d="M ${xEdgeL} ${yEdgeL} A ${rlx * r.w} ${rly * r.h} 0 0 ${sweep} ${xEdgeW} ${yEdgeW}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
+    s += `<path class="entrenolab-corner" d="M ${xEdgeL} ${yEdgeL} A ${rlx * r.w} ${rly * r.h} 0 0 ${sweep} ${xEdgeW} ${yEdgeW}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
   }
   return s;
 };
@@ -394,8 +409,10 @@ function halfField(r: Rect, o: Orientation): string {
   const [x2, y2] = at(r, o, 1, centerW + ryW);
   const sweep = o === 'horizontal' ? 0 : 1;
   s += `<path d="M ${x1} ${y1} A ${rxP} ${ryP} 0 0 ${sweep} ${x2} ${y2}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
-  // FASE 8: arcos de esquina (radio 1,2 m, fracción de longitud 52,5) en las 4 esquinas.
-  return s + cornerArcs(r, o, hlf, wf);
+  // Arcos de esquina (radio 1,2 m, fracción de longitud 52,5) SOLO en las dos esquinas de la
+  // LÍNEA DE PORTERÍA (l=0): en el otro extremo el campo continúa (es la línea de medio campo),
+  // así que no hay córner. Antes se pintaban los cuatro.
+  return s + cornerArcs(r, o, hlf, wf, ['l0w0', 'l0w1']);
 }
 
 /** Medio campo con la PORTERÍA a l=1 (línea de medio campo a l=0). Es el espejo X de
@@ -435,7 +452,10 @@ function halfFieldFlipped(r: Rect, o: Orientation): string {
   const [x2, y2] = at(r, o, 0, centerW + ryW);
   const sweep = o === 'horizontal' ? 1 : 0;
   s += `<path d="M ${x1} ${y1} A ${rxP} ${ryP} 0 0 ${sweep} ${x2} ${y2}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
-  return s;
+  // Arcos de esquina SOLO en las dos esquinas de la LÍNEA DE PORTERÍA (l=1 en este medio
+  // campo espejado). Antes no tenía ninguno: en «Dos medios campos» los quesitos salían solo
+  // en la mitad izquierda.
+  return s + cornerArcs(r, o, hlf, wf, ['l1w0', 'l1w1']);
 }
 
 /** A2: campo "dos medios campos" (izquierda/derecha en horizontal, arriba/abajo en
@@ -475,7 +495,8 @@ function thirdField(r: Rect, o: Orientation): string {
   s += rect(r, o, 0, centerW - sixHW, sixL, centerW + sixHW); // área pequeña
   s += spot(r, o, spotL, centerW); // punto de penalti
   s += penaltyArc(r, o, true, tl); // arco de penalti (9,15 m fuera del área)
-  return s;
+  // Arcos de esquina (1,2 m) en las dos esquinas de la línea de portería (l=0). Faltaban.
+  return s + cornerArcs(r, o, tl, tw, ['l0w0', 'l0w1']);
 }
 
 /** Recorte "Área y portería" (22×44 m): crop del F11 centrado en la portería que muestra

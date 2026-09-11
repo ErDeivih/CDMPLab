@@ -1402,4 +1402,55 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
     const svgArrowDash = renderBoardSvg('full', [dashedArrow], {});
     expect(svgArrowDash, 'la flecha discontinua lleva dasharray').toMatch(/<line[^>]*stroke-dasharray/);
   });
+
+  // Pedido del dueño: los objetos NO deben salir girados al cambiar de campo. Un cono tiene
+  // siempre la base hacia abajo en pantalla, y portería, miniportería, escalera y pica conservan
+  // siempre su orientación, sea cual sea el tipo y la orientación del campo. Líneas, flechas y
+  // figuras SÍ giran con el campo (son dibujo táctico, van pegadas al terreno).
+  describe('materiales siempre derechos por pantalla (independiente del campo)', () => {
+    const materiales: CanvasElement[] = [
+      { id: 'c1', t: 'cone', x: 0.3, y: 0.4 },
+      { id: 'g1', t: 'goal', x: 0.5, y: 0.4 },
+      { id: 'm1', t: 'minigoal', x: 0.5, y: 0.6 },
+      { id: 'l1', t: 'ladder', x: 0.7, y: 0.5 },
+      { id: 'p1', t: 'pica', x: 0.4, y: 0.6 },
+    ];
+
+    it('en campo vertical cada material se contrarrota -90° sobre su punto', () => {
+      const svg = renderBoardSvg('full', materiales, { orientation: 'vertical' });
+      const grupos = svg.match(/<g [^>]*data-el-type[^>]*>/g) ?? [];
+      expect(grupos, 'hay un grupo por material').toHaveLength(materiales.length);
+      for (const g of grupos) {
+        expect(g, `material derecho por pantalla: ${g.slice(0, 60)}`).toMatch(/rotate\(-90 [\d.]+ [\d.]+\)/);
+      }
+      // Y en horizontal NO hay contrarrotación: el dibujo ya está derecho.
+      const svgH = renderBoardSvg('full', materiales, {});
+      for (const g of svgH.match(/<g [^>]*data-el-type[^>]*>/g) ?? []) {
+        expect(g, 'en horizontal no se contrarrota').not.toMatch(/rotate\(-90/);
+      }
+    });
+
+    it('líneas, flechas y figuras giran con el campo (no se contrarrotan)', () => {
+      const geo: CanvasElement[] = [
+        { id: 'l1', t: 'line', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3 },
+        { id: 'a1', t: 'arrow', x1: 0.2, y1: 0.5, x2: 0.8, y2: 0.5 },
+        { id: 'r1', t: 'rect', x: 0.2, y: 0.6, w: 0.2, h: 0.1 },
+        { id: 't1', t: 'zone', x: 0.5, y: 0.8, w: 0.2, h: 0.1 },
+      ];
+      const svg = renderBoardSvg('full', geo, { orientation: 'vertical' });
+      for (const g of svg.match(/<g [^>]*data-el-type[^>]*>/g) ?? []) {
+        expect(g, 'el dibujo táctico NO se contrarrota').not.toMatch(/rotate\(-90 [\d.]+ [\d.]+\)/);
+      }
+    });
+
+    it('la contrarrotación no depende del TIPO de campo (medio campo, futsal, F7, lienzo)', () => {
+      for (const campo of ['half', 'third', 'box', 'futsal', 'f7', 'two_halves', 'blank'] as const) {
+        const svg = renderBoardSvg(campo, [{ id: 'c1', t: 'cone', x: 0.5, y: 0.5 }], {
+          orientation: 'vertical',
+        });
+        const grupo = (svg.match(/<g [^>]*data-el-type="cone"[^>]*>/) ?? [''])[0];
+        expect(grupo, `el cono se ve derecho en ${campo}`).toMatch(/rotate\(-90 [\d.]+ [\d.]+\)/);
+      }
+    });
+  });
 });

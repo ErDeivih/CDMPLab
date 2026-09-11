@@ -385,16 +385,6 @@
     font-size: 15px;
   }
 
-  // La pista de la herramienta ocupa el espacio disponible y se trunca (evita
-  // desbordamiento horizontal en 360/390 px).
-  .field-hint {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .field-count {
     @extend %field-chip;
     margin-left: auto;
@@ -1031,15 +1021,8 @@
     min-height: 0;
     padding: 0 2px;
 
-    // En móvil el aviso NO se oculta (antes desaparecía: el usuario no tenía forma de
-    // saber si su dibujo se había guardado). Se TRUNCA para no empujar la fila.
-    .field-hint {
-      max-width: 44vw;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
+    // El aviso de guardado NO se oculta en móvil (antes desaparecía: el usuario no tenía
+    // forma de saber si su dibujo se había guardado).
     .save-state {
       flex-shrink: 0;
       font-size: 11px;

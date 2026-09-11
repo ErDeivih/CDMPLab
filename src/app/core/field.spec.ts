@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { fieldSvg, FIELD_LINE_WIDTH, F7_LINE_COLOR, fieldGeometry, fieldDimensions, orientationLabel, FIELD_BASE_SPECS, fieldObjectScale } from './field';
+import {
+  fieldSvg,
+  FIELD_LINE_WIDTH,
+  F7_LINE_COLOR,
+  fieldGeometry,
+  fieldDimensions,
+  orientationLabel,
+  FIELD_BASE_SPECS,
+  fieldObjectScale,
+} from './field';
 import { FieldType } from './models';
 
 // Rect de referencia idéntico al de render.boardGeometry (proporción 105×68).
@@ -25,7 +34,8 @@ function rects(svg: string): Box[] {
 /** Extrae las porterías (rectángulos con relleno translúcido). */
 function goals(svg: string): Box[] {
   const out: Box[] = [];
-  const re = /<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)" fill="rgba\(255,255,255,0.25\)"/g;
+  const re =
+    /<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)" fill="rgba\(255,255,255,0.25\)"/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(svg))) out.push({ x: +m[1], y: +m[2], w: +m[3], h: +m[4] });
   return out;
@@ -60,7 +70,9 @@ describe('field (geometría orientada)', () => {
     expect(left).toBe(true);
     expect(right).toBe(true);
     for (const gr of g) expect(Math.abs(gr.y + gr.h / 2 - centerY)).toBeLessThan(0.5);
-    const c = ellipses(svg).find((e) => Math.abs(e.x - (H.x + H.w / 2)) < 0.5 && Math.abs(e.y - centerY) < 0.5);
+    const c = ellipses(svg).find(
+      (e) => Math.abs(e.x - (H.x + H.w / 2)) < 0.5 && Math.abs(e.y - centerY) < 0.5,
+    );
     expect(c).toBeDefined();
     expect(Math.abs(c!.w - c!.h)).toBeLessThan(0.05);
   });
@@ -75,7 +87,9 @@ describe('field (geometría orientada)', () => {
     expect(top).toBe(true);
     expect(bottom).toBe(true);
     for (const gr of g) expect(Math.abs(gr.x + gr.w / 2 - centerX)).toBeLessThan(0.5);
-    const c = ellipses(svg).find((e) => Math.abs(e.x - centerX) < 0.5 && Math.abs(e.y - (V.y + V.h / 2)) < 0.5);
+    const c = ellipses(svg).find(
+      (e) => Math.abs(e.x - centerX) < 0.5 && Math.abs(e.y - (V.y + V.h / 2)) < 0.5,
+    );
     expect(c).toBeDefined();
     expect(Math.abs(c!.w - c!.h)).toBeLessThan(0.05);
   });
@@ -213,9 +227,11 @@ describe('field (geometría orientada)', () => {
 
   it('plantilla F7: sus dos líneas interiores coinciden exactamente con los laterales del área F11', () => {
     const svg = fieldSvg('f7', H, 'horizontal');
-    const expectedLeft = H.x + (0.5 - (40.32 / 68) / 2) * H.w;
-    const expectedRight = H.x + (0.5 + (40.32 / 68) / 2) * H.w;
-    const verticalLines = [...svg.matchAll(/<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"/g)]
+    const expectedLeft = H.x + (0.5 - 40.32 / 68 / 2) * H.w;
+    const expectedRight = H.x + (0.5 + 40.32 / 68 / 2) * H.w;
+    const verticalLines = [
+      ...svg.matchAll(/<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"/g),
+    ]
       .filter((m) => Math.abs(Number(m[1]) - Number(m[3])) < 1e-9)
       .map((m) => Number(m[1]));
     expect(verticalLines.some((x) => Math.abs(x - expectedLeft) < 1e-9)).toBe(true);
@@ -224,8 +240,9 @@ describe('field (geometría orientada)', () => {
 
   it('plantilla F7: los arcos del F11 se abren hacia el terreno de juego', () => {
     const svg = fieldSvg('f7', H, 'horizontal');
-    const paths = [...svg.matchAll(/<path d="M ([\d.]+) ([\d.]+) A [^\"]+ 0 0 ([01]) ([\d.]+) ([\d.]+)"/g)]
-      .map((m) => ({ y1: Number(m[2]), sweep: Number(m[3]), y2: Number(m[5]) }));
+    const paths = [
+      ...svg.matchAll(/<path d="M ([\d.]+) ([\d.]+) A [^\"]+ 0 0 ([01]) ([\d.]+) ([\d.]+)"/g),
+    ].map((m) => ({ y1: Number(m[2]), sweep: Number(m[3]), y2: Number(m[5]) }));
     const penaltyArc = paths.find((p) => Math.abs(p.y1 - (H.y + (16.5 / 52.5) * H.h)) < 0.01);
     const halfwayArc = paths.find((p) => Math.abs(p.y1 - (H.y + H.h)) < 0.01);
     expect(penaltyArc?.sweep).toBe(0);
@@ -337,8 +354,11 @@ describe('fútbol sala (40×20) — geometría propia y marcas reglamentarias', 
     const g = fieldGeometry('futsal', 'horizontal');
     const svg = fieldSvg('futsal', g.rect, 'horizontal');
     // Debe haber arcos (paths con A): 2 por área en D × 2 lados = 4, más los de esquina.
-    const arcs = svg.match(/<path d="M [^"]* A [^"]*" fill="none" stroke="#ffffff"/g) ?? [];
-    expect(arcs.length, 'arcos del área en D + esquinas (no un rectángulo a todo el ancho)').toBeGreaterThanOrEqual(4);
+    const arcs = svg.match(/<path[^>]*d="M [^"]* A [^"]*" fill="none" stroke="#ffffff"/g) ?? [];
+    expect(
+      arcs.length,
+      'arcos del área en D + esquinas (no un rectángulo a todo el ancho)',
+    ).toBeGreaterThanOrEqual(4);
   });
 
   it('futsal: punto de penalti a 6 m y segundo punto a 10 m', () => {
@@ -360,7 +380,10 @@ describe('fútbol sala (40×20) — geometría propia y marcas reglamentarias', 
       const rx = parseFloat(mm[1]);
       // Radio de esquina 0,25 m → ~0,22 px (0,25/40*35,05). Los arcos del área en D son
       // de 6 m (≈5,26 px). Un radio < 0,5 px corresponde al arco de esquina de futsal.
-      if (rx > 0 && rx < 0.5) { found = true; break; }
+      if (rx > 0 && rx < 0.5) {
+        found = true;
+        break;
+      }
     }
     expect(found, 'hay un arco de esquina con radio de 0,25 m').toBe(true);
   });
@@ -385,7 +408,7 @@ describe('tercio de campo (35×68) — recorte medido del F11', () => {
     expect(svg).toContain('rgba(255,255,255,0.25)'); // portería translúcida
     expect(svg).toContain('stroke="#ffffff"');
     // Contiene un arco (penalti/centro) y no un círculo central completo de 9,15 m.
-    expect(svg).toMatch(/<path d="M [^"]* A [^"]*"/);
+    expect(svg).toMatch(/<path[^>]*d="M [^"]* A [^"]*"/);
     expect(svg).not.toContain('<ellipse'); // sin círculo central (recorte no llega al centro)
   });
 });
@@ -407,7 +430,7 @@ describe('área/box (22×44) — recorte con portería, áreas y arco', () => {
     const g = fieldGeometry('box', 'horizontal');
     const svg = fieldSvg('box', g.rect, 'horizontal');
     expect(svg).toContain('rgba(255,255,255,0.25)'); // portería
-    expect(svg).toMatch(/<path d="M [^"]* A [^"]*"/); // arco de penalti
+    expect(svg).toMatch(/<path[^>]*d="M [^"]* A [^"]*"/); // arco de penalti
     expect(svg).not.toContain('<ellipse'); // sin círculo central
   });
 });
@@ -497,9 +520,31 @@ describe('field — arcos de esquina (FASE 7)', () => {
   // Extrae los <path> de arco de esquina. El arco de esquina tiene radio 1,2 m (rx EJE-l
   // y ry EJE-w escalados al rect); se distingue del arco de penalti (radio 9,15 m, mucho
   // mayor) filtrando por el radio EJE-L del rect del campo. `cornerRx` es ese radio (px).
-  function cornerArcs(svg: string, cornerRx: number): Array<{ d: string; x1: number; y1: number; rx: number; ry: number; sweep: number; x2: number; y2: number }> {
-    const out: Array<{ d: string; x1: number; y1: number; rx: number; ry: number; sweep: number; x2: number; y2: number }> = [];
-    const re = /<path d="M ([-\d.]+) ([-\d.]+) A ([-\d.]+) ([-\d.]+) 0 0 ([01]) ([-\d.]+) ([-\d.]+)" fill="none" stroke="#ffffff" stroke-width="0\.3" \/>/g;
+  function cornerArcs(
+    svg: string,
+    cornerRx: number,
+  ): Array<{
+    d: string;
+    x1: number;
+    y1: number;
+    rx: number;
+    ry: number;
+    sweep: number;
+    x2: number;
+    y2: number;
+  }> {
+    const out: Array<{
+      d: string;
+      x1: number;
+      y1: number;
+      rx: number;
+      ry: number;
+      sweep: number;
+      x2: number;
+      y2: number;
+    }> = [];
+    const re =
+      /<path[^>]*d="M ([-\d.]+) ([-\d.]+) A ([-\d.]+) ([-\d.]+) 0 0 ([01]) ([-\d.]+) ([-\d.]+)" fill="none" stroke="#ffffff" stroke-width="0\.3" \/>/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(svg))) {
       const rx = +m[3];
@@ -529,10 +574,15 @@ describe('field — arcos de esquina (FASE 7)', () => {
     for (const a of arcs) {
       // Anclado a una esquina: su extremo 1 o 2 está a distancia radial de una esquina del rect.
       const corners = [
-        [H.x, H.y], [H.x + H.w, H.y], [H.x, H.y + H.h], [H.x + H.w, H.y + H.h],
+        [H.x, H.y],
+        [H.x + H.w, H.y],
+        [H.x, H.y + H.h],
+        [H.x + H.w, H.y + H.h],
       ];
-      const nearCorner = corners.some(([cx, cy]) =>
-        Math.hypot(a.x1 - cx, a.y1 - cy) < radial * 1.05 || Math.hypot(a.x2 - cx, a.y2 - cy) < radial * 1.05
+      const nearCorner = corners.some(
+        ([cx, cy]) =>
+          Math.hypot(a.x1 - cx, a.y1 - cy) < radial * 1.05 ||
+          Math.hypot(a.x2 - cx, a.y2 - cy) < radial * 1.05,
       );
       expect(nearCorner, 'el arco arranca cerca de una esquina reglamentaria').toBe(true);
       // Radio uniforme (misma elipse radial para los 4).
@@ -555,7 +605,10 @@ describe('field — arcos de esquina (FASE 7)', () => {
     // rx/ry se intercambian respecto a horizontal (largo pasa a Y), pero la suma radial
     // de la elipse (en píxeles del rect) debe ser coherente.
     const radV = Math.hypot(arcs[0].rx, arcs[0].ry);
-    const radH = Math.hypot(cornerArcs(fieldSvg('full', H, 'horizontal'), cornerRxFor(H, 'horizontal'))[0].rx, cornerArcs(fieldSvg('full', H, 'horizontal'), cornerRxFor(H, 'horizontal'))[0].ry);
+    const radH = Math.hypot(
+      cornerArcs(fieldSvg('full', H, 'horizontal'), cornerRxFor(H, 'horizontal'))[0].rx,
+      cornerArcs(fieldSvg('full', H, 'horizontal'), cornerRxFor(H, 'horizontal'))[0].ry,
+    );
     expect(radV).toBeCloseTo(radH, 6);
     const unique = new Set(arcs.map((a) => a.d));
     expect(unique.size, 'sin duplicados en vertical').toBe(4);
@@ -583,7 +636,10 @@ describe('field — arcos de esquina (FASE 7)', () => {
     // Cada arco debe estar a distancia <= radial de una esquina (no a mitad de borde).
     const radial = Math.hypot(arcs[0].rx, arcs[0].ry);
     const corners = [
-      [H.x, H.y], [H.x + H.w, H.y], [H.x, H.y + H.h], [H.x + H.w, H.y + H.h],
+      [H.x, H.y],
+      [H.x + H.w, H.y],
+      [H.x, H.y + H.h],
+      [H.x + H.w, H.y + H.h],
     ];
     for (const a of arcs) {
       // La distancia desde un extremo a la esquina MÁS CERCANA debe ser ~radial.
@@ -594,27 +650,69 @@ describe('field — arcos de esquina (FASE 7)', () => {
     }
   });
 
-  it('medio campo (half): 4 arcos de esquina anclados a las esquinas; lienzo y F7 sin arcos', () => {
-    const arcs = cornerArcs(fieldSvg('half', H, 'horizontal'), cornerRxFor(H, 'horizontal'));
-    expect(arcs, 'el medio campo tiene 4 arcos de esquina (FASE 8)').toHaveLength(4);
+  // CORRECCIÓN (petición del dueño: «hay quesitos de corners en algún campo mal puestos»):
+  // esta prueba exigía 4 arcos en el MEDIO campo, y estaba MAL: en el extremo de la línea de
+  // medio campo el campo continúa, así que no hay córner que dibujar. Ahora el medio campo
+  // lleva arcos SOLO en sus dos esquinas de la línea de portería (l=0), y el extremo opuesto
+  // queda sin arcos a propósito.
+  it('medio campo (half): arcos SOLO en las dos esquinas de la línea de portería; lienzo y F7 aparte', () => {
+    const svg = fieldSvg('half', H, 'horizontal');
+    const arcs = cornerArcs(svg, cornerRxFor(H, 'horizontal'));
+    expect(arcs, 'el medio campo tiene 2 arcos (los de la línea de portería)').toHaveLength(2);
     const radial = Math.hypot(arcs[0].rx, arcs[0].ry);
-    const corners = [
-      [H.x, H.y], [H.x + H.w, H.y], [H.x, H.y + H.h], [H.x + H.w, H.y + H.h],
+    // Las dos esquinas de la línea de PORTERÍA están en l=0, es decir x = H.x (el medio campo
+    // se dibuja con la portería a la izquierda y la línea de medio campo a la derecha).
+    const cornersPorteria = [
+      [H.x, H.y],
+      [H.x, H.y + H.h],
     ];
     for (const a of arcs) {
-      const nearCorner = corners.some(([cx, cy]) =>
-        Math.hypot(a.x1 - cx, a.y1 - cy) < radial * 1.05 || Math.hypot(a.x2 - cx, a.y2 - cy) < radial * 1.05
+      const enPorteria = cornersPorteria.some(
+        ([cx, cy]) =>
+          Math.hypot(a.x1 - cx, a.y1 - cy) < radial * 1.05 ||
+          Math.hypot(a.x2 - cx, a.y2 - cy) < radial * 1.05,
       );
-      expect(nearCorner, 'el arco del medio campo arranca cerca de una esquina').toBe(true);
+      expect(enPorteria, 'cada arco del medio campo está en una esquina de la portería').toBe(true);
     }
+    // Y NO hay ningún arco anclado a la línea de medio campo (x = H.x + H.w): ahí el campo
+    // continúa y no hay esquina.
+    const xMedio = H.x + H.w;
+    const enMedioCampo = arcs.filter(
+      (a) => Math.min(Math.abs(a.x1 - xMedio), Math.abs(a.x2 - xMedio)) < radial * 1.05,
+    );
+    expect(enMedioCampo, 'no hay quesitos en la línea de medio campo').toHaveLength(0);
+    // El TERCIO es otro recorte: también lleva sus dos arcos de la línea de portería.
+    expect(
+      cornerArcs(fieldSvg('third', H, 'horizontal'), (1.2 / 68) * H.h),
+      'el tercio tiene sus 2 arcos de la línea de portería',
+    ).toHaveLength(2);
     // Lienzo sin arcos; el F7 SÍ tiene sus 4 arcos de esquina propios (FASE 8b: antes se
     // asumía que no los tenía, pero la plantilla F7 los requiere). Los arcos del F7 son
     // del color de contraste del F7 (F7_LINE_COLOR), no blancos, por lo que el helper de
     // arcos blancos (`cornerArcs`) no los cuenta: se comprueban con su propio patrón.
-    expect(cornerArcs(fieldSvg('blank', H, 'horizontal'), cornerRxFor(H, 'horizontal')), 'lienzo sin arcos').toHaveLength(0);
+    expect(
+      cornerArcs(fieldSvg('blank', H, 'horizontal'), cornerRxFor(H, 'horizontal')),
+      'lienzo sin arcos',
+    ).toHaveLength(0);
     const f7Svg = fieldSvg('f7', H, 'horizontal');
-    const f7Arcs = f7Svg.match(/<path d="M [^"]* A [^"]*" fill="none" stroke="#38bdf8" stroke-width="0\.3" \/>/g) ?? [];
+    const f7Arcs =
+      f7Svg.match(
+        /<path[^>]*d="M [^"]* A [^"]*" fill="none" stroke="#38bdf8" stroke-width="0\.3" \/>/g,
+      ) ?? [];
     expect(f7Arcs.length, 'el F7 tiene sus 4 arcos de esquina propios (FASE 8b)').toBe(4);
+  });
+
+  it('Dos medios campos: exactamente 4 arcos, uno por esquina REAL (antes solo en una mitad)', () => {
+    const svg = fieldSvg('two_halves', H, 'horizontal');
+    const arcs = cornerArcs(svg, cornerRxFor(H, 'horizontal'));
+    expect(arcs, 'las 4 esquinas reales del campo tienen su arco').toHaveLength(4);
+    // Dos en cada mitad, y ninguno en la arista central (donde se juntan las dos mitades).
+    const mitad = H.w / 2;
+    const enCentral = arcs.filter((a) => {
+      const xs = [a.x1, a.x2];
+      return xs.some((x) => Math.abs(x - (H.x + mitad)) < 0.01);
+    });
+    expect(enCentral, 'ningún arco en la arista central').toHaveLength(0);
   });
 
   it('campo completo horizontal: los 4 arcos son cuartos de circunferencia finos con extremos en fondo y banda, sin relleno', () => {
@@ -626,8 +724,16 @@ describe('field — arcos de esquina (FASE 7)', () => {
       expect(a.d).toContain('fill="none"');
       expect(a.d).toContain(`stroke-width="${FIELD_LINE_WIDTH}"`);
       // Cada extremo cae sobre UN borde del campo (distancia ~0 en fondo o banda).
-      const onEdgeX = Math.abs(a.x1 - H.x) < 0.6 || Math.abs(a.x1 - (H.x + H.w)) < 0.6 || Math.abs(a.x2 - H.x) < 0.6 || Math.abs(a.x2 - (H.x + H.w)) < 0.6;
-      const onEdgeY = Math.abs(a.y1 - H.y) < 0.6 || Math.abs(a.y1 - (H.y + H.h)) < 0.6 || Math.abs(a.y2 - H.y) < 0.6 || Math.abs(a.y2 - (H.y + H.h)) < 0.6;
+      const onEdgeX =
+        Math.abs(a.x1 - H.x) < 0.6 ||
+        Math.abs(a.x1 - (H.x + H.w)) < 0.6 ||
+        Math.abs(a.x2 - H.x) < 0.6 ||
+        Math.abs(a.x2 - (H.x + H.w)) < 0.6;
+      const onEdgeY =
+        Math.abs(a.y1 - H.y) < 0.6 ||
+        Math.abs(a.y1 - (H.y + H.h)) < 0.6 ||
+        Math.abs(a.y2 - H.y) < 0.6 ||
+        Math.abs(a.y2 - (H.y + H.h)) < 0.6;
       expect(onEdgeX, 'un extremo sobre una línea de fondo/banda vertical').toBe(true);
       expect(onEdgeY, 'el otro extremo sobre una línea de fondo/banda horizontal').toBe(true);
     }
@@ -636,7 +742,9 @@ describe('field — arcos de esquina (FASE 7)', () => {
     // Verifica que el punto medio del arco cae DENTRO del rect (ya cubierto) y que el sweep
     // de los dos arcos superiores difiere del de los dos inferiores (apertura simétrica).
     const topSweep = arcs.filter((a) => Math.min(a.y1, a.y2) < H.y + H.h / 2).map((a) => a.sweep);
-    const bottomSweep = arcs.filter((a) => Math.max(a.y1, a.y2) > H.y + H.h / 2).map((a) => a.sweep);
+    const bottomSweep = arcs
+      .filter((a) => Math.max(a.y1, a.y2) > H.y + H.h / 2)
+      .map((a) => a.sweep);
     expect(topSweep.length, '2 arcos superiores').toBe(2);
     expect(bottomSweep.length, '2 arcos inferiores').toBe(2);
     // Arriba y abajo usan sweep OPUESTOS (si no, un arco sobresaldría hacia fuera).
@@ -651,9 +759,15 @@ describe('field — arcos de esquina (FASE 7)', () => {
     const svg = fieldSvg('f7', g.rect, 'horizontal');
     // Además del contorno blanco del medio campo, el F7 transversal dibuja su rect
     // en color de contraste cruzando TODO el ancho (68 m) del medio campo apaisado.
-    const f7Rect = /<rect x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"[^>]*stroke="#38bdf8"/.exec(svg);
+    const f7Rect =
+      /<rect x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"[^>]*stroke="#38bdf8"/.exec(
+        svg,
+      );
     expect(f7Rect, 'el F7 transversal dibuja su rect en color de contraste').not.toBeNull();
-    expect(parseFloat(f7Rect![3]), 'el F7 cruza todo el ancho (68 m) del medio campo apaisado').toBeCloseTo(68 * (92 / 105), 4);
+    expect(
+      parseFloat(f7Rect![3]),
+      'el F7 cruza todo el ancho (68 m) del medio campo apaisado',
+    ).toBeCloseTo(68 * (92 / 105), 4);
   });
 
   it('AUDITORÍA: la galería ofrece los campos base sin duplicar el medio campo', () => {
@@ -666,12 +780,16 @@ describe('field — arcos de esquina (FASE 7)', () => {
     // (`models.FIELD_TYPES`) y el normalizador lo migra a `half` + orientación vertical.
     expect(types, 'la galería no duplica el medio campo').not.toContain('vertical_half');
     // Y sigue pintándose igual que un medio campo (compatibilidad de render).
-    expect(fieldSvg('vertical_half' as FieldType, H, 'vertical'), 'el alias conserva su render').toBe(
-      fieldSvg('half' as FieldType, H, 'vertical'),
-    );
+    expect(
+      fieldSvg('vertical_half' as FieldType, H, 'vertical'),
+      'el alias conserva su render',
+    ).toBe(fieldSvg('half' as FieldType, H, 'vertical'));
     // Los campos VISUALMENTE distintos deben renderizarse cada uno con su propio dibujo real.
     const svg = (t: string) => fieldSvg(t as FieldType, H, 'horizontal');
-    expect(new Set([svg('full'), svg('half'), svg('third'), svg('box'), svg('futsal'), svg('f7')]).size, 'los campos visualmente distintos se renderizan cada uno distinto').toBe(6);
+    expect(
+      new Set([svg('full'), svg('half'), svg('third'), svg('box'), svg('futsal'), svg('f7')]).size,
+      'los campos visualmente distintos se renderizan cada uno distinto',
+    ).toBe(6);
     // 'blank' (lienzo) no dibuja ninguna marca.
     expect(svg('blank')).toBe('');
   });
@@ -693,6 +811,8 @@ describe('field — arcos de esquina (FASE 7)', () => {
     const marksTwo = count(svgTwo, 'rect');
     const marksHalf = count(svgHalf, 'rect');
     // Al menos dos mitades (el texto incluye dos porterías): no debe ser más simple que half.
-    expect(marksTwo, 'two_halves dibuja las marcas de dos medios campos').toBeGreaterThan(marksHalf);
+    expect(marksTwo, 'two_halves dibuja las marcas de dos medios campos').toBeGreaterThan(
+      marksHalf,
+    );
   });
 });

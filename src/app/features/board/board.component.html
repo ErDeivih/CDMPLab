@@ -5,26 +5,58 @@
         <span class="msi">arrow_back</span>
       </button>
       <div class="top-title">
-        <img class="brand-shield" src="assets/brand/cdm-pizarrales-original.jpg" alt="CDM Pizarrales">
+        <img
+          class="brand-shield"
+          src="assets/brand/cdm-pizarrales-original.jpg"
+          alt="CDM Pizarrales"
+        />
         <span class="brand">CDMPLab</span>
         <span class="top-sep">·</span>
         <span class="exercise">{{ title() }}</span>
         @if (dirty() && !saved()) {
-          <span class="dirty-dot" title="Cambios sin guardar" aria-label="Cambios sin guardar"></span>
+          <span
+            class="dirty-dot"
+            title="Cambios sin guardar"
+            aria-label="Cambios sin guardar"
+          ></span>
         }
       </div>
     </div>
     <div class="top-right">
-      <button class="edge-btn" [class.edge-on]="panelOpen()" [title]="panelOpen() ? 'Cerrar propiedades' : 'Propiedades'" [attr.aria-label]="panelOpen() ? 'Cerrar propiedades' : 'Propiedades'" (click)="togglePanel()">
+      <button
+        class="edge-btn"
+        [class.edge-on]="panelOpen()"
+        [title]="panelOpen() ? 'Cerrar propiedades' : 'Propiedades'"
+        [attr.aria-label]="panelOpen() ? 'Cerrar propiedades' : 'Propiedades'"
+        (click)="togglePanel()"
+      >
         <span class="msi">{{ panelOpen() ? 'close' : 'tune' }}</span>
       </button>
-      <button class="chip-icon chip-icon-primary" title="Guardar ejercicio" aria-label="Guardar" [disabled]="saving()" (click)="saveToExercise()">
+      <button
+        class="chip-icon chip-icon-primary"
+        title="Guardar ejercicio"
+        aria-label="Guardar"
+        [disabled]="saving()"
+        (click)="saveToExercise()"
+      >
         <span class="msi">{{ saved() ? 'check' : 'save' }}</span>
       </button>
-      <button class="edge-btn" [class.edge-on]="exportMenuOpen()" title="Exportar" aria-label="Exportar" (click)="toggleExportMenu()">
+      <button
+        class="edge-btn"
+        [class.edge-on]="exportMenuOpen()"
+        title="Exportar"
+        aria-label="Exportar"
+        (click)="toggleExportMenu()"
+      >
         <span class="msi">file_download</span>
       </button>
-      <button class="edge-btn" [class.edge-on]="masOpen()" title="Más" aria-label="Más" (click)="toggleMas()">
+      <button
+        class="edge-btn"
+        [class.edge-on]="masOpen()"
+        title="Más"
+        aria-label="Más"
+        (click)="toggleMas()"
+      >
         <span class="msi">more_horiz</span>
       </button>
     </div>
@@ -33,12 +65,17 @@
   <div class="studio-main">
     <div class="studio-field">
       <div class="field-status">
-        <span class="msi">info</span>
-        <span class="field-hint">{{ toolHint() }}</span>
+        <!-- Decisión del dueño: se retira el mensaje informativo («Selecciona y mueve
+             elementos…») porque no aportaba nada y ocupaba la parte superior del lienzo.
+             Se conservan el estado de guardado, el contador y el botón de encuadre. -->
         @if (saving()) {
-          <span class="save-state saving" role="status"><span class="msi">hourglass_top</span> Guardando…</span>
+          <span class="save-state saving" role="status"
+            ><span class="msi">hourglass_top</span> Guardando…</span
+          >
         } @else if (saved()) {
-          <span class="save-state saved" role="status"><span class="msi">check</span> Guardado</span>
+          <span class="save-state saved" role="status"
+            ><span class="msi">check</span> Guardado</span
+          >
         }
         <span class="field-count tnum">{{ view().length }}</span>
         <button
@@ -51,12 +88,36 @@
         >
           <span class="msi">{{ fillScreen() ? 'fullscreen_exit' : 'fullscreen' }}</span>
         </button>
+        @if (vistaAlterada()) {
+          <!-- Pedido del dueño: el zoom se puede hacer, pero también DESHACER. Aparece solo
+               cuando hay zoom o paneo aplicados y devuelve el encuadre neutro (100 %, sin
+               desplazamiento), de modo que el campo vuelve a verse entero. -->
+          <button
+            class="field-fit-toggle"
+            title="Volver al encuadre (100 %)"
+            aria-label="Volver al encuadre"
+            (click)="resetView()"
+          >
+            <span class="msi">zoom_out_map</span>
+          </button>
+        }
       </div>
       @if (orientHintVisible()) {
-        <div class="orient-hint" role="status" aria-label="Gira el móvil para usar la pizarra en horizontal">
+        <div
+          class="orient-hint"
+          role="status"
+          aria-label="Gira el móvil para usar la pizarra en horizontal"
+        >
           <span class="msi">screen_rotation</span>
           <span class="orient-hint-text">Gira el móvil para usar la pizarra en horizontal</span>
-          <button class="orient-hint-btn" title="Continuar en vertical" aria-label="Continuar en vertical" (click)="dismissOrientHint()">Continuar en vertical</button>
+          <button
+            class="orient-hint-btn"
+            title="Continuar en vertical"
+            aria-label="Continuar en vertical"
+            (click)="dismissOrientHint()"
+          >
+            Continuar en vertical
+          </button>
         </div>
       }
       <div
@@ -108,29 +169,71 @@
             (pointermove)="$event.stopPropagation()"
             (pointerup)="$event.stopPropagation()"
           >
-            <button class="ctx-btn" [disabled]="!canUndo()" title="Deshacer (Ctrl+Z)" aria-label="Deshacer" (click)="undo(); closeCtxMenu()">
+            <button
+              class="ctx-btn"
+              [disabled]="!canUndo()"
+              title="Deshacer (Ctrl+Z)"
+              aria-label="Deshacer"
+              (click)="undo(); closeCtxMenu()"
+            >
               <span class="msi">undo</span>
             </button>
-            <button class="ctx-btn" [disabled]="!canRedo()" title="Rehacer (Ctrl+Y)" aria-label="Rehacer" (click)="redo(); closeCtxMenu()">
+            <button
+              class="ctx-btn"
+              [disabled]="!canRedo()"
+              title="Rehacer (Ctrl+Y)"
+              aria-label="Rehacer"
+              (click)="redo(); closeCtxMenu()"
+            >
               <span class="msi">redo</span>
             </button>
             <span class="ctx-sep"></span>
-            <button class="ctx-btn" title="Girar 45° a la izquierda" aria-label="Girar 45° a la izquierda" (click)="rotateSelected(-45); closeCtxMenu()">
+            <button
+              class="ctx-btn"
+              title="Girar 45° a la izquierda"
+              aria-label="Girar 45° a la izquierda"
+              (click)="rotateSelected(-45); closeCtxMenu()"
+            >
               <span class="msi">rotate_90_degrees_ccw</span>
             </button>
-            <button class="ctx-btn" title="Girar 45° a la derecha" aria-label="Girar 45° a la derecha" (click)="rotateSelected(45); closeCtxMenu()">
+            <button
+              class="ctx-btn"
+              title="Girar 45° a la derecha"
+              aria-label="Girar 45° a la derecha"
+              (click)="rotateSelected(45); closeCtxMenu()"
+            >
               <span class="msi">rotate_90_degrees_cw</span>
             </button>
-            <button class="ctx-btn" title="Girar 90° a la izquierda" aria-label="Girar 90° a la izquierda" (click)="rotateSelected(-90); closeCtxMenu()">
+            <button
+              class="ctx-btn"
+              title="Girar 90° a la izquierda"
+              aria-label="Girar 90° a la izquierda"
+              (click)="rotateSelected(-90); closeCtxMenu()"
+            >
               <span class="msi">rotate_left</span>
             </button>
-            <button class="ctx-btn" title="Girar 90° a la derecha" aria-label="Girar 90° a la derecha" (click)="rotateSelected(90); closeCtxMenu()">
+            <button
+              class="ctx-btn"
+              title="Girar 90° a la derecha"
+              aria-label="Girar 90° a la derecha"
+              (click)="rotateSelected(90); closeCtxMenu()"
+            >
               <span class="msi">rotate_right</span>
             </button>
-            <button class="ctx-btn" title="Duplicar" aria-label="Duplicar" (click)="duplicateSelected(); closeCtxMenu()">
+            <button
+              class="ctx-btn"
+              title="Duplicar"
+              aria-label="Duplicar"
+              (click)="duplicateSelected(); closeCtxMenu()"
+            >
               <span class="msi">content_copy</span>
             </button>
-            <button class="ctx-btn ctx-danger" title="Eliminar" aria-label="Eliminar" (click)="removeSelected(); closeCtxMenu()">
+            <button
+              class="ctx-btn ctx-danger"
+              title="Eliminar"
+              aria-label="Eliminar"
+              (click)="removeSelected(); closeCtxMenu()"
+            >
               <span class="msi">delete</span>
             </button>
           </div>
@@ -159,11 +262,19 @@
         </div>
       </div>
       @if (fillHintVisible()) {
-        <div class="fill-hint" role="status" aria-label="Sugerencia para recorrer el campo en Llenar pantalla">
+        <div
+          class="fill-hint"
+          role="status"
+          aria-label="Sugerencia para recorrer el campo en Llenar pantalla"
+        >
           <span class="msi">swap_horiz</span>
           <span class="fill-hint-long">Desliza para recorrer el campo · pellizca para acercar</span>
           <span class="fill-hint-short">Desliza para recorrer el campo</span>
-          <button class="fill-hint-close" aria-label="Cerrar sugerencia" (click)="dismissFillHint()">
+          <button
+            class="fill-hint-close"
+            aria-label="Cerrar sugerencia"
+            (click)="dismissFillHint()"
+          >
             <span class="msi">close</span>
           </button>
         </div>
@@ -172,7 +283,12 @@
         <div class="placement-hint" role="status" aria-label="Colocación pendiente">
           <span class="msi">ads_click</span>
           <span class="placement-hint-text">{{ armedLabel() }}</span>
-          <button class="placement-hint-cancel" title="Cancelar" aria-label="Cancelar colocación" (click)="cancelArm()">
+          <button
+            class="placement-hint-cancel"
+            title="Cancelar"
+            aria-label="Cancelar colocación"
+            (click)="cancelArm()"
+          >
             <span class="msi">close</span>
           </button>
         </div>
@@ -180,10 +296,16 @@
     </div>
 
     @if (showPropsPanel()) {
-      <aside class="side-panel studio-panel side-panel-right" role="dialog" aria-label="Propiedades">
+      <aside
+        class="side-panel studio-panel side-panel-right"
+        role="dialog"
+        aria-label="Propiedades"
+      >
         <div class="panel-head">
           <h3 class="panel-title">Propiedades</h3>
-          <button class="panel-close" aria-label="Cerrar panel" (click)="closePropsPanel()"><span class="msi">close</span></button>
+          <button class="panel-close" aria-label="Cerrar panel" (click)="closePropsPanel()">
+            <span class="msi">close</span>
+          </button>
         </div>
         @if (selectedElement()) {
           <div class="inspector">
@@ -197,11 +319,21 @@
               @case ('player') {
                 <div class="field">
                   <label>Dorsal</label>
-                  <input type="number" min="0" max="99" [value]="selectedElement()!.n ?? ''" (change)="setSelNumber($event)" />
+                  <input
+                    type="number"
+                    min="0"
+                    max="99"
+                    [value]="selectedElement()!.n ?? ''"
+                    (change)="setSelNumber($event)"
+                  />
                 </div>
                 <div class="field">
                   <label>Etiqueta</label>
-                  <input [value]="selectedElement()!.label ?? ''" (change)="setSelLabel($event)" placeholder="Nombre / puesto" />
+                  <input
+                    [value]="selectedElement()!.label ?? ''"
+                    (change)="setSelLabel($event)"
+                    placeholder="Nombre / puesto"
+                  />
                 </div>
                 <div class="field">
                   <label>Color</label>
@@ -222,15 +354,35 @@
               @case ('text') {
                 <div class="field">
                   <label>Texto</label>
-                  <textarea class="input" rows="2" #textEditor [value]="selectedElement()!.v ?? ''" (input)="setSelText($event)" (change)="setSelText($event)" aria-label="Texto"></textarea>
+                  <textarea
+                    class="input"
+                    rows="2"
+                    #textEditor
+                    [value]="selectedElement()!.v ?? ''"
+                    (input)="setSelText($event)"
+                    (change)="setSelText($event)"
+                    aria-label="Texto"
+                  ></textarea>
                 </div>
               }
               @case ('arrow') {
                 <div class="field">
                   <label>Estilo</label>
                   <div class="chips">
-                    <button class="chip" [class.chip-active]="(selectedElement()!.style ?? 'solid') === 'solid'" (click)="setSelArrowStyle('solid')">Movimiento</button>
-                    <button class="chip" [class.chip-active]="selectedElement()!.style === 'dashed'" (click)="setSelArrowStyle('dashed')">Pase</button>
+                    <button
+                      class="chip"
+                      [class.chip-active]="(selectedElement()!.style ?? 'solid') === 'solid'"
+                      (click)="setSelArrowStyle('solid')"
+                    >
+                      Movimiento
+                    </button>
+                    <button
+                      class="chip"
+                      [class.chip-active]="selectedElement()!.style === 'dashed'"
+                      (click)="setSelArrowStyle('dashed')"
+                    >
+                      Pase
+                    </button>
                   </div>
                 </div>
               }
@@ -239,36 +391,100 @@
               <div class="field-row">
                 <div class="field">
                   <label>Ancho (%)</label>
-                  <input type="text" inputmode="decimal" [value]="selWPct()" (change)="setSelW($event)" aria-label="Ancho en porcentaje" />
+                  <input
+                    type="text"
+                    inputmode="decimal"
+                    [value]="selWPct()"
+                    (change)="setSelW($event)"
+                    aria-label="Ancho en porcentaje"
+                  />
                 </div>
                 <div class="field">
                   <label>Alto (%)</label>
-                  <input type="text" inputmode="decimal" [value]="selHPct()" (change)="setSelH($event)" aria-label="Alto en porcentaje" />
+                  <input
+                    type="text"
+                    inputmode="decimal"
+                    [value]="selHPct()"
+                    (change)="setSelH($event)"
+                    aria-label="Alto en porcentaje"
+                  />
                 </div>
               </div>
             }
-            @if (selectedElement()!.t !== 'player' && selectedElement()!.t !== 'arrow' && selectedElement()!.t !== 'line' && selectedElement()!.t !== 'zone' && selectedElement()!.t !== 'rect' && !isMaterialType(selectedElement()!.t)) {
+            @if (
+              selectedElement()!.t !== 'player' &&
+              selectedElement()!.t !== 'arrow' &&
+              selectedElement()!.t !== 'line' &&
+              selectedElement()!.t !== 'zone' &&
+              selectedElement()!.t !== 'rect' &&
+              !isMaterialType(selectedElement()!.t)
+            ) {
               <div class="field">
                 <label>Tamaño (u.)</label>
-                <input type="number" inputmode="decimal" step="0.1" min="0.4" max="6" [value]="selectedElement()!.size ?? 1" (change)="setSelSize($event)" aria-label="Tamaño (unidades)" />
+                <input
+                  type="number"
+                  inputmode="decimal"
+                  step="0.1"
+                  min="0.4"
+                  max="6"
+                  [value]="selectedElement()!.size ?? 1"
+                  (change)="setSelSize($event)"
+                  aria-label="Tamaño (unidades)"
+                />
               </div>
             }
             <div class="field">
               <label>Opacidad — {{ opacityPct() }}%</label>
-              <input type="range" min="0.05" max="1" step="0.05" [value]="selectedElement()!.opacity ?? 1" (change)="setSelOpacity($event)" />
+              <input
+                type="range"
+                min="0.05"
+                max="1"
+                step="0.05"
+                [value]="selectedElement()!.opacity ?? 1"
+                (change)="setSelOpacity($event)"
+              />
             </div>
-            @if (selectedElement()!.t === 'arrow' || selectedElement()!.t === 'line' || selectedElement()!.t === 'dribble') {
+            @if (
+              selectedElement()!.t === 'arrow' ||
+              selectedElement()!.t === 'line' ||
+              selectedElement()!.t === 'dribble'
+            ) {
               <div class="field">
                 <label>Grosor</label>
                 <!-- Default 0.4 (mitad del antiguo 0.8); mínimo coherente 0.1 (nunca 0/negativo). -->
-                <input type="number" step="0.1" min="0.1" max="2.5" [value]="selectedElement()!.strokeWidth ?? 0.4" (change)="setSelStrokeWidth($event)" />
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="2.5"
+                  [value]="selectedElement()!.strokeWidth ?? 0.4"
+                  (change)="setSelStrokeWidth($event)"
+                />
               </div>
               <div class="field">
                 <label>Trazo</label>
                 <div class="chips">
-                  <button class="chip" [class.chip-active]="(selectedElement()!.lineStyle ?? 'solid') === 'solid'" (click)="setSelLineStyle('solid')">Sólido</button>
-                  <button class="chip" [class.chip-active]="selectedElement()!.lineStyle === 'dashed'" (click)="setSelLineStyle('dashed')">Discontinuo</button>
-                  <button class="chip" [class.chip-active]="selectedElement()!.lineStyle === 'dotted'" (click)="setSelLineStyle('dotted')">Puntos</button>
+                  <button
+                    class="chip"
+                    [class.chip-active]="(selectedElement()!.lineStyle ?? 'solid') === 'solid'"
+                    (click)="setSelLineStyle('solid')"
+                  >
+                    Sólido
+                  </button>
+                  <button
+                    class="chip"
+                    [class.chip-active]="selectedElement()!.lineStyle === 'dashed'"
+                    (click)="setSelLineStyle('dashed')"
+                  >
+                    Discontinuo
+                  </button>
+                  <button
+                    class="chip"
+                    [class.chip-active]="selectedElement()!.lineStyle === 'dotted'"
+                    (click)="setSelLineStyle('dotted')"
+                  >
+                    Puntos
+                  </button>
                 </div>
               </div>
             }
@@ -293,8 +509,20 @@
               <div class="field">
                 <label>Relleno</label>
                 <div class="chips">
-                  <button class="chip" [class.chip-active]="selectedElement()!.fill === false" (click)="setSelFill(false)">Perímetro</button>
-                  <button class="chip" [class.chip-active]="selectedElement()!.fill !== false" (click)="setSelFill(true)">Relleno</button>
+                  <button
+                    class="chip"
+                    [class.chip-active]="selectedElement()!.fill === false"
+                    (click)="setSelFill(false)"
+                  >
+                    Perímetro
+                  </button>
+                  <button
+                    class="chip"
+                    [class.chip-active]="selectedElement()!.fill !== false"
+                    (click)="setSelFill(true)"
+                  >
+                    Relleno
+                  </button>
                 </div>
               </div>
               @if (selectedElement()!.fill !== false) {
@@ -304,30 +532,86 @@
                 <div class="field">
                   <label>Opacidad del relleno</label>
                   <div class="chips">
-                    <button class="chip" [class.chip-active]="selectedElement()!.fillOpacity === undefined" (click)="setSelFillOpacity(undefined)">Auto</button>
-                    <button class="chip" [class.chip-active]="selectedElement()!.fillOpacity === 0.1" (click)="setSelFillOpacity(0.1)">10%</button>
-                    <button class="chip" [class.chip-active]="selectedElement()!.fillOpacity === 0.2" (click)="setSelFillOpacity(0.2)">20%</button>
-                    <button class="chip" [class.chip-active]="selectedElement()!.fillOpacity === 0.35" (click)="setSelFillOpacity(0.35)">35%</button>
-                    <button class="chip" [class.chip-active]="selectedElement()!.fillOpacity === 0.5" (click)="setSelFillOpacity(0.5)">50%</button>
-                    <button class="chip" [class.chip-active]="selectedElement()!.fillOpacity === 0.7" (click)="setSelFillOpacity(0.7)">70%</button>
+                    <button
+                      class="chip"
+                      [class.chip-active]="selectedElement()!.fillOpacity === undefined"
+                      (click)="setSelFillOpacity(undefined)"
+                    >
+                      Auto
+                    </button>
+                    <button
+                      class="chip"
+                      [class.chip-active]="selectedElement()!.fillOpacity === 0.1"
+                      (click)="setSelFillOpacity(0.1)"
+                    >
+                      10%
+                    </button>
+                    <button
+                      class="chip"
+                      [class.chip-active]="selectedElement()!.fillOpacity === 0.2"
+                      (click)="setSelFillOpacity(0.2)"
+                    >
+                      20%
+                    </button>
+                    <button
+                      class="chip"
+                      [class.chip-active]="selectedElement()!.fillOpacity === 0.35"
+                      (click)="setSelFillOpacity(0.35)"
+                    >
+                      35%
+                    </button>
+                    <button
+                      class="chip"
+                      [class.chip-active]="selectedElement()!.fillOpacity === 0.5"
+                      (click)="setSelFillOpacity(0.5)"
+                    >
+                      50%
+                    </button>
+                    <button
+                      class="chip"
+                      [class.chip-active]="selectedElement()!.fillOpacity === 0.7"
+                      (click)="setSelFillOpacity(0.7)"
+                    >
+                      70%
+                    </button>
                   </div>
                 </div>
               }
             }
             <div class="inspector-actions">
               @if (selectedElement()!.t === 'text') {
-                <button class="btn btn-ghost btn-sm" title="Ajustar al contenido" [attr.aria-label]="'Ajustar el cuadro al contenido del texto'" (click)="fitTextToContentSelected()">
+                <button
+                  class="btn btn-ghost btn-sm"
+                  title="Ajustar al contenido"
+                  [attr.aria-label]="'Ajustar el cuadro al contenido del texto'"
+                  (click)="fitTextToContentSelected()"
+                >
                   <span class="msi">fit_screen</span> Ajustar al contenido
                 </button>
               }
-              <button class="btn btn-ghost btn-sm" title="Bloquear / desbloquear" [attr.aria-label]="selectedElement()!.locked ? 'Desbloquear' : 'Bloquear'" (click)="toggleLock()">
+              <button
+                class="btn btn-ghost btn-sm"
+                title="Bloquear / desbloquear"
+                [attr.aria-label]="selectedElement()!.locked ? 'Desbloquear' : 'Bloquear'"
+                (click)="toggleLock()"
+              >
                 <span class="msi">{{ selectedElement()!.locked ? 'lock' : 'lock_open' }}</span>
                 {{ selectedElement()!.locked ? 'Desbloquear' : 'Bloquear' }}
               </button>
-              <button class="btn btn-ghost btn-sm" title="Traer adelante" aria-label="Traer adelante" (click)="bringForward()">
+              <button
+                class="btn btn-ghost btn-sm"
+                title="Traer adelante"
+                aria-label="Traer adelante"
+                (click)="bringForward()"
+              >
                 <span class="msi">flip_to_front</span> Traer adelante
               </button>
-              <button class="btn btn-ghost btn-sm" title="Enviar atrás" aria-label="Enviar atrás" (click)="sendBack()">
+              <button
+                class="btn btn-ghost btn-sm"
+                title="Enviar atrás"
+                aria-label="Enviar atrás"
+                (click)="sendBack()"
+              >
                 <span class="msi">flip_to_back</span> Enviar atrás
               </button>
             </div>
@@ -341,11 +625,22 @@
           <label>Título</label>
           <!-- FASE 7: "Nueva pizarra" es SOLO el placeholder. El valor real inicial es
                vacío (se muestra el placeholder) y no se guarda literalmente. -->
-          <input class="input" [value]="metaTitle()" (input)="setMetaTitle($any($event.target).value)" placeholder="Nueva pizarra" aria-label="Título del ejercicio" />
+          <input
+            class="input"
+            [value]="metaTitle()"
+            (input)="setMetaTitle($any($event.target).value)"
+            placeholder="Nueva pizarra"
+            aria-label="Título del ejercicio"
+          />
         </div>
         <div class="field">
           <label>Categoría</label>
-          <select class="input" [value]="metaCategory()" (change)="setMetaCategory($any($event.target).value)" aria-label="Categoría">
+          <select
+            class="input"
+            [value]="metaCategory()"
+            (change)="setMetaCategory($any($event.target).value)"
+            aria-label="Categoría"
+          >
             @for (c of exerciseCategories; track c) {
               <option [value]="c">{{ c }}</option>
             }
@@ -353,39 +648,32 @@
         </div>
         <div class="field">
           <label>Descripción</label>
-          <textarea class="input" rows="2" [value]="metaDescription()" (input)="metaDescription.set($any($event.target).value); markDirty()" aria-label="Descripción"></textarea>
+          <textarea
+            class="input"
+            rows="2"
+            [value]="metaDescription()"
+            (input)="metaDescription.set($any($event.target).value); markDirty()"
+            aria-label="Descripción"
+          ></textarea>
         </div>
         <div class="field">
           <label>Explicación</label>
-          <textarea class="input" rows="2" [value]="metaExplanation()" (input)="metaExplanation.set($any($event.target).value); markDirty()" aria-label="Explicación"></textarea>
-        </div>
-        <div class="field">
-          <label>Material necesario</label>
-          <!-- FASE 8: checklist interactivo en lugar del campo de texto con comas.
-               Las opciones mínimas + "Otro" personalizado. Se conserva la lista guardada
-               (los ejercicios antiguos muestran también su material aunque no esté en la lista). -->
-          <div class="material-checklist" role="group" aria-label="Material necesario">
-            @for (opt of materialChecklist(); track opt) {
-              <label class="mat-check">
-                <input type="checkbox" [checked]="materialSelected(opt)" (change)="toggleMaterial(opt)" [attr.aria-label]="opt" />
-                <span>{{ opt }}</span>
-              </label>
-              @if (opt === 'Otro') {
-                <input
-                  class="input mat-custom"
-                  type="text"
-                  [value]="customMaterial()"
-                  (input)="setCustomMaterial($any($event.target).value)"
-                  placeholder="Indica el material…"
-                  aria-label="Otro material"
-                />
-              }
-            }
-          </div>
+          <textarea
+            class="input"
+            rows="2"
+            [value]="metaExplanation()"
+            (input)="metaExplanation.set($any($event.target).value); markDirty()"
+            aria-label="Explicación"
+          ></textarea>
         </div>
         <div class="field">
           <label>Carpeta de destino</label>
-          <select class="input" [value]="metaFolder() ?? ''" (change)="setMetaFolder($any($event.target).value)" aria-label="Carpeta">
+          <select
+            class="input"
+            [value]="metaFolder() ?? ''"
+            (change)="setMetaFolder($any($event.target).value)"
+            aria-label="Carpeta"
+          >
             <option value="">Sin carpeta</option>
             @for (f of folders(); track f.id) {
               <option [value]="f.id">{{ f.name }}</option>
@@ -395,13 +683,33 @@
         <div class="field field-grid2">
           <div>
             <label>Duración (min)</label>
-            <input class="input" type="number" min="0" [value]="metaDuration() ?? ''" (input)="setMetaDuration($any($event.target).value)" />
+            <input
+              class="input"
+              type="number"
+              min="0"
+              [value]="metaDuration() ?? ''"
+              (input)="setMetaDuration($any($event.target).value)"
+            />
           </div>
           <div>
             <label>Jugadores min/max</label>
             <div class="field-inline">
-              <input class="input" type="number" min="0" placeholder="min" [value]="metaMinPlayers() ?? ''" (input)="setMetaMin($any($event.target).value)" />
-              <input class="input" type="number" min="0" placeholder="max" [value]="metaMaxPlayers() ?? ''" (input)="setMetaMax($any($event.target).value)" />
+              <input
+                class="input"
+                type="number"
+                min="0"
+                placeholder="min"
+                [value]="metaMinPlayers() ?? ''"
+                (input)="setMetaMin($any($event.target).value)"
+              />
+              <input
+                class="input"
+                type="number"
+                min="0"
+                placeholder="max"
+                [value]="metaMaxPlayers() ?? ''"
+                (input)="setMetaMax($any($event.target).value)"
+              />
             </div>
           </div>
         </div>
@@ -433,7 +741,11 @@
           <!-- Control semántico/programático: oculto visualmente pero disponible para
                lectores de pantalla y para la API de pruebas (selectOption), y sincronizado
                con la señal del campo. -->
-          <select class="input sr-only" (change)="setField($any($event.target).value)" aria-label="Campo base">
+          <select
+            class="input sr-only"
+            (change)="setField($any($event.target).value)"
+            aria-label="Campo base"
+          >
             @for (f of fieldBaseSpecs; track f.type) {
               <option [value]="f.type" [selected]="field() === f.type">{{ f.label }}</option>
             }
@@ -441,7 +753,12 @@
         </div>
         <div class="field">
           <label>Guía de zonas</label>
-          <select class="input" [value]="guide()" (change)="setGuide($any($event.target).value)" aria-label="Guía de zonas">
+          <select
+            class="input"
+            [value]="guide()"
+            (change)="setGuide($any($event.target).value)"
+            aria-label="Guía de zonas"
+          >
             <option value="none">Sin guía</option>
             <option value="2x2">División 2×2</option>
             <option value="3x3">División 3×3</option>
@@ -462,8 +779,24 @@
           <div class="chips">
             <!-- Decisión de usabilidad (dueño): etiquetas por RESULTADO visual y no
                  "Horizontal/Vertical" (ambiguo). Los valores internos no cambian. -->
-            <button class="chip" [class.chip-active]="orientation() === 'horizontal'" [attr.data-orient]="'horizontal'" aria-label="Orientación {{ orientLabel('horizontal') }}" (click)="setOrientation('horizontal')">{{ orientLabel('horizontal') }}</button>
-            <button class="chip" [class.chip-active]="orientation() === 'vertical'" [attr.data-orient]="'vertical'" aria-label="Orientación {{ orientLabel('vertical') }}" (click)="setOrientation('vertical')">{{ orientLabel('vertical') }}</button>
+            <button
+              class="chip"
+              [class.chip-active]="orientation() === 'horizontal'"
+              [attr.data-orient]="'horizontal'"
+              aria-label="Orientación {{ orientLabel('horizontal') }}"
+              (click)="setOrientation('horizontal')"
+            >
+              {{ orientLabel('horizontal') }}
+            </button>
+            <button
+              class="chip"
+              [class.chip-active]="orientation() === 'vertical'"
+              [attr.data-orient]="'vertical'"
+              aria-label="Orientación {{ orientLabel('vertical') }}"
+              (click)="setOrientation('vertical')"
+            >
+              {{ orientLabel('vertical') }}
+            </button>
           </div>
         </div>
 
@@ -472,7 +805,14 @@
         </div>
         <div class="field">
           <label>Zoom — {{ (zoom() * 100).toFixed(0) }}%</label>
-          <input type="range" min="0.5" max="3" step="0.05" [value]="zoom()" (change)="setZoom(+($any($event.target).value))" />
+          <input
+            type="range"
+            min="0.5"
+            max="3"
+            step="0.05"
+            [value]="zoom()"
+            (change)="setZoom(+$any($event.target).value)"
+          />
         </div>
         <button class="btn btn-ghost btn-sm" (click)="resetView()">Restablecer vista</button>
       </aside>
@@ -482,32 +822,68 @@
       <aside class="side-panel side-panel-left" role="dialog" aria-label="Jugadores">
         <div class="panel-head">
           <h3 class="panel-title">Jugadores</h3>
-          <button class="panel-close" aria-label="Cerrar panel" (click)="toggleJugadores()"><span class="msi">close</span></button>
+          <button class="panel-close" aria-label="Cerrar panel" (click)="toggleJugadores()">
+            <span class="msi">close</span>
+          </button>
         </div>
         <p class="panel-hint">Toca un jugador de la plantilla o crea uno genérico.</p>
         <div class="roster-list">
           @for (p of players(); track p.id) {
             <div class="roster-row">
-              <button class="roster-item" [class.tray-disabled]="placedPlayerIds().has(p.id)" [disabled]="placedPlayerIds().has(p.id)" [title]="placedPlayerIds().has(p.id) ? 'Ya está en el campo' : 'Colocar en el campo'"
+              <button
+                class="roster-item"
+                [class.tray-disabled]="placedPlayerIds().has(p.id)"
+                [disabled]="placedPlayerIds().has(p.id)"
+                [title]="
+                  placedPlayerIds().has(p.id) ? 'Ya está en el campo' : 'Colocar en el campo'
+                "
                 (click)="armRosterPlayer(p)"
-                (pointerdown)="!placedPlayerIds().has(p.id) && beginPanelDrag(rosterDragSpec(p), $event)"
+                (pointerdown)="
+                  !placedPlayerIds().has(p.id) && beginPanelDrag(rosterDragSpec(p), $event)
+                "
                 (pointermove)="trackPanelDrag($event)"
                 (pointerup)="endPanelDrag($event)"
                 (pointercancel)="cancelPanelDrag($event)"
                 (pointerleave)="cancelPanelDrag($event)"
-                (lostpointercapture)="cancelPanelDrag($event)">
-                <span class="mini-avatar" [style.background]="p.color" [style.color]="textColor(p.color)">{{ p.number ?? '·' }}</span>
-                <span class="mini-name">{{ placedPlayerIds().has(p.id) ? 'Ya está en el campo' : p.name }}</span>
+                (lostpointercapture)="cancelPanelDrag($event)"
+              >
+                <span
+                  class="mini-avatar"
+                  [style.background]="p.color"
+                  [style.color]="textColor(p.color)"
+                  >{{ p.number ?? '·' }}</span
+                >
+                <span class="mini-name">{{
+                  placedPlayerIds().has(p.id) ? 'Ya está en el campo' : p.name
+                }}</span>
                 <span class="mini-pos">{{ positionLabel(p.position) }}</span>
               </button>
               <!-- Fase 12: color rápido, sin abrir el inspector. -->
-              <button class="roster-color" [style.background]="p.color" [attr.aria-label]="'Cambiar color de ' + p.name" title="Cambiar color" (click)="toggleRosterColor(p.id, $event)">
+              <button
+                class="roster-color"
+                [style.background]="p.color"
+                [attr.aria-label]="'Cambiar color de ' + p.name"
+                title="Cambiar color"
+                (click)="toggleRosterColor(p.id, $event)"
+              >
                 <span class="msi">palette</span>
               </button>
               @if (rosterColorOpen() === p.id) {
-                <div class="roster-color-menu" (click)="$event.stopPropagation()" role="menu" [attr.aria-label]="'Paleta de color de ' + p.name">
+                <div
+                  class="roster-color-menu"
+                  (click)="$event.stopPropagation()"
+                  role="menu"
+                  [attr.aria-label]="'Paleta de color de ' + p.name"
+                >
                   @for (c of palette; track c) {
-                    <button class="swatch" [style.background]="c" [class.swatch-active]="p.color === c" [attr.aria-label]="'Color ' + colorName(c)" [title]="'Color ' + colorName(c)" (click)="setRosterColor(p.id, c, $event)"></button>
+                    <button
+                      class="swatch"
+                      [style.background]="c"
+                      [class.swatch-active]="p.color === c"
+                      [attr.aria-label]="'Color ' + colorName(c)"
+                      [title]="'Color ' + colorName(c)"
+                      (click)="setRosterColor(p.id, c, $event)"
+                    ></button>
                   }
                 </div>
               }
@@ -525,15 +901,21 @@
              elegido (sin nombre/dorsal fijo/playerId). -->
         <div class="tray-quick" role="group" aria-label="Genéricos por color">
           @for (q of quickGenericColors; track q.c) {
-            <button class="tray-player tray-quick-chip" [title]="'Jugador ' + q.label" [attr.aria-label]="'Jugador genérico ' + q.label"
+            <button
+              class="tray-player tray-quick-chip"
+              [title]="'Jugador ' + q.label"
+              [attr.aria-label]="'Jugador genérico ' + q.label"
               (click)="armGenericColor(q.c, q.label)"
               (pointerdown)="beginPanelDrag(genericDragSpec(q.c, q.label), $event)"
               (pointermove)="trackPanelDrag($event)"
               (pointerup)="endPanelDrag($event)"
               (pointercancel)="cancelPanelDrag($event)"
               (pointerleave)="cancelPanelDrag($event)"
-              (lostpointercapture)="cancelPanelDrag($event)">
-              <span class="mini-avatar" [style.background]="q.c" [style.color]="textColor(q.c)">·</span>
+              (lostpointercapture)="cancelPanelDrag($event)"
+            >
+              <span class="mini-avatar" [style.background]="q.c" [style.color]="textColor(q.c)"
+                >·</span
+              >
               <span class="tray-name">{{ q.label }}</span>
             </button>
           }
@@ -544,7 +926,12 @@
         <div class="formations" role="group" aria-label="Formaciones">
           <p class="panel-hint">Coloca 11 jugadores genéricos del color elegido (sin plantilla).</p>
           <label class="formation-mirror">
-            <input type="checkbox" [checked]="formationMirror()" (change)="setFormationMirror($any($event.target).checked)" aria-label="Reflejar formación en X" />
+            <input
+              type="checkbox"
+              [checked]="formationMirror()"
+              (change)="setFormationMirror($any($event.target).checked)"
+              aria-label="Reflejar formación en X"
+            />
             <span>Reflejar en X (equipo contrario)</span>
           </label>
           <div class="formations-grid">
@@ -569,92 +956,149 @@
       <aside
         class="side-panel side-panel-left tools-panel-side"
         role="dialog"
-        [attr.aria-label]="panelCat() === 'material' ? 'Herramientas de Material' : 'Herramientas de Dibujo'"
+        [attr.aria-label]="
+          panelCat() === 'material' ? 'Herramientas de Material' : 'Herramientas de Dibujo'
+        "
         (keydown.escape)="closeToolPanel()"
       >
-      @switch (panelCat()) {
-        @case ('material') {
-          <div class="panel-head">
-            <div class="tools-panel-title">Material</div>
-            <button class="panel-close" aria-label="Cerrar panel" (click)="closeToolPanel()"><span class="msi">close</span></button>
-          </div>
-          <div class="tools-search">
-            <span class="msi">search</span>
-            <input class="tools-search-input" type="search" [value]="materialQuery()" (input)="setMaterialQuery($any($event.target).value)" placeholder="Buscar material…" aria-label="Buscar material" />
-          </div>
-          <div class="tools-material-groups">
-            @for (grp of materialGroupList(); track grp.label) {
-              <div class="tools-material-group">
-                <div class="tools-material-group-title">{{ grp.label }}</div>
-                @for (t of grp.items; track t.id) {
-                  <div class="tools-material-card">
-                    <button class="rail-btn rail-row" [class.rail-active]="tool() === t.id" [title]="t.title"
-                      (click)="barToolClick(t.id)"
-                      (pointerdown)="beginBarPress(t.id, $event); beginPanelDrag(materialDragSpec(t.id), $event)"
-                      (pointermove)="cancelBarPress($event); trackPanelDrag($event)"
-                      (pointerup)="endBarPress(); endPanelDrag($event)"
-                      (pointercancel)="endBarPress(); cancelPanelDrag($event)"
-                      (pointerleave)="endBarPress(); cancelPanelDrag($event)"
-                      (lostpointercapture)="cancelPanelDrag($event)"
-                      (contextmenu)="openBarVariant($event, t.id)">
-                      <!-- Fase 14/5: miniatura REAL del material (PNG o SVG vectorial del mismo render). -->
-                      @if (materialThumbSrc(t.id)) {
-                        <span class="mat-thumb"><img [src]="materialThumbSrc(t.id)" alt="" loading="lazy"></span>
-                      } @else {
-                        <span class="mat-thumb mat-thumb-vector" [innerHTML]="materialVectorThumbSafe(t.id)"></span>
-                      }
-                      <span class="rail-label">{{ t.title }}</span>
-                    </button>
-                    @if (variantKindsFor(t.id).length > 1) {
-                      <div class="tools-material-variants" role="group" [attr.aria-label]="'Variantes de ' + t.title">
-                        @for (k of variantKindsFor(t.id); track k) {
-                          <button class="variant-swatch" [title]="variantAsset(k)?.label" [attr.aria-label]="variantAsset(k)?.label" [style.background]="variantAsset(k)?.color" [class.sel]="materialVariant()[t.id] === k" (click)="setMaterialVariant(t.id, k)"></button>
-                        }
-                      </div>
-                    }
-                  </div>
-                }
-              </div>
-            }
-          </div>
-        }
-        @case ('dibujo') {
-          <div class="panel-head">
-            <div class="tools-panel-title">Dibujo y formas</div>
-            <button class="panel-close" aria-label="Cerrar panel" (click)="closeToolPanel()"><span class="msi">close</span></button>
-          </div>
-          <div class="tools-panel-list">
-            @for (t of toolGroups.find((g) => g.id === 'dibujo')!.items; track t.id) {
-              <button class="rail-btn rail-row" [class.rail-active]="tool() === t.id" [title]="t.title"
-                (click)="barToolClick(t.id)"
-                (pointerdown)="beginBarPress(t.id, $event)"
-                (pointermove)="cancelBarPress($event)"
-                (pointerup)="endBarPress()"
-                (pointercancel)="endBarPress()"
-                (pointerleave)="endBarPress()"
-                (contextmenu)="openBarVariant($event, t.id)">
-                <span class="msi">{{ t.icon }}</span>
-                <span class="rail-label">{{ t.title }}</span>
+        @switch (panelCat()) {
+          @case ('material') {
+            <div class="panel-head">
+              <div class="tools-panel-title">Material</div>
+              <button class="panel-close" aria-label="Cerrar panel" (click)="closeToolPanel()">
+                <span class="msi">close</span>
               </button>
-            }
-          </div>
+            </div>
+            <div class="tools-search">
+              <span class="msi">search</span>
+              <input
+                class="tools-search-input"
+                type="search"
+                [value]="materialQuery()"
+                (input)="setMaterialQuery($any($event.target).value)"
+                placeholder="Buscar material…"
+                aria-label="Buscar material"
+              />
+            </div>
+            <div class="tools-material-groups">
+              @for (grp of materialGroupList(); track grp.label) {
+                <div class="tools-material-group">
+                  <div class="tools-material-group-title">{{ grp.label }}</div>
+                  @for (t of grp.items; track t.id) {
+                    <div class="tools-material-card">
+                      <button
+                        class="rail-btn rail-row"
+                        [class.rail-active]="tool() === t.id"
+                        [title]="t.title"
+                        (click)="barToolClick(t.id)"
+                        (pointerdown)="
+                          beginBarPress(t.id, $event);
+                          beginPanelDrag(materialDragSpec(t.id), $event)
+                        "
+                        (pointermove)="cancelBarPress($event); trackPanelDrag($event)"
+                        (pointerup)="endBarPress(); endPanelDrag($event)"
+                        (pointercancel)="endBarPress(); cancelPanelDrag($event)"
+                        (pointerleave)="endBarPress(); cancelPanelDrag($event)"
+                        (lostpointercapture)="cancelPanelDrag($event)"
+                        (contextmenu)="openBarVariant($event, t.id)"
+                      >
+                        <!-- Fase 14/5: miniatura REAL del material (PNG o SVG vectorial del mismo render). -->
+                        @if (materialThumbSrc(t.id)) {
+                          <span class="mat-thumb"
+                            ><img [src]="materialThumbSrc(t.id)" alt="" loading="lazy"
+                          /></span>
+                        } @else {
+                          <span
+                            class="mat-thumb mat-thumb-vector"
+                            [innerHTML]="materialVectorThumbSafe(t.id)"
+                          ></span>
+                        }
+                        <span class="rail-label">{{ t.title }}</span>
+                      </button>
+                      @if (variantKindsFor(t.id).length > 1) {
+                        <div
+                          class="tools-material-variants"
+                          role="group"
+                          [attr.aria-label]="'Variantes de ' + t.title"
+                        >
+                          @for (k of variantKindsFor(t.id); track k) {
+                            <button
+                              class="variant-swatch"
+                              [title]="variantAsset(k)?.label"
+                              [attr.aria-label]="variantAsset(k)?.label"
+                              [style.background]="variantAsset(k)?.color"
+                              [class.sel]="materialVariant()[t.id] === k"
+                              (click)="setMaterialVariant(t.id, k)"
+                            ></button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+          @case ('dibujo') {
+            <div class="panel-head">
+              <div class="tools-panel-title">Dibujo y formas</div>
+              <button class="panel-close" aria-label="Cerrar panel" (click)="closeToolPanel()">
+                <span class="msi">close</span>
+              </button>
+            </div>
+            <div class="tools-panel-list">
+              @for (t of toolGroups.find((g) => g.id === 'dibujo')!.items; track t.id) {
+                <button
+                  class="rail-btn rail-row"
+                  [class.rail-active]="tool() === t.id"
+                  [title]="t.title"
+                  (click)="barToolClick(t.id)"
+                  (pointerdown)="beginBarPress(t.id, $event)"
+                  (pointermove)="cancelBarPress($event)"
+                  (pointerup)="endBarPress()"
+                  (pointercancel)="endBarPress()"
+                  (pointerleave)="endBarPress()"
+                  (contextmenu)="openBarVariant($event, t.id)"
+                >
+                  <span class="msi">{{ t.icon }}</span>
+                  <span class="rail-label">{{ t.title }}</span>
+                </button>
+              }
+            </div>
+          }
         }
-      }
-    </aside>
+      </aside>
     }
   </div>
 
   @if (exportMenuOpen()) {
-    <div class="top-pop top-pop-export" role="dialog" aria-label="Exportar" (keydown.escape)="toggleExportMenu()">
+    <div
+      class="top-pop top-pop-export"
+      role="dialog"
+      aria-label="Exportar"
+      (keydown.escape)="toggleExportMenu()"
+    >
       <div class="panel-head">
         <div class="tools-panel-title">Exportar</div>
-        <button class="panel-close" aria-label="Cerrar panel" (click)="toggleExportMenu()"><span class="msi">close</span></button>
+        <button class="panel-close" aria-label="Cerrar panel" (click)="toggleExportMenu()">
+          <span class="msi">close</span>
+        </button>
       </div>
-      <button class="rail-btn rail-row" title="Descargar PNG" aria-label="Descargar PNG" (click)="exportPng(); toggleExportMenu()">
+      <button
+        class="rail-btn rail-row"
+        title="Descargar PNG"
+        aria-label="Descargar PNG"
+        (click)="exportPng(); toggleExportMenu()"
+      >
         <span class="msi">image</span>
         <span class="rail-label">Descargar PNG</span>
       </button>
-      <button class="rail-btn rail-row" title="Exportar con opciones (PNG)" aria-label="Exportar con opciones" (click)="openExport(); toggleExportMenu()">
+      <button
+        class="rail-btn rail-row"
+        title="Exportar con opciones (PNG)"
+        aria-label="Exportar con opciones"
+        (click)="openExport(); toggleExportMenu()"
+      >
         <span class="msi">tune</span>
         <span class="rail-label">Opciones de exportación…</span>
       </button>
@@ -665,21 +1109,40 @@
     <div class="top-pop top-pop-mas" role="dialog" aria-label="Más" (keydown.escape)="closeMas()">
       <div class="panel-head">
         <div class="tools-panel-title">Más</div>
-        <button class="panel-close" aria-label="Cerrar panel" (click)="closeMas()"><span class="msi">close</span></button>
+        <button class="panel-close" aria-label="Cerrar panel" (click)="closeMas()">
+          <span class="msi">close</span>
+        </button>
       </div>
       <!-- Lote B: Deshacer/Rehacer también aquí, para que en TÁCTIL no haya que mantener
            pulsado el objeto para abrir el menú contextual. NO se devuelven a la barra
            persistente (`.tools-persist`): en 360 px sus 7 controles ya ocupan una única
            fila y dos botones más de 40 px la harían desbordar (ver board.component.scss). -->
-      <button class="rail-btn rail-row" [disabled]="!canUndo()" title="Deshacer (Ctrl+Z)" aria-label="Deshacer" (click)="undo(); closeMas()">
+      <button
+        class="rail-btn rail-row"
+        [disabled]="!canUndo()"
+        title="Deshacer (Ctrl+Z)"
+        aria-label="Deshacer"
+        (click)="undo(); closeMas()"
+      >
         <span class="msi">undo</span>
         <span class="rail-label">Deshacer</span>
       </button>
-      <button class="rail-btn rail-row" [disabled]="!canRedo()" title="Rehacer (Ctrl+Y)" aria-label="Rehacer" (click)="redo(); closeMas()">
+      <button
+        class="rail-btn rail-row"
+        [disabled]="!canRedo()"
+        title="Rehacer (Ctrl+Y)"
+        aria-label="Rehacer"
+        (click)="redo(); closeMas()"
+      >
         <span class="msi">redo</span>
         <span class="rail-label">Rehacer</span>
       </button>
-      <button class="rail-btn rail-row btn-danger-row" title="Limpiar pizarra" aria-label="Limpiar pizarra" (click)="clearAll(); closeMas()">
+      <button
+        class="rail-btn rail-row btn-danger-row"
+        title="Limpiar pizarra"
+        aria-label="Limpiar pizarra"
+        (click)="clearAll(); closeMas()"
+      >
         <span class="msi">cleaning_services</span>
         <span class="rail-label">Limpiar pizarra</span>
       </button>
@@ -693,10 +1156,22 @@
       <!-- Fase 3: Deshacer/Rehacer se retiran de la barra permanente y pasan al menú
            contextual (pulsación larga / clic derecho) y al menú «Más». Se conservan
            Ctrl+Z / Ctrl+Y. En móvil, «Más» es la vía sin pulsación larga. -->
-      <button class="rail-btn" [class.rail-active]="tool() === 'select'" title="Seleccionar y mover" aria-label="Seleccionar y mover" (click)="setTool('select')">
+      <button
+        class="rail-btn"
+        [class.rail-active]="tool() === 'select'"
+        title="Seleccionar y mover"
+        aria-label="Seleccionar y mover"
+        (click)="setTool('select')"
+      >
         <span class="msi">near_me</span>
       </button>
-      <button class="rail-btn" [class.rail-active]="tool() === 'hand'" title="Desplazar campo" aria-label="Desplazar campo" (click)="setTool('hand')">
+      <button
+        class="rail-btn"
+        [class.rail-active]="tool() === 'hand'"
+        title="Desplazar campo"
+        aria-label="Desplazar campo"
+        (click)="setTool('hand')"
+      >
         <span class="msi">pan_tool</span>
       </button>
       <div class="tools-sep"></div>
@@ -734,10 +1209,26 @@
     <div class="tools-caption" [class.tools-caption-color]="isColorTool()">
       <span class="tools-caption-title">{{ activeToolTitle() }}</span>
       <!-- Bloque E: trazo Continuo/Discontinuo para Línea y Flecha (preferencia por herramienta). -->
-      @if (tool() === 'line' || tool() === 'arrow' || tool() === 'doubleArrow' || tool() === 'measure') {
+      @if (
+        tool() === 'line' || tool() === 'arrow' || tool() === 'doubleArrow' || tool() === 'measure'
+      ) {
         <div class="chips" role="group" aria-label="Estilo de trazo">
-          <button class="chip" [class.chip-active]="lineStyleCurrent() === 'solid'" (click)="setToolLineStyle(tool(), 'solid')" aria-label="Trazo continuo">Continuo</button>
-          <button class="chip" [class.chip-active]="lineStyleCurrent() === 'dashed'" (click)="setToolLineStyle(tool(), 'dashed')" aria-label="Trazo discontinuo">Discontinuo</button>
+          <button
+            class="chip"
+            [class.chip-active]="lineStyleCurrent() === 'solid'"
+            (click)="setToolLineStyle(tool(), 'solid')"
+            aria-label="Trazo continuo"
+          >
+            Continuo
+          </button>
+          <button
+            class="chip"
+            [class.chip-active]="lineStyleCurrent() === 'dashed'"
+            (click)="setToolLineStyle(tool(), 'dashed')"
+            aria-label="Trazo discontinuo"
+          >
+            Discontinuo
+          </button>
         </div>
       }
       @if (isColorTool()) {
@@ -755,19 +1246,59 @@
         </div>
         @if (tool() === 'rect' || tool() === 'ellipse') {
           <div class="chips">
-            <button class="chip" [class.chip-active]="!shapeFill()" (click)="setShapeFill(false)">Perímetro</button>
-            <button class="chip" [class.chip-active]="shapeFill()" (click)="setShapeFill(true)">Relleno</button>
+            <button class="chip" [class.chip-active]="!shapeFill()" (click)="setShapeFill(false)">
+              Perímetro
+            </button>
+            <button class="chip" [class.chip-active]="shapeFill()" (click)="setShapeFill(true)">
+              Relleno
+            </button>
           </div>
           @if (shapeFill()) {
             <!-- Fase 10: el relleno usa el mismo color que el perímetro, solo se elige
                  la opacidad. Se retira el selector independiente de color de relleno. -->
             <div class="chips">
-              <button class="chip" [class.chip-active]="fillOpacity() === undefined" (click)="setFillOpacity(undefined)">Auto</button>
-              <button class="chip" [class.chip-active]="fillOpacity() === 0.1" (click)="setFillOpacity(0.1)">10%</button>
-              <button class="chip" [class.chip-active]="fillOpacity() === 0.2" (click)="setFillOpacity(0.2)">20%</button>
-              <button class="chip" [class.chip-active]="fillOpacity() === 0.35" (click)="setFillOpacity(0.35)">35%</button>
-              <button class="chip" [class.chip-active]="fillOpacity() === 0.5" (click)="setFillOpacity(0.5)">50%</button>
-              <button class="chip" [class.chip-active]="fillOpacity() === 0.7" (click)="setFillOpacity(0.7)">70%</button>
+              <button
+                class="chip"
+                [class.chip-active]="fillOpacity() === undefined"
+                (click)="setFillOpacity(undefined)"
+              >
+                Auto
+              </button>
+              <button
+                class="chip"
+                [class.chip-active]="fillOpacity() === 0.1"
+                (click)="setFillOpacity(0.1)"
+              >
+                10%
+              </button>
+              <button
+                class="chip"
+                [class.chip-active]="fillOpacity() === 0.2"
+                (click)="setFillOpacity(0.2)"
+              >
+                20%
+              </button>
+              <button
+                class="chip"
+                [class.chip-active]="fillOpacity() === 0.35"
+                (click)="setFillOpacity(0.35)"
+              >
+                35%
+              </button>
+              <button
+                class="chip"
+                [class.chip-active]="fillOpacity() === 0.5"
+                (click)="setFillOpacity(0.5)"
+              >
+                50%
+              </button>
+              <button
+                class="chip"
+                [class.chip-active]="fillOpacity() === 0.7"
+                (click)="setFillOpacity(0.7)"
+              >
+                70%
+              </button>
             </div>
           }
         }
@@ -777,11 +1308,24 @@
 
   @if (barVariant()) {
     <div class="bar-variant-backdrop" (click)="closeBarVariant()" aria-hidden="true"></div>
-    <div class="bar-variant-pop" role="dialog" aria-label="Elegir variante" (click)="$event.stopPropagation()" (keydown.escape)="closeBarVariant()">
+    <div
+      class="bar-variant-pop"
+      role="dialog"
+      aria-label="Elegir variante"
+      (click)="$event.stopPropagation()"
+      (keydown.escape)="closeBarVariant()"
+    >
       <div class="bar-variant-title">Variante de {{ activeToolTitle() }}</div>
       <div class="bar-variant-list">
         @for (k of variantKindsFor(barVariant()!); track k) {
-          <button class="variant-swatch" [title]="variantAsset(k)?.label" [attr.aria-label]="variantAsset(k)?.label" [style.background]="variantAsset(k)?.color" [class.sel]="materialVariant()[barVariant()!] === k" (click)="pickBarVariant(barVariant()!, k)"></button>
+          <button
+            class="variant-swatch"
+            [title]="variantAsset(k)?.label"
+            [attr.aria-label]="variantAsset(k)?.label"
+            [style.background]="variantAsset(k)?.color"
+            [class.sel]="materialVariant()[barVariant()!] === k"
+            (click)="pickBarVariant(barVariant()!, k)"
+          ></button>
         }
       </div>
     </div>
@@ -789,11 +1333,24 @@
 
   @if (barColor()) {
     <div class="bar-variant-backdrop" (click)="closeBarColor()" aria-hidden="true"></div>
-    <div class="bar-variant-pop" role="dialog" [attr.aria-label]="'Elegir color de ' + barColorTitle()" (click)="$event.stopPropagation()" (keydown.escape)="closeBarColor()">
+    <div
+      class="bar-variant-pop"
+      role="dialog"
+      [attr.aria-label]="'Elegir color de ' + barColorTitle()"
+      (click)="$event.stopPropagation()"
+      (keydown.escape)="closeBarColor()"
+    >
       <div class="bar-variant-title">Color de {{ barColorTitle() }}</div>
       <div class="bar-variant-list swatches">
         @for (c of palette; track c) {
-          <button class="swatch" [style.background]="c" [class.swatch-active]="colorFor(barColor()!) === c" [attr.aria-label]="'Color ' + colorName(c)" [title]="'Color ' + colorName(c)" (click)="pickBarColor(c)"></button>
+          <button
+            class="swatch"
+            [style.background]="c"
+            [class.swatch-active]="colorFor(barColor()!) === c"
+            [attr.aria-label]="'Color ' + colorName(c)"
+            [title]="'Color ' + colorName(c)"
+            (click)="pickBarColor(c)"
+          ></button>
         }
       </div>
     </div>
@@ -815,16 +1372,44 @@
   }
 
   @if (fieldDialogOpen()) {
-    <div class="unsaved-backdrop" (click)="decideFieldChange('cancel')" (document:keydown.escape)="decideFieldChange('cancel')">
-      <div class="unsaved field-change-dialog" role="dialog" aria-modal="true" aria-label="Cambiar de campo" (click)="$event.stopPropagation()">
+    <div
+      class="unsaved-backdrop"
+      (click)="decideFieldChange('cancel')"
+      (document:keydown.escape)="decideFieldChange('cancel')"
+    >
+      <div
+        class="unsaved field-change-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Cambiar de campo"
+        (click)="$event.stopPropagation()"
+      >
         <div class="unsaved-head">
           <h3>Cambiar a medio campo</h3>
-          <button class="btn btn-ghost btn-icon" aria-label="Cerrar" (click)="decideFieldChange('cancel')"><span class="msi">close</span></button>
+          <button
+            class="btn btn-ghost btn-icon"
+            aria-label="Cerrar"
+            (click)="decideFieldChange('cancel')"
+          >
+            <span class="msi">close</span>
+          </button>
         </div>
-        <p class="unsaved-msg">Vas a cambiar de campo completo a un medio campo. ¿Cómo quieres conservar los elementos?</p>
+        <p class="unsaved-msg">
+          Vas a cambiar de campo completo a un medio campo. ¿Cómo quieres conservar los elementos?
+        </p>
         <div class="unsaved-actions">
-          <button class="btn btn-primary" (click)="decideFieldChange('two-halves')">Dos medios campos — recomendado</button>
-          <button class="btn btn-ghost" (click)="decideFieldChange('fit-half')">Encajar todo en un medio campo</button>
+          <button class="btn btn-primary" (click)="decideFieldChange('two-halves')">
+            Dos medios campos — recomendado
+          </button>
+          <button class="btn btn-ghost" (click)="decideFieldChange('fit-half')">
+            Encajar todo en un medio campo
+          </button>
+          <!-- Petición del dueño: poder cambiar de campo CONSERVANDO los objetos donde están,
+               sin obligar a elegir entre «dos medios campos» y «encajar». Es la única forma de
+               llegar a F7 (o a cualquier campo de media extensión) sin recolocar nada. -->
+          <button class="btn btn-ghost" (click)="decideFieldChange('keep')">
+            Mantener los objetos donde están
+          </button>
           <button class="btn btn-ghost" (click)="decideFieldChange('cancel')">Cancelar</button>
         </div>
       </div>
@@ -839,11 +1424,23 @@
   }
 
   @if (unsavedOpen()) {
-    <div class="unsaved-backdrop" (click)="closeUnsaved()" (document:keydown.escape)="closeUnsaved()">
-      <div class="unsaved" role="dialog" aria-modal="true" aria-label="Cambios sin guardar" (click)="$event.stopPropagation()">
+    <div
+      class="unsaved-backdrop"
+      (click)="closeUnsaved()"
+      (document:keydown.escape)="closeUnsaved()"
+    >
+      <div
+        class="unsaved"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Cambios sin guardar"
+        (click)="$event.stopPropagation()"
+      >
         <div class="unsaved-head">
           <h3>Cambios sin guardar</h3>
-          <button class="btn btn-ghost btn-icon" aria-label="Cerrar" (click)="closeUnsaved()"><span class="msi">close</span></button>
+          <button class="btn btn-ghost btn-icon" aria-label="Cerrar" (click)="closeUnsaved()">
+            <span class="msi">close</span>
+          </button>
         </div>
         <p class="unsaved-msg">Hay cambios sin guardar en esta pizarra. ¿Qué quieres hacer?</p>
         <div class="unsaved-actions">

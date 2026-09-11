@@ -295,8 +295,6 @@ select {
 .studio-panel .field-inline,
 .studio-panel .chips,
 .studio-panel .field-gallery,
-.studio-panel .material-checklist,
-.studio-panel .mat-check,
 .studio-panel .inspector-actions {
   min-width: 0;
 }
@@ -566,46 +564,6 @@ select {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
-}
-
-// FASE 8: checklist de "Material necesario".
-.material-checklist {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  // Contener el ancho: no empuja el panel (overflow horizontal).
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.mat-check {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  cursor: pointer;
-  min-width: 0;
-  overflow: hidden;
-
-  input[type='checkbox'] {
-    accent-color: #2563eb;
-    flex-shrink: 0;
-  }
-
-  // El texto envuelve/recorta en vez de empujar el ancho.
-  span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-  }
-}
-
-.mat-custom {
-  grid-column: 1 / -1;
-  margin-top: 2px;
-  min-width: 0;
 }
 
 .edit-sep {

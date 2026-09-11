@@ -100,10 +100,9 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   await expect(page.locator('[aria-label="Título del ejercicio"]')).toHaveValue('Salida de balón 4-3-3');
   await expect(page.locator('[aria-label="Descripción"]')).toHaveValue(/Posesión y salida limpia/);
   await expect(page.locator('[aria-label="Explicación"]')).toHaveValue(/Circular el balón/);
-  // FASE 8: "Material necesario" es un checklist. El material del borrador IA
-  // ("2 miniporterías") se muestra como opción marcada.
-  await expect(page.locator('.material-checklist input[aria-label="2 miniporterías"]')).toBeChecked();
-  await expect(page.locator('.material-checklist')).toContainText('miniporterías');
+  // El material del borrador IA («2 miniporterías») llega al MODELO; el checklist del panel se
+  // retiró por decisión del dueño, así que aquí solo se comprueba que el borrador lo trae.
+  expect(DRAFT.material, 'el borrador trae su material').toMatch(/miniporterías/i);
 
   // 2) EDITAR: mover el primer jugador.
   const playerSel = '.board-canvas svg [data-el-type="player"]';
@@ -159,8 +158,16 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   const savedTitle = await page.locator('[aria-label="Título del ejercicio"]').inputValue();
   expect(savedTitle, 'el título guardado se conserva').toBe('Salida de balón 4-3-3');
   await expect(page.locator('[aria-label="Descripción"]')).toHaveValue(/Posesión y salida limpia/);
-  // FASE 8: material como checkbox (se conserva al reabrir).
-  await expect(page.locator('.material-checklist input[aria-label="2 miniporterías"]')).toBeChecked();
+  // El material del borrador («2 miniporterías») se conserva en el MODELO del ejercicio aunque
+  // el checklist del panel se haya retirado por decisión del dueño: ya no hay checkbox que
+  // comprobar, así que se comprueba el dato guardado.
+  const guardado = await page.evaluate(
+    () => (JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]') as Array<{ materials?: string[] }>)[0],
+  );
+  expect(
+    (guardado?.materials ?? []).join(' '),
+    'el material del borrador se conserva al guardar y reabrir',
+  ).toMatch(/miniporterías/i);
   const saveCount = Number(await page.locator('.field-count').innerText());
   expect(saveCount, 'los elementos del borrador se conservan').toBeGreaterThanOrEqual(25);
 });

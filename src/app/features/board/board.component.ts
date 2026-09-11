@@ -22,7 +22,6 @@ import {
   Exercise,
   ExerciseCategory,
   EXERCISE_CATEGORIES,
-  MATERIAL_OPTIONS,
   F7Overlay,
 } from '../../core/models';
 import {
@@ -666,7 +665,7 @@ export class BoardComponent {
   /** Abre el diálogo de conversión al cambiar de campo completo a un medio campo. */
   protected readonly fieldDialogOpen = signal(false);
   /** Aplica la opción elegida en el diálogo de conversión de campo. */
-  protected decideFieldChange(mode: 'two-halves' | 'fit-half' | 'cancel'): void {
+  protected decideFieldChange(mode: 'two-halves' | 'fit-half' | 'keep' | 'cancel'): void {
     const target = this.fieldChangePlan();
     if (mode === 'cancel' || !target) {
       this.fieldDialogOpen.set(false);
@@ -675,12 +674,13 @@ export class BoardComponent {
     }
     // Aplicar la conversión según la opción: "Dos medios campos" encaja el ejercicio
     // en la primera mitad (manteniendo todo); "Encajar todo" conserva todos los elementos
-    // y escala la composición a un medio. Ambos no recortan ni borran nada.
+    // y escala la composición a un medio; "Conservar objetos" cambia al campo PEDIDO sin
+    // tocar ninguna coordenada. Ninguna opción recorta ni borra nada.
     this.applyFieldChange(target, mode);
     this.fieldDialogOpen.set(false);
     this.fieldChangePlan.set(null);
   }
-  private applyFieldChange(f: FieldType, mode: 'two-halves' | 'fit-half'): void {
+  private applyFieldChange(f: FieldType, mode: 'two-halves' | 'fit-half' | 'keep'): void {
     this.beginHistory();
     // A2: "Dos medios campos" y "Encajar todo" son REALMENTE distintas.
     //  - 'two-halves' → campo `two_halves`: conserva las coordenadas normalizadas (la
@@ -688,11 +688,18 @@ export class BoardComponent {
     //  - 'fit-half'   → campo `half`: conserva TODOS los elementos y ESCALA la
     //    composición para que quepa en el rectángulo del medio campo (×0,5 del largo),
     //    sin mandar ninguna coordenada fuera de [0,1].
+    //  - 'keep'       → el campo PEDIDO (F7 incluido) conservando las coordenadas tal cual.
+    //    Faltaba: con las dos opciones anteriores era IMPOSIBLE llegar a F7 teniendo objetos,
+    //    porque ninguna de las dos deja el campo en `f7` (una va a `two_halves` y la otra a
+    //    `half`). Verificado en `e2e/fase-j-campos-vista` (matriz de los 8 campos).
     const vertical = this.orientation() === 'vertical';
     if (mode === 'two-halves') {
       // Siempre conserva coordenadas: campo `two_halves` (o el destino de media extensión).
       this.frames.set(mapFramesToTwoHalves(this.frames(), vertical));
       this.field.set('two_halves');
+    } else if (mode === 'keep') {
+      // El campo pedido, sin tocar las coordenadas de ningún elemento.
+      this.field.set(f);
     } else {
       // "Encajar todo en un medio campo": conserva TODOS los elementos y ESCALA la
       // composición para que quepa en el rectángulo del campo de media extensión destino.
@@ -708,6 +715,10 @@ export class BoardComponent {
 
   protected setOrientation(o: 'horizontal' | 'vertical'): void {
     this.orientation.set(o);
+    // Igual que al cambiar de campo: girar la orientación cambia la forma del campo (una mitad
+    // vertical es mucho más ancha que alta), así que en «ver campo completo» se vuelve al
+    // encuadre neutro para que el campo siga viéndose entero.
+    if (!this.fillScreen()) this.resetView();
     this.markDirty();
   }
 
@@ -741,6 +752,11 @@ export class BoardComponent {
     } catch {
       /* sin persistencia: el modo se mantiene solo en memoria */
     }
+    // Pedido del dueño: «Ver campo completo» (el modo llenar se apaga) tiene que mostrar el
+    // campo ENTERO de verdad. Antes solo cambiaba el modo, así que un zoom de rueda >100 %
+    // seguía recortando el campo — y en un medio campo VERTICAL (más ancho que alto) no había
+    // forma de verlo completo. Al pasar a ver-completo se restablece también zoom y paneo.
+    if (!next) this.resetView();
     // La pista de recorrido se muestra la primera vez que se actíva el modo Llenar
     // pantalla (por defecto en móvil o al alternar aquí). Solo aparece una vez.
     if (next) this.maybeShowFillHint();
@@ -860,6 +876,16 @@ export class BoardComponent {
     this.panX.set(0);
     this.panY.set(0);
   }
+  /** La vista tiene zoom o paneo aplicados (ya no es el encuadre neutro). Sirve para ofrecer
+   *  el botón «Volver al encuadre» SOLO cuando hace falta: el dueño pidió poder hacer zoom y
+   *  poder deshacerlo, y con la rueda el zoom podía dejarse puesto sin forma evidente de
+   *  volver a ver el campo entero (sobre todo en un medio campo vertical). */
+  protected readonly vistaAlterada = computed(
+    () =>
+      Math.abs(this.zoom() - 1) > 0.001 ||
+      Math.abs(this.panX()) > 0.5 ||
+      Math.abs(this.panY()) > 0.5,
+  );
   protected hostWheel(evt: WheelEvent): void {
     evt.preventDefault();
     this.setZoom(this.zoom() * (evt.deltaY < 0 ? 1.1 : 0.9));
@@ -1073,38 +1099,6 @@ export class BoardComponent {
     const teamId = this.store.activeTeam()?.id;
     return teamId ? this.store.getFoldersForTeam(teamId) : this.store.folders();
   });
-  /** FASE 8: lista de materiales del checklist. */
-  protected readonly materialOptions = MATERIAL_OPTIONS;
-  /** Valor personalizado de "Otro" del checklist. */
-  protected readonly customMaterial = signal('');
-  /** Establece la lista de materiales a partir del checklist (sin duplicados). */
-  protected setMetaMaterials(v: string[]): void {
-    this.metaMaterials.set([...new Set(v.map((m) => m.trim()).filter((m) => m.length > 0))]);
-    this.markDirty();
-  }
-  /** Alterna una opción del checklist (incluye "Otro" junto a su valor personalizado). */
-  protected toggleMaterial(opt: string): void {
-    const cur = this.metaMaterials();
-    this.setMetaMaterials(cur.includes(opt) ? cur.filter((m) => m !== opt) : [...cur, opt]);
-  }
-  /** Marca si una opción del checklist está seleccionada. */
-  protected materialSelected(opt: string): boolean {
-    return this.metaMaterials().includes(opt);
-  }
-  /** Lista efectiva del checklist: opciones estándar + cualquier material guardado que
-   *  no sea estándar (para que un ejercicio antiguo conserve y muestre su material,
-   *  aunque no coincida con la lista nueva). */
-  protected readonly materialChecklist = computed<string[]>(() => {
-    const saved = this.metaMaterials().filter((m) => !MATERIAL_OPTIONS.includes(m));
-    return [...MATERIAL_OPTIONS, ...saved];
-  });
-  /** Aplica el valor de "Otro": cuando se escribe, se añade como material personalizado. */
-  protected setCustomMaterial(v: string): void {
-    this.customMaterial.set(v);
-    const others = this.metaMaterials().filter((m) => m !== 'Otro');
-    if (v.trim()) this.setMetaMaterials([...others, 'Otro']);
-    else this.setMetaMaterials(others.filter((m) => m !== 'Otro'));
-  }
   protected setMetaTitle(v: string): void {
     this.metaTitle.set(v);
     this.markDirty();
@@ -2064,6 +2058,11 @@ export class BoardComponent {
       return;
     }
     this.field.set(f);
+    // Pedido del dueño: al CAMBIAR de campo la vista vuelve a su encuadre neutro en el modo
+    // «ver campo completo» (zoom 100 %, sin paneo), para que el campo nuevo —que puede ser más
+    // alto o más ancho— se vea ENTERO y no heredado del encuadre del campo anterior. En modo
+    // «Llenar pantalla» no se toca: ahí el recorte es intencionado.
+    if (!this.fillScreen()) this.resetView();
     // El medio campo por defecto se muestra en VERTICAL (portería arriba, línea de
     // medio campo abajo) en escritorio/tablet. Decisión del dueño (usabilidad móvil):
     // en un ejercicio NUEVO desde móvil se mantiene HORIZONTAL/paisaje por defecto
@@ -3060,10 +3059,6 @@ export class BoardComponent {
     const el = this.buildPlayerElement(p, spec);
     this.addElement(el);
     return el.id;
-  }
-
-  protected toolHint(): string {
-    return toolHintFor(this.tool());
   }
 
   protected positionLabel(pos: Position): string {

@@ -750,9 +750,9 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     await page.locator('.studio-panel input[aria-label="Título del ejercicio"]').fill('Rondos de pase y recepción');
     await page.locator('.studio-panel select[aria-label="Categoría"]').selectOption('Táctica');
     await page.locator('.studio-panel textarea[aria-label="Descripción"]').fill('Conservación en superioridad con pase al apoyo');
-    // FASE 8: "Material necesario" es un checklist; se marcan Conos y Balones.
-    await page.locator('.material-checklist .mat-check', { hasText: 'Conos' }).locator('input').check();
-    await page.locator('.material-checklist .mat-check', { hasText: 'Balones' }).locator('input').check();
+    // Decisión del dueño: el checklist «Material necesario» se retira del panel, así que el
+    // material ya no se marca por la UI. La tarjeta de Biblioteca no depende de él (miniatura,
+    // título, descripción, duración, jugadores, categoría y carpeta se comprueban abajo).
     await page.locator('.studio-panel select[aria-label="Carpeta"]').selectOption('f1');
     const dur = page.locator('.studio-panel .field-grid2 > div').nth(0).locator('input');
     await dur.fill('14');

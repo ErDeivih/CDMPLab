@@ -1,4 +1,5 @@
 import { CanvasElement, FieldType, F7Overlay } from './models';
+import { CANONICAL_MATERIALS } from './material-registry';
 import { FIELD_RECT, fieldSvg, FIELD_LINE_WIDTH, fieldGeometry, fieldObjectScale, STRIP_FRAC, STRIP_MARGIN_NORM, OFFICIAL_PITCH_COLOR, OFFICIAL_GRASS_MODE } from './field';
 import { f7Geometry } from './f7';
 import { materialBaseSize, materialHitFrac } from './tactic-assets';
@@ -65,6 +66,11 @@ export interface Geometry {
 
 // Proporción real de un campo 105×68 m. En horizontal, el largo va en X.
 const HORIZONTAL: Geometry = { vbW: VB_W, vbH: VB_H, rect: { x: 4, y: 10, w: 92, h: 92 / (105 / 68) }, vertical: false };
+
+/** Tipos de MATERIAL: su dibujo tiene un «arriba» propio (un cono con la base hacia abajo, una
+ *  portería, una miniportería, una escalera, una pica…). Fuente única: el registro canónico de
+ *  materiales, de modo que añadir un material nuevo lo incluye sin tocar el render. */
+const UPRIGHT_MATERIAL_TYPES: ReadonlySet<string> = new Set(CANONICAL_MATERIALS.map((c) => c.id));
 
 /**
  * Rect canónico del contenido (largo→X, ancho→Y). Campo + elementos + asas se
@@ -1195,7 +1201,20 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
         (el.fillOpacity != null ? ` data-fill-opacity="${el.fillOpacity}"` : '') +
         (el.t === 'player' ? ` data-side="${el.side ?? ''}" data-kind="${el.type ?? ''}" data-player-id="${el.playerId ?? ''}"` : '') +
         (el.assetKind ? ` data-asset-kind="${el.assetKind}"` : '');
-      return `<g ${attrs}>${inner}</g>`;
+      // Pedido del dueño: los MATERIALES se ven SIEMPRE derechos por pantalla, sea cual sea el
+      // tipo y la orientación del campo (un cono siempre con la base hacia abajo; portería,
+      // miniportería, escalera y pica siempre con la misma orientación). El grupo exterior rota
+      // 90° cuando el campo es vertical, así que el material se contrarrota -90° sobre SU punto:
+      // la POSICIÓN sigue al campo, el DIBUJO no. Líneas, flechas, figuras, zonas y textos NO se
+      // contrarrotan: forman parte del dibujo táctico y deben girar con el campo.
+      // Se aplica al envoltorio `[data-el-type]`, sin añadir ni tocar ningún grupo interno: el
+      // primer `translate(...)` del elemento sigue siendo el suyo (las pruebas que lo leen, y el
+      // hit-test, no cambian).
+      const upright =
+        isVertical && (UPRIGHT_MATERIAL_TYPES.has(el.t) || !!el.asset)
+          ? ` transform="rotate(-90 ${px(el.x ?? 0, contentRect)} ${py(el.y ?? 0, contentRect)})"`
+          : '';
+      return `<g ${attrs}${upright}>${inner}</g>`;
     })
     .join('');
   const guide = opts.guide && opts.guide !== 'none' ? guideSvg(opts.guide, lc, contentRect) : '';
