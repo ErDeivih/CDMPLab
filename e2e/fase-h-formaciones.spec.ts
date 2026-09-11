@@ -204,6 +204,19 @@ test.describe('FASE H — formaciones aplicadas de verdad', () => {
     await showCategory(page, 'Jugadores');
     await page.locator('.formation-btn', { hasText: '4-4-2' }).click();
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(11);
+    // La recolocación es un cambio de MODELO y su pintado llega en el fotograma siguiente: se
+    // espera a que el SVG lo refleje antes de comparar, en vez de leer una sola vez tras el clic.
+    // Medido (20 repeticiones del escenario, ~1 fallo): leer inmediatamente devolvía los vectores
+    // de 4-3-3 y parecía que la formación no se aplicaba, cuando la app SÍ la aplicaba (traza del
+    // componente: `formationId: '4-4-2'`, 11 specs, 1 bloqueado) y dos fotogramas después las
+    // posiciones eran las correctas. El contador no servía de espera porque ya valía 11 antes del
+    // clic. El lado equivocado era la PRUEBA, no el producto.
+    await expect
+      .poll(async () => (await playerPoints(page)).some((pt) => !antes.includes(pt)), {
+        message: 'la segunda formación llega a pintarse',
+        timeout: 5000,
+      })
+      .toBe(true);
 
     const despues = await playerPoints(page);
     expect(despues.length, 'el bloqueado ni se duplica ni se pierde').toBe(11);
