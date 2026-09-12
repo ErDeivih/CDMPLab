@@ -28,8 +28,7 @@ import {
   FIELD_RECT,
   FIELD_BASE_SPECS,
   fieldGeometry,
-  fieldSvg,
-  FIELD_LINE_WIDTH,
+  fieldPreviewSvg,
   fieldObjectScale,
   orientationLabel,
 } from '../../core/field';
@@ -1802,11 +1801,18 @@ export class BoardComponent {
     const g = this.geo();
     const fit = this.fillScreen() ? 'height' : 'contain';
     const s = fit === 'height' ? this.fillScale(r, g) : Math.min(r.width / g.vbW, r.height / g.vbH);
-    return hitTestElement(p, view, g.rect, this.objectScale(), {
-      screenPx,
-      zoom: this.zoom(),
-      scale: s,
-    });
+    return hitTestElement(
+      p,
+      view,
+      g.rect,
+      this.objectScale(),
+      {
+        screenPx,
+        zoom: this.zoom(),
+        scale: s,
+      },
+      g.vertical,
+    );
   }
 
   /** Caja envolvente (normalizada 0..1) de un elemento, por familia. Se usa para
@@ -2402,17 +2408,9 @@ export class BoardComponent {
    *  orientación de ese momento y, al pulsarlo, el campo se ponía en vertical, así que en
    *  escritorio la tarjeta prometía algo distinto de lo que hacía. */
   protected fieldPreviewSafe(field: FieldType): SafeHtml {
-    const o = this.orientationForField(field);
-    const geo = fieldGeometry(field, o);
-    const fieldStr = fieldSvg(field, geo.rect, o);
-    const svg =
-      `<svg class="field-preview-svg" viewBox="0 0 ${geo.vbW} ${geo.vbH}" xmlns="http://www.w3.org/2000/svg">` +
-      `<g fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" stroke-linecap="round">` +
-      (o === 'vertical'
-        ? `<g transform="translate(${geo.vbW / 2 + (geo.rect.y + geo.rect.h / 2)} 0) rotate(90)">${fieldStr}</g>`
-        : fieldStr) +
-      `</g></svg>`;
-    return this.sanitizer.bypassSecurityTrustHtml(svg);
+    return this.sanitizer.bypassSecurityTrustHtml(
+      fieldPreviewSvg(field, this.orientationForField(field)),
+    );
   }
 
   /** Estado seleccionado de una tarjeta de la galería de campos. */

@@ -1466,6 +1466,43 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.inspector')).toBeVisible();
   });
 
+  test('la barra contextual NO tapa el panel de Propiedades ni su botón de cerrar (escritorio)', async ({ page }) => {
+    await seed(page);
+    await page.goto('/board');
+    const box = (await page.locator('.board-host').boundingBox())!;
+    // Cono, seleccionado.
+    await page.locator('.tools-cat', { hasText: 'Material' }).click();
+    await page.locator('.rail-btn[title="Cono"]').click();
+    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+    await expect(page.locator('.field-count')).toHaveText('1');
+    await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
+    const img = (await page.locator('.board-canvas image').first().boundingBox())!;
+
+    // REGRESIÓN (medida en móvil y verificada aquí): la barra contextual llevaba `z-index: 89`
+    // y se montaba ENCIMA de los paneles laterales (`z-index: 40`), tapando su botón de cerrar:
+    // el clic se quedaba colgado sin completarse y el panel era IMPOSIBLE de cerrar. Con la
+    // barra en 39 los paneles ganan. El orden importa: al revés el botón «Propiedades» ni existe
+    // (es un @if mientras el menú contextual está abierto).
+    await page.locator('button[aria-label="Propiedades"]').click();
+    await expect(page.locator('.studio-panel')).toBeVisible();
+    await longPress(page, img.x + img.width / 2, img.y + img.height / 2);
+    await expect(page.locator('.context-bar')).toBeVisible();
+
+    // Datos de la pila: el panel debe estar POR ENCIMA de la barra.
+    const zBarra = Number(await page.locator('.context-bar').evaluate((el) => getComputedStyle(el).zIndex));
+    const zPanel = Number(await page.locator('.studio-panel').evaluate((el) => getComputedStyle(el).zIndex));
+    expect(zPanel, 'el panel lateral gana a la barra contextual').toBeGreaterThan(zBarra);
+    const enPunto = await page.locator('.studio-panel .panel-close').first().evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return document.elementsFromPoint(r.x + r.width / 2, r.y + r.height / 2).some((n) => n.closest('.context-bar') !== null);
+    });
+    expect(enPunto, 'nada de la barra contextual intercepta el botón de cerrar').toBe(false);
+
+    // Y el clic lo cierra de verdad.
+    await page.locator('.studio-panel .panel-close').first().click();
+    await expect(page.locator('.studio-panel')).toHaveCount(0);
+  });
+
   test('un elemento bloqueado se puede re-seleccionar y desbloquear (el bloqueo no es permanente)', async ({ page }) => {
     await seed(page);
     await page.goto('/board');

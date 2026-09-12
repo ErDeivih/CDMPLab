@@ -955,6 +955,38 @@ describe('render', () => {
     expect(hitTestElement({ x: 0.5, y: 0.5 - 0.09 }, [pole])).toBeNull();
   });
 
+  it('en VERTICAL la caja táctil del material derecho va girada como su dibujo (no perpendicular)', () => {
+    // El tablero en vertical contrarrota los materiales -90° para que queden DERECHOS por
+    // pantalla: una escalera se ve ALTA, así que su caja táctil tiene que ser alta también.
+    // Antes se usaba la caja sin girar: tocar los extremos visibles no seleccionaba y sí
+    // seleccionaba césped vacío al lado. Se nota en los materiales GRANDES: a los pequeños los
+    // cubre el mínimo táctil (una caja cuadrada de ~44 px por lado) y el intercambio no cambia
+    // nada.
+    const R = BOARD_CANON_RECT;
+    const ladder: CanvasElement = { id: 'l', t: 'ladder', x: 0.5, y: 0.5, size: 2, assetKind: 'ladder', asset: '/assets/tactical/ladder.png' };
+    const { hw, hh } = materialHitHalfExtents(ladder);
+    // Semiejes de la caja GIRADA: el intercambio es en UNIDADES del viewBox, así que en norm hay
+    // que reescalar por eje (norm X = 92 u, norm Y = 59,6 u). Intercambiar los norm sin más deja
+    // el dibujo a medio cubrir.
+    const hwV = (hh * R.h) / R.w;
+    const hhV = (hw * R.w) / R.h;
+    expect(hhV, 'el dibujo girado es alto').toBeGreaterThan(hh);
+    expect(hwV, 'y estrecho').toBeLessThan(hw);
+    // Puntos a medio camino entre la caja vieja y la nueva: dentro de una y fuera de la otra.
+    const yMedio = (hh + hhV) / 2;
+    const xMedio = (hw + hwV) / 2;
+    // VERTICAL (último argumento `true`): la caja es ALTA → el extremo visible selecciona.
+    expect(hitTestElement({ x: 0.5, y: 0.5 + yMedio }, [ladder], undefined, 1, undefined, true)).toBe('l');
+    expect(hitTestElement({ x: 0.5 + xMedio, y: 0.5 }, [ladder], undefined, 1, undefined, true)).toBeNull();
+    // HORIZONTAL (comportamiento de siempre): la caja es ANCHA.
+    expect(hitTestElement({ x: 0.5 + xMedio, y: 0.5 }, [ladder])).toBe('l');
+    expect(hitTestElement({ x: 0.5, y: 0.5 + yMedio }, [ladder])).toBeNull();
+    // Y las dimensiones de la caja girada son las del dibujo girado, en unidades.
+    const v = materialHitHalfExtents(ladder, R, 1, undefined, true);
+    expect(v.hw * R.w).toBeCloseTo(hh * R.h, 6);
+    expect(v.hh * R.h).toBeCloseTo(hw * R.w, 6);
+  });
+
   it('la hit-box de un material crece con size (por encima del mínimo táctil)', () => {
     const small: CanvasElement = { id: 's', t: 'pole', x: 0.5, y: 0.5, assetKind: 'pole', asset: '/assets/tactical/pole.png', size: 1 };
     const big: CanvasElement = { id: 'b', t: 'pole', x: 0.5, y: 0.5, assetKind: 'pole', asset: '/assets/tactical/pole.png', size: 2 };

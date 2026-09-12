@@ -35,24 +35,40 @@ export function materialSize(el: CanvasElement): number {
  *  (sin rotación). Usa el recuadro de contenido (bbox) escalado por `size` y lo
  *  eleva a un área táctil mínima de ~44 px CSS: los elementos largos/estrechos
  *  escalan con `size`, y nunca quedan por debajo del mínimo táctil. */
-export function materialHitHalfExtents(el: CanvasElement, r: Geometry['rect'] = BOARD_CANON_RECT, objectScale = 1, pxTol?: { x: number; y: number }): { hw: number; hh: number } {
+export function materialHitHalfExtents(
+  el: CanvasElement,
+  r: Geometry['rect'] = BOARD_CANON_RECT,
+  objectScale = 1,
+  pxTol?: { x: number; y: number },
+  // `true` si el material se dibuja CONTRARROTADO (-90°) porque el tablero está en vertical:
+  // su caja visible queda girada y los semiejes hay que intercambiarlos.
+  uprightVertical = false
+): { hw: number; hh: number } {
   const s = materialSize(el) * objectScale;
   const frac = materialHitFrac(el.assetKind ?? el.t);
-  const boxW = MATERIAL_BOX * s * frac.w;
-  const boxH = MATERIAL_BOX * s * frac.h;
+  // Semiejes en UNIDADES del viewBox (sin normalizar todavía). El intercambio del caso vertical
+  // se hace AQUÍ, en unidades: norm X y norm Y escalan distinto (92 vs 59,6 unidades), así que
+  // intercambiar los valores ya normalizados dejaría el dibujo a medio cubrir (medido: una
+  // escalera grande en vertical quedaba con el eje largo en el sitio equivocado).
+  let hwU = (MATERIAL_BOX * s * frac.w) / 2;
+  let hhU = (MATERIAL_BOX * s * frac.h) / 2;
   // Hit-box = recuadro de contenido (bbox del material, con su proporción real via `frac`)
   // + margen EN PANTALLA por zoom. D1: la base es la caja REAL del objeto (así un poste
   // alto/estrecho conserva su caja vertical y un cono la suya), y el margen se convierte de
   // px de pantalla a norm según el zoom (screenPxToNormTolerance). Sin `pxTol` se mantiene el
   // mínimo táctil legado (~44 px) para compatibilidad.
   if (pxTol) {
-    return { hw: boxW / 2 / r.w + pxTol.x, hh: boxH / 2 / r.h + pxTol.y };
+    hwU += pxTol.x * r.w;
+    hhU += pxTol.y * r.h;
+  } else {
+    // Mínimo táctil en norm que garantiza ~44 CSS px sobre un móvil típico
+    // (horiz, fit=height en 360×800 → ~10 px por unidad de viewBox): 4,4 unidades de viewBox.
+    const minHalfU = 4.4;
+    hwU = Math.max(hwU, minHalfU);
+    hhU = Math.max(hhU, minHalfU);
   }
-  // Mínimo táctil en norm que garantiza ~44 CSS px sobre un móvil típico
-  // (horiz, fit=height en 360×800 → ~10 px por unidad de viewBox).
-  const minX = 4.4 / r.w; // ≈0.048 → ~44 px en X
-  const minY = 4.4 / r.h; // ≈0.074 → ~44 px en Y
-  return { hw: Math.max(boxW / 2 / r.w, minX), hh: Math.max(boxH / 2 / r.h, minY) };
+  if (uprightVertical) [hwU, hhU] = [hhU, hwU];
+  return { hw: hwU / r.w, hh: hhU / r.h };
 }
 
 export interface Geometry {
@@ -500,7 +516,17 @@ export function screenPxToNormTolerance(opts: ScreenPxTolerance, screenPx: numbe
   return { x: screenPx / denomX, y: screenPx / denomY };
 }
 
-export function hitTestElement(p: { x: number; y: number }, elements: CanvasElement[], r: Geometry['rect'] = BOARD_CANON_RECT, objectScale = 1, pxScreen?: { screenPx: number; zoom: number; scale: number }): string | null {
+export function hitTestElement(
+  p: { x: number; y: number },
+  elements: CanvasElement[],
+  r: Geometry['rect'] = BOARD_CANON_RECT,
+  objectScale = 1,
+  pxScreen?: { screenPx: number; zoom: number; scale: number },
+  // `true` cuando el tablero se dibuja en VERTICAL: en esa orientación los materiales se
+  // contrarrotan -90° para quedar derechos por pantalla (ver `renderBoardSvg`), así que su caja
+  // visible en el espacio canónico va girada y hay que intercambiar los semiejes.
+  vertical = false
+): string | null {
   // D1: tolerancia en px de pantalla (ratón ~4, táctil ~8–10) convertida a norm según
   // el zoom, en vez de un 0.045 normalizado fijo. Si no se pasa, se usa el mínimo táctil legado.
   const pxTol = pxScreen ? screenPxToNormTolerance({ zoom: pxScreen.zoom, scale: pxScreen.scale, rect: r }, pxScreen.screenPx) : undefined;
@@ -539,7 +565,12 @@ export function hitTestElement(p: { x: number; y: number }, elements: CanvasElem
       // escalada por `size` y con un área táctil mínima. El punto ya está en el
       // espacio LOCAL del elemento (rotado por -rot), así que la caja es
       // axis-aligned: respeta `size` y `rot` y cubre las partes transparentes.
-      const { hw, hh } = materialHitHalfExtents(el, r, objectScale, pxTol);
+      // En vertical estos materiales se dibujan CONTRARROTADOS para quedar derechos por pantalla,
+      // así que su caja visible va girada: los semiejes se intercambian (en unidades del viewBox,
+      // ver `materialHitHalfExtents`). Sin esto, un material GRANDE (mayor que el mínimo táctil)
+      // tenía la caja perpendicular al dibujo: tocar sus extremos visibles no lo seleccionaba y
+      // sí seleccionaba césped vacío al lado.
+      const { hw, hh } = materialHitHalfExtents(el, r, objectScale, pxTol, vertical && (UPRIGHT_MATERIAL_TYPES.has(el.t) || !!el.asset));
       if (Math.abs(lp.x - (el.x ?? 0)) <= hw && Math.abs(lp.y - (el.y ?? 0)) <= hh) return el.id;
     } else if (el.t === 'text') {
       if (Math.hypot(lp.x - (el.x ?? 0), lp.y - (el.y ?? 0)) < textTol) return el.id;

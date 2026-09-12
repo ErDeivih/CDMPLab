@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   fieldSvg,
+  fieldPreviewSvg,
   FIELD_LINE_WIDTH,
   F7_LINE_COLOR,
   fieldGeometry,
@@ -999,3 +1000,43 @@ function puntoMedioArcoSvg(a: {
   const tm = t0 + delta / 2;
   return [cx + rx * Math.cos(tm), cy + ry * Math.sin(tm)];
 }
+
+describe('field — la miniatura de la galería aplica la orientación UNA sola vez (como el tablero)', () => {
+  const CAMPOS: FieldType[] = [
+    'full',
+    'half',
+    'vertical_half',
+    'third',
+    'box',
+    'futsal',
+    'f7',
+    'two_halves',
+  ];
+
+  it('vertical: dibuja el campo CANÓNICO y lo envuelve en rotate(90)', () => {
+    for (const f of CAMPOS) {
+      const geo = fieldGeometry(f, 'vertical');
+      const svg = fieldPreviewSvg(f, 'vertical');
+      expect(svg, `${f}: viewBox con los ejes intercambiados`).toContain(
+        `viewBox="0 0 ${geo.vbW} ${geo.vbH}"`,
+      );
+      // El contenido tiene que ser EXACTAMENTE el canónico: antes se le pasaba la orientación
+      // vertical a `fieldSvg` y ADEMÁS se envolvía en rotate(90), y como el paso a vertical de
+      // `at()` ya es una transposición de ejes, la tarjeta salía transpuesta y anisotrópica
+      // (porterías a los lados, arcos del doble de largo en un eje que en el tablero).
+      expect(svg, `${f}: contenido canónico dentro del rotate(90)`).toContain(
+        fieldSvg(f, geo.rect, 'horizontal'),
+      );
+      expect(svg, `${f}: una sola rotación`).toContain('rotate(90)');
+    }
+  });
+
+  it('horizontal: sin rotación y con el campo canónico', () => {
+    for (const f of CAMPOS) {
+      const geo = fieldGeometry(f, 'horizontal');
+      const svg = fieldPreviewSvg(f, 'horizontal');
+      expect(svg, `${f}: sin rotación`).not.toContain('rotate(90)');
+      expect(svg, `${f}: contenido canónico`).toContain(fieldSvg(f, geo.rect, 'horizontal'));
+    }
+  });
+});

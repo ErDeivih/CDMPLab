@@ -875,6 +875,34 @@ export function fieldSvg(
 
 export const FIELD_RECT: Rect = { x: 4, y: 10, w: 92, h: 70 };
 
+/**
+ * Miniatura SVG de un campo base para la galería (solo las LÍNEAS, sin fichas).
+ *
+ * Se construye EXACTAMENTE como el tablero (`renderBoardSvg`): el campo se dibuja SIEMPRE en el
+ * sistema canónico (horizontal) dentro de un viewBox que encaja el campo en esa orientación y, si
+ * la orientación es vertical, TODO el contenido se envuelve en
+ * `translate(Tx 0) rotate(90)` con `Tx = vbW/2 + (rect.y + rect.h/2)`.
+ *
+ * Antes esta miniatura llamaba a `fieldSvg(field, rect, orientation)` Y ADEMÁS envolvía el
+ * resultado en `rotate(90)`: la orientación se aplicaba DOS veces. Como el paso a vertical de
+ * `at()` ya es una transposición de ejes, la tarjeta salía transpuesta (porterías a los lados en
+ * vez de arriba/abajo) y anisotrópica (en «Área y portería» el arco de 9,15 m medía el DOBLE en un
+ * eje que en el tablero), así que prometía un campo distinto del que se aplicaba al pulsarla.
+ */
+export function fieldPreviewSvg(field: FieldType, orientation: Orientation = 'horizontal'): string {
+  const geo = fieldGeometry(field, orientation);
+  const fieldStr = fieldSvg(field, geo.rect, 'horizontal');
+  const inner =
+    orientation === 'vertical'
+      ? `<g transform="translate(${geo.vbW / 2 + (geo.rect.y + geo.rect.h / 2)} 0) rotate(90)">${fieldStr}</g>`
+      : fieldStr;
+  return (
+    `<svg class="field-preview-svg" viewBox="0 0 ${geo.vbW} ${geo.vbH}" xmlns="http://www.w3.org/2000/svg">` +
+    `<g fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" stroke-linecap="round">${inner}</g>` +
+    `</svg>`
+  );
+}
+
 export function toSvgPoint(evt: PointerEvent, svg: SVGSVGElement): { x: number; y: number } {
   const pt = svg.createSVGPoint();
   pt.x = evt.clientX;
