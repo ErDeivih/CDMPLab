@@ -966,10 +966,8 @@ function arcosDeFutsal(
     .filter((a) => Math.abs(a.rx - 6 * pxX) < 0.05 && Math.abs(a.ry - 6 * pxY) < 0.05);
 }
 
-/** Punto medio REAL de un arco SVG `M P0 A rx ry 0 0 sweep P1`, con la conversión de la
- *  especificación (centro y ángulos). Es lo que permite comprobar el SENTIDO del arco: con el
- *  `sweep` invertido el arco recorre los 270° que pasan por detrás de la portería. */
-function puntoMedioArcoSvg(a: {
+/** Conversión de un arco SVG a centro y ángulos (especificación SVG; `fA = 0`: arcos de 90°). */
+function conversionArcoSvg(a: {
   x0: number;
   y0: number;
   rx: number;
@@ -977,7 +975,7 @@ function puntoMedioArcoSvg(a: {
   sweep: number;
   x1: number;
   y1: number;
-}): [number, number] {
+}): { cx: number; cy: number; rx: number; ry: number; t0: number; delta: number } {
   const fA = 0; // arcos de 90°: siempre el arco pequeño
   const dx2 = (a.x0 - a.x1) / 2;
   const dy2 = (a.y0 - a.y1) / 2;
@@ -997,9 +995,216 @@ function puntoMedioArcoSvg(a: {
   let delta = t1 - t0;
   if (a.sweep === 0 && delta > 0) delta -= 2 * Math.PI;
   if (a.sweep === 1 && delta < 0) delta += 2 * Math.PI;
-  const tm = t0 + delta / 2;
-  return [cx + rx * Math.cos(tm), cy + ry * Math.sin(tm)];
+  return { cx, cy, rx, ry, t0, delta };
 }
+
+/** Punto medio REAL de un arco SVG `M P0 A rx ry 0 0 sweep P1`. Es lo que permite comprobar el
+ *  SENTIDO del arco: con el `sweep` invertido el arco recorre los 270° que pasan por detrás de la
+ *  portería. */
+function puntoMedioArcoSvg(a: {
+  x0: number;
+  y0: number;
+  rx: number;
+  ry: number;
+  sweep: number;
+  x1: number;
+  y1: number;
+}): [number, number] {
+  const c = conversionArcoSvg(a);
+  const tm = c.t0 + c.delta / 2;
+  return [c.cx + c.rx * Math.cos(tm), c.cy + c.ry * Math.sin(tm)];
+}
+
+/** CENTRO real del arco, en coordenadas del SVG. Es la medida que distingue un arco bien orientado
+ *  de uno girado: el arco de esquina tiene su centro EN LA ESQUINA, y con el `sweep` invertido el
+ *  centro se va al otro lado de la cuerda, a `(rx, ry)` de la esquina. */
+function centroArcoSvg(a: {
+  x0: number;
+  y0: number;
+  rx: number;
+  ry: number;
+  sweep: number;
+  x1: number;
+  y1: number;
+}): [number, number] {
+  const c = conversionArcoSvg(a);
+  return [c.cx, c.cy];
+}
+
+/** Las MISMAS coordenadas que usa el render: `at()` de field.ts (en vertical TRANSPONE los ejes,
+ *  no niega: `[x + w·w, y + l·h]`). */
+function puntoCampo(
+  r: { x: number; y: number; w: number; h: number },
+  o: 'horizontal' | 'vertical',
+  l: number,
+  w: number,
+): [number, number] {
+  return o === 'vertical' ? [r.x + w * r.w, r.y + l * r.h] : [r.x + l * r.w, r.y + w * r.h];
+}
+
+function arcosDeEsquina(svg: string): Array<{
+  x0: number;
+  y0: number;
+  rx: number;
+  ry: number;
+  sweep: number;
+  x1: number;
+  y1: number;
+}> {
+  return [
+    ...svg.matchAll(
+      /<path class="entrenolab-corner"[^>]*d="M ([-\d.]+) ([-\d.]+) A ([-\d.]+) ([-\d.]+) 0 0 ([01]) ([-\d.]+) ([-\d.]+)"/g,
+    ),
+  ].map((m) => ({
+    x0: +m[1],
+    y0: +m[2],
+    rx: +m[3],
+    ry: +m[4],
+    sweep: +m[5],
+    x1: +m[6],
+    y1: +m[7],
+  }));
+}
+
+describe('field — el CENTRO del arco de esquina ES la esquina (medido, no supuesto)', () => {
+  // El arco de córner es un cuarto de círculo con centro EN LA ESQUINA: si el `sweep` está
+  // invertido, el arco sigue teniendo los mismos extremos y el mismo radio, pero su centro se va
+  // al OTRO lado de la cuerda — a `(rx, ry)` de la esquina (≈1,5 unidades del viewBox) — y el arco
+  // se ve «plano» y despegado del córner. Medir el punto medio no bastaba: seguía cayendo dentro
+  // del campo. Por eso se mide el CENTRO.
+  const CON_ESQUINAS: FieldType[] = ['full', 'two_halves', 'half', 'third'];
+
+  for (const campo of CON_ESQUINAS) {
+    for (const o of ['horizontal', 'vertical'] as const) {
+      it(`${campo} · ${o}: cada arco tiene su centro en una esquina del rect`, () => {
+        const g = fieldGeometry(campo, o);
+        const arcos = arcosDeEsquina(fieldSvg(campo, g.rect, o));
+        expect(arcos.length, `${campo} · ${o}: hay arcos de esquina`).toBeGreaterThan(0);
+        // «Dos medios campos» NO se dibuja como un rect: se dibuja como DOS medios campos
+        // (`twoHalvesField`), así que sus arcos se centran en las esquinas de esas dos mitades
+        // —la izquierda en las de su línea de portería y la derecha en las suyas—. En el tablero,
+        // que siempre dibuja el sistema canónico, eso deja los cuatro córners reales del rect (es
+        // lo que comprueba `two_halves · horizontal`).
+        const subRects =
+          campo === 'two_halves'
+            ? [
+                { ...g.rect, w: g.rect.w / 2 },
+                { x: g.rect.x + g.rect.w / 2, y: g.rect.y, w: g.rect.w / 2, h: g.rect.h },
+              ]
+            : [g.rect];
+        const esquinas = subRects.flatMap((sub) =>
+          [0, 1].flatMap((l) => [0, 1].map((w) => puntoCampo(sub, o, l, w))),
+        );
+        for (const a of arcos) {
+          const [cx, cy] = centroArcoSvg(a);
+          const distancia = Math.min(...esquinas.map(([ex, ey]) => Math.hypot(cx - ex, cy - ey)));
+          expect(
+            distancia,
+            `centro (${cx.toFixed(2)}, ${cy.toFixed(2)}) de un arco de ${campo} · ${o} debe ser una esquina`,
+          ).toBeLessThan(0.3);
+        }
+      });
+    }
+  }
+  it('f7: los cuatro arcos de esquina tienen su centro en las esquinas del campo', () => {
+    // El F7 dibuja sus córners con su propio color y SIN la clase `entrenolab-corner`, así que se
+    // localizan por la forma del `path` (son los únicos arcos del SVG del F7).
+    const g = fieldGeometry('f7', 'horizontal');
+    const svg = fieldSvg('f7', g.rect, 'horizontal');
+    const cajas = rects(svg);
+    const arcos = [
+      ...svg.matchAll(
+        /<path d="M ([-\d.]+) ([-\d.]+) A ([-\d.]+) ([-\d.]+) 0 0 ([01]) ([-\d.]+) ([-\d.]+)"/g,
+      ),
+    ].map((m) => ({
+      x0: +m[1],
+      y0: +m[2],
+      rx: +m[3],
+      ry: +m[4],
+      sweep: +m[5],
+      x1: +m[6],
+      y1: +m[7],
+    }));
+    // El SVG del F7 trae 6 arcos: los 4 córners (radio pequeño, 1,2 m) y los 2 semicírculos del
+    // área. Los córners son los del radio pequeño.
+    const radio = Math.min(...arcos.map((a) => a.rx));
+    const corners = arcos.filter((a) => Math.abs(a.rx - radio) < 0.01);
+    expect(corners, 'el F7 tiene sus cuatro córners').toHaveLength(4);
+    // El rect del CAMPO es el MENOR rect del SVG que contiene todos los extremos de los córners
+    // (el otro candidato es la franja exterior de césped, que es mayor).
+    const dentro = (
+      b: { x: number; y: number; w: number; h: number },
+      a: { x0: number; y0: number; x1: number; y1: number },
+    ) =>
+      [a.x0, a.x1].every((x) => x >= b.x - 1e-6 && x <= b.x + b.w + 1e-6) &&
+      [a.y0, a.y1].every((y) => y >= b.y - 1e-6 && y <= b.y + b.h + 1e-6);
+    const campo = cajas
+      .filter((b) => corners.every((a) => dentro(b, a)))
+      .sort((p, q) => p.w * p.h - q.w * q.h)[0];
+    expect(campo, 'el rect del campo del F7').toBeTruthy();
+    const esquinas = [
+      [campo.x, campo.y],
+      [campo.x + campo.w, campo.y],
+      [campo.x, campo.y + campo.h],
+      [campo.x + campo.w, campo.y + campo.h],
+    ] as Array<[number, number]>;
+    for (const a of corners) {
+      const [cx, cy] = centroArcoSvg(a);
+      const distancia = Math.min(...esquinas.map(([ex, ey]) => Math.hypot(cx - ex, cy - ey)));
+      expect(
+        distancia,
+        `centro (${cx.toFixed(2)}, ${cy.toFixed(2)}) debe ser una esquina del F7`,
+      ).toBeLessThan(0.3);
+    }
+  });
+  it('fútbol sala: los cuatro arcos de esquina tienen su centro en las esquinas del campo', () => {
+    // Los córners del futsal (0,25 m) se dibujan sin clase, así que se localizan por RADIO: son
+    // los arcos más pequeños del SVG (los del área miden 6 m y el del penalti 9,15 m).
+    const g = fieldGeometry('futsal', 'horizontal');
+    const svg = fieldSvg('futsal', g.rect, 'horizontal');
+    const cajas = rects(svg);
+    const arcos = [
+      ...svg.matchAll(
+        /<path[^>]*d="M ([-\d.]+) ([-\d.]+) A ([-\d.]+) ([-\d.]+) 0 0 ([01]) ([-\d.]+) ([-\d.]+)"/g,
+      ),
+    ].map((m) => ({
+      x0: +m[1],
+      y0: +m[2],
+      rx: +m[3],
+      ry: +m[4],
+      sweep: +m[5],
+      x1: +m[6],
+      y1: +m[7],
+    }));
+    const radio = Math.min(...arcos.map((a) => a.rx));
+    const corners = arcos.filter((a) => Math.abs(a.rx - radio) < 0.02);
+    expect(corners, 'el futsal tiene sus cuatro córners').toHaveLength(4);
+    const dentro = (
+      b: { x: number; y: number; w: number; h: number },
+      a: { x0: number; y0: number; x1: number; y1: number },
+    ) =>
+      [a.x0, a.x1].every((x) => x >= b.x - 1e-6 && x <= b.x + b.w + 1e-6) &&
+      [a.y0, a.y1].every((y) => y >= b.y - 1e-6 && y <= b.y + b.h + 1e-6);
+    const campo = cajas
+      .filter((b) => corners.every((a) => dentro(b, a)))
+      .sort((p, q) => p.w * p.h - q.w * q.h)[0];
+    expect(campo, 'el rect del campo de futsal').toBeTruthy();
+    const esquinas = [
+      [campo.x, campo.y],
+      [campo.x + campo.w, campo.y],
+      [campo.x, campo.y + campo.h],
+      [campo.x + campo.w, campo.y + campo.h],
+    ] as Array<[number, number]>;
+    for (const a of corners) {
+      const [cx, cy] = centroArcoSvg(a);
+      const distancia = Math.min(...esquinas.map(([ex, ey]) => Math.hypot(cx - ex, cy - ey)));
+      expect(
+        distancia,
+        `centro (${cx.toFixed(2)}, ${cy.toFixed(2)}) debe ser una esquina del futsal`,
+      ).toBeLessThan(0.3);
+    }
+  });
+});
 
 describe('field — la miniatura de la galería aplica la orientación UNA sola vez (como el tablero)', () => {
   const CAMPOS: FieldType[] = [

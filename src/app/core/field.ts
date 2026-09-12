@@ -422,8 +422,14 @@ const cornerArcs = (
     // Puntos sobre los dos bordes: a lo largo del eje L y del eje W.
     const [xEdgeL, yEdgeL] = at(r, o, cl + dl * rl, cw);
     const [xEdgeW, yEdgeW] = at(r, o, cl, cw + dw * rw);
-    // El sentido del arco depende de la orientación y de la esquina.
-    const sweep = o === 'horizontal' ? (dw > 0 ? 1 : 0) : dl > 0 ? 0 : 1;
+    // Sentido del arco. MEDIDO con la conversión de arco SVG: el centro tiene que caer EN LA
+    // ESQUINA, y eso ocurre cuando el sentido se decide por AMBAS direcciones (`dl === dw`), no
+    // solo por `dw`: con la regla vieja el centro se iba al otro lado de la cuerda (a ~1,5
+    // unidades de la esquina) en las dos esquinas del lado derecho —«dos medios campos» salía con
+    // el medio derecho de córners planos— y en vertical fallaban las de `w` alto. En vertical se
+    // NIEGA, porque `at()` transpone los ejes y una transposición invierte el sentido de giro.
+    const sweepBase = dl === dw ? 1 : 0;
+    const sweep = o === 'vertical' ? 1 - sweepBase : sweepBase;
     s += `<path class="entrenolab-corner" d="M ${xEdgeL} ${yEdgeL} A ${rlx * r.w} ${rly * r.h} 0 0 ${sweep} ${xEdgeW} ${yEdgeW}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
   }
   return s;
@@ -631,7 +637,10 @@ function futsalCornerArcs(r: Rect, o: Orientation): string {
   for (const [cl, cw, dl, dw] of corners) {
     const [xE, yE] = at(r, o, cl + dl * rl, cw);
     const [xW, yW] = at(r, o, cl, cw + dw * rw);
-    const sweep = o === 'horizontal' ? (dw > 0 ? 1 : 0) : dl > 0 ? 0 : 1;
+    // Mismo sentido que los córners del fútbol once: el centro del arco tiene que ser la esquina
+    // (`dl === dw`, negado en vertical por la transposición de `at()`).
+    const sweepBase = dl === dw ? 1 : 0;
+    const sweep = o === 'vertical' ? 1 - sweepBase : sweepBase;
     s += `<path d="M ${xE} ${yE} A ${rx} ${ry} 0 0 ${sweep} ${xW} ${yW}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
   }
   return s;
@@ -807,9 +816,13 @@ function f7CornerArcs(g: F7Geom): string {
   const ry = rad;
   const edges = [
     // [puntoInicial, puntoFinal, sweep]
-    [`${x + rad} ${y}`, `${x} ${y + rad}`, 0], // superior-izquierda
-    [`${x + w - rad} ${y}`, `${x + w} ${y + rad}`, 1], // superior-derecha
-    [`${x + w} ${y + h - rad}`, `${x + w - rad} ${y + h}`, 1], // inferior-derecha
+    // El `sweep` sale de la misma regla que los córners del once (el centro del arco es la
+    // esquina), medida con la conversión de arco SVG: el F7 se dibuja siempre en el sistema
+    // canónico (no rota), así que aquí no hay negación. Antes eran 0,1,1,1 y TRES de los cuatro
+    // estaban girados (centro al otro lado de la cuerda, arco «plano» y despegado del córner).
+    [`${x + rad} ${y}`, `${x} ${y + rad}`, 1], // superior-izquierda
+    [`${x + w - rad} ${y}`, `${x + w} ${y + rad}`, 0], // superior-derecha
+    [`${x + w} ${y + h - rad}`, `${x + w - rad} ${y + h}`, 0], // inferior-derecha
     [`${x} ${y + h - rad}`, `${x + rad} ${y + h}`, 1], // inferior-izquierda
   ] as const;
   let s = '';
