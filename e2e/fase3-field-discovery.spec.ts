@@ -152,6 +152,35 @@ async function panToGoal(page: Page, host: Box, goal: 'left' | 'right'): Promise
   }
 }
 
+/** `transform` computado del lienzo: el zoom y el pan REALMENTE aplicados. */
+async function canvasTransform(page: Page): Promise<string> {
+  return page.locator('.board-canvas').first().evaluate((el) => getComputedStyle(el).transform);
+}
+
+/**
+ * Espera a que el lienzo esté APLICADO y QUIETO antes de medir o tocar.
+ *
+ * El zoom y el pan son un `transform` que Angular pinta en el repintado SIGUIENTE, no dentro del
+ * propio gesto: MEDIDO con una sonda, justo después del evento el lienzo sigue con el `matrix`
+ * viejo (`matrix(1, 0, 0, 1, 0, 0)` tras pedir un zoom del 150 %). Si un toque de colocación cae
+ * en esa ventana, el objeto se coloca con la vista VIEJA y se pinta con la NUEVA, y aparece
+ * desplazado del punto tocado: es la clase de fallo que dio el Nightly en este mismo test
+ * («centro X del elemento ≈ toque tras paneo», 75,58 px de error, tolerancia 6). No se debilita
+ * ninguna aserción: se deja de medir/tocar contra una vista a medio aplicar.
+ */
+async function waitCanvasQuieto(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const a = await canvasTransform(page);
+        const b = await canvasTransform(page);
+        return a === b;
+      },
+      { message: 'el lienzo deja de moverse (vista aplicada)' }
+    )
+    .toBe(true);
+}
+
 test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" (indicadores)', () => {
   test.use({ hasTouch: true });
 
@@ -252,6 +281,7 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
 
     // Panear a la portería DERECHA (se satura panX en su mínimo).
     await panToGoal(page, host, 'right');
+    await waitCanvasQuieto(page); // el paneo, APLICADO antes de calcular el punto a tocar
     const cw = await canvasWidth(page);
     const panX = -(cw - host.width) / 2; // extremo derecho (zoom=1)
 
@@ -267,12 +297,20 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
     // el panel en móvil vertical; se cierra el panel con su X (no desarma la colocación)
     // antes del toque táctil.
     await page.locator('.side-panel-left .panel-close').first().click();
+    await waitCanvasQuieto(page);
+    // Vista EXACTA con la que se va a colocar: si cambia entre el toque y la medida, el objeto
+    // se coloca con una vista y se pinta con otra y aparece desplazado del punto tocado (fallo
+    // del Nightly: 75,58 px). Se comprueba abajo, en lugar de darlo por hecho.
+    const vistaAlTocar = await canvasTransform(page);
     await page.touchscreen.tap(S.x, S.y);
     await expect(page.locator('.field-count')).toHaveText('1');
 
     // Fase 3: la colocación continua sigue armada tras el toque. Para mover el objeto
     // hay que pasar a "Seleccionar" (si no, arrastrar sobre él colocaría otro genérico).
     await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
+    expect(await canvasTransform(page), 'la vista no se mueve entre el toque de colocación y la medida (si se mueve, el objeto aparece desplazado del punto tocado)').toBe(
+      vistaAlTocar
+    );
 
     const circle = page.locator('.entrenolab-board circle[r="2.5"]').first();
     await circle.waitFor({ state: 'attached', timeout: 5000 });
