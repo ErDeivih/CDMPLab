@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AccessService } from '../../core/access.service';
+import { StoreService } from '../../core/store.service';
 import { SupabaseService } from '../../core/supabase.service';
 import { ConfirmService } from '../../core/confirm.service';
 import { AuthCardComponent } from './auth-card.component';
@@ -16,6 +17,7 @@ const SEAT_LIMIT = 4;
 })
 export class MembersComponent {
   private readonly access = inject(AccessService);
+  private readonly store = inject(StoreService);
   private readonly supabase = inject(SupabaseService);
   private readonly confirm = inject(ConfirmService);
   private readonly router = inject(Router);
@@ -30,6 +32,12 @@ export class MembersComponent {
   protected readonly success = signal<string | null>(null);
 
   protected readonly isOwner = computed(() => this.access.target().role === 'owner');
+  /**
+   * `true` solo cuando NO se puede gestionar y eso se debe a la falta de propiedad en un equipo
+   * REMOTO. En modo local/desarrollo `isOwner()` también es falso (no hay sesión ni roles), pero
+   * ahí el usuario es el dueño de sus datos: ocultarle la pantalla la dejaba vacía.
+   */
+  protected readonly sinGestion = computed(() => this.store.isRemote() && !this.isOwner());
   protected readonly seatsLimit = SEAT_LIMIT;
 
   protected readonly seatsUsed = computed(() => {
@@ -80,7 +88,9 @@ export class MembersComponent {
       this.inviteEmail.set('');
       // Decisión de usabilidad (dueño): NO se envía correo personalizado, solo se
       // crea el registro de invitación. El mensaje debe ser veraz.
-      this.success.set(`Invitación creada para ${email}. La persona debe registrarse en CDMPLab con esa misma dirección.`);
+      this.success.set(
+        `Invitación creada para ${email}. La persona debe registrarse en CDMPLab con esa misma dirección.`,
+      );
       await this.load();
     } catch (e) {
       this.error.set(this.friendly((e as Error)?.message ?? 'No se pudo invitar.'));
@@ -100,7 +110,9 @@ export class MembersComponent {
         this.access
           .cancelInvitation(inv.id)
           .then(() => this.load())
-          .catch((e) => this.error.set((e as Error)?.message ?? 'No se pudo cancelar la invitación.'))
+          .catch((e) =>
+            this.error.set((e as Error)?.message ?? 'No se pudo cancelar la invitación.'),
+          )
           .finally(() => this.busyId.set(null));
       },
     });
@@ -132,11 +144,15 @@ export class MembersComponent {
   }
 
   private friendly(msg: string): string {
-    if (msg.includes('collaborator_limit_exceeded')) return 'Se alcanzó el máximo de 4 colaboradores (activos + invitaciones pendientes).';
+    if (msg.includes('collaborator_limit_exceeded'))
+      return 'Se alcanzó el máximo de 4 colaboradores (activos + invitaciones pendientes).';
     if (msg.includes('invalid_invitation_email')) return 'El correo introducido no es válido.';
-    if (msg.includes('collaborator_not_approved')) return 'Solo puedes invitar a personas con el perfil aprobado.';
-    if (msg.includes('duplicate_invitation')) return 'Ya existe una invitación pendiente para este correo.';
-    if (msg.includes('forbidden') || msg.includes('not_team_owner')) return 'Solo el propietario puede gestionar los colaboradores.';
+    if (msg.includes('collaborator_not_approved'))
+      return 'Solo puedes invitar a personas con el perfil aprobado.';
+    if (msg.includes('duplicate_invitation'))
+      return 'Ya existe una invitación pendiente para este correo.';
+    if (msg.includes('forbidden') || msg.includes('not_team_owner'))
+      return 'Solo el propietario puede gestionar los colaboradores.';
     return msg;
   }
 

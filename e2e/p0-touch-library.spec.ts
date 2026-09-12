@@ -8,12 +8,56 @@ async function seedFoldersExercise(page: Page): Promise<void> {
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem('entrenolab:teams', JSON.stringify([team]));
     localStorage.setItem('entrenolab:players', JSON.stringify([]));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([
-      { id: 'f1', teamId: 't1', parentId: null, name: 'Posesión', createdAt: now, updatedAt: now },
-    ]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([
-      { id: 'e1', teamId: 't1', folderId: null, title: 'Rondos', description: 'Conservación', explanation: '', category: 'Técnica', objectives: [], materials: [], durationMinutes: 12, minPlayers: 6, maxPlayers: 8, loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false, canvas: { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [] }], orientation: 'horizontal', grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a' }, thumbnail: null, savedAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:folders',
+      JSON.stringify([
+        {
+          id: 'f1',
+          teamId: 't1',
+          parentId: null,
+          name: 'Posesión',
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]),
+    );
+    localStorage.setItem(
+      'entrenolab:exercises',
+      JSON.stringify([
+        {
+          id: 'e1',
+          teamId: 't1',
+          folderId: null,
+          title: 'Rondos',
+          description: 'Conservación',
+          explanation: '',
+          category: 'Técnica',
+          objectives: [],
+          materials: [],
+          durationMinutes: 12,
+          minPlayers: 6,
+          maxPlayers: 8,
+          loadMode: 'fixed',
+          seriesCount: null,
+          repetitionsCount: null,
+          workSeconds: null,
+          restSeconds: null,
+          isTemplate: false,
+          canvas: {
+            version: 2,
+            schemaVersion: 3,
+            field: 'full',
+            frames: [{ duration: 1000, elements: [] }],
+            orientation: 'horizontal',
+            grass: 'stripes',
+            lineColor: '#ffffff',
+            backgroundColor: '#31834a',
+          },
+          thumbnail: null,
+          savedAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
@@ -23,7 +67,9 @@ for (const [W, H] of [
   [360, 800],
 ] as const) {
   test.describe(`Biblioteca táctil ${W}×${H}`, () => {
-    test('la tarjeta tiene acción primaria visible y un menú "Más" táctil que funciona', async ({ page }) => {
+    test('la tarjeta tiene acción primaria visible y un menú "Más" táctil que funciona', async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: W, height: H });
       await seedFoldersExercise(page);
       await page.goto('/library');
@@ -80,7 +126,9 @@ for (const [W, H] of [
       await page.locator('.folder-more-menu').getByText('Renombrar').click();
       await expect(page.locator('.tree-inline input.folder-input')).toBeVisible();
       await page.locator('.tree-inline input.folder-input').fill('Posesión 2');
-      await page.locator('.tree-inline').getByText('OK').click();
+      // La etiqueta del botón es «Guardar»: antes decía «OK» (en inglés) y el test apuntaba a esa
+      // etiqueta, que el proyecto no admite (la UI va en español). El botón es el mismo.
+      await page.locator('.tree-inline').getByText('Guardar').click();
       await expect(page.locator('.tree-name', { hasText: 'Posesión 2' })).toBeVisible();
 
       // Nueva subcarpeta desde el menú.
