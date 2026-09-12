@@ -191,7 +191,14 @@
 // host ni tapar los menús. Botones compactos con área táctil >= 40×40 px.
 .context-bar {
   position: absolute;
-  z-index: 89;
+  // Auditoría (medido, no supuesto): la barra contextual sigue al objeto seleccionado y llegaba a
+  // montarse ENCIMA de los paneles laterales (`z-index: 40`), tapando su botón de cerrar. La pila
+  // real medida en el punto del botón era: [SPAN.msi, BUTTON.ctx-btn, DIV.context-bar(z=89),
+  // SPAN.msi, BUTTON.panel-close, …, ASIDE.side-panel.side-panel-left(z=40)] → el clic sobre el
+  // cerrar se quedaba colgado sin completarse nunca (`scrolling into view`) y el panel era
+  // IMPOSIBLE de cerrar en móvil. Los paneles laterales ganan a la barra contextual; la barra
+  // sigue por encima del lienzo y de sus capas (24–30).
+  z-index: 39;
   display: flex;
   align-items: center;
   gap: 4px;

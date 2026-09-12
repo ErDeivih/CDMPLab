@@ -220,9 +220,11 @@ try {
   } else {
     console.log(`
 [alcance] Este script es SOLO análisis estático/sintaxis (nivel A).
-  No determina por sí mismo el estado remoto. La migración de grants se aplicó y
-  verificó externamente el 2026-09-02; consulta README.md para la evidencia y los
-  pendientes de Auth/SMTP.`);
+  Comprueba propiedades ESTÁTICAS del SQL versionado en supabase/migrations/: no ejecuta
+  nada sobre PostgreSQL y el estado REMOTO no se verifica aquí (ni el recuento de
+  migraciones aplicadas, ni el mapeo entre el nombre local y el registrado en remoto).
+  Lo que está documentado en el repositorio y lo que sigue SIN verificar contra la base
+  está en docs/supabase-estado.md.`);
   }
   process.exit(0);
 } catch (e) {

@@ -36,14 +36,48 @@ import type {
 } from './data-source';
 import { DataError } from './data-source';
 import type { Exercise, ExerciseFolder, Player, Session, SessionTask, Team } from '../models';
-import { exerciseFromRow, exerciseRowForInsert, folderFromRow, playerFromRow, sessionFromRow, teamFromRow } from './mappers';
+import {
+  exerciseFromRow,
+  exerciseRowForInsert,
+  folderFromRow,
+  playerFromRow,
+  sessionFromRow,
+  teamFromRow,
+} from './mappers';
 
 const COLLABORATOR_LIMIT = 4;
+
+/**
+ * Filas por página en las lecturas del dataset del equipo.
+ *
+ * POR QUÉ: PostgREST no devuelve más de `max-rows` filas por petición (1000 por defecto en
+ * Supabase) y no avisa de que ha recortado. Una lectura sin `.range()` hidrataba el store
+ * INCOMPLETO —la app operaba sobre una vista parcial: `deleteFolder` calculaba el subárbol a
+ * borrar sobre una lista truncada, `duplicateFolderTree` copiaba solo una parte— así que el
+ * dataset se pide página a página hasta que una vuelve incompleta. El tamaño de página es el
+ * `max-rows` del servidor: pedir bloques mayores no traería más filas.
+ */
+const PAGE_SIZE = 1000;
+
+/**
+ * Ids por consulta `.in(...)` al leer las tareas de las sesiones. La lista de ids viaja en la
+ * URL: con miles de sesiones una única petición excedería el límite de longitud del servidor
+ * (el error sería ruidoso, pero el equipo dejaría de cargar). Cada bloque se pagina aparte.
+ */
+const SESSION_ID_CHUNK = 100;
+
+/** Trocea `items` en bloques de `size` (el último, con lo que quede). */
+function chunked<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 /** Códigos de app conocidos → mensaje en español. */
 const ERROR_MESSAGES: Record<string, string> = {
   collaborator_limit_exceeded: `No puedes invitar a más personas: el equipo tiene el máximo de ${COLLABORATOR_LIMIT} colaboradores (activos + invitaciones pendientes).`,
-  owner_cannot_be_collaborator: 'El propietario del equipo no puede ser invitado como colaborador de su propio equipo.',
+  owner_cannot_be_collaborator:
+    'El propietario del equipo no puede ser invitado como colaborador de su propio equipo.',
   collaborator_not_approved: 'Solo puedes invitar a personas con el perfil aprobado.',
   invalid_invitation_email: 'El correo introducido no es válido.',
   invitation_not_available: 'La invitación ya no está disponible (caducó, se rechazó o se aceptó).',
@@ -59,17 +93,24 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_accent_color: 'El color del equipo no es válido.',
   duplicate_invitation: 'Ya existe una invitación pendiente para este correo en este equipo.',
   not_team_owner: 'Solo el propietario puede gestionar los colaboradores.',
-  revision_conflict: 'La sesión fue modificada por otra persona. Recarga para ver la versión más reciente o guarda una copia de la tuya.',
-  same_team_exercise_required: 'No se puede guardar la sesión: una tarea referencia un ejercicio que no pertenece al equipo.',
+  revision_conflict:
+    'La sesión fue modificada por otra persona. Recarga para ver la versión más reciente o guarda una copia de la tuya.',
+  same_team_exercise_required:
+    'No se puede guardar la sesión: una tarea referencia un ejercicio que no pertenece al equipo.',
   session_belongs_to_another_team: 'No se puede guardar: la sesión pertenece a otro equipo.',
   session_not_found: 'No se encontró la sesión.',
   // Importación local → Supabase (RPC transaccional, todo o nada).
   invalid_uuid: 'La importación no se pudo completar: hay un identificador que no es válido.',
-  wrong_team_reference: 'La importación no se pudo completar: una entidad referencia a otro equipo.',
-  cross_team_id_conflict: 'La importación no se pudo completar: un identificador ya pertenece a otro equipo.',
-  broken_folder_reference: 'La importación no se pudo completar: una carpeta referencia a otra que no existe o no pertenece al equipo.',
-  broken_exercise_reference: 'La importación no se pudo completar: una tarea referencia a un ejercicio que no existe o no pertenece al equipo.',
-  id_content_conflict: 'La importación no se pudo completar: una entidad ya existe con un contenido distinto.',
+  wrong_team_reference:
+    'La importación no se pudo completar: una entidad referencia a otro equipo.',
+  cross_team_id_conflict:
+    'La importación no se pudo completar: un identificador ya pertenece a otro equipo.',
+  broken_folder_reference:
+    'La importación no se pudo completar: una carpeta referencia a otra que no existe o no pertenece al equipo.',
+  broken_exercise_reference:
+    'La importación no se pudo completar: una tarea referencia a un ejercicio que no existe o no pertenece al equipo.',
+  id_content_conflict:
+    'La importación no se pudo completar: una entidad ya existe con un contenido distinto.',
 };
 
 function messageFor(code: string, fallback: string): string {
@@ -132,7 +173,7 @@ export class SupabaseRepository implements DataSource {
   constructor(
     private readonly client: SupabaseClient<Database>,
     userId: string | null,
-    teamId: string | null
+    teamId: string | null,
   ) {
     this._userId = userId;
     this._teamId = teamId;
@@ -181,6 +222,9 @@ export class SupabaseRepository implements DataSource {
     const ownedTeam = ownedRow ? teamFromRow(ownedRow) : null;
 
     // Miembro activo (owner/editor) de otro equipo.
+    // NO se pagina a propósito: la pertenencia de UN usuario a equipos es una lista corta por
+    // diseño (un equipo propio como máximo + colaboraciones), no un dataset que crezca como el
+    // del equipo. Además `team_members` no tiene un `id` con el que desempatar el orden.
     const { data: memberRows, error: memberErr } = await this.client
       .from('team_members')
       .select('*')
@@ -214,67 +258,149 @@ export class SupabaseRepository implements DataSource {
   }
 
   private async loadTeamRow(teamId: string): Promise<Team | null> {
-    const { data, error } = await this.client.from('teams').select('*').eq('id', teamId).maybeSingle();
+    const { data, error } = await this.client
+      .from('teams')
+      .select('*')
+      .eq('id', teamId)
+      .maybeSingle();
     if (error) throw errorToDataError(error, 'team_read');
     return data ? teamFromRow(data) : null;
   }
 
+  /**
+   * Trae TODAS las filas de una consulta, página a página, con `.range(from, to)`.
+   *
+   * Devuelve la MISMA forma que devolvían las lecturas anteriores (el array de filas de la
+   * tabla): el llamante sigue mapeando fila a fila y no cambia ningún contrato.
+   *
+   * `page(from, to)` debe aplicar el rango a una consulta con un `order` DETERMINISTA
+   * (criterio + desempate): sin un orden total, la frontera entre páginas no es estable y dos
+   * peticiones consecutivas pueden repetir o saltarse filas empatadas. Una página incompleta
+   * significa que ya no queda nada más (una página llena puede ser la última, así que se pide
+   * la siguiente y esa vuelve vacía: una petición de más a cambio de no adivinar el total).
+   */
+  private async loadAllPages<T>(
+    code: string,
+    page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  ): Promise<T[]> {
+    const rows: T[] = [];
+    let from = 0;
+    let firstRow: string | null = null;
+    let pending = true;
+    while (pending) {
+      const { data, error } = await page(from, from + PAGE_SIZE - 1);
+      if (error) throw errorToDataError(error, code);
+      const pageRows = data ?? [];
+      // Red de seguridad: si el servidor devolviera SIEMPRE la misma página (un proxy que se
+      // coma el `Range`, por ejemplo) el bucle no terminaría nunca y la app se colgaría
+      // llenando memoria. Se detecta en la primera página que no avanza y se falla claro.
+      const firstOfPage = pageRows.length === PAGE_SIZE ? JSON.stringify(pageRows[0]) : null;
+      if (firstOfPage !== null && firstOfPage === firstRow) {
+        throw new DataError(
+          'pagination_stuck',
+          'No se pudo leer el equipo completo: el servidor devuelve siempre la misma página.',
+        );
+      }
+      firstRow = firstOfPage;
+      rows.push(...pageRows);
+      from += PAGE_SIZE;
+      // Una página incompleta es la última: ya no queda nada más que traer.
+      pending = pageRows.length === PAGE_SIZE;
+    }
+    return rows;
+  }
+
   private async loadPlayers(teamId: string): Promise<Player[]> {
-    const { data, error } = await this.client.from('players').select('*').eq('team_id', teamId).order('created_at', { ascending: true });
-    if (error) throw errorToDataError(error, 'player_read');
-    return (data ?? []).map((r) => playerFromRow(r));
+    const rows = await this.loadAllPages<PlayersRow>('player_read', (from, to) =>
+      this.client
+        .from('players')
+        .select('*')
+        .eq('team_id', teamId)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map((r) => playerFromRow(r));
   }
 
   private async loadFolders(teamId: string): Promise<ExerciseFolder[]> {
-    const { data, error } = await this.client.from('exercise_folders').select('*').eq('team_id', teamId).order('created_at', { ascending: true });
-    if (error) throw errorToDataError(error, 'folder_read');
-    return (data ?? []).map((r) => folderFromRow(r));
+    const rows = await this.loadAllPages<ExerciseFoldersRow>('folder_read', (from, to) =>
+      this.client
+        .from('exercise_folders')
+        .select('*')
+        .eq('team_id', teamId)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map((r) => folderFromRow(r));
   }
 
   private async loadExercises(teamId: string): Promise<Exercise[]> {
-    const { data, error } = await this.client
-      .from('exercises')
-      .select('*')
-      .eq('team_id', teamId)
-      .order('updated_at', { ascending: false });
-    if (error) throw errorToDataError(error, 'exercise_read');
-    return (data ?? []).map((r) => exerciseFromRow(r));
+    const rows = await this.loadAllPages<ExercisesRow>('exercise_read', (from, to) =>
+      this.client
+        .from('exercises')
+        .select('*')
+        .eq('team_id', teamId)
+        .order('updated_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map((r) => exerciseFromRow(r));
   }
 
   private async loadSessions(teamId: string): Promise<Session[]> {
-    const { data: sessionRows, error: sessionErr } = await this.client
-      .from('sessions')
-      .select('*')
-      .eq('team_id', teamId)
-      .order('updated_at', { ascending: false });
-    if (sessionErr) throw errorToDataError(sessionErr, 'session_read');
+    const sessionRows = await this.loadAllPages<SessionsRow>('session_read', (from, to) =>
+      this.client
+        .from('sessions')
+        .select('*')
+        .eq('team_id', teamId)
+        .order('updated_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
 
-    const ids = (sessionRows ?? []).map((s) => s.id);
+    const ids = sessionRows.map((s) => s.id);
     const tasksBySession = new Map<string, SessionTask[]>();
     if (ids.length > 0) {
-      const { data: taskRows, error: taskErr } = await this.client
-        .from('session_exercises')
-        .select('*')
-        .in('session_id', ids)
-        .order('sort_order', { ascending: true });
-      if (taskErr) throw errorToDataError(taskErr, 'session_task_read');
-      const exercises = (await this.loadExercises(teamId)).reduce<Map<string, Exercise>>((m, e) => m.set(e.id, e), new Map());
-      for (const r of taskRows ?? []) {
-        const task: SessionTask = {
-          id: r.id,
-          exerciseId: r.exercise_id,
-          title: r.title,
-          durationMinutes: r.duration_minutes,
-          material: r.material,
-          sortOrder: r.sort_order,
-          snapshot: r.exercise_id && exercises.has(r.exercise_id) ? exercises.get(r.exercise_id)! : undefined,
-        };
-        const list = tasksBySession.get(r.session_id) ?? [];
-        list.push(task);
-        tasksBySession.set(r.session_id, list);
+      const exercises = (await this.loadExercises(teamId)).reduce<Map<string, Exercise>>(
+        (m, e) => m.set(e.id, e),
+        new Map(),
+      );
+      // Cada sesión cae en UN solo bloque, así que sus tareas llegan siempre juntas y
+      // ordenadas: `sort_order` es único dentro de la sesión y `id` solo desempata.
+      for (const idChunk of chunked(ids, SESSION_ID_CHUNK)) {
+        const taskRows = await this.loadAllPages<SessionExercisesRow>(
+          'session_task_read',
+          (from, to) =>
+            this.client
+              .from('session_exercises')
+              .select('*')
+              .in('session_id', idChunk)
+              .order('sort_order', { ascending: true })
+              .order('id', { ascending: true })
+              .range(from, to),
+        );
+        for (const r of taskRows) {
+          const task: SessionTask = {
+            id: r.id,
+            exerciseId: r.exercise_id,
+            title: r.title,
+            durationMinutes: r.duration_minutes,
+            material: r.material,
+            sortOrder: r.sort_order,
+            snapshot:
+              r.exercise_id && exercises.has(r.exercise_id)
+                ? exercises.get(r.exercise_id)!
+                : undefined,
+          };
+          const list = tasksBySession.get(r.session_id) ?? [];
+          list.push(task);
+          tasksBySession.set(r.session_id, list);
+        }
       }
     }
-    return (sessionRows ?? []).map((s) => sessionFromRow(s, tasksBySession.get(s.id) ?? []));
+    return sessionRows.map((s) => sessionFromRow(s, tasksBySession.get(s.id) ?? []));
   }
 
   // ---------------- Teams ----------------
@@ -282,10 +408,15 @@ export class SupabaseRepository implements DataSource {
   async createTeam(name: string, accentColor: string): Promise<Team> {
     const uid = this.userId;
     if (!uid) throw new DataError('forbidden', 'No hay sesión.');
-    const { data, error } = await this.client.rpc('create_my_team', { p_name: name, p_accent_color: accentColor });
+    const { data, error } = await this.client.rpc('create_my_team', {
+      p_name: name,
+      p_accent_color: accentColor,
+    });
     if (error) throw errorToDataError(error, 'team_create');
     const teamId = data as string;
-    return this.loadTeamRow(teamId).then((t) => t ?? { id: teamId, name, accentColor, createdAt: new Date().toISOString() });
+    return this.loadTeamRow(teamId).then(
+      (t) => t ?? { id: teamId, name, accentColor, createdAt: new Date().toISOString() },
+    );
   }
 
   async renameTeam(teamId: string, name: string, accentColor: string): Promise<Team> {
@@ -307,7 +438,14 @@ export class SupabaseRepository implements DataSource {
     if (!teamId) throw new DataError('forbidden', 'No hay equipo de contexto.');
     const { data, error } = await this.client
       .from('players')
-      .insert({ team_id: teamId, name: input.name, number: input.number, position: input.position, color: input.color, active: true })
+      .insert({
+        team_id: teamId,
+        name: input.name,
+        number: input.number,
+        position: input.position,
+        color: input.color,
+        active: true,
+      })
       .select()
       .single();
     if (error) throw errorToDataError(error, 'player_create');
@@ -338,7 +476,11 @@ export class SupabaseRepository implements DataSource {
 
   // ---------------- Carpetas ----------------
 
-  async createFolder(teamId: string, name: string, parentId: string | null): Promise<ExerciseFolder> {
+  async createFolder(
+    teamId: string,
+    name: string,
+    parentId: string | null,
+  ): Promise<ExerciseFolder> {
     const { data, error } = await this.client
       .from('exercise_folders')
       .insert({ team_id: teamId, parent_id: parentId, name })
@@ -349,7 +491,12 @@ export class SupabaseRepository implements DataSource {
   }
 
   async renameFolder(id: string, name: string): Promise<ExerciseFolder> {
-    const { data, error } = await this.client.from('exercise_folders').update({ name }).eq('id', id).select().single();
+    const { data, error } = await this.client
+      .from('exercise_folders')
+      .update({ name })
+      .eq('id', id)
+      .select()
+      .single();
     if (error) throw errorToDataError(error, 'folder_rename');
     return folderFromRow(data);
   }
@@ -360,7 +507,7 @@ export class SupabaseRepository implements DataSource {
     // Recupera el subárbol (hijos anidados) para borrarlo de forma recursiva.
     const folders = await this.loadFolders(teamId);
     const toDelete = this.subtreeIds(id, folders);
-    const order = [...toDelete].sort((a, b) => (this.depth(b, folders) - this.depth(a, folders)));
+    const order = [...toDelete].sort((a, b) => this.depth(b, folders) - this.depth(a, folders));
     for (const fid of order) {
       const { error } = await this.client.from('exercise_folders').delete().eq('id', fid);
       if (error) throw errorToDataError(error, 'folder_delete');
@@ -376,7 +523,11 @@ export class SupabaseRepository implements DataSource {
     const exercises = await this.loadExercises(teamId);
 
     const map = new Map<string, string>();
-    const createRec = async (oldId: string, newParentId: string | null, rootName: string): Promise<void> => {
+    const createRec = async (
+      oldId: string,
+      newParentId: string | null,
+      rootName: string,
+    ): Promise<void> => {
       const old = folders.find((f) => f.id === oldId);
       if (!old) return;
       const name = oldId === id ? `${rootName} (copia)` : old.name;
@@ -399,13 +550,19 @@ export class SupabaseRepository implements DataSource {
   }
 
   async moveExerciseToFolder(exerciseId: string, folderId: string | null): Promise<void> {
-    const { error } = await this.client.from('exercises').update({ folder_id: folderId }).eq('id', exerciseId);
+    const { error } = await this.client
+      .from('exercises')
+      .update({ folder_id: folderId })
+      .eq('id', exerciseId);
     if (error) throw errorToDataError(error, 'exercise_move');
   }
 
   async moveExercisesToFolder(ids: string[], folderId: string | null): Promise<void> {
     if (ids.length === 0) return;
-    const { error } = await this.client.from('exercises').update({ folder_id: folderId }).in('id', ids);
+    const { error } = await this.client
+      .from('exercises')
+      .update({ folder_id: folderId })
+      .in('id', ids);
     if (error) throw errorToDataError(error, 'exercise_move');
   }
 
@@ -445,7 +602,11 @@ export class SupabaseRepository implements DataSource {
       if (error) throw errorToDataError(error, 'exercise_save');
       if (!data || data.length === 0) {
         // La revisión no coincidió → otro usuario lo modificó.
-        const { data: latest } = await this.client.from('exercises').select('*').eq('id', ex.id).maybeSingle();
+        const { data: latest } = await this.client
+          .from('exercises')
+          .select('*')
+          .eq('id', ex.id)
+          .maybeSingle();
         return {
           conflict: true,
           revision: latest?.revision ?? 1,
@@ -468,7 +629,11 @@ export class SupabaseRepository implements DataSource {
   }
 
   async duplicateExercise(id: string): Promise<Exercise> {
-    const { data, error } = await this.client.from('exercises').select('*').eq('id', id).maybeSingle();
+    const { data, error } = await this.client
+      .from('exercises')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
     if (error) throw errorToDataError(error, 'exercise_read');
     if (!data) throw new DataError('not_found', 'No se encontró el ejercicio.');
     const src = exerciseFromRow(data);
@@ -521,6 +686,13 @@ export class SupabaseRepository implements DataSource {
   }
 
   // ---------------- Colaboradores / invitaciones ----------------
+  //
+  // Las listas de miembros, invitaciones propias y perfiles NO se paginan aquí: vienen de RPC
+  // del servidor (`list_team_members`, `my_team_invitations`, `admin_list_profiles`) que
+  // devuelven el conjunto completo de una vez. Paginarlas exigiría cambiar la firma de la RPC
+  // en el backend, que en este cambio no se toca (ver docs/06-supabase-autoritativo.md).
+  // Las que sí leen tablas directamente están acotadas por el límite de colaboradores
+  // (`collaborator_limit_exceeded`: 4 activos + pendientes) y quedan marcadas abajo.
 
   async listMembers(teamId: string): Promise<TeamMemberInfo[]> {
     const { data, error } = await this.client.rpc('list_team_members', { p_team_id: teamId });
@@ -540,7 +712,14 @@ export class SupabaseRepository implements DataSource {
   }
 
   private async listInvitations(teamId: string): Promise<TeamInvitationInfo[]> {
-    const { data, error } = await this.client.from('team_invitations').select('*').eq('team_id', teamId).eq('status', 'pending');
+    // NO se pagina: las invitaciones PENDIENTES de un equipo están acotadas por
+    // `collaborator_limit_exceeded` (4 colaboradores entre activos y pendientes), muy por
+    // debajo de la página del servidor.
+    const { data, error } = await this.client
+      .from('team_invitations')
+      .select('*')
+      .eq('team_id', teamId)
+      .eq('status', 'pending');
     if (error) throw errorToDataError(error, 'invitation_list');
     const team = await this.loadTeamRow(teamId);
     return (data ?? []).map((r) => ({
@@ -560,11 +739,18 @@ export class SupabaseRepository implements DataSource {
   }
 
   async inviteMember(teamId: string, email: string): Promise<TeamInvitationInfo> {
-    const { data, error } = await this.client.rpc('invite_team_member', { p_team_id: teamId, p_email: email });
+    const { data, error } = await this.client.rpc('invite_team_member', {
+      p_team_id: teamId,
+      p_email: email,
+    });
     if (error) throw errorToDataError(error, 'invitation_create');
     const invitationId = data as string;
     if (!invitationId) throw new DataError('invitation_create', 'No se pudo crear la invitación.');
-    const { data: row, error: rowErr } = await this.client.from('team_invitations').select('*').eq('id', invitationId).single();
+    const { data: row, error: rowErr } = await this.client
+      .from('team_invitations')
+      .select('*')
+      .eq('id', invitationId)
+      .single();
     if (rowErr || !row) throw errorToDataError(rowErr, 'invitation_create');
     const team = await this.loadTeamRow(teamId);
     return {
@@ -580,7 +766,9 @@ export class SupabaseRepository implements DataSource {
   }
 
   async cancelInvitation(invitationId: string): Promise<void> {
-    const { error } = await this.client.rpc('cancel_team_invitation', { p_invitation_id: invitationId });
+    const { error } = await this.client.rpc('cancel_team_invitation', {
+      p_invitation_id: invitationId,
+    });
     if (error) throw errorToDataError(error, 'invitation_cancel');
   }
 
@@ -590,12 +778,17 @@ export class SupabaseRepository implements DataSource {
    * 'forbidden: not team owner' y "Rechazar" no hacía nada.
    */
   async declineInvitation(invitationId: string): Promise<void> {
-    const { error } = await this.client.rpc('decline_team_invitation', { p_invitation_id: invitationId });
+    const { error } = await this.client.rpc('decline_team_invitation', {
+      p_invitation_id: invitationId,
+    });
     if (error) throw errorToDataError(error, 'invitation_decline');
   }
 
   async revokeMember(teamId: string, userId: string): Promise<void> {
-    const { error } = await this.client.rpc('revoke_team_member', { p_team_id: teamId, p_user_id: userId });
+    const { error } = await this.client.rpc('revoke_team_member', {
+      p_team_id: teamId,
+      p_user_id: userId,
+    });
     if (error) throw errorToDataError(error, 'member_revoke');
   }
 
@@ -618,7 +811,9 @@ export class SupabaseRepository implements DataSource {
   }
 
   async acceptInvitation(invitationId: string): Promise<string> {
-    const { data, error } = await this.client.rpc('accept_team_invitation', { p_invitation_id: invitationId });
+    const { data, error } = await this.client.rpc('accept_team_invitation', {
+      p_invitation_id: invitationId,
+    });
     if (error) throw errorToDataError(error, 'invitation_accept');
     return data as string;
   }
@@ -647,7 +842,10 @@ export class SupabaseRepository implements DataSource {
   }
 
   async setProfileStatus(userId: string, status: ProfileStatus): Promise<void> {
-    const { error } = await this.client.rpc('admin_set_profile_status', { p_user_id: userId, p_status: status });
+    const { error } = await this.client.rpc('admin_set_profile_status', {
+      p_user_id: userId,
+      p_status: status,
+    });
     if (error) throw errorToDataError(error, 'profile_status');
   }
 
@@ -655,23 +853,35 @@ export class SupabaseRepository implements DataSource {
 
   async importLocalData(
     teamId: string,
-    data: { players: Player[]; folders: ExerciseFolder[]; exercises: Exercise[]; sessions: Session[] }
+    data: {
+      players: Player[];
+      folders: ExerciseFolder[];
+      exercises: Exercise[];
+      sessions: Session[];
+    },
   ): Promise<ImportCounts> {
     // 1. Mapa explícito oldId → newId POR TIPO, ANTES de enviar. El nuevo id es
     //    determinista (función de `${teamId}:<tipo>:${oldId}`), de modo que
     //    reimportar el mismo conjunto produce los MISMOS ids y es idempotente.
     const folderIds = new Map<string, string>();
-    for (const f of data.folders) folderIds.set(f.id, await this.deterministicId(`${teamId}:folder:${f.id}`));
+    for (const f of data.folders)
+      folderIds.set(f.id, await this.deterministicId(`${teamId}:folder:${f.id}`));
     const playerIds = new Map<string, string>();
-    for (const p of data.players) playerIds.set(p.id, await this.deterministicId(`${teamId}:player:${p.id}`));
+    for (const p of data.players)
+      playerIds.set(p.id, await this.deterministicId(`${teamId}:player:${p.id}`));
     const exerciseIds = new Map<string, string>();
-    for (const e of data.exercises) exerciseIds.set(e.id, await this.deterministicId(`${teamId}:exercise:${e.id}`));
+    for (const e of data.exercises)
+      exerciseIds.set(e.id, await this.deterministicId(`${teamId}:exercise:${e.id}`));
     const sessionIds = new Map<string, string>();
-    for (const s of data.sessions) sessionIds.set(s.id, await this.deterministicId(`${teamId}:session:${s.id}`));
+    for (const s of data.sessions)
+      sessionIds.set(s.id, await this.deterministicId(`${teamId}:session:${s.id}`));
     const taskIds = new Map<string, string>();
     for (const s of data.sessions) {
       for (const t of s.tasks) {
-        taskIds.set(`${s.id}:${t.id}`, await this.deterministicId(`${teamId}:session-task:${s.id}:${t.id}`));
+        taskIds.set(
+          `${s.id}:${t.id}`,
+          await this.deterministicId(`${teamId}:session-task:${s.id}:${t.id}`),
+        );
       }
     }
 
@@ -807,7 +1017,9 @@ export class SupabaseRepository implements DataSource {
    * cuando WebCrypto está disponible y un fallback determinista en su ausencia.
    */
   private async deterministicId(seed: string): Promise<string> {
-    const g = globalThis as { crypto?: { subtle?: { digest?: (alg: string, data: Uint8Array) => Promise<ArrayBuffer> } } };
+    const g = globalThis as {
+      crypto?: { subtle?: { digest?: (alg: string, data: Uint8Array) => Promise<ArrayBuffer> } };
+    };
     if (g?.crypto?.subtle?.digest) {
       try {
         const digest = await g.crypto.subtle.digest('SHA-1', new TextEncoder().encode(seed));
@@ -838,10 +1050,14 @@ export class SupabaseRepository implements DataSource {
         h2 = Math.imul(h2 ^ c, 0x01000193) >>> 0;
       }
       return [
-        (h1 >>> 8) & 0xff, h1 & 0xff,
-        (h1 >>> 24) & 0xff, (h1 >>> 16) & 0xff,
-        (h2 >>> 8) & 0xff, h2 & 0xff,
-        (h2 >>> 24) & 0xff, (h2 >>> 16) & 0xff,
+        (h1 >>> 8) & 0xff,
+        h1 & 0xff,
+        (h1 >>> 24) & 0xff,
+        (h1 >>> 16) & 0xff,
+        (h2 >>> 8) & 0xff,
+        h2 & 0xff,
+        (h2 >>> 24) & 0xff,
+        (h2 >>> 16) & 0xff,
       ].map((v) => v.toString(16).padStart(2, '0'));
     };
     const a = hashPart(0x811c9dc5, seed);
@@ -850,5 +1066,4 @@ export class SupabaseRepository implements DataSource {
     hex = `${hex.slice(0, 12)}5${hex.slice(13, 16)}8${hex.slice(17)}`;
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
-
 }

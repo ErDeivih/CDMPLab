@@ -1140,18 +1140,37 @@ export class BoardComponent {
    *  el defecto del "doble clic" que arregla la Fase 5). Solo llega a `null` al
    *  confirmar (pointerup) o al cancelar el borrador (Escape/cancel/pinch). */
   private readonly drag = signal<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  /** Herramienta con la que se EMPEZÓ el borrador, capturada al iniciarlo. La usan el
+   *  CONFIRMAR (`commitDrag`) y la PREVISUALIZACIÓN (`previewStr`), en vez de leer `tool()` en
+   *  vivo: con «Línea», mantener ESPACIO a mitad de trazo (pasa a Mano) hacía que al soltar no
+   *  casara ninguna rama y el trazo DESAPARECIERA (con otra herramienta de dibujo creaba OTRO
+   *  tipo), mientras la previsualización ya mostraba la forma nueva: mentía. `null` cuando no
+   *  hay borrador en curso. */
+  private dragTool: Tool | null = null;
   private freehandPts: [number, number][] = [];
   private movingIds: string[] = [];
   private moveStart: { x: number; y: number } | null = null;
   private moveGestureBegun = false;
   private resizing = false;
   private resizeKey: string | null = null;
+  /** Elemento que se está redimensionando, CAPTURADO al empezar el gesto. No se usa
+   *  `selectedId` en vivo durante el arrastre: si entre medias el usuario deshace (Ctrl+Z), pega
+   *  (Ctrl+V) o cualquier acción cambia la selección, el gesto se congelaba (el elemento dejaba de
+   *  seguir al puntero) o pasaba a redimensionar OTRO elemento, y al soltar se registraba una
+   *  entrada de historial que no correspondía a ningún cambio real. */
+  private resizeId: string | null = null;
   /** `size` inicial al empezar a redimensionar un material/jugador (escala uniforme). */
   private resizeStartSize: number | null = null;
   /** `points` iniciales al redimensionar un trazo a mano alzada (bbox proporcional). */
   private resizeStartPoints: [number, number][] | null = null;
-  private gestureBase: BoardSnapshot | null =
-    null; /** Inicio de un gesto de PANEO (solo con la herramienta "Mano"; Seleccionar ya NO panea,
+  private gestureBase: BoardSnapshot | null = null;
+  /** Copia EXACTA del historial justo ANTES de abrir la transacción del gesto (`snapshot()`
+   *  deja vacía la pila de rehacer). La lee SOLO la cancelación de un gesto con Escape: al
+   *  cancelar, el deshacer/rehacer tienen que quedar como estaban antes del gesto (igual que
+   *  hace el camino táctil en `restoreTouchState`). En un gesto confirmado no se lee nunca:
+   *  `endHistory` se limita a olvidarla. */
+  private historyBase: HistorySnapshot<BoardSnapshot> | null = null;
+  /** Inicio de un gesto de PANEO (solo con la herramienta "Mano"; Seleccionar ya NO panea,
    *  ni sobre vacío ni sobre un objeto). `null` cuando no hay paneo activo. Distingue
    *  pantalla‑objeto: con Seleccionar, si el puntero baja sobre un elemento se MUEVE el
    *  elemento; sobre vacío solo deselecciona. Con "Mano", el arrastre (sobre objeto o no)
@@ -1901,6 +1920,7 @@ export class BoardComponent {
     this.moveStart = null;
     this.moveGestureBegun = false;
     this.drag.set(null);
+    this.dragTool = null;
     this.freehandPts = [];
     this.rotating = false;
     this.rotCenter = null;
@@ -1916,8 +1936,46 @@ export class BoardComponent {
    *  un no-op mientras el documento no haya cambiado, que es el caso del borrador). */
   private cancelDraft(): void {
     this.drag.set(null);
+    this.dragTool = null;
     this.freehandPts = [];
     this.endHistory();
+  }
+
+  /** Cancela el gesto de un puntero EN CURSO (mover/redimensionar con ratón o pluma, o el
+   *  gesto de un dedo ya empezado) devolviendo el estado EXACTO previo al gesto. Se usa al
+   *  pulsar Escape.
+   *
+   *  Por qué hacía falta: sin esto, Escape solo limpiaba la selección y el objeto seguía
+   *  pegado al puntero hasta soltar; si se soltaba sobre la papelera, se BORRABA un objeto que
+   *  el usuario creía haber cancelado.
+   *
+   *  Cómo queda el historial: se restaura el documento desde `gestureBase` ANTES de limpiar el
+   *  gesto, así el `endHistory` de la limpieza compara dos estados idénticos y no confirma NADA
+   *  (ni entrada de undo ni marca de sucio); y se devuelve la copia de `historyBase` para que el
+   *  deshacer/rehacer queden como estaban (el `snapshot()` del inicio del gesto vacía el rehacer).
+   *
+   *  Devuelve true si había un gesto que cancelar (y por tanto Escape ya se ha consumido). */
+  private cancelActiveGesture(): boolean {
+    // Camino TÁCTIL: la gestión del dedo guarda su propia instantánea completa (documento,
+    // vista, selección, historial y sucio). Se descarta entera —también si aún estaba
+    // PENDIENTE, porque al levantar el dedo confirmaría un tap que Escape debe anular.
+    if (this.touchPending) {
+      this.cancelLongPress(); // la pulsación larga armada por este dedo muere con el gesto
+      this.cancelTouchGesture();
+      return true;
+    }
+    // Camino de UN PUNTERO: solo hay gesto con estado que limpiar si está moviendo o
+    // redimensionando (un paneo no toca el documento y Escape lo sigue dejando en paz).
+    if (!this.movingIds.length && !this.resizing) return false;
+    // Bajar sobre un objeto ARMA la pulsación larga: si Escape cancela el gesto, el
+    // temporizador no puede seguir vivo y abrir la barra contextual medio segundo después.
+    this.cancelLongPress();
+    const base = this.gestureBase;
+    const hist = this.historyBase;
+    if (base) this.restoreSnapshot(base);
+    this.cancelSinglePointerGestures(); // limpia el gesto; su endHistory no confirma nada
+    if (hist) this.history.restore(hist);
+    return true;
   }
 
   /** Inicia un pinch (llega el SEGUNDO dedo táctil): FIJA los dos participantes y guarda
@@ -2388,6 +2446,9 @@ export class BoardComponent {
 
   private beginHistory(): void {
     this.gestureBase = this.docSnapshot();
+    // Copia del historial ANTES de abrir la transacción: `snapshot()` vacía la pila de rehacer,
+    // y una cancelación (Escape) tiene que poder devolverla a como estaba.
+    this.historyBase = this.history.capture();
     this.history.snapshot(this.gestureBase);
   }
   private endHistory(): void {
@@ -2402,6 +2463,7 @@ export class BoardComponent {
       this.markDirty();
     }
     this.gestureBase = null;
+    this.historyBase = null;
   }
   /** Snapshot de documento (campo + orientación + frames) usado por el historial. */
   private docSnapshot(): BoardSnapshot {
@@ -2467,6 +2529,11 @@ export class BoardComponent {
       evt.preventDefault();
       this.removeSelected();
     } else if (evt.key === 'Escape') {
+      // Si hay un gesto de UN puntero EN CURSO (mover/redimensionar con ratón o pluma, o el
+      // gesto de un dedo), Escape lo CANCELA restaurando el estado previo al gesto: no basta
+      // con limpiar la selección, porque el objeto seguiría al puntero hasta soltar y, si se
+      // soltara sobre la papelera, se borraría.
+      if (this.cancelActiveGesture()) return;
       // Si hay un borrador de dibujo en curso, Escape lo cancela (no crea nada).
       if (this.drag()) {
         this.cancelDraft();
@@ -2562,7 +2629,15 @@ export class BoardComponent {
     this.tool.set(t);
     // Cada herramienta coloreable usa SU color recordado (Fase 1) al armarse.
     if (this.colorableTools.has(t)) this.drawColor.set(this.colorFor(t));
-    if (t !== 'select') this.selectedId.set(null);
+    if (t !== 'select') {
+      // La selección se limpia ENTERA. Antes solo se anulaba `selectedId`, pero el inspector y las
+      // asas del campo se pintan desde `selectedIds`: tras cambiar de herramienta y volver a
+      // «Seleccionar» aparecían las asas y el contorno de un elemento que ya no se podía ni
+      // redimensionar ni editar (el asa se movía en balde y todo el inspector era un no-op
+      // silencioso). Una sola verdad: sin elemento seleccionado, sin asas ni inspector.
+      this.selectedId.set(null);
+      this.selectedIds.set([]);
+    }
     if (t !== 'hand') this.handDragging.set(false);
     // Fase 3: cambiar a Seleccionar o a Desplazar campo FINALIZA la colocación
     // continua (armed se limpia: ya no se crean más elementos al tocar el campo).
@@ -3240,6 +3315,14 @@ export class BoardComponent {
       this.notify('No se puede duplicar un jugador de la plantilla: ya está en el campo.');
       return;
     }
+    // Un elemento BLOQUEADO tampoco: el clon se copia entero (incluido `locked`) y nacería
+    // inmóvil, así que «Duplicar» solo añadiría un objeto que no se puede mover ni editar. La
+    // intención ya estaba escrita en `duplicateElementEl`, pero este camino —el único real— no la
+    // cumplía; ahora se comparte el candado `canDuplicateElement`.
+    if (!this.canDuplicateElement(el)) {
+      this.notify('El elemento está bloqueado: desbloquéalo para poder duplicarlo.');
+      return;
+    }
     this.beginHistory();
     this.addElement({ ...translateElement(el, 0.04, 0.04), id: uid() });
     this.endHistory();
@@ -3591,7 +3674,14 @@ export class BoardComponent {
     shift: boolean,
     pointerId: number,
     eventStamp: number,
+    // Cuando el gesto viene de un DEDO, el plan se decidió con tolerancias táctiles (16 px en las
+    // asas, 9 px al objeto) y aquí hay que usar LAS MISMAS: si se re-decide con las de ratón (10 y
+    // 4), un dedo que empieza el arrastre en esa franja obtiene plan de mover/redimensionar pero la
+    // ejecución no encuentra ni asa ni objeto, así que se DESELECCIONA y no se mueve nada.
+    fromTouch = false,
   ): void {
+    const tolAsa = fromTouch ? 16 : 10;
+    const tolHit = fromTouch ? 9 : 4;
     // Fase 3: cualquier interacción sobre el campo cierra el menú contextual (tocar fuera).
     this.closeCtxMenu();
 
@@ -3610,11 +3700,12 @@ export class BoardComponent {
         const selEl = this.selectedElement();
         // Asas de redimensionado del elemento seleccionado (la rotación continua se
         // retira en la Fase 6: ahora es ±90° desde la barra de contexto).
-        const rKey = selEl ? this.resizeHandleAt(selEl, p, 10) : null;
+        const rKey = selEl ? this.resizeHandleAt(selEl, p, tolAsa) : null;
         if (selEl && rKey && !selEl.locked) {
           this.beginHistory();
           this.resizing = true;
           this.resizeKey = rKey;
+          this.resizeId = selEl.id;
           this.moveStart = { x: p.x, y: p.y };
           this.resizeStartSize =
             selEl.t !== 'text' && this.isPointLike(selEl.t)
@@ -3626,7 +3717,7 @@ export class BoardComponent {
         }
         // Los elementos bloqueados siguen siendo SELECCIONABLES (para poder
         // desbloquearlos desde el inspector), pero no se mueven/editan/borran.
-        const hit = this.hitTestNorm(p, this.view(), 4);
+        const hit = this.hitTestNorm(p, this.view(), tolHit);
         if (hit) {
           if (shift) {
             this.toggleSelect(hit);
@@ -3761,6 +3852,10 @@ export class BoardComponent {
       case 'dribble':
       case 'freehand':
         this.beginHistory();
+        // La herramienta del borrador se CAPTURA aquí (antes de mostrarlo) y es la que decide
+        // qué se crea al soltar y qué pinta la previsualización: la activa puede cambiar a
+        // mitad del trazo (p. ej. mantener ESPACIO pasa a Mano).
+        this.dragTool = this.tool();
         this.drag.set({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
         this.freehandPts = [[p.x, p.y]];
         break;
@@ -3986,8 +4081,11 @@ export class BoardComponent {
       this.panMoved = false;
       this.handDragging.set(false);
     }
-    // Seleccionar el objeto y abrir el menú contextual (sin duplicar ni mover).
-    this.setSingleSelection(el.id);
+    // Seleccionar el objeto y abrir el menú contextual (sin duplicar ni mover). Si el elemento ya
+    // forma parte de una SELECCIÓN MÚLTIPLE no se colapsa: el arrastre ya está armado con todo el
+    // grupo (`movingIds`) y la papelera borraría el grupo entero, así que la interfaz debe seguir
+    // mostrando lo mismo que se va a mover/borrar. Colapsar aquí dejaba dos verdades divergentes.
+    if (this.selectedIds().length <= 1) this.setSingleSelection(el.id);
     this.ctxMenuOpen.set(true);
     this.lp = null;
   }
@@ -4037,6 +4135,7 @@ export class BoardComponent {
       gp.shift,
       gp.pointerId,
       gp.stamp,
+      true, // gesto de DEDO: tolerancias táctiles, las mismas con las que se decidió el plan
     );
   }
 
@@ -4166,7 +4265,10 @@ export class BoardComponent {
     if (this.drag()) {
       const d = this.drag()!;
       this.drag.set({ ...d, x1: p.x, y1: p.y });
-      if (this.tool() === 'freehand') this.freehandPts.push([p.x, p.y]);
+      // La herramienta CAPTURADA al empezar el borrador decide si se acumulan puntos (no la
+      // activa: si a mitad del trazo cambia, el dibujo a mano alzada se cortaba y al soltar no
+      // se creaba nada aunque la previsualización siguiera mostrando el trazo).
+      if ((this.dragTool ?? this.tool()) === 'freehand') this.freehandPts.push([p.x, p.y]);
       return;
     }
     if (this.movingIds.length && this.moveStart) {
@@ -4187,7 +4289,10 @@ export class BoardComponent {
       return;
     }
     if (this.resizing && this.resizeKey) {
-      const id = this.selectedId();
+      // El elemento se toma del CAPTURADO al empezar el gesto (`resizeId`), no de la selección
+      // viva: si el usuario deshace o pega a mitad de arrastre, la selección cambia y el
+      // redimensionado se congelaba o se aplicaba a otro elemento.
+      const id = this.resizeId;
       const el = id ? this.view().find((e) => e.id === id) : undefined;
       if (el) this.applyResize(el, this.resizeKey, p);
     }
@@ -4360,11 +4465,13 @@ export class BoardComponent {
     }
     if (dragVal || this.moveGestureBegun || this.rotating || this.resizing) this.endHistory();
     this.drag.set(null);
+    this.dragTool = null;
     this.movingIds = [];
     this.moveGestureBegun = false;
     this.moveStart = null;
     this.resizing = false;
     this.resizeKey = null;
+    this.resizeId = null;
     this.resizeStartSize = null;
     this.resizeStartPoints = null;
     this.rotating = false;
@@ -4586,7 +4693,12 @@ export class BoardComponent {
   }
 
   private commitDrag(d: { x0: number; y0: number; x1: number; y1: number }): void {
-    const t = this.tool();
+    // El tipo se toma de la herramienta CAPTURADA al empezar el borrador (`dragTool`), no de la
+    // activa en este instante: si cambia a mitad del trazo (p. ej. mantener ESPACIO pasa a Mano)
+    // leer `tool()` no casaba con ninguna rama y el trazo DESAPARECÍA —después de que la
+    // previsualización ya hubiera mostrado la forma nueva—, o creaba OTRO tipo si la nueva
+    // herramienta era de dibujo. El `?? this.tool()` solo cubre un commit sin borrador capturado.
+    const t = this.dragTool ?? this.tool();
     // Fase 5 — un clic SIN movimiento NO debe crear una línea/shape invisible:
     // si los dos extremos están prácticamente juntos, el borrador se descarta.
     if (Math.hypot(d.x1 - d.x0, d.y1 - d.y0) < 0.004) return;
@@ -4724,7 +4836,9 @@ export class BoardComponent {
   }
 
   private previewStr(d: { x0: number; y0: number; x1: number; y1: number }): string {
-    const t = this.tool();
+    // Misma herramienta capturada que usará `commitDrag`: la previsualización no puede mostrar
+    // una forma que al soltar no se cree (o se cree de otro tipo).
+    const t = this.dragTool ?? this.tool();
     const g = this.geo().rect;
     // Antes de mover, el borrador es un PUNTO: se dibuja un pequeño ancla para que el
     // inicio del trazo sea visible desde el pointerdown (Fase 5). En cuanto hay

@@ -88,7 +88,8 @@ export class App {
         : 'Se borrarán todos los datos locales de CDMPLab (equipos, jugadores, ejercicios, sesiones). Esta acción no se puede deshacer.',
       confirmLabel: 'Borrar',
       onConfirm: () => {
-        for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+        for (const k of Object.keys(localStorage))
+          if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
         location.reload();
       },
     });
@@ -151,6 +152,15 @@ export class App {
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
+    // El límite de tamaño se comprueba ANTES de leer: leer el fichero entero (file.text()) y
+    // validarlo después cargaba en memoria un fichero de varios GB antes de rechazarlo. El tope
+    // es el mismo que el del validador (10 MB de caracteres ≈ 10 MiB de bytes).
+    const MAX_BYTES = 10 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+      this.importJson.set(null);
+      this.backupError.set('El archivo es demasiado grande (máximo 10 MB).');
+      return;
+    }
     file.text().then((text) => {
       const v = this.store.validateBackup(text);
       if (!v.ok) {

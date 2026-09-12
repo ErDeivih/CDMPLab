@@ -443,6 +443,75 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await expect(page.locator('.field-count'), 'moverse fuera antes de soltar NO elimina').toHaveText('1');
   });
 
+  test('(i) Escape a mitad de un arrastre CANCELA el gesto: no borra en la papelera, el objeto vuelve a su sitio y el historial queda intacto', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await seed(page);
+    await openClosed(page);
+    await placeConeAt(page, 0.55, 0.5);
+    expect(await fieldCount(page)).toBe(1);
+    await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
+    await hideOverlays(page);
+    // Posición del cono en PANTALLA: el material se mide por su caja real (su `<image>` no
+    // lleva el `translate` en el `<g>`, así que `objectNorm` no sirve para materiales).
+    const obj = await objectScreen(page, CONE);
+    const distFromStart = async (): Promise<number> => {
+      const n = await objectScreen(page, CONE);
+      return Math.hypot(n.x - obj.x, n.y - obj.y);
+    };
+    const trash = (await page.locator('.board-trash').boundingBox())!;
+
+    // Arrastre EN CURSO hasta la papelera (con el botón todavía bajado).
+    await page.mouse.move(obj.x, obj.y);
+    await page.mouse.down();
+    await page.mouse.move(trash.x + trash.width / 2, trash.y + trash.height / 2, { steps: 6 });
+    await expect(page.locator('.board-trash')).toHaveClass(/trash-hot/);
+    // El cono ACOMPAÑA al puntero: hay un gesto de movimiento realmente en curso.
+    await expect.poll(distFromStart, { timeout: 4000 }).toBeGreaterThan(20);
+
+    // Escape con el gesto a medias: lo CANCELA y devuelve el objeto a su sitio.
+    await page.keyboard.press('Escape');
+    await expect(page.locator(CONE), 'el cono sigue en el campo').toHaveCount(1);
+    await expect.poll(distFromStart, { timeout: 4000 }).toBeLessThan(2);
+
+    // Soltar ENCIMA de la papelera ya NO borra: el gesto se canceló al pulsar Escape.
+    await page.mouse.up();
+    await expect(
+      page.locator('.field-count'),
+      'Escape cancela: soltar en la papelera no borra',
+    ).toHaveText('1');
+    expect(await distFromStart(), 'el objeto vuelve a su sitio').toBeLessThan(2);
+
+    // El gesto cancelado NO deja entrada de historial: el primer Undo deshace la COLOCACIÓN
+    // del cono (si el arrastre hubiera confirmado algo, el contador seguiría en 1).
+    await page.keyboard.press('Control+z');
+    await expect(page.locator('.field-count'), 'un Undo deshace la colocación').toHaveText('0');
+  });
+
+  test('(j) Escape con el botón BAJADO sobre un objeto mata también la pulsación larga pendiente', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await seed(page);
+    await openClosed(page);
+    await placeComodinAt(page, 0.5, 0.5);
+    await hideOverlays(page);
+    const obj = await objectScreen(page, PLAYER);
+    // Bajar SIN moverse: se arma el temporizador de la pulsación larga (LONG_PRESS_MS = 550).
+    await page.mouse.move(obj.x, obj.y);
+    await page.mouse.down();
+    await page.keyboard.press('Escape'); // cancela el gesto a media pulsación
+    // Espera MAYOR que LONG_PRESS_MS: si el temporizador siguiera vivo, abriría la barra.
+    await page.waitForTimeout(900);
+    await expect(
+      page.locator('.context-bar'),
+      'Escape mata la pulsación larga pendiente',
+    ).toHaveCount(0);
+    await page.mouse.up();
+    await expect(page.locator('.field-count'), 'no se duplica ni se borra nada').toHaveText('1');
+  });
+
   test('(extra) captura del tablero con la barra de herramientas (botón Mano visible)', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);

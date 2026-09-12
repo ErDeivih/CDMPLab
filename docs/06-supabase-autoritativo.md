@@ -3,6 +3,12 @@
 > Proyecto: `vgwfjkhvzprsoixpzruq`. ChatGPT aplicó y verificó estas 5 migraciones
 > contra el remoto. **No modificar migraciones aplicadas (hasta 20260827000004).**
 > Cualquier cambio nuevo va en una migración incremental posterior (>= 00005).
+>
+> **Alcance de la cifra «5»:** son las cinco migraciones del lote documentado en
+> `docs/05-supabase-fase6.md` (verificación externa del 27/08/2026), **no** el total de
+> ficheros de `supabase/migrations/` (hay 12). El recuento local, la contradicción entre
+> documentos, el mapeo de identidad y lo que **no** está verificado contra la base están en
+> [`supabase-estado.md`](supabase-estado.md).
 
 ## Migraciones aplicadas
 - `20260827000000_entrenolab_schema.sql`

@@ -3,7 +3,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import { SupabaseRepository } from './supabase-data-source';
 import { DataError } from './data-source';
-import type { CanvasDocument, Exercise, ExerciseFolder, Player, Session, SessionTask } from '../models';
+import type {
+  CanvasDocument,
+  Exercise,
+  ExerciseFolder,
+  Player,
+  Session,
+  SessionTask,
+} from '../models';
 
 describe('SupabaseRepository team hydration', () => {
   it('no mezcla la carga común del editor con las RPC exclusivas del propietario', async () => {
@@ -53,7 +60,16 @@ function makeClient(overrides?: {
 }
 
 function makeSession(overrides: Partial<Session> = {}): Session {
-  const tasks: SessionTask[] = [{ id: 't1', exerciseId: 'ex-1', title: 'Rondos', durationMinutes: 15, material: '', sortOrder: 0 }];
+  const tasks: SessionTask[] = [
+    {
+      id: 't1',
+      exerciseId: 'ex-1',
+      title: 'Rondos',
+      durationMinutes: 15,
+      material: '',
+      sortOrder: 0,
+    },
+  ];
   return {
     id: 's-1',
     teamId: 'team-1',
@@ -110,7 +126,16 @@ describe('SupabaseRepository.saveSession (RPC transaccional)', () => {
         notes: 'notas',
       },
       p_revision: null, // sesión nueva o sin revisión → la RPC inserta
-      p_tasks: [{ id: 't1', exercise_id: 'ex-1', title: 'Rondos', duration_minutes: 15, material: '', sort_order: 0 }],
+      p_tasks: [
+        {
+          id: 't1',
+          exercise_id: 'ex-1',
+          title: 'Rondos',
+          duration_minutes: 15,
+          material: '',
+          sort_order: 0,
+        },
+      ],
     });
   });
 
@@ -133,16 +158,23 @@ describe('SupabaseRepository.saveSession (RPC transaccional)', () => {
     });
     const repo = new SupabaseRepository(client, 'user-1', 'team-1');
 
-    await expect(repo.saveSession(makeSession())).rejects.toMatchObject({ code: 'revision_conflict' });
+    await expect(repo.saveSession(makeSession())).rejects.toMatchObject({
+      code: 'revision_conflict',
+    });
   });
 
   it('superficia el rechazo de un ejercicio de otro equipo (same_team_exercise_required)', async () => {
     const { client } = makeClient({
-      rpc: async () => ({ data: null, error: { code: 'P0001', message: 'same_team_exercise_required' } }),
+      rpc: async () => ({
+        data: null,
+        error: { code: 'P0001', message: 'same_team_exercise_required' },
+      }),
     });
     const repo = new SupabaseRepository(client, 'user-1', 'team-1');
 
-    await expect(repo.saveSession(makeSession())).rejects.toMatchObject({ code: 'same_team_exercise_required' });
+    await expect(repo.saveSession(makeSession())).rejects.toMatchObject({
+      code: 'same_team_exercise_required',
+    });
   });
 
   it('no hace NINGUNA escritura parcial: la RPC es la única llamada al servidor', async () => {
@@ -180,7 +212,11 @@ describe('SupabaseRepository.saveSession (RPC transaccional)', () => {
 // T2 — importLocalData: mapeo de ids, orden topológico, idempotencia
 // ---------------------------------------------------------------------------
 
-const CANVAS: CanvasDocument = { version: 2, field: 'full', frames: [{ duration: 0, elements: [{ id: 'e1', t: 'cone', x: 0.5, y: 0.5 }] }] };
+const CANVAS: CanvasDocument = {
+  version: 2,
+  field: 'full',
+  frames: [{ duration: 0, elements: [{ id: 'e1', t: 'cone', x: 0.5, y: 0.5 }] }],
+};
 
 function makeExercise(overrides: Partial<Exercise> = {}): Exercise {
   return {
@@ -214,7 +250,17 @@ function makeFolder(id: string, parentId: string | null, name: string): Exercise
 }
 
 function makePlayer(overrides: Partial<Player> = {}): Player {
-  return { id: 'j-1', teamId: 'team-1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: 'now', ...overrides };
+  return {
+    id: 'j-1',
+    teamId: 'team-1',
+    name: 'Marcos',
+    number: 2,
+    position: 'DF',
+    color: '#1a73e8',
+    active: true,
+    createdAt: 'now',
+    ...overrides,
+  };
 }
 
 function makeSessionWithTasks(overrides: Partial<Session> = {}): Session {
@@ -225,7 +271,16 @@ function makeSessionWithTasks(overrides: Partial<Session> = {}): Session {
     date: '2026-01-01',
     durationMinutes: 60,
     notes: '',
-    tasks: [{ id: 'task-1', exerciseId: 'ex-1', title: 'Rondos', durationMinutes: 15, material: '', sortOrder: 0 }],
+    tasks: [
+      {
+        id: 'task-1',
+        exerciseId: 'ex-1',
+        title: 'Rondos',
+        durationMinutes: 15,
+        material: '',
+        sortOrder: 0,
+      },
+    ],
     createdAt: 'now',
     savedAt: 'now',
     ...overrides,
@@ -266,7 +321,10 @@ describe('SupabaseRepository.importLocalData', () => {
       rpc: async (name: string, args: unknown) => {
         seen.push({ name, args });
         return {
-          data: { created: { players: 1, folders: 2, exercises: 1, sessions: 1 }, skipped: { players: 0, folders: 0, exercises: 0, sessions: 0 } },
+          data: {
+            created: { players: 1, folders: 2, exercises: 1, sessions: 1 },
+            skipped: { players: 0, folders: 0, exercises: 0, sessions: 0 },
+          },
           error: null,
         };
       },
@@ -319,7 +377,10 @@ describe('SupabaseRepository.importLocalData', () => {
   it('mapea el resultado idempotente de la RPC (created=0, skipped=total)', async () => {
     const { client } = makeClient({
       rpc: async () => ({
-        data: { created: { players: 0, folders: 0, exercises: 0, sessions: 0 }, skipped: { players: 1, folders: 2, exercises: 1, sessions: 1 } },
+        data: {
+          created: { players: 0, folders: 0, exercises: 0, sessions: 0 },
+          skipped: { players: 1, folders: 2, exercises: 1, sessions: 1 },
+        },
         error: null,
       }),
     });
@@ -343,11 +404,25 @@ describe('SupabaseRepository.importLocalData', () => {
     const { client } = makeClient({
       rpc: async (name: string, args: unknown) => {
         seen.push({ name, args });
-        return { data: { created: { players: 1, folders: 2, exercises: 1, sessions: 0 }, skipped: { players: 0, folders: 0, exercises: 0, sessions: 0 }, errors: { players: 0, folders: 0, exercises: 0, sessions: 0 } }, error: null };
+        return {
+          data: {
+            created: { players: 1, folders: 2, exercises: 1, sessions: 0 },
+            skipped: { players: 0, folders: 0, exercises: 0, sessions: 0 },
+            errors: { players: 0, folders: 0, exercises: 0, sessions: 0 },
+          },
+          error: null,
+        };
       },
     });
     const repo = new SupabaseRepository(client, 'user-1', 'team-1');
-    const F7_CANVAS: CanvasDocument = { version: 2, schemaVersion: 4, field: 'f7', frames: [{ duration: 1000, elements: [{ id: 'e1', t: 'cone', x: 0.5, y: 0.5 }] }], orientation: 'horizontal', grass: 'stripes' };
+    const F7_CANVAS: CanvasDocument = {
+      version: 2,
+      schemaVersion: 4,
+      field: 'f7',
+      frames: [{ duration: 1000, elements: [{ id: 'e1', t: 'cone', x: 0.5, y: 0.5 }] }],
+      orientation: 'horizontal',
+      grass: 'stripes',
+    };
     const data = {
       players: [makePlayer()],
       folders: [makeFolder('f-root', null, 'Raíz')],
@@ -356,7 +431,9 @@ describe('SupabaseRepository.importLocalData', () => {
     };
     const counts = await repo.importLocalData('team-1', data);
     expect(counts.created.exercises).toBe(1);
-    const payload = (seen[0].args as { p_payload: { exercises: Array<{ canvas_data: CanvasDocument }> } }).p_payload;
+    const payload = (
+      seen[0].args as { p_payload: { exercises: Array<{ canvas_data: CanvasDocument }> } }
+    ).p_payload;
     expect(payload.exercises[0].canvas_data.field).toBe('f7');
   });
 
@@ -375,18 +452,511 @@ describe('SupabaseRepository.importLocalData', () => {
         rpc: async () => ({ data: null, error: { code: 'P0001', message: c.message } }),
       });
       const repo = new SupabaseRepository(client, 'user-1', 'team-1');
-      await expect(repo.importLocalData('team-1', { players: [], folders: [], exercises: [], sessions: [] })).rejects.toMatchObject({
+      await expect(
+        repo.importLocalData('team-1', { players: [], folders: [], exercises: [], sessions: [] }),
+      ).rejects.toMatchObject({
         code: c.expectedCode,
       });
     }
 
     // Forbidden (42501) → code 'forbidden'.
     const { client } = makeClient({
-      rpc: async () => ({ data: null, error: { code: '42501', message: 'forbidden: not a member of the team' } }),
+      rpc: async () => ({
+        data: null,
+        error: { code: '42501', message: 'forbidden: not a member of the team' },
+      }),
     });
     const repo = new SupabaseRepository(client, 'user-1', 'team-1');
-    await expect(repo.importLocalData('team-1', { players: [], folders: [], exercises: [], sessions: [] })).rejects.toMatchObject({
+    await expect(
+      repo.importLocalData('team-1', { players: [], folders: [], exercises: [], sessions: [] }),
+    ).rejects.toMatchObject({
       code: 'forbidden',
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T3 — Paginación del dataset del equipo (PostgREST `max-rows` = 1000)
+//
+// Por qué existe esta prueba: PostgREST no devuelve más de `max-rows` filas por petición y
+// NO avisa de que ha recortado. Una lectura sin `.range()` hidrataba el store INCOMPLETO y la
+// app operaba sobre una vista parcial (el borrado recursivo de carpetas calculaba el subárbol
+// sobre la lista truncada). El doble de pruebas de abajo replica exactamente ese recorte, de
+// modo que estos tests fallan si el repositorio vuelve a leer el dataset de una sola petición.
+// ---------------------------------------------------------------------------
+
+const PAGINATED_TEAM_ID = 'team-1';
+
+/** Filas por respuesta del "servidor": el `max-rows` por defecto de PostgREST. */
+const SERVER_MAX_ROWS = 1000;
+
+/** Cada tabla del dataset de pruebas supera una página, y varias superan dos. */
+const DATASET = {
+  players: 2500,
+  folders: 1200,
+  exercises: 1500,
+  sessions: 1100,
+  tasksPerSession: 11,
+};
+
+/** Mismo instante para todas las filas: es el caso real de una importación en bloque, y el
+ *  que obliga a que el orden lleve desempate (si no, las páginas pueden solaparse). */
+const SEED_TIME = '2026-01-01T00:00:00.000Z';
+
+type FakeRow = Record<string, unknown>;
+
+interface FakeRange {
+  from: number;
+  to: number;
+}
+
+interface FakeOrder {
+  column: string;
+  ascending: boolean;
+}
+
+interface FakeCall {
+  table: string;
+  mode: 'select' | 'delete';
+  /** `null` si la consulta no pidió `.range()` (el servidor devuelve su primera página). */
+  range: FakeRange | null;
+  orders: FakeOrder[];
+  rows: number;
+}
+
+interface FakeResponse {
+  data: unknown;
+  error: { code: string; message: string } | null;
+}
+
+function pad(n: number): string {
+  return String(n).padStart(4, '0');
+}
+
+/** Compara como Postgres en lo que aquí importa: números como números, el resto como texto
+ *  (ISO timestamps y uuids se ordenan igual). */
+function compareValues(a: unknown, b: unknown): number {
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  const sa = String(a ?? '');
+  const sb = String(b ?? '');
+  return sa < sb ? -1 : sa > sb ? 1 : 0;
+}
+
+function dataRows(response: FakeResponse): FakeRow[] {
+  return (response.data ?? []) as FakeRow[];
+}
+
+function idsOf(rows: readonly FakeRow[]): string[] {
+  return rows.map((r) => String(r['id'])).sort();
+}
+
+/** Doble del servidor PostgREST: filtros, orden, y `max-rows` aplicado SIEMPRE (también
+ *  cuando el rango pedido es mayor, como hace el servidor real).
+ *  `ignoresRange` emula al servidor que se come el offset y devuelve siempre la primera
+ *  página (un proxy que descarte el `Range`): sirve para probar la red de seguridad del
+ *  repositorio frente a un bucle infinito. */
+class FakePostgrestServer {
+  private readonly tables = new Map<string, FakeRow[]>();
+  /** Cada petición que el repositorio envía al "servidor", en orden. */
+  readonly calls: FakeCall[] = [];
+
+  constructor(
+    private readonly maxRows: number = SERVER_MAX_ROWS,
+    private readonly ignoresRange = false,
+  ) {}
+
+  seed(table: string, rows: FakeRow[]): void {
+    this.tables.set(table, [...rows]);
+  }
+
+  rowsOf(table: string): FakeRow[] {
+    return this.tables.get(table) ?? [];
+  }
+
+  query(table: string): FakeQueryBuilder {
+    return new FakeQueryBuilder(this, table);
+  }
+
+  respond(
+    table: string,
+    rows: FakeRow[],
+    range: FakeRange | null,
+    orders: FakeOrder[],
+  ): FakeResponse {
+    const from = range && !this.ignoresRange ? range.from : 0;
+    const to = Math.min(range ? range.to : Number.MAX_SAFE_INTEGER, from + this.maxRows - 1);
+    const page = rows.slice(from, to + 1);
+    this.calls.push({ table, mode: 'select', range, orders, rows: page.length });
+    return { data: page, error: null };
+  }
+
+  removeRows(table: string, rows: FakeRow[]): FakeResponse {
+    const doomed = new Set(rows);
+    this.tables.set(
+      table,
+      this.rowsOf(table).filter((r) => !doomed.has(r)),
+    );
+    this.calls.push({ table, mode: 'delete', range: null, orders: [], rows: rows.length });
+    return { data: null, error: null };
+  }
+}
+
+class FakeQueryBuilder implements PromiseLike<FakeResponse> {
+  private readonly filters: Array<(row: FakeRow) => boolean> = [];
+  private readonly orders: FakeOrder[] = [];
+  private rangeWindow: FakeRange | null = null;
+  private singleMode: 'maybe' | 'only' | null = null;
+  private deleting = false;
+
+  constructor(
+    private readonly server: FakePostgrestServer,
+    private readonly table: string,
+  ) {}
+
+  select(_columns?: string): this {
+    return this;
+  }
+
+  eq(column: string, value: unknown): this {
+    this.filters.push((row) => String(row[column]) === String(value));
+    return this;
+  }
+
+  in(column: string, values: readonly unknown[]): this {
+    const wanted = new Set(values.map((v) => String(v)));
+    this.filters.push((row) => wanted.has(String(row[column])));
+    return this;
+  }
+
+  order(column: string, options?: { ascending?: boolean }): this {
+    this.orders.push({ column, ascending: options?.ascending ?? true });
+    return this;
+  }
+
+  range(from: number, to: number): this {
+    this.rangeWindow = { from, to };
+    return this;
+  }
+
+  delete(): this {
+    this.deleting = true;
+    return this;
+  }
+
+  maybeSingle(): this {
+    this.singleMode = 'maybe';
+    return this;
+  }
+
+  single(): this {
+    this.singleMode = 'only';
+    return this;
+  }
+
+  then<TResult1 = FakeResponse, TResult2 = never>(
+    onfulfilled?: ((value: FakeResponse) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    let rows = this.server.rowsOf(this.table).filter((row) => this.filters.every((f) => f(row)));
+    const orders = this.orders;
+    rows = [...rows].sort((a, b) => {
+      for (const order of orders) {
+        const cmp = compareValues(a[order.column], b[order.column]);
+        if (cmp !== 0) return order.ascending ? cmp : -cmp;
+      }
+      return 0;
+    });
+    const response = this.singleMode
+      ? { data: rows[0] ?? null, error: null }
+      : this.responseFor(rows, orders);
+    return Promise.resolve(response).then(onfulfilled, onrejected);
+  }
+
+  private responseFor(rows: FakeRow[], orders: FakeOrder[]): FakeResponse {
+    return this.deleting
+      ? this.server.removeRows(this.table, rows)
+      : this.server.respond(this.table, rows, this.rangeWindow, orders);
+  }
+}
+
+function playerRows(count: number): FakeRow[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `p-${pad(i)}`,
+    team_id: PAGINATED_TEAM_ID,
+    name: `Jugador ${i}`,
+    number: i,
+    position: 'DF',
+    color: '#1a73e8',
+    active: true,
+    created_at: SEED_TIME,
+  }));
+}
+
+function folderRows(count: number): FakeRow[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `f-${pad(i)}`,
+    team_id: PAGINATED_TEAM_ID,
+    parent_id: null,
+    name: `Carpeta ${i}`,
+    created_at: SEED_TIME,
+  }));
+}
+
+function exerciseRows(count: number): FakeRow[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `ex-${pad(i)}`,
+    team_id: PAGINATED_TEAM_ID,
+    folder_id: null,
+    title: `Ejercicio ${i}`,
+    description: '',
+    explanation: '',
+    category: 'Técnica',
+    objectives: [],
+    materials: [],
+    duration_minutes: 15,
+    min_players: null,
+    max_players: null,
+    load_mode: 'fixed',
+    series_count: null,
+    repetitions_count: null,
+    work_seconds: null,
+    rest_seconds: null,
+    is_template: false,
+    canvas_data: null,
+    thumbnail: null,
+    revision: 1,
+    created_at: SEED_TIME,
+    updated_at: SEED_TIME,
+  }));
+}
+
+/** Dataset del equipo con TODAS las tablas por encima de la página del servidor. */
+function seededServer(): FakePostgrestServer {
+  const server = new FakePostgrestServer();
+  server.seed('teams', [
+    {
+      id: PAGINATED_TEAM_ID,
+      owner_user_id: 'user-1',
+      name: 'Primer Equipo',
+      accent_color: '#3056d3',
+      created_at: SEED_TIME,
+      updated_at: SEED_TIME,
+    },
+  ]);
+  server.seed('players', playerRows(DATASET.players));
+  server.seed('exercise_folders', folderRows(DATASET.folders));
+  server.seed('exercises', exerciseRows(DATASET.exercises));
+  server.seed(
+    'sessions',
+    Array.from({ length: DATASET.sessions }, (_, i) => ({
+      id: `s-${pad(i)}`,
+      team_id: PAGINATED_TEAM_ID,
+      title: `Sesión ${i}`,
+      date: '2026-01-01',
+      duration_minutes: 60,
+      notes: '',
+      revision: 1,
+      created_at: SEED_TIME,
+      updated_at: SEED_TIME,
+    })),
+  );
+  const tasks: FakeRow[] = [];
+  for (let s = 0; s < DATASET.sessions; s++) {
+    for (let t = 0; t < DATASET.tasksPerSession; t++) {
+      tasks.push({
+        id: `t-${pad(s)}-${pad(t)}`,
+        team_id: PAGINATED_TEAM_ID,
+        session_id: `s-${pad(s)}`,
+        exercise_id: t === 0 ? 'ex-0000' : null,
+        title: `Tarea ${t}`,
+        duration_minutes: 5,
+        material: '',
+        sort_order: t,
+      });
+    }
+  }
+  server.seed('session_exercises', tasks);
+  return server;
+}
+
+/** Árbol de carpetas cuya RAÍZ y cuya rama profunda caen más allá de la primera página:
+ *  truncando la lectura, `deleteFolder` no encontraría ni la raíz. */
+function seedFolderTree(server: FakePostgrestServer): number {
+  const rows: FakeRow[] = [
+    {
+      id: 'f-root',
+      team_id: PAGINATED_TEAM_ID,
+      parent_id: null,
+      name: 'Raíz',
+      created_at: SEED_TIME,
+    },
+  ];
+  for (let i = 0; i < 1200; i++) {
+    rows.push({
+      id: `f-${pad(i)}`,
+      team_id: PAGINATED_TEAM_ID,
+      parent_id: 'f-root',
+      name: `Hija ${i}`,
+      created_at: SEED_TIME,
+    });
+  }
+  rows.push({
+    id: 'f-nieta',
+    team_id: PAGINATED_TEAM_ID,
+    parent_id: 'f-1199',
+    name: 'Nieta',
+    created_at: SEED_TIME,
+  });
+  server.seed('exercise_folders', rows);
+  return rows.length;
+}
+
+function makePagedRepo(server: FakePostgrestServer): SupabaseRepository {
+  const client = {
+    from: (table: string) => server.query(table),
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+  } as unknown as SupabaseClient<Database>;
+  return new SupabaseRepository(client, 'user-1', PAGINATED_TEAM_ID);
+}
+
+function selectCalls(server: FakePostgrestServer, table: string): FakeCall[] {
+  return server.calls.filter((c) => c.table === table && c.mode === 'select');
+}
+
+function selectRanges(server: FakePostgrestServer, table: string): FakeRange[] {
+  return selectCalls(server, table)
+    .filter((c): c is FakeCall & { range: FakeRange } => c.range !== null)
+    .map((c) => c.range);
+}
+
+describe('SupabaseRepository · paginación del dataset del equipo', () => {
+  it('el doble replica el recorte del servidor: sin `.range()` solo llegan 1000 filas (control del experimento)', async () => {
+    const server = seededServer();
+
+    const truncated = dataRows(
+      await server
+        .query('players')
+        .select('*')
+        .eq('team_id', PAGINATED_TEAM_ID)
+        .order('created_at', { ascending: true }),
+    );
+    expect(truncated).toHaveLength(SERVER_MAX_ROWS);
+
+    // `max-rows` manda incluso sobre un rango mayor: por eso la página es de 1000 y no de más.
+    const wide = dataRows(
+      await server
+        .query('players')
+        .select('*')
+        .eq('team_id', PAGINATED_TEAM_ID)
+        .order('created_at', { ascending: true })
+        .range(0, 4999),
+    );
+    expect(wide).toHaveLength(SERVER_MAX_ROWS);
+
+    // El "servidor" sí tiene las 2500 filas: lo que recorta es la respuesta.
+    expect(server.rowsOf('players')).toHaveLength(DATASET.players);
+  });
+
+  it('loadTeam recoge TODAS las filas del equipo aunque superen la página del servidor', async () => {
+    const server = seededServer();
+    const repo = makePagedRepo(server);
+
+    const dataset = await repo.loadTeam(PAGINATED_TEAM_ID);
+
+    // Ni una fila perdida ni duplicada: los ids devueltos son EXACTAMENTE los del servidor.
+    expect(dataset.players.map((p) => p.id).sort()).toEqual(idsOf(server.rowsOf('players')));
+    expect(dataset.folders.map((f) => f.id).sort()).toEqual(
+      idsOf(server.rowsOf('exercise_folders')),
+    );
+    expect(dataset.exercises.map((e) => e.id).sort()).toEqual(idsOf(server.rowsOf('exercises')));
+    expect(dataset.sessions.map((s) => s.id).sort()).toEqual(idsOf(server.rowsOf('sessions')));
+    expect(dataset.players).toHaveLength(DATASET.players);
+
+    // Las tareas también llegan todas, cada una con su sesión y en su orden.
+    const allTasks = dataset.sessions.flatMap((s) => s.tasks);
+    expect(allTasks).toHaveLength(DATASET.sessions * DATASET.tasksPerSession);
+    const first = dataset.sessions.find((s) => s.id === 's-0000');
+    expect(first?.tasks.map((t) => t.sortOrder)).toEqual(
+      Array.from({ length: DATASET.tasksPerSession }, (_, i) => i),
+    );
+    expect(first?.tasks[0].snapshot?.id).toBe('ex-0000'); // el snapshot resolvió contra `exercises`
+    expect(server.rowsOf('session_exercises')).toHaveLength(
+      DATASET.sessions * DATASET.tasksPerSession,
+    );
+  });
+
+  it('recorre páginas consecutivas de 1000 con un orden que desempata (fronteras estables)', async () => {
+    const server = seededServer();
+    await makePagedRepo(server).loadTeam(PAGINATED_TEAM_ID);
+
+    // Cada tabla se pidió entera: bloques de 1000 y una última página incompleta.
+    expect(selectRanges(server, 'players')).toEqual([
+      { from: 0, to: 999 },
+      { from: 1000, to: 1999 },
+      { from: 2000, to: 2999 },
+    ]);
+    expect(selectRanges(server, 'exercise_folders')).toEqual([
+      { from: 0, to: 999 },
+      { from: 1000, to: 1999 },
+    ]);
+    expect(selectRanges(server, 'exercises').slice(0, 2)).toEqual([
+      { from: 0, to: 999 },
+      { from: 1000, to: 1999 },
+    ]);
+    expect(selectRanges(server, 'sessions')).toEqual([
+      { from: 0, to: 999 },
+      { from: 1000, to: 1999 },
+    ]);
+
+    // Ninguna petición pidió más de una página, y todas pidieron un rango explícito.
+    for (const call of server.calls.filter((c) => c.mode === 'select')) {
+      expect(call.range).not.toBeNull();
+      expect(call.rows).toBeLessThanOrEqual(SERVER_MAX_ROWS);
+    }
+
+    // Las tareas van en bloques de sesiones (la lista de ids viaja en la URL) y cada bloque
+    // también se pagina: con 100 sesiones × 11 tareas, un bloque necesita dos páginas.
+    const taskRanges = selectRanges(server, 'session_exercises');
+    expect(taskRanges[0]).toEqual({ from: 0, to: 999 });
+    expect(taskRanges[1]).toEqual({ from: 1000, to: 1999 });
+    expect(taskRanges.filter((r) => r.from === 0).length).toBeGreaterThan(1); // varios bloques de sesiones
+    expect(taskRanges.every((r) => r.to - r.from === SERVER_MAX_ROWS - 1)).toBe(true);
+
+    // Y el orden que hace estables las fronteras entre páginas: criterio + desempate por id.
+    const expectedOrders: Record<string, string[]> = {
+      players: ['created_at', 'id'],
+      exercise_folders: ['created_at', 'id'],
+      exercises: ['updated_at', 'id'],
+      sessions: ['updated_at', 'id'],
+      session_exercises: ['sort_order', 'id'],
+    };
+    for (const [table, columns] of Object.entries(expectedOrders)) {
+      expect(selectCalls(server, table).length).toBeGreaterThan(0);
+      expect(selectCalls(server, table)[0].orders.map((o) => o.column)).toEqual(columns);
+    }
+  });
+
+  it('deleteFolder borra el subárbol COMPLETO aunque la raíz y la rama profunda caigan en la segunda página', async () => {
+    const server = new FakePostgrestServer();
+    const total = seedFolderTree(server);
+    const repo = makePagedRepo(server);
+
+    await repo.deleteFolder('f-root');
+
+    expect(server.rowsOf('exercise_folders')).toHaveLength(0);
+    expect(server.calls.filter((c) => c.mode === 'delete')).toHaveLength(total);
+  });
+
+  it('si el servidor ignorase el rango, la lectura falla con un error legible en vez de colgarse', async () => {
+    // Un servidor que devuelve siempre la primera página no avanza nunca: el repositorio
+    // tiene que cortar, no quedarse en un bucle infinito llenando memoria.
+    const server = new FakePostgrestServer(SERVER_MAX_ROWS, true);
+    server.seed('players', playerRows(DATASET.players));
+    const repo = makePagedRepo(server);
+
+    await expect(repo.loadTeam(PAGINATED_TEAM_ID)).rejects.toMatchObject({
+      code: 'pagination_stuck',
+    });
+    expect(selectCalls(server, 'players')).toHaveLength(2); // detectado en la segunda página
   });
 });

@@ -139,17 +139,48 @@ export class RlsBackend {
 
   seedTeam(id: string, ownerUserId: string, name: string, accentColor: string): void {
     const now = nowIso();
-    this.rows.teams.push({ id, owner_user_id: ownerUserId, name, accent_color: accentColor, created_at: now, updated_at: now });
+    this.rows.teams.push({
+      id,
+      owner_user_id: ownerUserId,
+      name,
+      accent_color: accentColor,
+      created_at: now,
+      updated_at: now,
+    });
     // Trigger add_owner_membership → el propietario es miembro activo.
-    this.rows.team_members.push({ team_id: id, user_id: ownerUserId, role: 'owner', status: 'active', invited_by: null, accepted_at: now, created_at: now });
+    this.rows.team_members.push({
+      team_id: id,
+      user_id: ownerUserId,
+      role: 'owner',
+      status: 'active',
+      invited_by: null,
+      accepted_at: now,
+      created_at: now,
+    });
   }
 
   seedPlayer(teamId: string, row: Rw): void {
-    this.rows.players.push({ id: row.id ?? uuid(), team_id: teamId, name: row.name ?? '', number: row.number ?? null, position: row.position ?? '', color: row.color ?? '#1a73e8', active: row.active ?? true, created_at: nowIso(), updated_at: nowIso() });
+    this.rows.players.push({
+      id: row.id ?? uuid(),
+      team_id: teamId,
+      name: row.name ?? '',
+      number: row.number ?? null,
+      position: row.position ?? '',
+      color: row.color ?? '#1a73e8',
+      active: row.active ?? true,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    });
   }
 
   seedFolder(teamId: string, row: Rw): void {
-    this.rows.exercise_folders.push({ id: row.id ?? uuid(), team_id: teamId, parent_id: row.parent_id ?? null, name: row.name ?? '', created_at: nowIso() });
+    this.rows.exercise_folders.push({
+      id: row.id ?? uuid(),
+      team_id: teamId,
+      parent_id: row.parent_id ?? null,
+      name: row.name ?? '',
+      created_at: nowIso(),
+    });
   }
 
   seedExercise(teamId: string, row: Rw): void {
@@ -181,12 +212,43 @@ export class RlsBackend {
   }
 
   /** Crea una sesión y sus session_exercises (para que loadSessions las hidrate). */
-  seedSession(teamId: string, row: Rw, tasks: Array<{ id: string; exerciseId: string | null; title: string; durationMinutes: number | null; material: string; sortOrder: number }>): void {
+  seedSession(
+    teamId: string,
+    row: Rw,
+    tasks: Array<{
+      id: string;
+      exerciseId: string | null;
+      title: string;
+      durationMinutes: number | null;
+      material: string;
+      sortOrder: number;
+    }>,
+  ): void {
     const now = nowIso();
     const id = (row.id as string) ?? uuid();
-    this.rows.sessions.push({ id, team_id: teamId, title: row.title ?? '', date: row.date ?? null, duration_minutes: row.duration_minutes ?? null, notes: row.notes ?? '', revision: row.revision ?? 1, created_at: now, updated_at: now });
+    this.rows.sessions.push({
+      id,
+      team_id: teamId,
+      title: row.title ?? '',
+      date: row.date ?? null,
+      duration_minutes: row.duration_minutes ?? null,
+      notes: row.notes ?? '',
+      revision: row.revision ?? 1,
+      created_at: now,
+      updated_at: now,
+    });
     this.rows.session_exercises.push(
-      ...tasks.map((t, i) => ({ id: t.id, team_id: teamId, session_id: id, exercise_id: t.exerciseId, title: t.title, duration_minutes: t.durationMinutes ?? null, material: t.material ?? '', sort_order: t.sortOrder ?? i, created_at: now }))
+      ...tasks.map((t, i) => ({
+        id: t.id,
+        team_id: teamId,
+        session_id: id,
+        exercise_id: t.exerciseId,
+        title: t.title,
+        duration_minutes: t.durationMinutes ?? null,
+        material: t.material ?? '',
+        sort_order: t.sortOrder ?? i,
+        created_at: now,
+      })),
     );
   }
 
@@ -219,7 +281,9 @@ export class RlsBackend {
     if (!this.isApproved(uid)) return 'none';
     const team = this.rows.teams.find((t) => t.id === teamId);
     if (team?.owner_user_id === uid) return 'owner';
-    const row = this.rows.team_members.find((m) => m.team_id === teamId && m.user_id === uid && m.status === 'active');
+    const row = this.rows.team_members.find(
+      (m) => m.team_id === teamId && m.user_id === uid && m.status === 'active',
+    );
     return row ? (row.role as 'editor') : 'none';
   }
 
@@ -236,7 +300,10 @@ export class RlsBackend {
     if (table === 'profiles') return row.user_id === uid || this.isPlatformAdmin(uid);
     if (table === 'teams') return this.isTeamMember(uid, row.id as string);
     if (table === 'team_invitations') {
-      return this.isTeamOwner(uid, row.team_id as string) || (this.isApproved(uid) && row.invited_user_id === uid);
+      return (
+        this.isTeamOwner(uid, row.team_id as string) ||
+        (this.isApproved(uid) && row.invited_user_id === uid)
+      );
     }
     // team_members, players, exercise_folders, exercises, sessions, session_exercises
     return this.isTeamMember(uid, row.team_id as string);
@@ -248,7 +315,13 @@ export class RlsBackend {
   }
 
   private canInsert(uid: string, table: string, payload: Rw): boolean {
-    if (table === 'profiles' || table === 'teams' || table === 'team_members' || table === 'team_invitations') return false; // solo via RPC
+    if (
+      table === 'profiles' ||
+      table === 'teams' ||
+      table === 'team_members' ||
+      table === 'team_invitations'
+    )
+      return false; // solo via RPC
     return this.isTeamMember(uid, payload.team_id as string);
   }
 
@@ -256,13 +329,30 @@ export class RlsBackend {
     const now = nowIso();
     switch (table) {
       case 'players':
-        return { ...p, id: p.id ?? uuid(), created_at: p.created_at ?? now, updated_at: p.updated_at ?? now };
+        return {
+          ...p,
+          id: p.id ?? uuid(),
+          created_at: p.created_at ?? now,
+          updated_at: p.updated_at ?? now,
+        };
       case 'exercise_folders':
         return { ...p, id: p.id ?? uuid(), created_at: p.created_at ?? now };
       case 'exercises':
-        return { ...p, id: p.id ?? uuid(), revision: p.revision ?? 1, created_at: p.created_at ?? now, updated_at: p.updated_at ?? now };
+        return {
+          ...p,
+          id: p.id ?? uuid(),
+          revision: p.revision ?? 1,
+          created_at: p.created_at ?? now,
+          updated_at: p.updated_at ?? now,
+        };
       case 'sessions':
-        return { ...p, id: p.id ?? uuid(), revision: p.revision ?? 1, created_at: p.created_at ?? now, updated_at: p.updated_at ?? now };
+        return {
+          ...p,
+          id: p.id ?? uuid(),
+          revision: p.revision ?? 1,
+          created_at: p.created_at ?? now,
+          updated_at: p.updated_at ?? now,
+        };
       case 'session_exercises':
         return { ...p, id: p.id ?? uuid(), created_at: p.created_at ?? now };
       default:
@@ -314,21 +404,46 @@ export class RlsBackend {
     }
     const id = uuid();
     const now = nowIso();
-    this.rows.teams.push({ id, owner_user_id: uid, name, accent_color: color, created_at: now, updated_at: now });
-    this.rows.team_members.push({ team_id: id, user_id: uid, role: 'owner', status: 'active', invited_by: null, accepted_at: now, created_at: now });
+    this.rows.teams.push({
+      id,
+      owner_user_id: uid,
+      name,
+      accent_color: color,
+      created_at: now,
+      updated_at: now,
+    });
+    this.rows.team_members.push({
+      team_id: id,
+      user_id: uid,
+      role: 'owner',
+      status: 'active',
+      invited_by: null,
+      accepted_at: now,
+      created_at: now,
+    });
     return ok(id);
   }
 
   private rpcInvite(a: Rw, uid: string): RpcResult {
     const teamId = a.p_team_id as string;
-    const normalized = String(a.p_email ?? '').trim().toLowerCase();
-    if (!normalized || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) return err('P0001', 'invalid_invitation_email');
+    const normalized = String(a.p_email ?? '')
+      .trim()
+      .toLowerCase();
+    if (!normalized || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized))
+      return err('P0001', 'invalid_invitation_email');
     const team = this.rows.teams.find((t) => t.id === teamId);
     if (!team) return err('P0001', 'team_not_found');
     if (!this.isTeamOwner(uid, teamId)) return err('P0001', 'forbidden: not team owner');
     const used =
-      this.rows.team_members.filter((m) => m.team_id === teamId && m.status === 'active' && m.role !== 'owner').length +
-      this.rows.team_invitations.filter((i) => i.team_id === teamId && i.status === 'pending' && new Date(i.expires_at as string).getTime() > Date.now()).length;
+      this.rows.team_members.filter(
+        (m) => m.team_id === teamId && m.status === 'active' && m.role !== 'owner',
+      ).length +
+      this.rows.team_invitations.filter(
+        (i) =>
+          i.team_id === teamId &&
+          i.status === 'pending' &&
+          new Date(i.expires_at as string).getTime() > Date.now(),
+      ).length;
     if (used >= 4) return err('P0001', 'collaborator_limit_exceeded');
     const target = this.rows.profiles.find((p) => p.email_normalized === normalized);
     const invId = uuid();
@@ -349,28 +464,48 @@ export class RlsBackend {
   private rpcAccept(a: Rw, uid: string): RpcResult {
     const prof = this.profileOf(uid);
     if (!prof || prof.status !== 'approved') return err('P0001', 'profile_not_approved');
-    const inv = this.rows.team_invitations.find((i) => i.id === a.p_invitation_id as string);
-    if (!inv || inv.status !== 'pending' || new Date(inv.expires_at as string).getTime() <= Date.now()) {
+    const inv = this.rows.team_invitations.find((i) => i.id === (a.p_invitation_id as string));
+    if (
+      !inv ||
+      inv.status !== 'pending' ||
+      new Date(inv.expires_at as string).getTime() <= Date.now()
+    ) {
       return err('P0001', 'invitation_not_available');
     }
-    if (inv.email_normalized !== prof.email_normalized) return err('P0001', 'invitation_email_mismatch');
+    if (inv.email_normalized !== prof.email_normalized)
+      return err('P0001', 'invitation_email_mismatch');
     inv.status = 'accepted';
     inv.invited_user_id = uid;
-    const existing = this.rows.team_members.find((m) => m.team_id === inv.team_id && m.user_id === uid);
+    const existing = this.rows.team_members.find(
+      (m) => m.team_id === inv.team_id && m.user_id === uid,
+    );
     const now = nowIso();
     if (existing) {
       existing.role = 'editor';
       existing.status = 'active';
       existing.accepted_at = existing.accepted_at ?? now;
     } else {
-      this.rows.team_members.push({ team_id: inv.team_id, user_id: uid, role: 'editor', status: 'active', invited_by: inv.invited_by as string | null, accepted_at: now, created_at: now });
+      this.rows.team_members.push({
+        team_id: inv.team_id,
+        user_id: uid,
+        role: 'editor',
+        status: 'active',
+        invited_by: inv.invited_by as string | null,
+        accepted_at: now,
+        created_at: now,
+      });
     }
     return ok(inv.team_id);
   }
 
   private rpcMyInvitations(uid: string): RpcResult {
     const rows = this.rows.team_invitations
-      .filter((i) => i.invited_user_id === uid && i.status === 'pending' && new Date(i.expires_at as string).getTime() > Date.now())
+      .filter(
+        (i) =>
+          i.invited_user_id === uid &&
+          i.status === 'pending' &&
+          new Date(i.expires_at as string).getTime() > Date.now(),
+      )
       .map((i) => ({
         id: i.id,
         team_id: i.team_id,
@@ -386,18 +521,20 @@ export class RlsBackend {
   private rpcListMembers(a: Rw, uid: string): RpcResult {
     const teamId = a.p_team_id as string;
     if (!this.isTeamOwner(uid, teamId)) return err('P0001', 'forbidden: not team owner');
-    const rows = this.rows.team_members.filter((m) => m.team_id === teamId).map((m) => {
-      const prof = this.rows.profiles.find((p) => p.user_id === m.user_id);
-      return {
-        user_id: m.user_id,
-        display_name: prof?.display_name ?? '',
-        email_normalized: prof?.email_normalized ?? '',
-        role: m.role,
-        status: m.status,
-        accepted_at: m.accepted_at ?? null,
-        invited_by: m.invited_by ?? null,
-      };
-    });
+    const rows = this.rows.team_members
+      .filter((m) => m.team_id === teamId)
+      .map((m) => {
+        const prof = this.rows.profiles.find((p) => p.user_id === m.user_id);
+        return {
+          user_id: m.user_id,
+          display_name: prof?.display_name ?? '',
+          email_normalized: prof?.email_normalized ?? '',
+          role: m.role,
+          status: m.status,
+          accepted_at: m.accepted_at ?? null,
+          invited_by: m.invited_by ?? null,
+        };
+      });
     return ok(rows);
   }
 
@@ -414,15 +551,17 @@ export class RlsBackend {
       }
     }
     for (const i of this.rows.team_invitations) {
-      if (i.team_id === teamId && i.invited_user_id === target && i.status === 'pending') i.status = 'revoked';
+      if (i.team_id === teamId && i.invited_user_id === target && i.status === 'pending')
+        i.status = 'revoked';
     }
     return ok(null);
   }
 
   private rpcCancelInvitation(a: Rw, uid: string): RpcResult {
-    const inv = this.rows.team_invitations.find((i) => i.id === a.p_invitation_id as string);
+    const inv = this.rows.team_invitations.find((i) => i.id === (a.p_invitation_id as string));
     if (!inv) return err('P0001', 'invitation_not_found');
-    if (!this.isTeamOwner(uid, inv.team_id as string)) return err('P0001', 'forbidden: not team owner');
+    if (!this.isTeamOwner(uid, inv.team_id as string))
+      return err('P0001', 'forbidden: not team owner');
     if (inv.status !== 'pending') return err('P0001', 'invitation_not_available');
     inv.status = 'revoked';
     return ok(null);
@@ -436,8 +575,10 @@ export class RlsBackend {
     let vRow: Rw | null = null;
     const existing = this.rows.sessions.find((x) => x.id === sessionId);
     if (existing) {
-      if (existing.team_id !== teamId) return err('42501', 'forbidden: session belongs to another team');
-      if ((existing.revision as number) !== Number(a.p_revision ?? null)) return err('P0001', 'revision_conflict');
+      if (existing.team_id !== teamId)
+        return err('42501', 'forbidden: session belongs to another team');
+      if ((existing.revision as number) !== Number(a.p_revision ?? null))
+        return err('P0001', 'revision_conflict');
       vRow = existing;
     }
     // Valida ANTES de mutar (transacción: si esto falla, no se cambia nada).
@@ -459,11 +600,23 @@ export class RlsBackend {
       vRow.revision = (vRow.revision as number) + 1;
     } else {
       const now = nowIso();
-      vRow = { id: sessionId, team_id: teamId, title: s.title ?? '', date: s.date ?? null, duration_minutes: s.duration_minutes ?? null, notes: s.notes ?? '', revision: 1, created_at: now, updated_at: now };
+      vRow = {
+        id: sessionId,
+        team_id: teamId,
+        title: s.title ?? '',
+        date: s.date ?? null,
+        duration_minutes: s.duration_minutes ?? null,
+        notes: s.notes ?? '',
+        revision: 1,
+        created_at: now,
+        updated_at: now,
+      };
       this.rows.sessions.push(vRow);
     }
     // Reemplazo atómico de tareas (misma transacción).
-    this.rows.session_exercises = this.rows.session_exercises.filter((se) => se.session_id !== sessionId);
+    this.rows.session_exercises = this.rows.session_exercises.filter(
+      (se) => se.session_id !== sessionId,
+    );
     for (const t of tasks) {
       this.rows.session_exercises.push({
         id: t.id ?? uuid(),
@@ -486,7 +639,8 @@ export class RlsBackend {
     let mode: 'select' | 'update' | 'insert' | 'delete' = 'select';
     let payload: Rw | null = null;
     const filters: Filter[] = [];
-    let orderBy: { col: string; asc: boolean } | null = null;
+    const orderBy: Array<{ col: string; asc: boolean }> = [];
+    let rangeWindow: { from: number; to: number } | null = null;
     let selectReturn = false;
     let limitSingle: 'single' | 'maybeSingle' | null = null;
 
@@ -525,13 +679,23 @@ export class RlsBackend {
       if (mode === 'select') {
         let rows = this.selectRows(uid, table);
         rows = applyFilters(rows);
-        if (orderBy) {
+        // PostgREST admite varios `.order()`: el criterio y, después, los desempates.
+        const keys = orderBy;
+        if (keys.length) {
           rows = [...rows].sort((a, b) => {
-            const av = a[orderBy!.col];
-            const bv = b[orderBy!.col];
-            return orderBy!.asc ? (av < bv ? -1 : av > bv ? 1 : 0) : av > bv ? -1 : av < bv ? 1 : 0;
+            for (const key of keys) {
+              const av = a[key.col];
+              const bv = b[key.col];
+              if (av === bv) continue;
+              const cmp = av < bv ? -1 : 1;
+              return key.asc ? cmp : -cmp;
+            }
+            return 0;
           });
         }
+        // `.range(from, to)` es el offset/limit de PostgREST (el recorte por `max-rows` no se
+        // emula aquí: estas pruebas usan datasets pequeños).
+        if (rangeWindow) rows = rows.slice(rangeWindow.from, rangeWindow.to + 1);
         return finishRead(rows);
       }
       if (mode === 'insert') {
@@ -563,7 +727,9 @@ export class RlsBackend {
       const visible = this.selectRows(uid, table);
       const toDelete = applyFilters(visible);
       const del = new Set(toDelete.map((r) => r));
-      this.rows[table as keyof BackendRow] = this.rows[table as keyof BackendRow].filter((r) => !del.has(r));
+      this.rows[table as keyof BackendRow] = this.rows[table as keyof BackendRow].filter(
+        (r) => !del.has(r),
+      );
       return ok(null);
     };
 
@@ -581,7 +747,11 @@ export class RlsBackend {
         return builder;
       },
       order: (col: string, opts?: { ascending?: boolean }) => {
-        orderBy = { col, asc: opts?.ascending ?? true };
+        orderBy.push({ col, asc: opts?.ascending ?? true });
+        return builder;
+      },
+      range: (from: number, to: number) => {
+        rangeWindow = { from, to };
         return builder;
       },
       update: (p: Rw) => {
@@ -606,7 +776,8 @@ export class RlsBackend {
         limitSingle = 'single';
         return builder;
       },
-      then: (resolve: (v: RpcResult) => unknown, reject: (e: unknown) => unknown) => execute().then(resolve, reject),
+      then: (resolve: (v: RpcResult) => unknown, reject: (e: unknown) => unknown) =>
+        execute().then(resolve, reject),
     };
 
     return builder;
@@ -619,6 +790,7 @@ export interface RwQuery {
   eq: (col: string, val: unknown) => RwQuery;
   in: (col: string, vals: unknown[]) => RwQuery;
   order: (col: string, opts?: { ascending?: boolean }) => RwQuery;
+  range: (from: number, to: number) => RwQuery;
   update: (p: Rw) => RwQuery;
   insert: (p: Rw) => RwQuery;
   delete: () => RwQuery;
@@ -641,7 +813,9 @@ function err(code: string, message: string): RpcResult {
 // ---------------------------------------------------------------------------
 
 function makeRlsClient(backend: RlsBackend, userId: string) {
-  const rpcMock = vi.fn(async (name: string, args: unknown): Promise<RpcResult> => backend.rpc(name, args, userId));
+  const rpcMock = vi.fn(async (name: string, args: unknown): Promise<RpcResult> =>
+    backend.rpc(name, args, userId),
+  );
   const fromMock = vi.fn((table: string): unknown => backend.tableQuery(table, userId));
   const client = { rpc: rpcMock, from: fromMock } as unknown as SupabaseClient<Database>;
   return { client, rpcMock, fromMock, userId };
@@ -685,7 +859,16 @@ function makeExercise(overrides: Partial<Exercise> = {}): Exercise {
 }
 
 function makeSession(overrides: Partial<Session> = {}): Session {
-  const tasks: SessionTask[] = [{ id: 't1', exerciseId: 'ex-1', title: 'Rondos', durationMinutes: 15, material: '', sortOrder: 0 }];
+  const tasks: SessionTask[] = [
+    {
+      id: 't1',
+      exerciseId: 'ex-1',
+      title: 'Rondos',
+      durationMinutes: 15,
+      material: '',
+      sortOrder: 0,
+    },
+  ];
   return {
     id: 's-1',
     teamId: 'team-1',
@@ -731,12 +914,44 @@ async function fullJourney() {
   const editorRepo = makeRepo(backend, EDITOR, null);
 
   const team = await ownerRepo.createTeam('Primer Equipo', '#3056d3');
-  backend.seedPlayer(team.id, { id: 'p1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true });
+  backend.seedPlayer(team.id, {
+    id: 'p1',
+    name: 'Marcos',
+    number: 2,
+    position: 'DF',
+    color: '#1a73e8',
+    active: true,
+  });
   backend.seedFolder(team.id, { id: 'f1', name: 'Ataque' });
-  backend.seedExercise(team.id, { id: 'ex-1', team_id: team.id, title: 'Rondos', folder_id: 'f1', revision: 1 });
-  backend.seedSession(team.id, { id: 's-1', team_id: team.id, title: 'Sesión 1', date: '2026-01-01', duration_minutes: 60, notes: 'notas', revision: 1 }, [
-    { id: 't1', exerciseId: 'ex-1', title: 'Rondos', durationMinutes: 15, material: '', sortOrder: 0 },
-  ]);
+  backend.seedExercise(team.id, {
+    id: 'ex-1',
+    team_id: team.id,
+    title: 'Rondos',
+    folder_id: 'f1',
+    revision: 1,
+  });
+  backend.seedSession(
+    team.id,
+    {
+      id: 's-1',
+      team_id: team.id,
+      title: 'Sesión 1',
+      date: '2026-01-01',
+      duration_minutes: 60,
+      notes: 'notas',
+      revision: 1,
+    },
+    [
+      {
+        id: 't1',
+        exerciseId: 'ex-1',
+        title: 'Rondos',
+        durationMinutes: 15,
+        material: '',
+        sortOrder: 0,
+      },
+    ],
+  );
 
   const invitation = await ownerRepo.inviteMember(team.id, 'editor@example.com');
   await editorRepo.acceptInvitation(invitation.id);
@@ -818,7 +1033,9 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
 
     // El propietario ve al editor como miembro activo.
     const members = await ownerRepo.listMembers(team.id);
-    expect(members).toContainEqual(expect.objectContaining({ userId: EDITOR, role: 'editor', status: 'active' }));
+    expect(members).toContainEqual(
+      expect.objectContaining({ userId: EDITOR, role: 'editor', status: 'active' }),
+    );
   });
 
   it('el editor carga el equipo y ve los datos comunes SIN las RPC exclusivas del propietario', async () => {
@@ -845,7 +1062,10 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
     const { backend, editorRepo, team } = await fullJourney();
     const ownerRepo = makeRepo(backend, OWNER, team.id);
 
-    const edited = await editorRepo.saveExercise(makeExercise({ id: 'ex-1', teamId: team.id, title: 'Rondos mejorado' }), 1);
+    const edited = await editorRepo.saveExercise(
+      makeExercise({ id: 'ex-1', teamId: team.id, title: 'Rondos mejorado' }),
+      1,
+    );
     expect(edited.conflict).toBeUndefined();
     expect(edited.revision).toBe(2);
 
@@ -861,10 +1081,16 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
     const ownerRepo = makeRepo(backend, OWNER, team.id);
 
     // Un primer guardado legítimo sube la revisión a 2.
-    await editorRepo.saveExercise(makeExercise({ id: 'ex-1', teamId: team.id, title: 'Versión 2' }), 1);
+    await editorRepo.saveExercise(
+      makeExercise({ id: 'ex-1', teamId: team.id, title: 'Versión 2' }),
+      1,
+    );
 
     // Ahora un guardado con la revisión 1 (ya stale) se rechaza como conflicto.
-    const result = await editorRepo.saveExercise(makeExercise({ id: 'ex-1', teamId: team.id, title: 'Cambio perdido' }), 1);
+    const result = await editorRepo.saveExercise(
+      makeExercise({ id: 'ex-1', teamId: team.id, title: 'Cambio perdido' }),
+      1,
+    );
     expect(result.conflict).toBe(true);
     expect(result.revision).toBe(2); // expone la revisión real del servidor
 
@@ -889,16 +1115,23 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
 
     // Escritura (update): el bloqueo RLS devuelve 0 filas → el repo lo trata como conflicto
     // (no como sobrescritura); el dato del propietario queda intacto.
-    const staleSave = await editorRepo.saveExercise(makeExercise({ id: 'ex-1', teamId: team.id, title: 'No debe guardarse' }), 2);
+    const staleSave = await editorRepo.saveExercise(
+      makeExercise({ id: 'ex-1', teamId: team.id, title: 'No debe guardarse' }),
+      2,
+    );
     expect(staleSave.conflict).toBe(true);
     const ownerSees = (await ownerRepo.loadTeam(team.id)).exercises.find((e) => e.id === 'ex-1');
     expect(ownerSees?.title).not.toBe('No debe guardarse');
 
     // Escritura nueva (insert): la RLS la rechaza con error.
-    await expect(editorRepo.saveExercise(makeExercise({ id: 'ex-new', teamId: team.id, title: 'Nuevo' }))).rejects.toMatchObject({ code: 'forbidden' });
+    await expect(
+      editorRepo.saveExercise(makeExercise({ id: 'ex-new', teamId: team.id, title: 'Nuevo' })),
+    ).rejects.toMatchObject({ code: 'forbidden' });
 
     // La membresía del editor quedó marcada como revocada.
-    const invRowMember = backend.rows.team_members.find((m) => m.user_id === EDITOR && m.team_id === team.id);
+    const invRowMember = backend.rows.team_members.find(
+      (m) => m.user_id === EDITOR && m.team_id === team.id,
+    );
     expect(invRowMember?.status).toBe('revoked');
   });
 
@@ -915,7 +1148,9 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
 
     // No puede listar miembros ni revocar (solo el propietario).
     await expect(foreignRepo.listMembers(team.id)).rejects.toMatchObject({ code: 'forbidden' });
-    await expect(foreignRepo.revokeMember(team.id, EDITOR)).rejects.toMatchObject({ code: 'forbidden' });
+    await expect(foreignRepo.revokeMember(team.id, EDITOR)).rejects.toMatchObject({
+      code: 'forbidden',
+    });
   });
 
   it('los usuarios pendientes y suspendidos NO acceden a los datos del equipo', async () => {
@@ -943,8 +1178,12 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
 
     // listMembers / revokeMember / inviteMember vetan al editor (solo owner).
     await expect(editorRepo.listMembers(team.id)).rejects.toMatchObject({ code: 'forbidden' });
-    await expect(editorRepo.revokeMember(team.id, OWNER)).rejects.toMatchObject({ code: 'forbidden' });
-    await expect(editorRepo.inviteMember(team.id, 'otro@example.com')).rejects.toMatchObject({ code: 'forbidden' });
+    await expect(editorRepo.revokeMember(team.id, OWNER)).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+    await expect(editorRepo.inviteMember(team.id, 'otro@example.com')).rejects.toMatchObject({
+      code: 'forbidden',
+    });
 
     // listTeamInvitations es por RLS: el editor (no owner) solo vería las suyas →
     // tras aceptar, no ve ninguna; no puede enumerar las invitaciones del equipo.
@@ -999,7 +1238,22 @@ describe('T4 multiuser — integridad de saveSession (RPC transaccional)', () =>
     backend.forceExerciseTeam(OTHER_TEAM_EID, 'other-team');
 
     await expect(
-      editorRepo.saveSession(makeSession({ teamId: team.id, revision: 1, tasks: [{ id: 'tX', exerciseId: OTHER_TEAM_EID, title: 'Roto', durationMinutes: 10, material: '', sortOrder: 0 }] }))
+      editorRepo.saveSession(
+        makeSession({
+          teamId: team.id,
+          revision: 1,
+          tasks: [
+            {
+              id: 'tX',
+              exerciseId: OTHER_TEAM_EID,
+              title: 'Roto',
+              durationMinutes: 10,
+              material: '',
+              sortOrder: 0,
+            },
+          ],
+        }),
+      ),
     ).rejects.toMatchObject({ code: 'same_team_exercise_required' });
   });
 
@@ -1007,12 +1261,16 @@ describe('T4 multiuser — integridad de saveSession (RPC transaccional)', () =>
     const { backend, ownerRepo, editorRepo, team } = await fullJourney();
     await ownerRepo.revokeMember(team.id, EDITOR);
 
-    await expect(editorRepo.saveSession(makeSession({ teamId: team.id, revision: 1 }))).rejects.toMatchObject({ code: 'forbidden' });
+    await expect(
+      editorRepo.saveSession(makeSession({ teamId: team.id, revision: 1 })),
+    ).rejects.toMatchObject({ code: 'forbidden' });
   });
 
   it('una revisión stale de la sesión se rechaza con revision_conflict y no muta nada', async () => {
     const { editorRepo, team } = await fullJourney();
-    await expect(editorRepo.saveSession(makeSession({ teamId: team.id, revision: 99 }))).rejects.toMatchObject({ code: 'revision_conflict' });
+    await expect(
+      editorRepo.saveSession(makeSession({ teamId: team.id, revision: 99 })),
+    ).rejects.toMatchObject({ code: 'revision_conflict' });
   });
 });
 
@@ -1030,7 +1288,13 @@ describe('T4 multiuser — resolución de acceso (decideAccess) sobre el estado 
 
   it('un perfil aprobado sin equipo ni invitaciones SOLO llega a crear equipo', async () => {
     const res: AccessResolution = {
-      profile: { userId: FOREIGN, displayName: 'Luis', emailNormalized: 'foreign@example.com', status: 'approved', approvedAt: null },
+      profile: {
+        userId: FOREIGN,
+        displayName: 'Luis',
+        emailNormalized: 'foreign@example.com',
+        status: 'approved',
+        approvedAt: null,
+      },
       ownedTeam: null,
       membership: null,
       pendingInvitations: [],
@@ -1041,9 +1305,24 @@ describe('T4 multiuser — resolución de acceso (decideAccess) sobre el estado 
   });
 
   it('un invitado (aprobado, sin equipo, con invitación pendiente) va a aceptar la invitación', async () => {
-    const inv: TeamInvitationInfo = { id: 'i1', teamId: 't1', teamName: 'Primer', emailNormalized: 'editor@example.com', invitedUserId: EDITOR, status: 'pending', expiresAt: 'x', createdAt: 'y' };
+    const inv: TeamInvitationInfo = {
+      id: 'i1',
+      teamId: 't1',
+      teamName: 'Primer',
+      emailNormalized: 'editor@example.com',
+      invitedUserId: EDITOR,
+      status: 'pending',
+      expiresAt: 'x',
+      createdAt: 'y',
+    };
     const target = decideAccess({
-      profile: { userId: EDITOR, displayName: 'Pedro', emailNormalized: 'editor@example.com', status: 'approved', approvedAt: null },
+      profile: {
+        userId: EDITOR,
+        displayName: 'Pedro',
+        emailNormalized: 'editor@example.com',
+        status: 'approved',
+        approvedAt: null,
+      },
       ownedTeam: null,
       membership: null,
       pendingInvitations: [inv],

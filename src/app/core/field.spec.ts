@@ -361,6 +361,75 @@ describe('fútbol sala (40×20) — geometría propia y marcas reglamentarias', 
     ).toBeGreaterThanOrEqual(4);
   });
 
+  // El test anterior solo CONTABA arcos, y por eso pasó por alto que dos de los cuatro arcos del
+  // área de fútbol sala giran al revés (reportado por el dueño: «el área no se ve como una D, dos
+  // curvas de las cuatro están puestas en mala dirección»). Este comprueba el SENTIDO de verdad:
+  // calcula el punto medio de cada arco con la conversión de la especificación SVG y exige que
+  // caiga DENTRO del campo y a 6 m de su poste. Con el sentido invertido el arco recorre los 270°
+  // que pasan por detrás de la línea de portería, y su punto medio cae fuera del campo.
+  it('futsal: los 4 arcos del área giran hacia el interior (una D, no dos curvas al revés)', () => {
+    const g = fieldGeometry('futsal', 'horizontal');
+    const svg = fieldSvg('futsal', g.rect, 'horizontal');
+    const pxX = g.rect.w / 40; // px de viewBox por metro de largo
+    const pxY = g.rect.h / 20; // px de viewBox por metro de ancho
+    const aMetros = (x: number, y: number) => ({
+      x: (x - g.rect.x) / pxX,
+      y: (y - g.rect.y) / pxY,
+    });
+    const arcos = arcosDeFutsal(svg, pxX, pxY);
+    expect(arcos, 'dos arcos de 6 m por área × dos áreas').toHaveLength(4);
+    // Los CUATRO postes del campo (reglamento): a 1,5 m del centro del ancho, en las dos
+    // líneas de portería. (Comparar solo con los dos de una portería daba falsos fallos en los
+    // arcos de la otra.)
+    const postes: Array<[number, number]> = [
+      [0, 8.5],
+      [0, 11.5],
+      [40, 8.5],
+      [40, 11.5],
+    ];
+    for (const a of arcos) {
+      const medio = aMetros(...puntoMedioArcoSvg(a));
+      expect(
+        medio.x,
+        `el arco no sale por detrás de la portería (x=${medio.x.toFixed(2)} m)`,
+      ).toBeGreaterThan(0);
+      expect(
+        medio.x,
+        `el arco no se pasa del centro del campo (x=${medio.x.toFixed(2)} m)`,
+      ).toBeLessThan(40);
+      expect(medio.y, `dentro del ancho (y=${medio.y.toFixed(2)} m)`).toBeGreaterThan(0);
+      expect(medio.y, `dentro del ancho (y=${medio.y.toFixed(2)} m)`).toBeLessThan(20);
+      const dPoste = Math.min(...postes.map(([px, py]) => Math.hypot(medio.x - px, medio.y - py)));
+      expect(
+        dPoste,
+        `el punto medio del arco está a 6 m de su poste (medio=${medio.x.toFixed(2)},${medio.y.toFixed(2)} arco=${JSON.stringify(a)})`,
+      ).toBeCloseTo(6, 0);
+    }
+  });
+
+  it('futsal: los arcos giran en sentidos OPUESTOS por poste, y en vertical se invierten (transposición de ejes)', () => {
+    const h = fieldGeometry('futsal', 'horizontal');
+    const v = fieldGeometry('futsal', 'vertical');
+    // Los arcos del ÁREA son los de radio grande; las esquinas son de 0,25 m (0,22 unidades).
+    const sweeps = (svg: string) =>
+      [
+        ...svg.matchAll(
+          /<path[^>]*d="M ([-\d.]+) ([-\d.]+) A ([-\d.]+) ([-\d.]+) 0 0 ([01]) ([-\d.]+) ([-\d.]+)"/g,
+        ),
+      ]
+        .filter((m) => Math.min(+m[3], +m[4]) > 1)
+        .map((m) => +m[5])
+        .sort();
+    const sh = sweeps(fieldSvg('futsal', h.rect, 'horizontal'));
+    const sv = sweeps(fieldSvg('futsal', v.rect, 'vertical'));
+    // Dos arcos de cada sentido: uno por poste. Con un `sweep` compartido saldrían [0,0,0,0] o
+    // [1,1,1,1] y el área no se vería como una D (fallo reportado por el dueño).
+    expect(sh, 'dos arcos giran en cada sentido').toEqual([0, 0, 1, 1]);
+    // `at()` en vertical TRANSPONE los ejes (l→Y, w→X, sin negar), y una transposición invierte el
+    // sentido de giro: los cuatro arcos van al revés que en horizontal.
+    expect(sv, 'en vertical los cuatro arcos se invierten').toEqual(sh.map((s) => 1 - s).sort());
+  });
+
   it('futsal: punto de penalti a 6 m y segundo punto a 10 m', () => {
     const g = fieldGeometry('futsal', 'horizontal');
     const svg = fieldSvg('futsal', g.rect, 'horizontal');
@@ -816,3 +885,117 @@ describe('field — arcos de esquina (FASE 7)', () => {
     );
   });
 });
+
+// Mismo fallo que el área de fútbol sala, pero en los quesitos de córner: el SENTIDO del arco se
+// calculaba con una fórmula distinta para vertical que no corresponde a la transposición de ejes
+// de `at()` (l→Y, w→X, sin negar), así que en vertical los arcos abrían hacia FUERA del campo.
+// Este test mide el punto medio REAL de cada arco (conversión SVG) y exige que caiga dentro del
+// rectángulo del campo, en todos los campos que tienen esquinas y en las dos orientaciones.
+describe('field — los arcos de esquina abren hacia DENTRO del campo (medido)', () => {
+  const camposConEsquinas: Array<[string, number]> = [
+    ['full', 4],
+    ['half', 2],
+    ['third', 2],
+    ['two_halves', 4],
+  ];
+  for (const [campo, cuantos] of camposConEsquinas) {
+    for (const o of ['horizontal', 'vertical'] as const) {
+      it(`${campo} · ${o}: ${cuantos} arcos, todos hacia dentro`, () => {
+        const g = fieldGeometry(campo as never, o);
+        const svg = fieldSvg(campo as never, g.rect, o);
+        const arcos = [
+          ...svg.matchAll(
+            /<path class="entrenolab-corner"[^>]*d="M ([-\d.]+) ([-\d.]+) A ([-\d.]+) ([-\d.]+) 0 0 ([01]) ([-\d.]+) ([-\d.]+)"/g,
+          ),
+        ].map((m) => ({
+          x0: +m[1],
+          y0: +m[2],
+          rx: +m[3],
+          ry: +m[4],
+          sweep: +m[5],
+          x1: +m[6],
+          y1: +m[7],
+        }));
+        expect(arcos, `${campo} tiene ${cuantos} arcos de esquina`).toHaveLength(cuantos);
+        for (const a of arcos) {
+          const [mx, my] = puntoMedioArcoSvg(a);
+          const desc = `arco=${JSON.stringify(a)}`;
+          expect(mx, `abre hacia dentro (x=${mx.toFixed(2)}) ${desc}`).toBeGreaterThan(g.rect.x);
+          expect(mx, `abre hacia dentro (x=${mx.toFixed(2)}) ${desc}`).toBeLessThan(
+            g.rect.x + g.rect.w,
+          );
+          expect(my, `abre hacia dentro (y=${my.toFixed(2)}) ${desc}`).toBeGreaterThan(g.rect.y);
+          expect(my, `abre hacia dentro (y=${my.toFixed(2)}) ${desc}`).toBeLessThan(
+            g.rect.y + g.rect.h,
+          );
+        }
+      });
+    }
+  }
+});
+
+/** Arcos del ÁREA de fútbol sala (radio 6 m) presentes en el SVG de un campo. */
+function arcosDeFutsal(
+  svg: string,
+  pxX: number,
+  pxY: number,
+): Array<{
+  x0: number;
+  y0: number;
+  rx: number;
+  ry: number;
+  sweep: number;
+  x1: number;
+  y1: number;
+}> {
+  return [
+    ...svg.matchAll(
+      /<path[^>]*d="M ([-\d.]+) ([-\d.]+) A ([-\d.]+) ([-\d.]+) 0 0 ([01]) ([-\d.]+) ([-\d.]+)"/g,
+    ),
+  ]
+    .map((m) => ({
+      x0: +m[1],
+      y0: +m[2],
+      rx: +m[3],
+      ry: +m[4],
+      sweep: +m[5],
+      x1: +m[6],
+      y1: +m[7],
+    }))
+    .filter((a) => Math.abs(a.rx - 6 * pxX) < 0.05 && Math.abs(a.ry - 6 * pxY) < 0.05);
+}
+
+/** Punto medio REAL de un arco SVG `M P0 A rx ry 0 0 sweep P1`, con la conversión de la
+ *  especificación (centro y ángulos). Es lo que permite comprobar el SENTIDO del arco: con el
+ *  `sweep` invertido el arco recorre los 270° que pasan por detrás de la portería. */
+function puntoMedioArcoSvg(a: {
+  x0: number;
+  y0: number;
+  rx: number;
+  ry: number;
+  sweep: number;
+  x1: number;
+  y1: number;
+}): [number, number] {
+  const fA = 0; // arcos de 90°: siempre el arco pequeño
+  const dx2 = (a.x0 - a.x1) / 2;
+  const dy2 = (a.y0 - a.y1) / 2;
+  const lambda = (dx2 * dx2) / (a.rx * a.rx) + (dy2 * dy2) / (a.ry * a.ry);
+  const k = lambda > 1 ? Math.sqrt(lambda) : 1;
+  const rx = a.rx * k;
+  const ry = a.ry * k;
+  const num = rx * rx * ry * ry - rx * rx * dy2 * dy2 - ry * ry * dx2 * dx2;
+  const den = rx * rx * dy2 * dy2 + ry * ry * dx2 * dx2;
+  const coef = (fA !== a.sweep ? 1 : -1) * Math.sqrt(Math.max(0, num / den));
+  const cxp = coef * ((rx * dy2) / ry);
+  const cyp = coef * (-(ry * dx2) / rx);
+  const cx = cxp + (a.x0 + a.x1) / 2;
+  const cy = cyp + (a.y0 + a.y1) / 2;
+  const t0 = Math.atan2((dy2 - cyp) / ry, (dx2 - cxp) / rx);
+  const t1 = Math.atan2((-dy2 - cyp) / ry, (-dx2 - cxp) / rx);
+  let delta = t1 - t0;
+  if (a.sweep === 0 && delta > 0) delta -= 2 * Math.PI;
+  if (a.sweep === 1 && delta < 0) delta += 2 * Math.PI;
+  const tm = t0 + delta / 2;
+  return [cx + rx * Math.cos(tm), cy + ry * Math.sin(tm)];
+}

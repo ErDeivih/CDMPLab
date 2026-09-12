@@ -93,10 +93,13 @@ npm run validate:migration   # análisis ESTÁTICO (sintaxis + endurecimiento de
 ```
 
 Este validador hace **análisis estático** (parseo de sintaxis con `libpg-query` y
-comprobaciones de endurecimiento sobre el SQL diseñado). No sustituye una ejecución
-real. La migración `harden_grants_and_defaults` fue aplicada al proyecto remoto el
-2026-09-02 y verificada después mediante `role_table_grants`, `routine_privileges`,
-`pg_default_acl`, historial remoto y asesores de Supabase.
+comprobaciones de endurecimiento sobre el SQL diseñado). No sustituye una ejecución real:
+solo comprueba propiedades **estáticas** del SQL versionado y **no verifica el estado
+remoto**. Lo que el repositorio documenta (no lo comprueba esta puerta) es que la migración
+`harden_grants_and_defaults` fue aplicada al proyecto remoto el 2026-09-02 y verificada
+después mediante `role_table_grants`, `routine_privileges`, `pg_default_acl`, historial
+remoto y asesores de Supabase. Estado, recuento y mapeo de identidad de las migraciones:
+[`docs/supabase-estado.md`](docs/supabase-estado.md).
 
 ### 6. Build de GitHub Pages (base href `/CDMPLab/`)
 
@@ -158,10 +161,23 @@ versionarse. `.env`, `.env.local` y `*.env.*.local` están en `.gitignore`.
 ## Estado real de Supabase
 
 La **build de producción** apunta al proyecto Supabase real (autenticación obligatoria,
-RLS por equipo). Las once migraciones están versionadas; la última figura remotamente
-como `20260902102208_harden_grants_and_defaults`. Tras aplicarla se verificó que `anon`
-no conserva permisos de tabla, que `authenticated` solo mantiene el conjunto explícito
-y que no existen grants prohibidos de función o acceso a `private.platform_admins`.
+RLS por equipo). El esquema versionado son **12 ficheros** en `supabase/migrations/` (cifra
+comprobable en local). **Cuántas están aplicadas en el proyecto remoto no se puede
+determinar desde el repositorio**, y los documentos de este repo no coinciden entre sí: este
+README afirmaba «las once migraciones están versionadas» y citaba el endurecimiento de grants
+como `20260902102208_harden_grants_and_defaults` (las dos frases se han retirado aquí),
+mientras el fichero local equivalente se llama `20260901000000_harden_grants.sql`;
+`docs/05-supabase-fase6.md` y `docs/06-supabase-autoritativo.md` hablan de cinco (el lote del
+27/08/2026). El recuento local,
+la contradicción documental, el mapeo de identidad y **lo que queda sin verificar contra la
+base** están en [`docs/supabase-estado.md`](docs/supabase-estado.md).
+
+Lo que este repositorio **documenta** (afirmación de sus propios documentos, no comprobada
+en esta auditoría): que el endurecimiento de grants se aplicó al proyecto remoto el
+2026-09-02 y se verificó con `role_table_grants`, `routine_privileges`, `pg_default_acl`,
+historial remoto y asesores de Supabase; de ahí que `anon` no conserve permisos de tabla,
+que `authenticated` solo mantenga el conjunto explícito y que no existan grants prohibidos
+de función o acceso a `private.platform_admins`.
 
 Los privilegios por defecto de objetos creados por nuestras migraciones (`postgres`)
 también quedaron endurecidos. Supabase no permite que `postgres` modifique los defaults
@@ -236,7 +252,7 @@ src/
 e2e/                 tests Playwright (incluye capturas en e2e/shots, ignoradas por git)
 scripts/             validación de migraciones, build/serve de Pages, serve de producción
 supabase/migrations/ SQL versionado + RLS (FUENTE ÚNICA del esquema)
-supabase/schema.sql  esquema inicial histórico: DEPRECADO (ver su cabecera)
+supabase/schema.sql  esquema inicial histórico: DEPRECADO, con guarda que ABORTA su ejecución
 ```
 
 ## Estado de las pruebas (números reales)

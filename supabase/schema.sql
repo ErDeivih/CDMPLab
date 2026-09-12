@@ -11,6 +11,31 @@
 -- Enfoque (histórico): cada usuario pertenece a UN equipo (profiles.team_id).
 -- =============================================================
 
+-- =============================================================
+-- ⛔ GUARDA DE EJECUCIÓN — este fichero NO debe aplicarse.
+--
+-- POR QUÉ HACE FALTA UNA GUARDA Y NO BASTA EL AVISO DE LA CABECERA:
+-- además de habilitar RLS, este esquema histórico CREA políticas PERMISIVAS:
+--   · profiles_select ......... using (true)
+--   · players_all, exercise_folders_all, exercises_all, sessions_all,
+--     session_exercises_all ... for all
+-- Las políticas de PostgreSQL se SUMAN por OR entre sí: aplicadas sobre una base ya
+-- migrada, estas políticas NO endurecen nada, AMPLÍAN el acceso (un `authenticated`
+-- cualquiera pasaría a leer todos los perfiles, y las políticas `for all` se añaden a
+-- las vigentes en lugar de sustituirlas). Ejecutar este fichero contra la base real es,
+-- por tanto, un cambio de seguridad a peor.
+--
+-- La guarda aborta la ejecución del fichero completo antes de la primera sentencia DDL.
+-- La FUENTE ÚNICA del esquema es `supabase/migrations/*.sql`, aplicada en orden por
+-- nombre de fichero. Todo el SQL de debajo se conserva TAL CUAL, solo como referencia
+-- de lectura histórica.
+-- =============================================================
+do $$
+begin
+  raise exception
+    'DEPRECADO: este esquema histórico no debe aplicarse; la fuente única son supabase/migrations/*.sql';
+end $$;
+
 -- ---------- Equipos ----------
 create table if not exists public.teams (
   id uuid primary key default gen_random_uuid(),

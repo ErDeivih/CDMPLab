@@ -136,8 +136,22 @@ function halfGeom(orientation: Orientation): FieldGeom {
   const rect = { x: VB_MARGIN, y: VB_MARGIN, w: px, h: py };
   return orientation === 'vertical'
     ? // En vertical el contenido se rota: el viewBox encaja el campo girado (ancho→X, largo→Y).
-      { vbW: py + 2 * VB_MARGIN, vbH: px + 2 * VB_MARGIN, rect, lenM: 52.5, widM: 68, vertical: true }
-    : { vbW: px + 2 * VB_MARGIN, vbH: py + 2 * VB_MARGIN, rect, lenM: 52.5, widM: 68, vertical: false };
+      {
+        vbW: py + 2 * VB_MARGIN,
+        vbH: px + 2 * VB_MARGIN,
+        rect,
+        lenM: 52.5,
+        widM: 68,
+        vertical: true,
+      }
+    : {
+        vbW: px + 2 * VB_MARGIN,
+        vbH: py + 2 * VB_MARGIN,
+        rect,
+        lenM: 52.5,
+        widM: 68,
+        vertical: false,
+      };
 }
 
 /** Geometría del campo base F7: medio campo F11 APISAADO (68 m en X, 52,5 m en Y).
@@ -150,8 +164,22 @@ function f7Geom(orientation: Orientation): FieldGeom {
   const py = 52.5 * PX_PER_M; // 52,5 m (largo del medio campo) en Y → 46
   const rect = { x: VB_MARGIN, y: VB_MARGIN, w: px, h: py };
   return orientation === 'vertical'
-    ? { vbW: py + 2 * VB_MARGIN, vbH: px + 2 * VB_MARGIN, rect, lenM: 52.5, widM: 68, vertical: true }
-    : { vbW: px + 2 * VB_MARGIN, vbH: py + 2 * VB_MARGIN, rect, lenM: 52.5, widM: 68, vertical: false };
+    ? {
+        vbW: py + 2 * VB_MARGIN,
+        vbH: px + 2 * VB_MARGIN,
+        rect,
+        lenM: 52.5,
+        widM: 68,
+        vertical: true,
+      }
+    : {
+        vbW: px + 2 * VB_MARGIN,
+        vbH: py + 2 * VB_MARGIN,
+        rect,
+        lenM: 52.5,
+        widM: 68,
+        vertical: false,
+      };
 }
 
 /** Geometría del campo de FÚTBOL SALA (40×20 m). Rect canónico con proporción 2:1.
@@ -163,7 +191,14 @@ function futsalGeom(orientation: Orientation): FieldGeom {
   const rect = { x: VB_MARGIN, y: VB_MARGIN, w: px, h: py };
   return orientation === 'vertical'
     ? { vbW: py + 2 * VB_MARGIN, vbH: px + 2 * VB_MARGIN, rect, lenM: 40, widM: 20, vertical: true }
-    : { vbW: px + 2 * VB_MARGIN, vbH: py + 2 * VB_MARGIN, rect, lenM: 40, widM: 20, vertical: false };
+    : {
+        vbW: px + 2 * VB_MARGIN,
+        vbH: py + 2 * VB_MARGIN,
+        rect,
+        lenM: 40,
+        widM: 20,
+        vertical: false,
+      };
 }
 
 /** Geometría del TERCIO de campo (35×68 m): recorte medido de 1/3 del largo del F11
@@ -174,7 +209,14 @@ function thirdGeom(orientation: Orientation): FieldGeom {
   const rect = { x: VB_MARGIN, y: VB_MARGIN, w: px, h: py };
   return orientation === 'vertical'
     ? { vbW: py + 2 * VB_MARGIN, vbH: px + 2 * VB_MARGIN, rect, lenM: 35, widM: 68, vertical: true }
-    : { vbW: px + 2 * VB_MARGIN, vbH: py + 2 * VB_MARGIN, rect, lenM: 35, widM: 68, vertical: false };
+    : {
+        vbW: px + 2 * VB_MARGIN,
+        vbH: py + 2 * VB_MARGIN,
+        rect,
+        lenM: 35,
+        widM: 68,
+        vertical: false,
+      };
 }
 
 /** Geometría del recorte "Área y portería" (22×44 m): crop del F11 que incluye la
@@ -186,7 +228,14 @@ function boxGeom(orientation: Orientation): FieldGeom {
   const rect = { x: VB_MARGIN, y: VB_MARGIN, w: px, h: py };
   return orientation === 'vertical'
     ? { vbW: py + 2 * VB_MARGIN, vbH: px + 2 * VB_MARGIN, rect, lenM: 22, widM: 44, vertical: true }
-    : { vbW: px + 2 * VB_MARGIN, vbH: py + 2 * VB_MARGIN, rect, lenM: 22, widM: 44, vertical: false };
+    : {
+        vbW: px + 2 * VB_MARGIN,
+        vbH: py + 2 * VB_MARGIN,
+        rect,
+        lenM: 22,
+        widM: 44,
+        vertical: false,
+      };
 }
 
 /**
@@ -197,12 +246,17 @@ function boxGeom(orientation: Orientation): FieldGeom {
  * geometría: la usan el render, la conversión pantalla↔norm, el hit-test, el
  * movimiento/redimensionado, el zoom/pan, las miniaturas, el PNG y al volver a abrir.
  */
-export function fieldGeometry(field: FieldType, orientation: Orientation = 'horizontal'): FieldGeom {
+export function fieldGeometry(
+  field: FieldType,
+  orientation: Orientation = 'horizontal',
+): FieldGeom {
   if (field === 'f7') return f7Geom(orientation);
   if (field === 'futsal') return futsalGeom(orientation);
   if (field === 'third') return thirdGeom(orientation);
   if (field === 'box') return boxGeom(orientation);
-  return field === 'half' || field === 'vertical_half' ? halfGeom(orientation) : fullGeom(orientation);
+  return field === 'half' || field === 'vertical_half'
+    ? halfGeom(orientation)
+    : fullGeom(orientation);
 }
 
 const LEN = 105; // largo del campo (m)
@@ -240,7 +294,10 @@ export const OFFICIAL_GRASS_MODE = 'stripes';
  *  APARENTE sea el mismo en cualquier campo, sin tocar el tamaño `size` guardado.
  *  Se deriva de la longitud física real del campo (fuente: fieldDimensions):
  *  completo = 1; medio campo/F7 (52,5 m) ≈ 0,5; fútbol sala (40 m) = 40/105. */
-export function fieldObjectScale(field: FieldType, orientation: Orientation = 'horizontal'): number {
+export function fieldObjectScale(
+  field: FieldType,
+  orientation: Orientation = 'horizontal',
+): number {
   // Relación longitudReal/longitudReferencia(105). No depende de la orientación (la
   // dilatación es la misma). Futsal (40 m) pasa de 1 a 40/105 al tener geometría propia.
   return fieldDimensions(field).len / 105;
@@ -255,7 +312,15 @@ function at(r: Rect, o: Orientation, l: number, w: number): [number, number] {
   return o === 'vertical' ? [r.x + w * r.w, r.y + l * r.h] : [r.x + l * r.w, r.y + w * r.h];
 }
 
-const line = (r: Rect, o: Orientation, l1: number, w1: number, l2: number, w2: number, dashed = false) => {
+const line = (
+  r: Rect,
+  o: Orientation,
+  l1: number,
+  w1: number,
+  l2: number,
+  w2: number,
+  dashed = false,
+) => {
   const [x1, y1] = at(r, o, l1, w1);
   const [x2, y2] = at(r, o, l2, w2);
   const dash = dashed ? ' stroke-dasharray="2,1.2"' : '';
@@ -271,7 +336,15 @@ const circlePx = (r: Rect, o: Orientation, l: number, w: number, Rm: number) => 
 };
 
 /** Rectángulo definido por dos esquinas en coordenadas (l, w). */
-const rect = (r: Rect, o: Orientation, l0: number, w0: number, l1: number, w1: number, fill = 'none') => {
+const rect = (
+  r: Rect,
+  o: Orientation,
+  l0: number,
+  w0: number,
+  l1: number,
+  w1: number,
+  fill = 'none',
+) => {
   const [x1, y1] = at(r, o, Math.min(l0, l1), Math.min(w0, w1));
   const [x2, y2] = at(r, o, Math.max(l0, l1), Math.max(w0, w1));
   return `<rect x="${x1}" y="${y1}" width="${x2 - x1}" height="${y2 - y1}" fill="${fill}" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
@@ -288,7 +361,13 @@ const spot = (r: Rect, o: Orientation, l: number, w: number) => {
  * punto de penalti) que queda FUERA del área. En horizontal el arco se
  * dibuja correctamente; en vertical se intercambian los ejes.
  */
-const penaltyArc = (r: Rect, o: Orientation, left: boolean, lenFrac: (m: number) => number, widFrac: (m: number) => number = wf) => {
+const penaltyArc = (
+  r: Rect,
+  o: Orientation,
+  left: boolean,
+  lenFrac: (m: number) => number,
+  widFrac: (m: number) => number = wf,
+) => {
   const Rm = 9.15;
   const rxL = lenFrac(Rm); // radio en fracción de longitud
   const ryW = widFrac(Rm); // radio en fracción de anchura
@@ -443,8 +522,18 @@ function halfFieldFlipped(r: Rect, o: Orientation): string {
   const ryP = o === 'vertical' ? rxL * r.h : ryW * r.h;
   // Arco de penalti (fuera del área, hacia el centro). En horizontal sobresale a la
   // izquierda del área; sweep adecuado.
-  const [ax1, ay1] = at(r, o, 1 - boxL, centerW - ryW * Math.sqrt(Math.max(0, 1 - ((boxL - spotL) / rxL) ** 2)));
-  const [ax2, ay2] = at(r, o, 1 - boxL, centerW + ryW * Math.sqrt(Math.max(0, 1 - ((boxL - spotL) / rxL) ** 2)));
+  const [ax1, ay1] = at(
+    r,
+    o,
+    1 - boxL,
+    centerW - ryW * Math.sqrt(Math.max(0, 1 - ((boxL - spotL) / rxL) ** 2)),
+  );
+  const [ax2, ay2] = at(
+    r,
+    o,
+    1 - boxL,
+    centerW + ryW * Math.sqrt(Math.max(0, 1 - ((boxL - spotL) / rxL) ** 2)),
+  );
   const rsweep = o === 'horizontal' ? 0 : 1;
   s += `<path d="M ${ax1} ${ay1} A ${rxP} ${ryP} 0 0 ${rsweep} ${ax2} ${ay2}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
   // Semicírculo central en la línea de medio campo (l=0), hacia el interior.
@@ -533,7 +622,10 @@ function futsalCornerArcs(r: Rect, o: Orientation): string {
   const rx = o === 'vertical' ? rw * r.w : rl * r.w;
   const ry = o === 'vertical' ? rl * r.h : rw * r.h;
   const corners: Array<[number, number, number, number]> = [
-    [0, 0, 1, 1], [1, 0, -1, 1], [0, 1, 1, -1], [1, 1, -1, -1],
+    [0, 0, 1, 1],
+    [1, 0, -1, 1],
+    [0, 1, 1, -1],
+    [1, 1, -1, -1],
   ];
   let s = '';
   for (const [cl, cw, dl, dw] of corners) {
@@ -560,12 +652,25 @@ function futsalPenaltyArea(r: Rect, o: Orientation, left: boolean): string {
   const dl = left ? rl : 1 - rl; // línea de 6 m
   const rx = o === 'vertical' ? rw * r.w : rl * r.w;
   const ry = o === 'vertical' ? rl * r.h : rw * r.h;
-  const sweep = o === 'vertical' ? (left ? 0 : 1) : left ? 1 : 0;
   let s = '';
-  for (const post of [postL, postR]) {
-    const [xs, ys] = at(r, o, gl, post + (post === postL ? -rw : rw)); // hacia fuera en la línea de portería
-    const [xe, ye] = at(r, o, dl, post); // en la línea de 6 m
-    s += `<path d="M ${xs} ${ys} A ${rx} ${ry} 0 0 ${sweep} ${xe} ${ye}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
+  // Cada arco va del punto de la LÍNEA DE PORTERÍA (a 6 m del poste, hacia la banda) al punto de
+  // la LÍNEA DE 6 m a la altura del poste, girando ALREDEDOR DEL POSTE. Los dos arcos de una misma
+  // portería abren hacia lados OPUESTOS (uno hacia arriba y otro hacia abajo), así que su sentido
+  // NO puede ser el mismo: con un `sweep` compartido, dos de los cuatro arcos del campo salían al
+  // revés y el área no se veía como una D. Medido en `field.spec.ts` con la conversión SVG: el
+  // punto medio del arco mal girado caía a 2,49 m de su poste en vez de a 6 m.
+  for (const [post, esPosteBajo] of [
+    [postL, true],
+    [postR, false],
+  ] as Array<[number, boolean]>) {
+    const [xs, ys] = at(r, o, gl, post + (esPosteBajo ? -rw : rw)); // en la línea de portería
+    const [xe, ye] = at(r, o, dl, post); // en la línea de 6 m, a la altura del poste
+    // Sentido con el convenio SVG (`sweep=1` gira en sentido horario sobre la pantalla). OJO: el
+    // paso a vertical NO es una rotación, sino una TRANSPOSICIÓN de ejes (`at()` mapea l→Y y w→X
+    // sin negar), y una transposición invierte el sentido de giro: por eso en vertical se niega.
+    const sweepBase = left === esPosteBajo ? 1 : 0;
+    const sweep = o === 'vertical' ? 1 - sweepBase : sweepBase;
+    s += `<path class="entrenolab-area-arc" d="M ${xs} ${ys} A ${rx} ${ry} 0 0 ${sweep} ${xe} ${ye}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
   }
   const [lx1, ly1] = at(r, o, dl, postL);
   const [lx2, ly2] = at(r, o, dl, postR);
@@ -612,7 +717,14 @@ function halfAtTop(r: Rect, fl: number, fw: number): [number, number] {
 }
 
 /** Rectángulo definido por dos esquinas en coordenadas (fl, fw) con portería arriba. */
-function halfRectAtTop(r: Rect, fl0: number, fw0: number, fl1: number, fw1: number, fill = 'none'): string {
+function halfRectAtTop(
+  r: Rect,
+  fl0: number,
+  fw0: number,
+  fl1: number,
+  fw1: number,
+  fill = 'none',
+): string {
   const [x1, y1] = halfAtTop(r, fl0, fw0);
   const [x2, y2] = halfAtTop(r, fl1, fw1);
   const x = Math.min(x1, x2);
@@ -720,15 +832,22 @@ function f7Field(r: Rect, o: Orientation): string {
   const stroke = F7_LINE_COLOR;
   const lw = FIELD_LINE_WIDTH;
   out += `<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" stroke="${stroke}" stroke-width="${lw}" fill="none"/>`;
-  for (const x of g.offsideX) out += `<line x1="${x}" y1="${g.y}" x2="${x}" y2="${g.y + g.h}" stroke="${stroke}" stroke-width="${lw}"/>`;
-  for (const b of g.big) out += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" stroke="${stroke}" stroke-width="${lw}" fill="none"/>`;
-  for (const b of g.small) out += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" stroke="${stroke}" stroke-width="${lw}" fill="none"/>`;
+  for (const x of g.offsideX)
+    out += `<line x1="${x}" y1="${g.y}" x2="${x}" y2="${g.y + g.h}" stroke="${stroke}" stroke-width="${lw}"/>`;
+  for (const b of g.big)
+    out += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" stroke="${stroke}" stroke-width="${lw}" fill="none"/>`;
+  for (const b of g.small)
+    out += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" stroke="${stroke}" stroke-width="${lw}" fill="none"/>`;
   out += `<circle cx="${g.center.x}" cy="${g.center.y}" r="0.35" fill="${F7_LINE_COLOR}" stroke="none"/>`;
   out += f7CornerArcs(g);
   return out;
 }
 
-export function fieldSvg(field: FieldType, rect: Rect, orientation: Orientation = 'horizontal'): string {
+export function fieldSvg(
+  field: FieldType,
+  rect: Rect,
+  orientation: Orientation = 'horizontal',
+): string {
   switch (field) {
     case 'full':
       return fullField(rect, orientation);

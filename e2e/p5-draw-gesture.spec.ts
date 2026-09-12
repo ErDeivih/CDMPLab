@@ -141,4 +141,40 @@ test.describe('Fase 5 — dibujo de UN solo gesto (pointerdown → preview → p
     await page.mouse.up(); // sin mover el puntero
     expect(await fieldCount(page), 'un clic sin movimiento no debe crear nada').toBe(0);
   });
+
+  test('la herramienta se CAPTURA al empezar el borrador: ESPACIO a mitad de trazo (Mano) no pierde la línea', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await seed(page);
+    await openClosed(page);
+    await useDrawTool(page, 'Línea');
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
+    const a = normToScreen(0.35, 0.4, host, fit);
+    const b = normToScreen(0.65, 0.6, host, fit);
+
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 6 });
+    // A mitad del trazo se mantiene ESPACIO: la herramienta ACTIVA pasa a "Mano" (paneo rápido)
+    // sin que el borrador deje de estar en curso.
+    await page.keyboard.down(' ');
+    await expect(page.locator('.rail-btn[aria-label="Desplazar campo"]')).toHaveClass(
+      /rail-active/,
+    );
+
+    // La previsualización sigue siendo la LÍNEA del borrador: antes se quedaba VACÍA (ninguna
+    // rama de `previewStr` casaba con "Mano") aunque el trazo se fuera a confirmar.
+    await expect(
+      page.locator('.board-canvas svg .board-preview line'),
+      'la preview sigue mostrando la línea del borrador',
+    ).toHaveCount(1);
+
+    await page.mouse.up();
+    await page.keyboard.up(' ');
+    // El trazo NO desaparece: se crea la LÍNEA con la que EMPEZÓ el borrador (ni vacío ni otro tipo).
+    await expect(page.locator('.field-count'), 'el trazo se confirma').toHaveText('1');
+    await expect(page.locator('.board-canvas svg [data-el-type="line"]')).toHaveCount(1);
+  });
 });
