@@ -74,7 +74,12 @@ export class LibraryComponent implements OnDestroy {
   }
 
   protected readonly treeRows = computed(() => {
-    const rows: Array<{ folder: ExerciseFolder; depth: number; hasChildren: boolean; expanded: boolean }> = [];
+    const rows: Array<{
+      folder: ExerciseFolder;
+      depth: number;
+      hasChildren: boolean;
+      expanded: boolean;
+    }> = [];
     const walk = (parentId: string | null, depth: number): void => {
       for (const f of this.childrenOf(parentId)) {
         const hasChildren = this.childrenOf(f.id).length > 0;
@@ -161,7 +166,8 @@ export class LibraryComponent implements OnDestroy {
   protected commitNewChild(): void {
     const teamId = this.team()?.id;
     const name = this.newChildName().trim();
-    const parent = this.newChildParent() === 'root' ? null : (this.newChildParent() as string | null);
+    const parent =
+      this.newChildParent() === 'root' ? null : (this.newChildParent() as string | null);
     if (!teamId || !name) return;
     this.store.createFolder(teamId, name, parent);
     this.newChildParent.set(null);
@@ -221,12 +227,23 @@ export class LibraryComponent implements OnDestroy {
       .getExercisesForTeam(teamId)
       .filter((e) => (cat === 'Todas' ? true : e.category === cat))
       .filter((e) =>
-        folder === 'all' ? true : folder === 'none' ? !e.folderId : (subtree as Set<string>).has(e.folderId as string)
+        folder === 'all'
+          ? true
+          : folder === 'none'
+            ? !e.folderId
+            : (subtree as Set<string>).has(e.folderId as string),
       )
-      .filter((e) => (q ? `${e.title} ${e.description ?? ''} ${e.explanation ?? ''} ${e.category}`.toLowerCase().includes(q) : true));
+      .filter((e) =>
+        q
+          ? `${e.title} ${e.description ?? ''} ${e.explanation ?? ''} ${e.category}`
+              .toLowerCase()
+              .includes(q)
+          : true,
+      );
     const by = this.order();
     if (by === 'az') return list.sort((a, b) => a.title.localeCompare(b.title, 'es'));
-    if (by === 'duration') return list.sort((a, b) => (b.durationMinutes ?? 0) - (a.durationMinutes ?? 0));
+    if (by === 'duration')
+      return list.sort((a, b) => (b.durationMinutes ?? 0) - (a.durationMinutes ?? 0));
     // Por defecto, lo último guardado primero.
     return list.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
   });
@@ -242,7 +259,10 @@ export class LibraryComponent implements OnDestroy {
 
   /** ¿Hay algún filtro puesto? (búsqueda, categoría o carpeta). */
   protected readonly hasFilters = computed(
-    () => this.search().trim().length > 0 || this.categoryFilter() !== 'Todas' || this.folderFilter() !== 'all',
+    () =>
+      this.search().trim().length > 0 ||
+      this.categoryFilter() !== 'Todas' ||
+      this.folderFilter() !== 'all',
   );
 
   protected clearFilters(): void {
@@ -258,7 +278,19 @@ export class LibraryComponent implements OnDestroy {
   protected toggleSidebar(): void {
     this.sidebarOpen.update((v) => !v);
   }
-  protected readonly form = signal<EditorForm>({ id: null, title: '', category: 'Técnica', durationMinutes: null, description: '', explanation: '', materials: '', minPlayers: null, maxPlayers: null, folderId: null, objectives: '' });
+  protected readonly form = signal<EditorForm>({
+    id: null,
+    title: '',
+    category: 'Técnica',
+    durationMinutes: null,
+    description: '',
+    explanation: '',
+    materials: '',
+    minPlayers: null,
+    maxPlayers: null,
+    folderId: null,
+    objectives: '',
+  });
   protected readonly formError = signal('');
   protected readonly draftIndicator = signal<null | 'saved' | 'loaded'>(null);
   protected readonly saving = signal(false);
@@ -286,7 +318,8 @@ export class LibraryComponent implements OnDestroy {
     // Poda: la caché no debe crecer con ejercicios que ya no existen.
     if (this.previewCache.size > 200) {
       const live = new Set(this.store.getExercisesForTeam(this.team()?.id ?? '').map((e) => e.id));
-      for (const id of [...this.previewCache.keys()]) if (!live.has(id)) this.previewCache.delete(id);
+      for (const id of [...this.previewCache.keys()])
+        if (!live.has(id)) this.previewCache.delete(id);
     }
     return html;
   }
@@ -326,7 +359,14 @@ export class LibraryComponent implements OnDestroy {
     if (!t) return 'El título es obligatorio.';
     const min = this.form().minPlayers;
     const max = this.form().maxPlayers;
-    if (min != null && max != null && min > max) return 'El número mínimo de jugadores no puede ser mayor que el máximo.';
+    if (min != null && max != null && min > max)
+      return 'El número mínimo de jugadores no puede ser mayor que el máximo.';
+    // Mismo rango que la restricción de la base (`exercises_duration check between 1 and 240`):
+    // antes el formulario dejaba escribir 0 (el `min` del input era 0), negativos o 300 y el
+    // guardado fallaba con un «Error al comunicarse con el servidor.» que no decía nada.
+    const duracion = this.form().durationMinutes;
+    if (duracion != null && (duracion < 1 || duracion > 240))
+      return 'La duración tiene que estar entre 1 y 240 minutos.';
     return '';
   }
 

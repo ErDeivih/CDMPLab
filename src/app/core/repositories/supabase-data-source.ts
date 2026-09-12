@@ -111,6 +111,12 @@ const ERROR_MESSAGES: Record<string, string> = {
     'La importación no se pudo completar: una tarea referencia a un ejercicio que no existe o no pertenece al equipo.',
   id_content_conflict:
     'La importación no se pudo completar: una entidad ya existe con un contenido distinto.',
+  // Restricciones de PostgreSQL. Sin esto, incumplir una `check` (p. ej. una duración fuera de
+  // rango) llegaba al usuario como «Error al comunicarse con el servidor.», que no dice nada.
+  '23514': 'Alguno de los valores no está permitido. Revisa los rangos (duración, jugadores…).',
+  '23502': 'Falta un dato obligatorio.',
+  '23503': 'El dato hace referencia a algo que ya no existe.',
+  '23505': 'Ya existe otro registro con esos mismos datos.',
 };
 
 function messageFor(code: string, fallback: string): string {

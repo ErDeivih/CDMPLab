@@ -1015,4 +1015,30 @@ describe('SupabaseRepository.updatePlayer — un parche PARCIAL no borra lo que 
     await repo.updatePlayer('p-1', { number: undefined });
     expect(payloads[1]).toEqual({ number: null });
   });
+
+  it('una restricción de la base (23514) se explica en español, no como fallo de red', async () => {
+    // Antes, incumplir una `check` (una duración fuera de rango, por ejemplo) llegaba al usuario
+    // como «Error al comunicarse con el servidor.»: ni decía qué pasaba ni qué revisar.
+    const builder = {
+      update: () => ({
+        eq: () => ({
+          select: () => ({
+            single: async () => ({
+              data: null,
+              error: {
+                code: '23514',
+                message: 'new row for relation "players" violates check constraint',
+              },
+            }),
+          }),
+        }),
+      }),
+    };
+    const { client } = makeClient({ from: () => builder });
+    const repo = new SupabaseRepository(client, 'u-1', 'team-1');
+    await expect(repo.updatePlayer('p-1', { number: 5 })).rejects.toMatchObject({
+      code: '23514',
+      message: expect.stringContaining('rangos'),
+    });
+  });
 });

@@ -2,16 +2,24 @@
   <!-- Carpetas (izquierda) -->
   <aside class="lib-sidebar" [class.open]="sidebarOpen()">
     <div class="lib-tree">
-      <button class="tree-item" [class.tree-active]="folderFilter() === 'all'" (click)="setFolderFilter('all')">
+      <button
+        class="tree-item"
+        [class.tree-active]="folderFilter() === 'all'"
+        (click)="setFolderFilter('all')"
+      >
         <span class="msi">apps</span><span>Todos los ejercicios</span>
       </button>
-      <button class="tree-item" [class.tree-active]="folderFilter() === 'none'" (click)="setFolderFilter('none')">
+      <button
+        class="tree-item"
+        [class.tree-active]="folderFilter() === 'none'"
+        (click)="setFolderFilter('none')"
+      >
         <span class="msi">folder_open</span><span>Sin carpeta</span>
       </button>
       <div class="tree-divider"></div>
 
       @for (row of treeRows(); track row.folder.id) {
-        <div class="tree-row" [style.padding-left]="(row.depth * 18 + 8) + 'px'">
+        <div class="tree-row" [style.padding-left]="row.depth * 18 + 8 + 'px'">
           <button
             class="tree-caret"
             (click)="toggleExpand(row.folder.id)"
@@ -20,35 +28,77 @@
           >
             <span class="msi">{{ row.expanded ? 'expand_more' : 'chevron_right' }}</span>
           </button>
-          <button class="tree-item" [class.tree-active]="folderFilter() === row.folder.id" (click)="setFolderFilter(row.folder.id)">
+          <button
+            class="tree-item"
+            [class.tree-active]="folderFilter() === row.folder.id"
+            (click)="setFolderFilter(row.folder.id)"
+          >
             <span class="msi">folder</span>
             <span class="tree-name">{{ row.folder.name }}</span>
             <span class="tree-count tnum">{{ folderCountOf(row.folder.id) }}</span>
           </button>
           <div class="tree-actions">
-            <button class="icon-btn tree-more-btn" [attr.aria-label]="'Más opciones para la carpeta ' + row.folder.name" (click)="toggleFolderMenu(row.folder.id)">
+            <button
+              class="icon-btn tree-more-btn"
+              [attr.aria-label]="'Más opciones para la carpeta ' + row.folder.name"
+              (click)="toggleFolderMenu(row.folder.id)"
+            >
               <span class="msi">more_vert</span>
             </button>
             @if (folderMenu() === row.folder.id) {
               <div class="folder-more-menu" role="menu" (click)="folderMenu.set(null)">
-                <button class="folder-more-item" role="menuitem" (click)="beginNewChild(row.folder.id)"><span class="msi">create_new_folder</span> Nueva subcarpeta</button>
-                <button class="folder-more-item" role="menuitem" (click)="beginRename(row.folder)"><span class="msi">edit</span> Renombrar</button>
-                <button class="folder-more-item" role="menuitem" (click)="duplicateFolderUI(row.folder)"><span class="msi">content_copy</span> Duplicar carpeta</button>
-                <button class="folder-more-item folder-more-item-danger" role="menuitem" (click)="removeFolder(row.folder)"><span class="msi">delete</span> Eliminar carpeta</button>
+                <button
+                  class="folder-more-item"
+                  role="menuitem"
+                  (click)="beginNewChild(row.folder.id)"
+                >
+                  <span class="msi">create_new_folder</span> Nueva subcarpeta
+                </button>
+                <button class="folder-more-item" role="menuitem" (click)="beginRename(row.folder)">
+                  <span class="msi">edit</span> Renombrar
+                </button>
+                <button
+                  class="folder-more-item"
+                  role="menuitem"
+                  (click)="duplicateFolderUI(row.folder)"
+                >
+                  <span class="msi">content_copy</span> Duplicar carpeta
+                </button>
+                <button
+                  class="folder-more-item folder-more-item-danger"
+                  role="menuitem"
+                  (click)="removeFolder(row.folder)"
+                >
+                  <span class="msi">delete</span> Eliminar carpeta
+                </button>
               </div>
             }
           </div>
         </div>
 
         @if (newChildParent() === row.folder.id) {
-          <div class="tree-inline" [style.padding-left]="((row.depth + 1) * 18 + 8) + 'px'">
-            <input class="folder-input" [(ngModel)]="newChildName" name="nc" placeholder="Subcarpeta…" (keyup.enter)="commitNewChild()" autofocus />
+          <div class="tree-inline" [style.padding-left]="(row.depth + 1) * 18 + 8 + 'px'">
+            <input
+              class="folder-input"
+              [(ngModel)]="newChildName"
+              name="nc"
+              placeholder="Subcarpeta…"
+              (keyup.enter)="commitNewChild()"
+              autofocus
+            />
             <button class="btn btn-primary btn-sm" (click)="commitNewChild()">Crear</button>
           </div>
         }
         @if (renameTarget() === row.folder.id) {
-          <div class="tree-inline" [style.padding-left]="(row.depth * 18 + 8) + 'px'">
-            <input class="folder-input" [(ngModel)]="renameName" name="rn" placeholder="Nombre…" (keyup.enter)="commitRename()" autofocus />
+          <div class="tree-inline" [style.padding-left]="row.depth * 18 + 8 + 'px'">
+            <input
+              class="folder-input"
+              [(ngModel)]="renameName"
+              name="rn"
+              placeholder="Nombre…"
+              (keyup.enter)="commitRename()"
+              autofocus
+            />
             <button class="btn btn-primary btn-sm" (click)="commitRename()">OK</button>
           </div>
         }
@@ -56,7 +106,14 @@
 
       @if (newChildParent() === 'root') {
         <div class="tree-inline">
-          <input class="folder-input" [(ngModel)]="newChildName" name="rc" placeholder="Carpeta…" (keyup.enter)="commitNewChild()" autofocus />
+          <input
+            class="folder-input"
+            [(ngModel)]="newChildName"
+            name="rc"
+            placeholder="Carpeta…"
+            (keyup.enter)="commitNewChild()"
+            autofocus
+          />
           <button class="btn btn-primary btn-sm" (click)="commitNewChild()">Crear</button>
         </div>
       } @else {
@@ -79,7 +136,11 @@
         <p class="page-sub">Diseña, guarda y encuentra tus ejercicios.</p>
       </div>
       <div class="page-actions">
-        <button class="btn btn-ghost sidebar-toggle" (click)="toggleSidebar()" aria-label="Carpetas">
+        <button
+          class="btn btn-ghost sidebar-toggle"
+          (click)="toggleSidebar()"
+          aria-label="Carpetas"
+        >
           <span class="msi">folder_open</span> Carpetas
         </button>
         <button class="btn btn-primary" (click)="createNew()">
@@ -91,17 +152,36 @@
     <div class="filters">
       <div class="search">
         <span class="msi">search</span>
-        <input placeholder="Buscar por título…" [value]="searchInput()" (input)="onSearch($event)" aria-label="Buscar ejercicio por título" />
+        <input
+          placeholder="Buscar por título…"
+          [value]="searchInput()"
+          (input)="onSearch($event)"
+          aria-label="Buscar ejercicio por título"
+        />
         @if (searchInput()) {
-          <button class="search-clear" type="button" aria-label="Limpiar búsqueda" title="Limpiar búsqueda" (click)="clearSearch()">
+          <button
+            class="search-clear"
+            type="button"
+            aria-label="Limpiar búsqueda"
+            title="Limpiar búsqueda"
+            (click)="clearSearch()"
+          >
             <span class="msi">close</span>
           </button>
         }
       </div>
       <div class="chips">
-        <button class="chip" [class.chip-active]="categoryFilter() === 'Todas'" (click)="setFilter('Todas')">Todas</button>
+        <button
+          class="chip"
+          [class.chip-active]="categoryFilter() === 'Todas'"
+          (click)="setFilter('Todas')"
+        >
+          Todas
+        </button>
         @for (c of categories; track c) {
-          <button class="chip" [class.chip-active]="categoryFilter() === c" (click)="setFilter(c)">{{ c }}</button>
+          <button class="chip" [class.chip-active]="categoryFilter() === c" (click)="setFilter(c)">
+            {{ c }}
+          </button>
         }
       </div>
     </div>
@@ -121,7 +201,9 @@
     <div class="results-bar">
       <span class="result-count" role="status">
         {{ resultCount() }} {{ resultCount() === 1 ? 'ejercicio' : 'ejercicios' }}
-        @if (hasFilters()) { <span class="result-total">de {{ totalCount() }}</span> }
+        @if (hasFilters()) {
+          <span class="result-total">de {{ totalCount() }}</span>
+        }
       </span>
       <label class="order">
         <span>Ordenar</span>
@@ -132,7 +214,9 @@
         </select>
       </label>
       @if (hasFilters()) {
-        <button class="btn btn-ghost btn-sm" type="button" (click)="clearFilters()">Limpiar filtros</button>
+        <button class="btn btn-ghost btn-sm" type="button" (click)="clearFilters()">
+          Limpiar filtros
+        </button>
       }
     </div>
 
@@ -154,26 +238,66 @@
             <div class="ex-title-row">
               <div class="ex-title">{{ ex.title }}</div>
               <div class="ex-more-wrap">
-                <button class="icon-btn ex-more-btn" [attr.aria-label]="'Más opciones para ' + ex.title" (click)="toggleMore(ex.id)">
+                <button
+                  class="icon-btn ex-more-btn"
+                  [attr.aria-label]="'Más opciones para ' + ex.title"
+                  (click)="toggleMore(ex.id)"
+                >
                   <span class="msi">more_vert</span>
                 </button>
                 @if (moreMenu() === ex.id) {
                   <div class="ex-more-menu" role="menu" (click)="moreMenu.set(null)">
-                    <button class="ex-more-item" role="menuitem" title="Duplicar" (click)="duplicate(ex)"><span class="msi">content_copy</span> Duplicar</button>
-                    <button class="ex-more-item" role="menuitem" title="Mover a carpeta" (click)="openMovePicker(ex)"><span class="msi">drive_file_move</span> Mover a carpeta</button>
-                    <button class="ex-more-item" role="menuitem" title="Editar datos" (click)="edit(ex)"><span class="msi">tune</span> Editar datos</button>
-                    <button class="ex-more-item ex-more-item-danger" role="menuitem" title="Eliminar" (click)="remove(ex)"><span class="msi">delete</span> Eliminar</button>
+                    <button
+                      class="ex-more-item"
+                      role="menuitem"
+                      title="Duplicar"
+                      (click)="duplicate(ex)"
+                    >
+                      <span class="msi">content_copy</span> Duplicar
+                    </button>
+                    <button
+                      class="ex-more-item"
+                      role="menuitem"
+                      title="Mover a carpeta"
+                      (click)="openMovePicker(ex)"
+                    >
+                      <span class="msi">drive_file_move</span> Mover a carpeta
+                    </button>
+                    <button
+                      class="ex-more-item"
+                      role="menuitem"
+                      title="Editar datos"
+                      (click)="edit(ex)"
+                    >
+                      <span class="msi">tune</span> Editar datos
+                    </button>
+                    <button
+                      class="ex-more-item ex-more-item-danger"
+                      role="menuitem"
+                      title="Eliminar"
+                      (click)="remove(ex)"
+                    >
+                      <span class="msi">delete</span> Eliminar
+                    </button>
                   </div>
                 }
               </div>
             </div>
             <div class="ex-desc">{{ ex.description || ex.explanation || 'Sin descripción.' }}</div>
             <div class="ex-meta">
-              <span class="meta-item"><span class="msi">schedule</span> {{ ex.durationMinutes ? ex.durationMinutes + "′" : '—' }}</span>
+              <span class="meta-item"
+                ><span class="msi">schedule</span>
+                {{ ex.durationMinutes ? ex.durationMinutes + '′' : '—' }}</span
+              >
               <span class="meta-item"><span class="msi">groups</span> {{ playerCount(ex) }}</span>
               <span class="tag">{{ ex.category }}</span>
             </div>
-            <button class="btn btn-primary btn-sm ex-open-btn" title="Diseñar en pizarra" aria-label="Diseñar en pizarra" (click)="openForDesign(ex)">
+            <button
+              class="btn btn-primary btn-sm ex-open-btn"
+              title="Diseñar en pizarra"
+              aria-label="Diseñar en pizarra"
+              (click)="openForDesign(ex)"
+            >
               <span class="msi">edit</span> Diseñar en pizarra
             </button>
           </div>
@@ -185,10 +309,14 @@
       <div class="empty">
         <div class="empty-title">Aún no hay ejercicios aquí</div>
         <div class="empty-sub">
-          {{ team() ? 'Crea el primer ejercicio y diséñalo en la pizarra.' : 'Crea un equipo para empezar.' }}
+          {{
+            team()
+              ? 'Crea el primer ejercicio y diséñalo en la pizarra.'
+              : 'Crea un equipo para empezar.'
+          }}
         </div>
         @if (team()) {
-          <button class="btn btn-primary" style="margin-top:16px" (click)="createNew()">
+          <button class="btn btn-primary" style="margin-top: 16px" (click)="createNew()">
             <span class="msi">add</span> Crear ejercicio
           </button>
         }
@@ -207,17 +335,27 @@
           </div>
           <div class="modal-body">
             @if (formError()) {
-              <div class="form-error" role="alert"><span class="msi">warning</span> {{ formError() }}</div>
+              <div class="form-error" role="alert">
+                <span class="msi">warning</span> {{ formError() }}
+              </div>
             }
             @if (draftIndicator() === 'loaded') {
               <div class="draft-banner"><span class="msi">restore</span> Borrador recuperado</div>
             } @else if (draftIndicator() === 'saved') {
-              <div class="draft-banner subtle"><span class="msi">save</span> Se guarda automáticamente…</div>
+              <div class="draft-banner subtle">
+                <span class="msi">save</span> Se guarda automáticamente…
+              </div>
             }
 
             <div class="field">
               <label>Título</label>
-              <input [(ngModel)]="form().title" name="title" placeholder="Rondos de pase" autofocus (input)="onFormChange()" />
+              <input
+                [(ngModel)]="form().title"
+                name="title"
+                placeholder="Rondos de pase"
+                autofocus
+                (input)="onFormChange()"
+              />
             </div>
             <div class="field-row">
               <div class="field">
@@ -230,7 +368,16 @@
               </div>
               <div class="field">
                 <label>Duración (min)</label>
-                <input type="number" min="0" max="240" [(ngModel)]="form().durationMinutes" name="duration" (input)="onFormChange()" />
+                <!-- El rango del input es el MISMO que la restricción de la base (1..240): con
+                     `min="0"` se podía guardar 0 y el servidor lo rechazaba sin explicar por qué. -->
+                <input
+                  type="number"
+                  min="1"
+                  max="240"
+                  [(ngModel)]="form().durationMinutes"
+                  name="duration"
+                  (input)="onFormChange()"
+                />
               </div>
             </div>
             <div class="field">
@@ -238,41 +385,81 @@
               <select [(ngModel)]="form().folderId" name="folder" (change)="onFormChange()">
                 <option [ngValue]="null">Sin carpeta</option>
                 @for (r of treeRows(); track r.folder.id) {
-                  <option [ngValue]="r.folder.id">{{ '—'.repeat(r.depth + 1) }} {{ r.folder.name }}</option>
+                  <option [ngValue]="r.folder.id">
+                    {{ '—'.repeat(r.depth + 1) }} {{ r.folder.name }}
+                  </option>
                 }
               </select>
             </div>
             <div class="field">
               <label>Descripción</label>
-              <textarea [(ngModel)]="form().description" name="description" rows="2" placeholder="Qué hace este ejercicio…" (input)="onFormChange()"></textarea>
+              <textarea
+                [(ngModel)]="form().description"
+                name="description"
+                rows="2"
+                placeholder="Qué hace este ejercicio…"
+                (input)="onFormChange()"
+              ></textarea>
             </div>
             <div class="field">
               <label>Explicación</label>
-              <textarea [(ngModel)]="form().explanation" name="explanation" rows="2" placeholder="Instrucciones para los jugadores…" (input)="onFormChange()"></textarea>
+              <textarea
+                [(ngModel)]="form().explanation"
+                name="explanation"
+                rows="2"
+                placeholder="Instrucciones para los jugadores…"
+                (input)="onFormChange()"
+              ></textarea>
             </div>
             <div class="field">
               <label>Material necesario</label>
-              <input [(ngModel)]="form().materials" name="materials" placeholder="Conos, balones, vallas… (separados por coma)" (input)="onFormChange()" />
+              <input
+                [(ngModel)]="form().materials"
+                name="materials"
+                placeholder="Conos, balones, vallas… (separados por coma)"
+                (input)="onFormChange()"
+              />
             </div>
             <div class="field-grid">
               <div class="field">
                 <label>Jugadores (min)</label>
-                <input type="number" min="0" [(ngModel)]="form().minPlayers" name="minPlayers" placeholder="—" (input)="onFormChange()" />
+                <input
+                  type="number"
+                  min="0"
+                  [(ngModel)]="form().minPlayers"
+                  name="minPlayers"
+                  placeholder="—"
+                  (input)="onFormChange()"
+                />
               </div>
               <div class="field">
                 <label>Jugadores (max)</label>
-                <input type="number" min="0" [(ngModel)]="form().maxPlayers" name="maxPlayers" placeholder="—" (input)="onFormChange()" />
+                <input
+                  type="number"
+                  min="0"
+                  [(ngModel)]="form().maxPlayers"
+                  name="maxPlayers"
+                  placeholder="—"
+                  (input)="onFormChange()"
+                />
               </div>
             </div>
             <div class="field">
               <label>Objetivos</label>
-              <input [(ngModel)]="form().objectives" name="objectives" placeholder="Objetivos separados por comas" (input)="onFormChange()" />
+              <input
+                [(ngModel)]="form().objectives"
+                name="objectives"
+                placeholder="Objetivos separados por comas"
+                (input)="onFormChange()"
+              />
             </div>
           </div>
           <div class="modal-foot">
             <button class="btn" (click)="closeEditor()">Cancelar</button>
             <button class="btn" (click)="design()"><span class="msi">edit</span> Diseñar</button>
-            <button class="btn btn-primary" [disabled]="!form().title.trim()" (click)="save()">Guardar</button>
+            <button class="btn btn-primary" [disabled]="!form().title.trim()" (click)="save()">
+              Guardar
+            </button>
           </div>
         </div>
       </div>
@@ -284,12 +471,20 @@
         <div class="modal modal-sm" (click)="$event.stopPropagation()">
           <div class="modal-head">
             <h3>Mover a carpeta</h3>
-            <button class="btn btn-ghost btn-icon" (click)="closeMovePicker()" title="Cerrar"><span class="msi">close</span></button>
+            <button class="btn btn-ghost btn-icon" (click)="closeMovePicker()" title="Cerrar">
+              <span class="msi">close</span>
+            </button>
           </div>
           <div class="modal-body">
-            <button class="picker-item" (click)="pickMoveFolder(null)"><span class="msi">folder_open</span> Sin carpeta</button>
+            <button class="picker-item" (click)="pickMoveFolder(null)">
+              <span class="msi">folder_open</span> Sin carpeta
+            </button>
             @for (r of treeRows(); track r.folder.id) {
-              <button class="picker-item" [style.padding-left]="(r.depth * 18 + 12) + 'px'" (click)="pickMoveFolder(r.folder.id)">
+              <button
+                class="picker-item"
+                [style.padding-left]="r.depth * 18 + 12 + 'px'"
+                (click)="pickMoveFolder(r.folder.id)"
+              >
                 <span class="msi">folder</span> {{ r.folder.name }}
               </button>
             }
