@@ -90,28 +90,6 @@ async function fitMode(page: Page): Promise<Fit> {
   return cls.includes('board-fill') ? 'height' : 'contain';
 }
 
-/** Despacha un PointerEvent sintético sobre `.board-host` (puntero táctil). */
-async function ptr(page: Page, type: 'pointerdown' | 'pointermove' | 'pointerup', x: number, y: number, pointerId: number, isPrimary = false): Promise<void> {
-  await page.evaluate(({ type, x, y, pointerId, isPrimary }) => {
-    const host = document.querySelector('.board-host') as HTMLElement | null;
-    if (!host) return;
-    const up = type === 'pointerup';
-    host.dispatchEvent(
-      new PointerEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        pointerId,
-        pointerType: 'touch',
-        isPrimary,
-        clientX: x,
-        clientY: y,
-        button: 0,
-        buttons: up ? 0 : 1,
-      })
-    );
-  }, { type, x, y, pointerId, isPrimary });
-}
-
 /** Centro en PANTALLA (coordenadas de página) del bounding box de un selector del SVG. */
 async function objectScreen(page: Page, selector: string): Promise<Pt> {
   const loc = page.locator(selector).first();
@@ -203,24 +181,47 @@ async function armComodin(page: Page): Promise<void> {
   await expect(page.locator('.side-panel-left')).toHaveCount(0);
 }
 
-/** Arrastra (arrastre de UN dedo, táctil) desde (x,y) por (dx,dy). */
+/**
+ * Arrastra (arrastre de UN dedo, táctil) desde (x,y) por (dx,dy).
+ *
+ * El gesto se despacha ATÓMICO: `pointerdown`, los `pointermove` y `pointerup` en la MISMA tarea
+ * del navegador. Antes eran tres `page.evaluate` seguidos —tres viajes por CDP— y en un runner
+ * cargado entre el `down` y el primer `move` podían pasar más de los 550 ms de la pulsación larga:
+ * el gesto que este test cree "un arrastre rápido" llegaba a la app como "pulsación larga y luego
+ * arrastre", que es OTRA entrada (el menú se abre y el dedo ya no mueve nada).
+ *
+ * MEDIDO con una sonda en este mismo flujo (móvil 390×844, jugador colocado y seleccionado):
+ *   down → 700 ms → move+up  ⟹ objeto QUIETO (Δx = 0) y el menú contextual ABIERTO.
+ *   down+move+up en la MISMA tarea ⟹ el objeto se mueve (Δx = -0,036, lo esperado).
+ * Culpable: el TEST, no la app. La app responde como debe a una pulsación larga táctil (abre el
+ * menú y no arrastra); lo que no puede es que el significado del gesto dependa de la velocidad del
+ * runner. FASE G: el movimiento se verifica en el llamador con `expect.poll(objectNorm/imageNorm)`.
+ */
 async function drag(page: Page, x: number, y: number, dx: number, dy: number, id = 7): Promise<void> {
-  await ptr(page, 'pointerdown', x, y, id, true);
-  await ptr(page, 'pointermove', x + dx, y + dy, id);
-  await ptr(page, 'pointerup', x + dx, y + dy, id);
-  // FASE G: el movimiento se verifica en el llamador con `expect.poll(objectNorm/imageNorm)`.
-}
-
-/** Rota el elemento seleccionado con la manija: baja en la manija y mueve el puntero
- *  a la DERECHA del centro (≈90°) para cambiar la rotación con el panel CERRADO. */
-async function rotateGesture(page: Page, handleScreen: Pt, centerScreen: Pt, id = 8): Promise<void> {
-  const v = { x: handleScreen.x - centerScreen.x, y: handleScreen.y - centerScreen.y };
-  const r = Math.hypot(v.x, v.y);
-  const target = { x: centerScreen.x + r, y: centerScreen.y };
-  await ptr(page, 'pointerdown', handleScreen.x, handleScreen.y, id, true);
-  await ptr(page, 'pointermove', target.x, target.y, id);
-  await ptr(page, 'pointerup', target.x, target.y, id);
-  // FASE G: helper sin uso actual; la rotación se verifica por `expect.poll(firstRot)` en quien la use.
+  await page.evaluate(
+    ({ x, y, dx, dy, id }) => {
+      const host = document.querySelector('.board-host') as HTMLElement | null;
+      if (!host) return;
+      const ev = (type: string, cx: number, cy: number, buttons: number) =>
+        host.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            pointerId: id,
+            pointerType: 'touch',
+            isPrimary: true,
+            clientX: cx,
+            clientY: cy,
+            button: 0,
+            buttons,
+          })
+        );
+      ev('pointerdown', x, y, 1);
+      for (const f of [0.5, 1]) ev('pointermove', x + dx * f, y + dy * f, 1);
+      ev('pointerup', x + dx, y + dy, 0);
+    },
+    { x, y, dx, dy, id }
+  );
 }
 
 // Selectores reutilizados.
