@@ -117,6 +117,44 @@ async function panByDrag(page: Page, dx: number, dy: number): Promise<void> {
   await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
 }
 
+/** Escala del `transform` computado del lienzo (`matrix(a, b, c, d, e, f)`). */
+function escalaDelLienzo(t: string): number {
+  const m = /matrix\(\s*([-\d.e+]+)/.exec(t);
+  return m ? Math.abs(parseFloat(m[1])) : Number.NaN;
+}
+
+/**
+ * Espera a que la VISTA esté APLICADA (y estable) antes de medirla.
+ *
+ * El zoom y el pan son un `transform` del lienzo que Angular pinta en el repintado SIGUIENTE,
+ * no dentro del propio `change`. MEDIDO con una sonda: justo después de
+ * `dispatchEvent(new Event('change'))` el lienzo sigue en `matrix(1, 0, 0, 1, 0, 0)` y solo un
+ * poco después pasa a `matrix(1.5, 0, 0, 1.5, 0, 0)`. Medir la posición de un objeto en esa
+ * ventana devuelve dónde estaba ANTES del zoom, así que el clic posterior cae en campo vacío y
+ * `.inspector` no llega a aparecer: es el fallo que apareció en CI (el test tardó 10,5 s y
+ * murió en `element(s) not found`) mientras en local pasaba por ir más rápido.
+ *
+ * Culpable: el TEST, no la app (la app aplica el zoom correctamente). La espera comprueba
+ * además la ESCALA REAL aplicada, de modo que el test ya no puede pasar sin que el zoom haya
+ * surtido efecto.
+ */
+async function waitViewApplied(page: Page, zoom: number): Promise<void> {
+  const transform = () => page.locator('.board-canvas').first().evaluate((el) => getComputedStyle(el).transform);
+  await expect
+    .poll(async () => escalaDelLienzo(await transform()), { message: `el lienzo aplica la escala ${zoom}` })
+    .toBeCloseTo(zoom, 2);
+  await expect
+    .poll(
+      async () => {
+        const a = await transform();
+        const b = await transform();
+        return a === b;
+      },
+      { message: 'la vista deja de cambiar (aplicada y estable)' },
+    )
+    .toBe(true);
+}
+
 /** Abre el menú "Exportar" (unificado) y pulsa una de sus acciones por título. */
 async function exportFromMenu(page: Page, title: string): Promise<void> {
   await page.locator('[aria-label="Exportar"]').click();
@@ -1334,6 +1372,7 @@ test.describe('EntrenoLab funcionalidades', () => {
       input.value = '1.5';
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
+    await waitViewApplied(page, 1.5); // el zoom se mide APLICADO, no pedido (ver el helper)
     ({ cx, cy } = await coneScreen());
     await page.mouse.click(cx, cy);
     await expect(page.locator('.inspector')).toBeVisible();
@@ -1348,7 +1387,9 @@ test.describe('EntrenoLab funcionalidades', () => {
       input.value = '2';
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
+    await waitViewApplied(page, 2); // idem: el zoom aplicado antes de medir
     await panByDrag(page, 30, 20);
+    await waitViewApplied(page, 2); // …y el pan también (misma ventana de repintado)
     ({ cx, cy } = await coneScreen());
     await page.mouse.click(cx, cy);
     await expect(page.locator('.inspector')).toBeVisible();
@@ -1385,9 +1426,11 @@ test.describe('EntrenoLab funcionalidades', () => {
         input.value = String(v);
         input.dispatchEvent(new Event('change', { bubbles: true }));
       }, zoom);
+      await waitViewApplied(page, zoom); // el zoom, aplicado antes de medir y clicar
       // DECISIÓN DEL DUEÑO: los inputs X/Y de la Vista fueron retirados → el pan se
       // hace con la herramienta "Mano" (arrastre), no con campos numéricos.
       await panByDrag(page, panX, panY);
+      await waitViewApplied(page, zoom); // …y el pan, por el mismo motivo
     };
 
     // En cada combinación el centro visual del elemento debe quedar DENTRO de la zona

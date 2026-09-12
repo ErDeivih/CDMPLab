@@ -105,9 +105,6 @@ test.describe('Fase 8 — el nombre/número del jugador se contrarrota al girar 
       await longPress(page, c.x, c.y);
       await expect(page.locator('.context-bar')).toBeVisible();
       await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
-      // FASE G: condición observable — esperamos a que la marca quede girada +90° en el
-      // SVG en lugar de un wait fijo.
-      await expect.poll(async () => (await page.locator('.board-canvas svg').innerHTML()).includes('rotate(90')).toBe(true);
 
       // La marca gira +90° y el texto se contrarrota para quedar DERECHO por pantalla.
       // En horizontal, el texto compensa solo la rotación del jugador: -(0 + 90) = -90.
@@ -116,6 +113,22 @@ test.describe('Fase 8 — el nombre/número del jugador se contrarrota al girar 
       // ambas orientaciones; eso era incorrecto para vertical (el texto quedaba a 90° y no
       // se leía de izquierda a derecha). La FASE 1 corrige el render.
       const expectedRot = orientation === 'vertical' ? 'rotate(-180 0 0)' : 'rotate(-90 0 0)';
+
+      // FASE G: condición observable — esperamos a que la marca quede girada +90° en el
+      // SVG en lugar de un wait fijo.
+      //
+      // OJO (defecto del TEST, visto en el Nightly): esperar por `rotate(90` NO es una espera
+      // real en vertical, porque el envoltorio del campo vertical YA lleva `rotate(90)`. El poll
+      // se satisfacía al instante con el DOM viejo, así que se leería el HTML antes del repintado
+      // y la contrarrotación todavía no estaría ahí (fallo intermitente en CI, verde en local por
+      // ir más rápido). Se espera a la SEÑAL REAL: la contrarrotación del texto en esta
+      // orientación, que solo existe cuando la rotación se ha aplicado de verdad.
+      await expect
+        .poll(async () => (await page.locator('.board-canvas svg').innerHTML()).includes(expectedRot), {
+          message: `la rotación se aplica (el texto queda en ${expectedRot})`,
+        })
+        .toBe(true);
+
       const html = await page.locator('.board-canvas svg').innerHTML();
       expect(html, 'la marca del jugador está girada +90°').toContain('rotate(90');
       expect(html, `el texto del jugador se contrarrota a ${expectedRot} (queda derecho) en ${orientation}`).toContain(expectedRot);
