@@ -1,11 +1,21 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { StoreService } from '../../core/store.service';
+import { AccessService } from '../../core/access.service';
 import { ConfirmService } from '../../core/confirm.service';
 import { Player, Position } from '../../core/models';
 import { colorName } from '../../core/color-name';
 
-const PALETTE = ['#1a73e8', '#c0392b', '#1f7a4d', '#e67e22', '#7d3c98', '#b8860b', '#111111', '#f4f4f4'];
+const PALETTE = [
+  '#1a73e8',
+  '#c0392b',
+  '#1f7a4d',
+  '#e67e22',
+  '#7d3c98',
+  '#b8860b',
+  '#111111',
+  '#f4f4f4',
+];
 const POSITIONS: Position[] = ['GK', 'DF', 'MF', 'FW'];
 
 interface Draft {
@@ -24,6 +34,7 @@ interface Draft {
 })
 export class RosterComponent {
   private readonly store = inject(StoreService);
+  private readonly access = inject(AccessService);
   private readonly confirmSvc = inject(ConfirmService);
 
   protected readonly palette = PALETTE;
@@ -40,7 +51,7 @@ export class RosterComponent {
       const pa = a.position === 'GK' ? 0 : 1;
       const pb = b.position === 'GK' ? 0 : 1;
       return pa - pb || (a.number ?? 99) - (b.number ?? 99);
-    })
+    }),
   );
 
   // ---------- Filtros de la lista ----------
@@ -81,7 +92,13 @@ export class RosterComponent {
   protected readonly newTeamColor = signal(PALETTE[0]);
 
   protected readonly editorOpen = signal(false);
-  protected readonly draft = signal<Draft>({ id: null, name: '', number: null, position: 'MF', color: PALETTE[0] });
+  protected readonly draft = signal<Draft>({
+    id: null,
+    name: '',
+    number: null,
+    position: 'MF',
+    color: PALETTE[0],
+  });
   /** Motivo por el que no se puede guardar (vacío = todo correcto). */
   protected readonly formError = signal('');
 
@@ -94,7 +111,16 @@ export class RosterComponent {
   createTeam(): void {
     const name = this.newTeamName().trim();
     if (!name) return;
-    this.store.createTeam(name, this.newTeamColor());
+    // En modo REMOTO la creación del equipo va por `AccessService` (que crea la fila, conecta el
+    // repositorio y lo activa): `store.createTeam` es síncrono y solo escribe en localStorage, así
+    // que aquí habría creado un equipo fantasma que desaparece al recargar. Misma ruta que el alta.
+    if (this.store.isRemote()) {
+      void this.access.createTeam(name, this.newTeamColor()).catch(() => {
+        this.formError.set('No se pudo crear el equipo. Inténtalo de nuevo.');
+      });
+    } else {
+      this.store.createTeam(name, this.newTeamColor());
+    }
     this.showCreateTeam.set(false);
     this.newTeamName.set('');
   }
@@ -135,7 +161,8 @@ export class RosterComponent {
     if (!d.position) return 'Elige una posición.';
     const n = d.number;
     if (n !== null) {
-      if (!Number.isInteger(n) || n < 1 || n > 99) return 'El dorsal tiene que ser un número del 1 al 99.';
+      if (!Number.isInteger(n) || n < 1 || n > 99)
+        return 'El dorsal tiene que ser un número del 1 al 99.';
       const dup = this.players().find((p) => p.number === n && p.id !== d.id);
       if (dup) return `El dorsal ${n} ya lo lleva ${dup.name}.`;
     }

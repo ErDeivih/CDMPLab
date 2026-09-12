@@ -1,6 +1,10 @@
-<app-auth-card [title]="'Panel de administración'" [subtitle]="'Gestión de accesos de la plataforma'">
+<app-auth-card
+  [title]="'Panel de administración'"
+  [subtitle]="'Gestión de accesos de la plataforma'"
+>
   <p class="auth-note">
-    Busca y gestiona los perfiles. Solo los administradores de plataforma pueden acceder a este panel.
+    Busca y gestiona los perfiles. Solo los administradores de plataforma pueden acceder a este
+    panel.
   </p>
 
   <div class="invite-form">
@@ -19,7 +23,9 @@
   @if (loading()) {
     <p class="auth-note">Cargando perfiles…</p>
   } @else if (profiles().length === 0) {
-    <p class="auth-note">No se han encontrado perfiles {{ query() ? 'para «' + query() + '»' : '' }}.</p>
+    <p class="auth-note">
+      No se han encontrado perfiles {{ query() ? 'para «' + query() + '»' : '' }}.
+    </p>
   } @else {
     @for (p of profiles(); track p.userId) {
       <div class="card invite-row">
@@ -27,21 +33,54 @@
           <strong>{{ p.displayName || p.emailNormalized }}</strong>
           <span class="auth-note">
             {{ p.emailNormalized }} · {{ statusLabel(p.status) }}
-            @if (me(p.userId)) { · tú }
+            @if (me(p.userId)) {
+              · tú
+            }
           </span>
         </div>
         <div class="admin-actions">
           @if (p.status !== 'approved') {
-            <button type="button" class="btn btn-primary" [disabled]="busy(p.userId)" (click)="approve(p)">Aprobar</button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              [disabled]="busy(p.userId)"
+              (click)="approve(p)"
+            >
+              Aprobar
+            </button>
           }
-          @if (p.status === 'pending' || p.status === 'approved') {
-            <button type="button" class="btn btn-ghost btn-danger-text" [disabled]="busy(p.userId)" (click)="reject(p)">Rechazar</button>
+          <!-- Nadie se rechaza ni se suspende a SÍ MISMO: era un pie de banco con final irreversible
+               desde la interfaz (el usuario se quedaba fuera de /team, /library, /sessions y /board
+               sin poder deshacerlo). Aprobar y reactivar sí se dejan: no encierran a nadie. -->
+          @if (!me(p.userId) && (p.status === 'pending' || p.status === 'approved')) {
+            <button
+              type="button"
+              class="btn btn-ghost btn-danger-text"
+              [disabled]="busy(p.userId)"
+              (click)="reject(p)"
+            >
+              Rechazar
+            </button>
           }
-          @if (p.status === 'approved') {
-            <button type="button" class="btn btn-ghost btn-danger-text" [disabled]="busy(p.userId)" (click)="suspend(p)">Suspender</button>
+          @if (!me(p.userId) && p.status === 'approved') {
+            <button
+              type="button"
+              class="btn btn-ghost btn-danger-text"
+              [disabled]="busy(p.userId)"
+              (click)="suspend(p)"
+            >
+              Suspender
+            </button>
           }
           @if (p.status === 'suspended' || p.status === 'rejected') {
-            <button type="button" class="btn" [disabled]="busy(p.userId)" (click)="reactivate(p)">Reactivar</button>
+            <button type="button" class="btn" [disabled]="busy(p.userId)" (click)="reactivate(p)">
+              Reactivar
+            </button>
+          }
+          @if (me(p.userId) && p.status !== 'suspended' && p.status !== 'rejected') {
+            <span class="auth-note" role="status"
+              >Tu propia cuenta no se puede rechazar ni suspender.</span
+            >
           }
         </div>
       </div>

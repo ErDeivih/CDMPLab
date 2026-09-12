@@ -9,9 +9,16 @@
 
   @if (loading()) {
     <p class="auth-note">Cargando miembros…</p>
+  } @else if (!isOwner()) {
+    <!-- Un editor no puede ver la lista (el servidor solo se la da al propietario): antes se le
+         mostraba «0 de 4 usadas» y ninguna lista, que parece un error de la app. -->
+    <p class="auth-note" role="status">
+      Solo el propietario del equipo puede ver y gestionar los miembros. Si necesitas un cambio,
+      pídeselo a quien creó el equipo.
+    </p>
   } @else {
     <div class="auth-row">
-      <span style="margin-right:auto">Plazas de colaboradores</span>
+      <span style="margin-right: auto">Plazas de colaboradores</span>
       <strong>{{ seatsUsed() }} de {{ seatsLimit }} usadas</strong>
     </div>
 
@@ -22,7 +29,12 @@
           <span class="auth-note">{{ m.role === 'owner' ? 'Propietario' : 'Editor' }}</span>
         </div>
         @if (isOwner() && m.role !== 'owner' && !me(m.userId)) {
-          <button type="button" class="btn btn-ghost btn-danger-text" [disabled]="busy(m.userId)" (click)="revoke(m)">
+          <button
+            type="button"
+            class="btn btn-ghost btn-danger-text"
+            [disabled]="busy(m.userId)"
+            (click)="revoke(m)"
+          >
             {{ busy(m.userId) ? '…' : 'Revocar' }}
           </button>
         }
@@ -35,10 +47,18 @@
           <div class="invite-main">
             <strong>{{ inv.emailNormalized }}</strong>
             <span class="auth-note">
-              Invitación pendiente@if (inv.teamName) { a {{ inv.teamName }} }
+              Invitación pendiente
+              @if (inv.teamName) {
+                a {{ inv.teamName }}
+              }
             </span>
           </div>
-          <button type="button" class="btn btn-ghost" [disabled]="busy(inv.id)" (click)="cancel(inv)">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            [disabled]="busy(inv.id)"
+            (click)="cancel(inv)"
+          >
             {{ busy(inv.id) ? '…' : 'Cancelar' }}
           </button>
         </div>
@@ -58,7 +78,12 @@
             (input)="onInviteEmailInput($event)"
             autocomplete="off"
           />
-          <button type="button" class="btn btn-primary" [disabled]="submitting()" (click)="invite()">
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="submitting()"
+            (click)="invite()"
+          >
             {{ submitting() ? 'Creando…' : 'Invitar' }}
           </button>
         </div>
@@ -66,9 +91,9 @@
              no se envía un correo personalizado. Explicamos qué ocurre y qué debe
              hacer la persona invitada, sin afirmar que se ha enviado un correo. -->
         <p class="invite-note">
-          Se crea una invitación pendiente. Si la persona aún no tiene cuenta, debe
-          registrarse en CDMPLab con ese mismo correo; su cuenta tendrá que ser
-          aprobada por el administrador y después podrá aceptar la invitación.
+          Se crea una invitación pendiente. Si la persona aún no tiene cuenta, debe registrarse en
+          CDMPLab con ese mismo correo; su cuenta tendrá que ser aprobada por el administrador y
+          después podrá aceptar la invitación.
         </p>
       </div>
     }

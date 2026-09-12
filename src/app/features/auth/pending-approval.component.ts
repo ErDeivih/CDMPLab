@@ -45,6 +45,10 @@ export class PendingApprovalComponent {
 
   protected async logout(): Promise<void> {
     await this.supabase.signOut();
+    // Igual que en «acceso rechazado» y «acceso suspendido»: al cerrar sesión se limpia el estado
+    // de acceso resuelto (si no, quedan vivos el estado 'pending' y el repositorio del usuario que
+    // se acaba de ir).
+    await this.access.clear();
     await this.router.navigate(['/auth/login']);
   }
 }

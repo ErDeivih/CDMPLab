@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AccessService } from '../../core/access.service';
+import { ConfirmService } from '../../core/confirm.service';
 import { AuthCardComponent } from './auth-card.component';
 import type { TeamInvitationInfo } from '../../core/repositories/data-source';
 
@@ -12,6 +13,7 @@ import type { TeamInvitationInfo } from '../../core/repositories/data-source';
 export class InvitationsComponent {
   private readonly access = inject(AccessService);
   private readonly router = inject(Router);
+  private readonly confirm = inject(ConfirmService);
 
   protected readonly invitations = signal<TeamInvitationInfo[]>([]);
   protected readonly loading = signal(true);
@@ -50,7 +52,19 @@ export class InvitationsComponent {
     }
   }
 
-  protected async reject(inv: TeamInvitationInfo): Promise<void> {
+  protected reject(inv: TeamInvitationInfo): void {
+    // Se pregunta antes: rechazar destruye la invitación y, si te arrepientes, solo el propietario
+    // del equipo puede volver a invitarte. El resto de acciones destructivas de la app ya
+    // preguntaban (cancelar invitación, revocar miembro); esta se ejecutaba con un clic.
+    this.confirm.ask({
+      title: 'Rechazar invitación',
+      message: `¿Rechazar la invitación a ${inv.teamName}? Desaparecerá de tu lista y para volver a entrar tendrías que pedirle al propietario que te invite otra vez.`,
+      confirmLabel: 'Rechazar invitación',
+      onConfirm: () => void this.doReject(inv),
+    });
+  }
+
+  private async doReject(inv: TeamInvitationInfo): Promise<void> {
     this.busyId.set(inv.id);
     this.error.set(null);
     try {
@@ -74,11 +88,15 @@ export class InvitationsComponent {
   }
 
   private friendly(msg: string): string {
-    if (msg.includes('invitation_not_available')) return 'La invitación ya no está disponible (caducó, se rechazó o se aceptó).';
-    if (msg.includes('invitation_email_mismatch')) return 'Esta invitación pertenece a otra cuenta.';
-    if (msg.includes('owner_cannot_be_collaborator')) return 'Eres el propietario de ese equipo: esa invitación no es tuya.';
+    if (msg.includes('invitation_not_available'))
+      return 'La invitación ya no está disponible (caducó, se rechazó o se aceptó).';
+    if (msg.includes('invitation_email_mismatch'))
+      return 'Esta invitación pertenece a otra cuenta.';
+    if (msg.includes('owner_cannot_be_collaborator'))
+      return 'Eres el propietario de ese equipo: esa invitación no es tuya.';
     if (msg.includes('profile_not_approved')) return 'Tu perfil todavía no ha sido aprobado.';
-    if (msg.includes('email_not_confirmed')) return 'Confirma tu correo antes de aceptar la invitación.';
+    if (msg.includes('email_not_confirmed'))
+      return 'Confirma tu correo antes de aceptar la invitación.';
     return msg;
   }
 }

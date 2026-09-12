@@ -54,7 +54,9 @@ export class SessionsComponent {
    *  se avisa de nada: preferimos no decir nada a decirlo mal. */
   protected isTaskOutdated(t: SessionTask): boolean {
     if (!t.exerciseId || !t.snapshot) return false;
-    const live = this.store.getExercisesForTeam(this.team()?.id ?? '').find((e) => e.id === t.exerciseId);
+    const live = this.store
+      .getExercisesForTeam(this.team()?.id ?? '')
+      .find((e) => e.id === t.exerciseId);
     return !!live && live.savedAt !== t.snapshot.savedAt;
   }
 
@@ -177,7 +179,9 @@ export class SessionsComponent {
     const v = parseInt((evt.target as HTMLInputElement).value, 10);
     this.form.update((f) => ({
       ...f,
-      tasks: f.tasks.map((t, i) => (i === index ? { ...t, durationMinutes: isNaN(v) ? null : v } : t)),
+      tasks: f.tasks.map((t, i) =>
+        i === index ? { ...t, durationMinutes: isNaN(v) ? null : v } : t,
+      ),
     }));
   }
 
@@ -211,6 +215,17 @@ export class SessionsComponent {
       this.formError.set(err);
       return;
     }
+    // La duración EFECTIVA es la que se guarda: si el campo va vacío se usa la suma de las tareas,
+    // y esa suma podía pasarse del máximo que este mismo formulario exige (3 tareas de 250 → 750).
+    // Se guardaba 750 y, al reabrir la sesión, no se podía volver a guardar por un número que el
+    // usuario nunca escribió.
+    const duracionEfectiva = f.durationMinutes ?? this.totalMinutes();
+    if (!Number.isFinite(duracionEfectiva) || duracionEfectiva < 0 || duracionEfectiva > 600) {
+      this.formError.set(
+        'La duración de la sesión (la suma de sus tareas) no puede superar 600 minutos. Ajusta las tareas o escribe una duración menor.',
+      );
+      return;
+    }
     this.formError.set('');
     this.saving.set(true);
     const existing = f.id ? this.store.sessions().find((s) => s.id === f.id) : undefined;
@@ -219,7 +234,7 @@ export class SessionsComponent {
       teamId,
       title: f.title.trim(),
       date: f.date,
-      durationMinutes: f.durationMinutes ?? this.totalMinutes(),
+      durationMinutes: duracionEfectiva,
       notes: f.notes,
       tasks: f.tasks.map((t, i) => ({ ...t, sortOrder: i })),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
