@@ -922,18 +922,51 @@ describe('SupabaseRepository · paginación del dataset del equipo', () => {
     expect(taskRanges.filter((r) => r.from === 0).length).toBeGreaterThan(1); // varios bloques de sesiones
     expect(taskRanges.every((r) => r.to - r.from === SERVER_MAX_ROWS - 1)).toBe(true);
 
-    // Y el orden que hace estables las fronteras entre páginas: criterio + desempate por id.
+    // Y el orden que hace estables las fronteras entre páginas.
+    // OJO (era el fallo, no la prueba la que estaba mal en su intención pero sí en su expectativa):
+    // este test exigía `updated_at` para ejercicios y sesiones, y `updated_at` CAMBIA con cada
+    // edición, así que una fila editada entre dos páginas se movía de sitio y el `.range()` podía
+    // duplicarla o saltársela. Lo que hace estables las fronteras es una clave INMUTABLE, `id`.
     const expectedOrders: Record<string, string[]> = {
       players: ['created_at', 'id'],
       exercise_folders: ['created_at', 'id'],
-      exercises: ['updated_at', 'id'],
-      sessions: ['updated_at', 'id'],
+      exercises: ['id'],
+      sessions: ['id'],
       session_exercises: ['sort_order', 'id'],
     };
     for (const [table, columns] of Object.entries(expectedOrders)) {
       expect(selectCalls(server, table).length).toBeGreaterThan(0);
       expect(selectCalls(server, table)[0].orders.map((o) => o.column)).toEqual(columns);
     }
+  });
+
+  it('una edición a mitad de lectura no duplica ni pierde ejercicios (orden por clave INMUTABLE)', async () => {
+    // Con el orden antiguo (`updated_at desc`) esta prueba falla: al editar entre la primera y la
+    // segunda página una fila YA LEÍDA, esa fila se movía al principio, el `.range()` la volvía a
+    // traer (duplicada) y otra se quedaba fuera. `updated_at` cambia con cada edición; `id` no.
+    class ServerQueEdita extends FakePostgrestServer {
+      override respond(
+        table: string,
+        rows: FakeRow[],
+        range: FakeRange | null,
+        orders: FakeOrder[],
+      ): FakeResponse {
+        if (table === 'exercises' && range?.from === 0) {
+          // Al servir la PRIMERA página, otra persona edita el primer ejercicio ya leído.
+          const fila = this.rowsOf('exercises').find((r) => r['id'] === 'ex-0000');
+          if (fila) fila['updated_at'] = '2999-01-01T00:00:00.000Z';
+        }
+        return super.respond(table, rows, range, orders);
+      }
+    }
+    const server = new ServerQueEdita(SERVER_MAX_ROWS);
+    server.seed('exercises', exerciseRows(DATASET.exercises));
+    const repo = makePagedRepo(server);
+
+    const dataset = await repo.loadTeam(PAGINATED_TEAM_ID);
+    const ids = dataset.exercises.map((e) => e.id);
+    expect(ids.length, 'están TODOS los ejercicios').toBe(DATASET.exercises);
+    expect(new Set(ids).size, 'y ninguno repetido').toBe(DATASET.exercises);
   });
 
   it('deleteFolder borra el subárbol COMPLETO aunque la raíz y la rama profunda caigan en la segunda página', async () => {

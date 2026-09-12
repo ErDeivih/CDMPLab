@@ -343,12 +343,16 @@ export class SupabaseRepository implements DataSource {
   }
 
   private async loadExercises(teamId: string): Promise<Exercise[]> {
+    // Orden por una clave INMUTABLE (`id`). Antes era `updated_at desc` + `id`: como `updated_at`
+    // CAMBIA con cada edición, una fila editada por otra persona entre dos páginas se movía al
+    // principio y el desplazamiento por `.range()` podía duplicarla o saltársela (el comentario de
+    // `loadAllPages` pide justo un orden determinista). El orden de presentación no depende de esto:
+    // la interfaz ordena por su cuenta (Recientes/A–Z/Duración en la biblioteca; fecha en sesiones).
     const rows = await this.loadAllPages<ExercisesRow>('exercise_read', (from, to) =>
       this.client
         .from('exercises')
         .select('*')
         .eq('team_id', teamId)
-        .order('updated_at', { ascending: false })
         .order('id', { ascending: true })
         .range(from, to),
     );
@@ -356,12 +360,12 @@ export class SupabaseRepository implements DataSource {
   }
 
   private async loadSessions(teamId: string): Promise<Session[]> {
+    // Mismo motivo que en `loadExercises`: `updated_at` es mutable y no sirve para paginar.
     const sessionRows = await this.loadAllPages<SessionsRow>('session_read', (from, to) =>
       this.client
         .from('sessions')
         .select('*')
         .eq('team_id', teamId)
-        .order('updated_at', { ascending: false })
         .order('id', { ascending: true })
         .range(from, to),
     );
