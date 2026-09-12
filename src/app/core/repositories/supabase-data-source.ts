@@ -453,15 +453,20 @@ export class SupabaseRepository implements DataSource {
   }
 
   async updatePlayer(id: string, patch: Partial<Player>): Promise<Player> {
+    // Solo se envían las claves PRESENTES en el parche. Antes se construía la fila entera con
+    // `number: patch.number ?? null`, así que cualquier parche PARCIAL borraba el dorsal en la
+    // base de datos (y, al aplicar la fila devuelta, también en la interfaz): pasaba con el color
+    // rápido de la pizarra —`{ color }`— y al DESACTIVAR un jugador —`{ active: false }`—. Un
+    // parche parcial de verdad es el que omite claves, y PostgREST omite las `undefined`.
+    const row: Database['public']['Tables']['players']['Update'] = {};
+    if ('name' in patch) row.name = patch.name;
+    if ('number' in patch) row.number = patch.number ?? null;
+    if ('position' in patch) row.position = patch.position;
+    if ('color' in patch) row.color = patch.color;
+    if ('active' in patch) row.active = patch.active;
     const { data, error } = await this.client
       .from('players')
-      .update({
-        name: patch.name,
-        number: patch.number ?? null,
-        position: patch.position,
-        color: patch.color,
-        active: patch.active,
-      })
+      .update(row)
       .eq('id', id)
       .select()
       .single();

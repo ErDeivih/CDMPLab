@@ -161,16 +161,25 @@ export class App {
       this.backupError.set('El archivo es demasiado grande (máximo 10 MB).');
       return;
     }
-    file.text().then((text) => {
-      const v = this.store.validateBackup(text);
-      if (!v.ok) {
+    file
+      .text()
+      .then((text) => {
+        const v = this.store.validateBackup(text);
+        if (!v.ok) {
+          this.importJson.set(null);
+          this.backupError.set(v.error ?? 'El archivo no es un respaldo válido.');
+          return;
+        }
+        this.backupError.set(null);
+        this.importJson.set(text);
+      })
+      // Si la lectura del fichero falla (permiso, fichero movido, disco), antes quedaba un
+      // rechazo sin manejar y la pantalla no decía NADA: el usuario veía un botón que no hacía
+      // nada. Ahora se informa y se limpia la selección previa.
+      .catch(() => {
         this.importJson.set(null);
-        this.backupError.set(v.error ?? 'El archivo no es un respaldo válido.');
-        return;
-      }
-      this.backupError.set(null);
-      this.importJson.set(text);
-    });
+        this.backupError.set('No se ha podido leer el archivo. Inténtalo de nuevo.');
+      });
   }
 
   /** Aplica la importación (reemplazar o fusionar). */

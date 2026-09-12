@@ -960,3 +960,59 @@ describe('SupabaseRepository · paginación del dataset del equipo', () => {
     expect(selectCalls(server, 'players')).toHaveLength(2); // detectado en la segunda página
   });
 });
+
+describe('SupabaseRepository.updatePlayer — un parche PARCIAL no borra lo que no menciona', () => {
+  const ROW = {
+    id: 'p-1',
+    team_id: 'team-1',
+    name: 'Marcos',
+    number: 2,
+    position: 'DF',
+    color: '#1a73e8',
+    active: true,
+    created_at: '2026-01-01T00:00:00Z',
+  };
+
+  /** Cliente mínimo que captura el payload de cada `update()` y devuelve la fila del jugador. */
+  function repoQueCaptura(): {
+    repo: SupabaseRepository;
+    payloads: Array<Record<string, unknown>>;
+  } {
+    const payloads: Array<Record<string, unknown>> = [];
+    const builder = {
+      update: (payload: Record<string, unknown>) => {
+        payloads.push(payload);
+        return {
+          eq: () => ({ select: () => ({ single: async () => ({ data: ROW, error: null }) }) }),
+        };
+      },
+    };
+    const { client } = makeClient({ from: () => builder });
+    return { repo: new SupabaseRepository(client, 'u-1', 'team-1'), payloads };
+  }
+
+  it('el color rápido de la pizarra y la desactivación NO tocan el dorsal', async () => {
+    // Antes se construía la fila entera con `number: patch.number ?? null`: el color rápido
+    // (`{ color }`) y desactivar un jugador (`{ active: false }`) BORRABAN el dorsal en la base
+    // de datos y, al aplicar la fila devuelta, también en la interfaz.
+    const { repo, payloads } = repoQueCaptura();
+    await repo.updatePlayer('p-1', { color: '#c0392b' });
+    expect(payloads[0], 'solo viaja la clave del parche').toEqual({ color: '#c0392b' });
+    await repo.updatePlayer('p-1', { active: false });
+    expect(payloads[1]).toEqual({ active: false });
+  });
+
+  it('un parche COMPLETO sigue enviando todo, y el dorsal se puede borrar a propósito', async () => {
+    const { repo, payloads } = repoQueCaptura();
+    await repo.updatePlayer('p-1', {
+      name: 'Marcos G.',
+      number: 5,
+      position: 'MF',
+      color: '#111111',
+    });
+    expect(payloads[0]).toEqual({ name: 'Marcos G.', number: 5, position: 'MF', color: '#111111' });
+    // Clave PRESENTE con valor `undefined` = borrar el dorsal (no es lo mismo que omitirla).
+    await repo.updatePlayer('p-1', { number: undefined });
+    expect(payloads[1]).toEqual({ number: null });
+  });
+});

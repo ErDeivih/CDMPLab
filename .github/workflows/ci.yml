@@ -46,3 +46,14 @@ jobs:
       # Se van sumando specs por lote (los nuevos del Lote C: fase-i-*).
       - name: E2E (estable)
         run: npx playwright test f7-persistence p11-persistence mobile-toolbar accesibilidad galerias fields features fase-h-formaciones fase-i-biblioteca fase-i-plantilla fase-i-sesiones fase-i-ajustes fase-i-shell fase-i-estilos --workers=1
+
+      # Diagnóstico: sin esto, un fallo E2E en un push era indiagnosticable desde el log — el
+      # reporter es `list`, así que NO existe `playwright-report/`; lo que Playwright deja son las
+      # capturas y las trazas de `test-results/` (con `trace: 'retain-on-failure'`).
+      - name: Subir capturas y trazas si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
