@@ -43,7 +43,8 @@ async function checkDesktop(name, viewport) {
   page.on('response', (res) => {
     const u = res.url();
     if (u.includes('/assets/fonts/')) fontStatus[u] = res.status();
-    if (u.includes('cdm-pizarrales-original.jpg') && res.status() !== 200) errors.push(`escudo ${res.status()} ${u}`);
+    if (u.includes('cdm-pizarrales-original.jpg') && res.status() !== 200)
+      errors.push(`escudo ${res.status()} ${u}`);
   });
   page.on('console', (msg) => {
     if (msg.type() === 'error') errors.push(msg.text());
@@ -53,10 +54,22 @@ async function checkDesktop(name, viewport) {
   await page.waitForTimeout(1200);
   const { fonts, sampleMsiWidth } = await inspect(page);
 
-  add(`${name} escudo (auth-card) visible`, await page.locator('.auth-brand').isVisible().catch(() => false));
+  add(
+    `${name} escudo (auth-card) visible`,
+    await page
+      .locator('.auth-brand')
+      .isVisible()
+      .catch(() => false),
+  );
   add(`${name} font Material Symbols activa`, fonts.msi, `check=${fonts.msi}`);
   add(`${name} font Inter activa`, fonts.inter, `check=${fonts.inter}`);
-  add(`${name} escudo sidebar visible`, await page.locator('.brand-shield').isVisible().catch(() => false));
+  add(
+    `${name} escudo sidebar visible`,
+    await page
+      .locator('.brand-shield')
+      .isVisible()
+      .catch(() => false),
+  );
 
   const btnBg = await page
     .locator('.btn.btn-primary')
@@ -65,13 +78,21 @@ async function checkDesktop(name, viewport) {
     .catch(() => null);
   add(`${name} botón primario rojo #c8102e`, btnBg === 'rgb(200, 16, 46)', `got=${btnBg}`);
 
-  add(`${name} 0 peticiones Google Fonts`, google.length === 0, `requests=${JSON.stringify(google)}`);
+  add(
+    `${name} 0 peticiones Google Fonts`,
+    google.length === 0,
+    `requests=${JSON.stringify(google)}`,
+  );
 
   const badFont = Object.entries(fontStatus).filter(([, s]) => s !== 200);
   add(`${name} fuentes servidas 200`, badFont.length === 0, `status=${JSON.stringify(fontStatus)}`);
 
   const fontErrs = errors.filter((e) => /font|woff|escudo|gstatic|googleapis|failed|404/i.test(e));
-  add(`${name} sin errores fuente/escudo`, fontErrs.length === 0, `errors=${JSON.stringify(fontErrs)}`);
+  add(
+    `${name} sin errores fuente/escudo`,
+    fontErrs.length === 0,
+    `errors=${JSON.stringify(fontErrs)}`,
+  );
 
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
   await ctx.close();
@@ -84,7 +105,11 @@ await browser.close();
 // Captura específica del sidebar en escritorio (vista autenticada parcial: nav visible en modo local).
 const b2 = await chromium.launch({ headless: true });
 {
-  const ctx = await b2.newContext({ viewport: { width: 1360, height: 900 }, baseURL: BASE, locale: 'es-ES' });
+  const ctx = await b2.newContext({
+    viewport: { width: 1360, height: 900 },
+    baseURL: BASE,
+    locale: 'es-ES',
+  });
   const page = await ctx.newPage();
   await page.goto('/auth/login', { waitUntil: 'networkidle' });
   await page.waitForTimeout(1000);
@@ -96,7 +121,11 @@ await b2.close();
 // Móvil
 const b3 = await chromium.launch({ headless: true });
 {
-  const ctx = await b3.newContext({ viewport: { width: 390, height: 844 }, baseURL: BASE, locale: 'es-ES' });
+  const ctx = await b3.newContext({
+    viewport: { width: 390, height: 844 },
+    baseURL: BASE,
+    locale: 'es-ES',
+  });
   const page = await ctx.newPage();
   const google = [];
   const errors = [];
@@ -110,9 +139,19 @@ const b3 = await chromium.launch({ headless: true });
   await page.goto('/auth/login', { waitUntil: 'networkidle' });
   await page.waitForTimeout(1200);
   const { fonts } = await inspect(page);
-  add('login-mobile topbar escudo visible', await page.locator('.topbar-shield').isVisible().catch(() => false));
+  add(
+    'login-mobile topbar escudo visible',
+    await page
+      .locator('.topbar-shield')
+      .isVisible()
+      .catch(() => false),
+  );
   add('login-mobile font Material Symbols activa', fonts.msi, `check=${fonts.msi}`);
-  add('login-mobile 0 peticiones Google Fonts', google.length === 0, `requests=${JSON.stringify(google)}`);
+  add(
+    'login-mobile 0 peticiones Google Fonts',
+    google.length === 0,
+    `requests=${JSON.stringify(google)}`,
+  );
   await page.screenshot({ path: `${OUT}/login-mobile.png`, fullPage: true });
   await ctx.close();
 }
@@ -129,3 +168,6 @@ console.log(`Google Fonts (desktop): ${desktop.google.length} peticiones`);
 console.log(`Font status (desktop): ${JSON.stringify(desktop.fontStatus)}`);
 console.log(`Muestra .msi width (desktop): ${desktop.sampleMsiWidth}`);
 console.log(allOk ? '\nTODAS LAS COMPROBACIONES OK' : '\nHAY COMPROBACIONES FALLIDAS');
+// Código de salida: sin esto la puerta no podía fallar (imprimía «HAY COMPROBACIONES FALLIDAS» y
+// terminaba con 0, así que en un `&&` o en CI se daba por buena).
+if (!allOk) process.exit(1);

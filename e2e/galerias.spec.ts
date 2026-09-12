@@ -28,10 +28,25 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'pl1', teamId: 't1', name: 'Marcos', number: 9, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'pl1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 9,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
@@ -44,9 +59,23 @@ async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await expect(page.locator('.board-canvas svg')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
-  const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.fill-hint-close').click();
+  const fill = await page
+    .locator('.board-host')
+    .evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
     await page.locator('.field-fit-toggle').click();
     await page.waitForTimeout(120);
@@ -57,7 +86,12 @@ async function useTool(page: Page, title: string, category?: string): Promise<vo
   if (category) {
     // FASE B: el catálogo persiste abierto, así que solo se abre la categoría si su
     // herramienta aún no está visible (un re-toggle la cerraría).
-    if (!(await page.locator(`.rail-btn[title="${title}"]`).isVisible().catch(() => false))) {
+    if (
+      !(await page
+        .locator(`.rail-btn[title="${title}"]`)
+        .isVisible()
+        .catch(() => false))
+    ) {
       await page.locator('.tools-cat', { hasText: category }).click();
     }
   }
@@ -78,7 +112,13 @@ async function clean(page: Page): Promise<void> {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(120);
 }
-async function placeMaterial(page: Page, host: Box, title: string, nx: number, ny: number): Promise<void> {
+async function placeMaterial(
+  page: Page,
+  host: Box,
+  title: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   const input = page.locator('.tools-search-input');
   // FASE B: el catálogo persiste abierto; solo se abre si no lo está (evitar re-toggle).
   if (!(await input.isVisible().catch(() => false))) {
@@ -93,19 +133,45 @@ async function placeMaterial(page: Page, host: Box, title: string, nx: number, n
 }
 async function setColor(page: Page, hex: string): Promise<void> {
   // PALETTE = ['#1a73e8','#c0392b','#1f7a4d','#e67e22','#7d3c98','#b8860b','#111111','#f4f4f4']
-  const index = ['#1a73e8', '#c0392b', '#1f7a4d', '#e67e22', '#7d3c98', '#b8860b', '#111111', '#f4f4f4'].indexOf(hex);
+  const index = [
+    '#1a73e8',
+    '#c0392b',
+    '#1f7a4d',
+    '#e67e22',
+    '#7d3c98',
+    '#b8860b',
+    '#111111',
+    '#f4f4f4',
+  ].indexOf(hex);
   await page.locator('.tools-caption .swatch').nth(index).click();
 }
 
 const MATERIALS = [
-  'Balón', 'Fitball', 'Cono', 'BOSU', 'Banderín', 'Chino',
-  'Pica coloreable', 'Pértiga / poste', 'Maniquí individual', 'Barrera de maniquíes',
-  'Miniportería', 'Portería grande', 'Valla', 'Aro', 'Escalera',
-  'Minitrampolín', 'Peto', 'Chaleco lastrado', 'Mancuerna / pesa',
+  'Balón',
+  'Fitball',
+  'Cono',
+  'BOSU',
+  'Banderín',
+  'Chino',
+  'Pica coloreable',
+  'Pértiga / poste',
+  'Maniquí individual',
+  'Barrera de maniquíes',
+  'Miniportería',
+  'Portería grande',
+  'Valla',
+  'Aro',
+  'Escalera',
+  'Minitrampolín',
+  'Peto',
+  'Chaleco lastrado',
+  'Mancuerna / pesa',
 ];
 
 test.describe('Galerías sin nombres en el campo', () => {
-  test('materiales en grupos de ≤6, sin etiquetas (contact sheet identifica por título)', async ({ page }) => {
+  test('materiales en grupos de ≤6, sin etiquetas (contact sheet identifica por título)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
@@ -113,7 +179,11 @@ test.describe('Galerías sin nombres en el campo', () => {
     // Dividir en grupos de máximo 6 (3 columnas × 2 filas) para que no se solapen.
     const chunk = (n: number) => {
       const out: Array<{ items: string[]; name: string }> = [];
-      for (let i = 0; i < MATERIALS.length; i += n) out.push({ items: MATERIALS.slice(i, i + n), name: `galeria-materiales-${out.length + 1}` });
+      for (let i = 0; i < MATERIALS.length; i += n)
+        out.push({
+          items: MATERIALS.slice(i, i + n),
+          name: `galeria-materiales-${out.length + 1}`,
+        });
       return out;
     };
     const groups = chunk(6);
@@ -137,7 +207,8 @@ test.describe('Galerías sin nombres en el campo', () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
-    const draw = (title: string, from: [number, number], to: [number, number]) => useTool(page, title, 'Dibujo').then(() => drawShape(page, from, to));
+    const draw = (title: string, from: [number, number], to: [number, number]) =>
+      useTool(page, title, 'Dibujo').then(() => drawShape(page, from, to));
     await draw('Línea', [0.06, 0.1], [0.32, 0.1]);
     await draw('Flecha (movimiento)', [0.06, 0.22], [0.32, 0.22]);
     await draw('Flecha doble sentido', [0.06, 0.34], [0.32, 0.34]);
@@ -146,10 +217,17 @@ test.describe('Galerías sin nombres en el campo', () => {
     await draw('Conducción (zigzag)', [0.06, 0.7], [0.3, 0.78]);
     await draw('Dibujo a mano alzada', [0.06, 0.82], [0.3, 0.88]);
     await clean(page);
+    // Sin esta comprobación el test pasaba «en verde» sin verificar nada (solo hacía una captura).
+    await expect(page.locator('.field-count'), 'las 7 formas están en el campo').toHaveText('7');
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/galeria-lineas-flechas.png` });
+    expect(fs.existsSync(`${SHOTS}/galeria-lineas-flechas.png`), 'la captura se ha escrito').toBe(
+      true,
+    );
   });
 
-  test('dibujo: formas y texto voluntario (galeria-formas y galeria-texto-voluntario)', async ({ page }) => {
+  test('dibujo: formas y texto voluntario (galeria-formas y galeria-texto-voluntario)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
@@ -172,6 +250,9 @@ test.describe('Galerías sin nombres en el campo', () => {
     await page.locator('.tools-caption .chip', { hasText: 'Relleno' }).click();
     await drawShape(page, [0.06, 0.72], [0.3, 0.9]);
     await clean(page);
+    // Comprobación real: las 5 figuras están colocadas antes de la captura (antes este test no
+    // verificaba nada).
+    await expect(page.locator('.field-count'), 'las 5 figuras están en el campo').toHaveText('5');
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/galeria-formas.png` });
     // Texto VOLUNTARIO (lo que el entrenador quiso escribir).
     await useTool(page, 'Texto', 'Dibujo');
@@ -180,10 +261,16 @@ test.describe('Galerías sin nombres en el campo', () => {
     await page.mouse.click(tp[0], tp[1], { button: 'right' });
     await page.locator('.studio-panel .inspector textarea').fill('Presión tras pérdida');
     await page.locator('.studio-panel .inspector textarea').dispatchEvent('change');
-    await page.locator('.studio-panel .inspector textarea').evaluate((el) => (el as HTMLElement).blur());
+    await page
+      .locator('.studio-panel .inspector textarea')
+      .evaluate((el) => (el as HTMLElement).blur());
     await page.waitForTimeout(120);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(120);
+    // El texto voluntario se ha escrito de verdad (antes: solo captura, sin comprobar nada).
+    await expect(page.locator('.board-canvas svg'), 'el texto se ha escrito').toContainText(
+      'Presión tras pérdida',
+    );
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/galeria-texto-voluntario.png` });
   });
 
@@ -200,7 +287,10 @@ test.describe('Galerías sin nombres en el campo', () => {
       await drawShape(page, [0.12, y], [0.88, y]);
     }
     await clean(page);
+    // Se han dibujado las 6 líneas, una por color (antes: captura sin comprobar nada).
+    await expect(page.locator('.field-count'), 'las 6 líneas están en el campo').toHaveText('6');
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/galeria-colores.png` });
+    expect(fs.existsSync(`${SHOTS}/galeria-colores.png`), 'la captura se ha escrito').toBe(true);
   });
 
   test('jugadores: real con número (galeria-jugadores)', async ({ page }) => {
@@ -241,7 +331,9 @@ test.describe('Galerías sin nombres en el campo', () => {
     const cc = normToScreen(0.53, 0.36, host);
     await page.mouse.click(cc[0], cc[1]);
     await page.waitForTimeout(150);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/galeria-transf-curva-control.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/galeria-transf-curva-control.png` });
     // Línea extremos.
     await useTool(page, 'Línea', 'Dibujo');
     await drawShape(page, [0.4, 0.7], [0.68, 0.8]);
@@ -249,7 +341,9 @@ test.describe('Galerías sin nombres en el campo', () => {
     const lc = normToScreen(0.54, 0.75, host);
     await page.mouse.click(lc[0], lc[1]);
     await page.waitForTimeout(150);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/galeria-transf-linea-extremos.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/galeria-transf-linea-extremos.png` });
     // Papelera.
     const cone = normToScreen(0.3, 0.5, host);
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
@@ -267,13 +361,21 @@ test.describe('Galerías sin nombres en el campo', () => {
 
 test.describe('Contact sheet de galerías (título = pie de foto externo)', () => {
   test('genera contact-sheet legible con títulos', async ({ page }) => {
-    const files = fs.readdirSync(SHOTS).filter((f) => f.endsWith('.png')).sort();
-    const rows = files.map((f) => {
-      const b64 = fs.readFileSync(path.resolve(SHOTS, f)).toString('base64');
-      const caption = f.replace('galeria-', '').replace('.png', '');
-      return `<figure><img src="data:image/png;base64,${b64}" alt="${caption}"><figcaption>${caption}</figcaption></figure>`;
-    }).join('\n');
-    const html = '<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;margin:12px;background:#111;color:#eee}h1{font-size:16px}figure{display:inline-block;margin:10px;text-align:center;vertical-align:top}figure img{max-width:480px;border:1px solid #555}figcaption{font-size:12px;margin-top:4px;max-width:480px}</style></head><body><h1>CDMPLab · galerías (pie de foto = título externo)</h1>' + rows + '</body></html>';
+    const files = fs
+      .readdirSync(SHOTS)
+      .filter((f) => f.endsWith('.png'))
+      .sort();
+    const rows = files
+      .map((f) => {
+        const b64 = fs.readFileSync(path.resolve(SHOTS, f)).toString('base64');
+        const caption = f.replace('galeria-', '').replace('.png', '');
+        return `<figure><img src="data:image/png;base64,${b64}" alt="${caption}"><figcaption>${caption}</figcaption></figure>`;
+      })
+      .join('\n');
+    const html =
+      '<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;margin:12px;background:#111;color:#eee}h1{font-size:16px}figure{display:inline-block;margin:10px;text-align:center;vertical-align:top}figure img{max-width:480px;border:1px solid #555}figcaption{font-size:12px;margin-top:4px;max-width:480px}</style></head><body><h1>CDMPLab · galerías (pie de foto = título externo)</h1>' +
+      rows +
+      '</body></html>';
     const file = path.resolve(SHOTS, 'contact-sheet.html');
     fs.writeFileSync(file, html, 'utf8');
     await page.setViewportSize({ width: 1400, height: 900 });
@@ -281,5 +383,12 @@ test.describe('Contact sheet de galerías (título = pie de foto externo)', () =
     await page.locator('h1').waitFor({ state: 'visible' });
     await page.waitForTimeout(300);
     await page.screenshot({ path: path.resolve(SHOTS, 'contact-sheet.png'), fullPage: true });
+    // Comprobación real: hay una figura por captura y la imagen se ha escrito (antes este test no
+    // verificaba nada de lo que generaba).
+    await expect(page.locator('figure')).toHaveCount(files.length);
+    expect(
+      fs.existsSync(path.resolve(SHOTS, 'contact-sheet.png')),
+      'la captura del contact-sheet se ha escrito',
+    ).toBe(true);
   });
 });

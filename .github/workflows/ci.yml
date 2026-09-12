@@ -57,6 +57,13 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      # E2E de la build REAL de producción (la que se despliega), que NO ejecutaba ningún workflow:
+      # el subconjunto estable usa `ng serve` (Supabase vacío) y el nightly, la build de DESARROLLO.
+      # Este spec no necesita credenciales —navega, comprueba el marcador de producción y que los
+      # guards siguen redirigiendo— y aprovecha el `dist/` que acaba de generar el paso anterior.
+      - name: E2E de producción (build real, sin credenciales)
+        run: npx playwright test --config=playwright.prod.config.ts
+
       # Conjunto E2E ESTABLE (los recorridos núcleo). El suite completo (≈550 tests)
       # es pesado para CI; se ejecuta de noche en `nightly.yml` y a mano en desarrollo.
       # Se van sumando specs por lote (los nuevos del Lote C: fase-i-*).
