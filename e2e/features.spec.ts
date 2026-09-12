@@ -1668,26 +1668,17 @@ test.describe('EntrenoLab funcionalidades', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
-    // Cono, seleccionado.
+    // El cono se coloca con su CENTRO en el punto pulsado, así que ese mismo punto sirve después
+    // para la pulsación larga: NO se mide el DOM del SVG. Medir su caja era frágil —el `<image>`
+    // puede tener caja 0×0 en el repintado siguiente a colocarlo (el SVG se reemplaza por
+    // `innerHTML`) y `boundingBox()` devuelve `null`—, y eso hizo rojo este test en CI tres veces
+    // (`d6dc9b2`, `5ec0656`, `4211e3a`) con un `TypeError` que no decía nada del producto.
+    const centro = { x: box.x + box.width * 0.5, y: box.y + box.height * 0.5 };
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
-    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+    await page.mouse.click(centro.x, centro.y);
     await expect(page.locator('.field-count')).toHaveText('1');
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
-    // El `<image>` del material puede tener caja 0×0 en el repintado siguiente a colocarlo (el SVG
-    // se reemplaza por `innerHTML`), y entonces `boundingBox()` devuelve `null`: en el Nightly este
-    // test moría con `Cannot read properties of null (reading 'x')`. Se espera a una caja REAL —
-    // misma clase de defecto que el (0, 0) medido en el trace de `e1-mobile-props`.
-    const cajaCono = async () => {
-      const b = await page.locator('.board-canvas image').first().boundingBox();
-      return b && b.width > 0 && b.height > 0 ? b : null;
-    };
-    await expect
-      .poll(async () => (await cajaCono()) !== null, {
-        message: 'la caja del cono es real (no 0×0) antes de pulsarla',
-      })
-      .toBe(true);
-    const img = (await cajaCono())!;
 
     // REGRESIÓN (medida en móvil y verificada aquí): la barra contextual llevaba `z-index: 89`
     // y se montaba ENCIMA de los paneles laterales (`z-index: 40`), tapando su botón de cerrar:
@@ -1696,7 +1687,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     // (es un @if mientras el menú contextual está abierto).
     await page.locator('button[aria-label="Propiedades"]').click();
     await expect(page.locator('.studio-panel')).toBeVisible();
-    await longPress(page, img.x + img.width / 2, img.y + img.height / 2);
+    await longPress(page, centro.x, centro.y);
     await expect(page.locator('.context-bar')).toBeVisible();
 
     // Datos de la pila: el panel debe estar POR ENCIMA de la barra.
