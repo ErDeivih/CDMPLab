@@ -8,8 +8,26 @@ async function seed(page: Page): Promise<void> {
     const now = new Date().toISOString();
     const team = { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now };
     const players = [
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
+      {
+        id: 'p1',
+        teamId: 't1',
+        name: 'Marcos',
+        number: 2,
+        position: 'DF',
+        color: '#1a73e8',
+        active: true,
+        createdAt: now,
+      },
+      {
+        id: 'p2',
+        teamId: 't1',
+        name: 'Pau',
+        number: 10,
+        position: 'MF',
+        color: '#c0392b',
+        active: true,
+        createdAt: now,
+      },
     ];
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem('entrenolab:teams', JSON.stringify([team]));
@@ -23,7 +41,8 @@ async function seed(page: Page): Promise<void> {
 async function createTask(page: Page, title: string): Promise<void> {
   await page.getByText('Crear ejercicio').first().click();
   await page.locator('.modal input[name="title"]').fill(title);
-  await page.getByText('Guardar').click();}
+  await page.getByText('Guardar').click();
+}
 
 /** FASE B (paneles persistentes): abre la categoría sin re-togglear una que ya está
  *  desplegada (re-clickar la misma la cerraría). Distingue Jugadores de Material/Dibujo
@@ -34,7 +53,13 @@ async function openCat(page: Page, category: string): Promise<void> {
     Material: '.side-panel-left[aria-label="Herramientas de Material"]',
     Dibujo: '.side-panel-left[aria-label="Herramientas de Dibujo"]',
   };
-  if (await page.locator(probe[category]).isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator(probe[category])
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
   await page.locator('.tools-cat', { hasText: category }).click();
   await expect(page.locator(probe[category])).toBeVisible();
 }
@@ -44,21 +69,21 @@ async function useTool(page: Page, title: string): Promise<void> {
   const category: Record<string, string> = {
     'Jugador propio': 'Jugadores',
     'Jugador rival': 'Jugadores',
-    'Cono': 'Material',
-    'Balón': 'Material',
+    Cono: 'Material',
+    Balón: 'Material',
     'Maniquí individual': 'Material',
-    'Miniportería': 'Material',
+    Miniportería: 'Material',
     'Pértiga / poste': 'Material',
-    'BOSU': 'Material',
+    BOSU: 'Material',
     'Conducción (zigzag)': 'Dibujo',
-    'Línea': 'Dibujo',
+    Línea: 'Dibujo',
     'Flecha (movimiento)': 'Dibujo',
     'Flecha doble sentido': 'Dibujo',
     'Curva derecha': 'Dibujo',
     'Dibujo a mano alzada': 'Dibujo',
-    'Rectángulo': 'Dibujo',
+    Rectángulo: 'Dibujo',
     'Círculo / elipse': 'Dibujo',
-    'Texto': 'Dibujo',
+    Texto: 'Dibujo',
   };
   const tab = category[title];
   if (tab) {
@@ -90,7 +115,13 @@ async function closeCatalogPanelIfOpen(page: Page): Promise<void> {
 
 /** Abre el panel de Propiedades (derecha), que empieza cerrado (Fase 1). */
 async function openProps(page: Page): Promise<void> {
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
   await page.locator('button[aria-label="Propiedades"]').click();
   // FASE G: el panel se espera con el `.toBeVisible()` siguiente (observable); sin wait fijo.
   await expect(page.locator('.studio-panel')).toBeVisible();
@@ -139,9 +170,15 @@ function escalaDelLienzo(t: string): number {
  * surtido efecto.
  */
 async function waitViewApplied(page: Page, zoom: number): Promise<void> {
-  const transform = () => page.locator('.board-canvas').first().evaluate((el) => getComputedStyle(el).transform);
+  const transform = () =>
+    page
+      .locator('.board-canvas')
+      .first()
+      .evaluate((el) => getComputedStyle(el).transform);
   await expect
-    .poll(async () => escalaDelLienzo(await transform()), { message: `el lienzo aplica la escala ${zoom}` })
+    .poll(async () => escalaDelLienzo(await transform()), {
+      message: `el lienzo aplica la escala ${zoom}`,
+    })
     .toBeCloseTo(zoom, 2);
   await expect
     .poll(
@@ -194,18 +231,25 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.getByText('Eric García')).toHaveCount(0);
   });
 
-  test('restaura el ejercicio completo al guardar y reabrir (orientación, guía)', async ({ page }) => {
+  test('restaura el ejercicio completo al guardar y reabrir (orientación, guía)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await openProps(page);
     // Orientación vertical. (La "Rejilla" fue retirada por el dueño y ya no se guarda.)
-    await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();
+    await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip[data-orient="vertical"]')
+      .click();
     // Un jugador (genérico): tocar el genérico ARMA la colocación. FASE B: el panel no se cierra.
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .tray-player[title="Jugador Azul"]').click();
     await expect(page.locator('.field-count')).toHaveText('0');
     const boxC = (await page.locator('.board-host').boundingBox())!;
-    await page.mouse.click(boxC.x + boxC.width * 0.5, boxC.y + boxC.height * 0.5, { button: 'right' });
+    await page.mouse.click(boxC.x + boxC.width * 0.5, boxC.y + boxC.height * 0.5, {
+      button: 'right',
+    });
     await expect(page.locator('.field-count')).toHaveText('1');
 
     // Guardar → biblioteca.
@@ -221,7 +265,11 @@ test.describe('EntrenoLab funcionalidades', () => {
     // Se conserva el jugador y la orientación vertical.
     await expect(page.locator('.field-count')).toHaveText('1');
     await openProps(page);
-    await expect(page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]')).toHaveClass(/chip-active/);
+    await expect(
+      page
+        .locator('.studio-panel .field', { hasText: 'Orientación' })
+        .locator('.chip[data-orient="vertical"]'),
+    ).toHaveClass(/chip-active/);
   });
 
   test('coloca y borra elementos en la pizarra', async ({ page }) => {
@@ -270,14 +318,21 @@ test.describe('EntrenoLab funcionalidades', () => {
       c.height = img.height;
       const ctx = c.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
-      const d = ctx.getImageData(Math.floor(img.width * 0.35), Math.floor(img.height * 0.5), 1, 1).data;
+      const d = ctx.getImageData(
+        Math.floor(img.width * 0.35),
+        Math.floor(img.height * 0.5),
+        1,
+        1,
+      ).data;
       return { r: d[0], g: d[1], b: d[2] };
     }, pngBuf.toString('base64'));
     expect(pixel.g).toBeGreaterThan(pixel.r);
     expect(pixel.g).toBeGreaterThan(pixel.b);
   });
 
-  test('el PNG exportado sí incluye los materiales (conos PNG embebidos, no solo el campo)', async ({ page }) => {
+  test('el PNG exportado sí incluye los materiales (conos PNG embebidos, no solo el campo)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -310,36 +365,41 @@ test.describe('EntrenoLab funcionalidades', () => {
     const bBuf = fs.readFileSync((await (await dlB).path())!);
 
     // Comparar la región alrededor del cono: el export CON cono debe diferir del vacío.
-    const diff = await page.evaluate(async ({ a, b }) => {
-      const load = (b64: string) => {
-        return new Promise<HTMLCanvasElement>((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            const c = document.createElement('canvas');
-            c.width = img.width;
-            c.height = img.height;
-            c.getContext('2d')!.drawImage(img, 0, 0);
-            resolve(c);
-          };
-          img.src = 'data:image/png;base64,' + b64;
-        });
-      };
-      const [ca, cb] = await Promise.all([load(a), load(b)]);
-      const W = ca.width, H = ca.height;
-      const sx = Math.round(((0.5 * 92 + 4) / 100) * W);
-      const sy = Math.round(((0.5 * (92 / (105 / 68)) + 10) / 80) * H);
-      const ctxA = ca.getContext('2d')!;
-      const ctxB = cb.getContext('2d')!;
-      let changed = 0;
-      for (let dy = -60; dy <= 60; dy += 3) {
-        for (let dx = -60; dx <= 60; dx += 3) {
-          const pa = ctxA.getImageData(sx + dx, sy + dy, 1, 1).data;
-          const pb = ctxB.getImageData(sx + dx, sy + dy, 1, 1).data;
-          if (Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) + Math.abs(pa[2] - pb[2]) > 60) changed++;
+    const diff = await page.evaluate(
+      async ({ a, b }) => {
+        const load = (b64: string) => {
+          return new Promise<HTMLCanvasElement>((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              const c = document.createElement('canvas');
+              c.width = img.width;
+              c.height = img.height;
+              c.getContext('2d')!.drawImage(img, 0, 0);
+              resolve(c);
+            };
+            img.src = 'data:image/png;base64,' + b64;
+          });
+        };
+        const [ca, cb] = await Promise.all([load(a), load(b)]);
+        const W = ca.width,
+          H = ca.height;
+        const sx = Math.round(((0.5 * 92 + 4) / 100) * W);
+        const sy = Math.round(((0.5 * (92 / (105 / 68)) + 10) / 80) * H);
+        const ctxA = ca.getContext('2d')!;
+        const ctxB = cb.getContext('2d')!;
+        let changed = 0;
+        for (let dy = -60; dy <= 60; dy += 3) {
+          for (let dx = -60; dx <= 60; dx += 3) {
+            const pa = ctxA.getImageData(sx + dx, sy + dy, 1, 1).data;
+            const pb = ctxB.getImageData(sx + dx, sy + dy, 1, 1).data;
+            if (Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) + Math.abs(pa[2] - pb[2]) > 60)
+              changed++;
+          }
         }
-      }
-      return { W, H, sx, sy, changed };
-    }, { a: aBuf.toString('base64'), b: bBuf.toString('base64') });
+        return { W, H, sx, sy, changed };
+      },
+      { a: aBuf.toString('base64'), b: bBuf.toString('base64') },
+    );
 
     // El cono (icono PNG) debe estar presente en el export → región distinta del campo vacío.
     expect(diff.changed).toBeGreaterThan(0);
@@ -426,7 +486,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(dorsal).toHaveValue('9');
   });
 
-  test('coloca objetos (maniquí, portería, pértiga, marcador, rectángulo) y ajusta tamaño/rotación', async ({ page }) => {
+  test('coloca objetos (maniquí, portería, pértiga, marcador, rectángulo) y ajusta tamaño/rotación', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -479,7 +541,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await ctxRot.click();
     // El inspector ya NO debe ofrecer "Rotación (°)".
     await openProps(page);
-    await expect(page.locator('.inspector .field', { hasText: 'Rotación' }).locator('input')).toHaveCount(0);
+    await expect(
+      page.locator('.inspector .field', { hasText: 'Rotación' }).locator('input'),
+    ).toHaveCount(0);
   });
 
   test('dibuja una conducción (zigzag) y no existe el control "Rejilla"', async ({ page }) => {
@@ -526,7 +590,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.field-count')).toHaveText('0');
   });
 
-  test('seleccionar un elemento NO crea entradas fantasma de undo (un solo Ctrl+Z deshace)', async ({ page }) => {
+  test('seleccionar un elemento NO crea entradas fantasma de undo (un solo Ctrl+Z deshace)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -569,7 +635,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.field-count')).toHaveText('1');
   });
 
-  test('coloca materiales y el césped es el oficial único (sin selector de color)', async ({ page }) => {
+  test('coloca materiales y el césped es el oficial único (sin selector de color)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -590,7 +658,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(grassField.locator('.swatch')).toHaveCount(0);
   });
 
-  test('rectángulo, elipse y zona guardan el color elegido y el relleno (no blanco fijo)', async ({ page }) => {
+  test('rectángulo, elipse y zona guardan el color elegido y el relleno (no blanco fijo)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -622,14 +692,18 @@ test.describe('EntrenoLab funcionalidades', () => {
     await fillBoardTitle(page, 'Dibujo');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
-    const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
+    const ex = JSON.parse(
+      (await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!,
+    )[0];
     for (const k of ['rect', 'ellipse', 'line']) {
       const el = ex.canvas.frames[0].elements.find((e: { t: string }) => e.t === k);
       expect(el.c).toBe(col);
     }
   });
 
-  test('FASE 9: no hay selector de textura de césped (siempre franjas) y un ejercicio nuevo se guarda con franjas', async ({ page }) => {
+  test('FASE 9: no hay selector de textura de césped (siempre franjas) y un ejercicio nuevo se guarda con franjas', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await openProps(page);
@@ -640,16 +714,23 @@ test.describe('EntrenoLab funcionalidades', () => {
     await fillBoardTitle(page, 'CespedFranjas');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
-    const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
+    const ex = JSON.parse(
+      (await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!,
+    )[0];
     expect(ex.canvas.grass).toBe('stripes');
   });
 
-  test('la miniatura del ejercicio respeta la orientación (vertical → retrato)', async ({ page }) => {
+  test('la miniatura del ejercicio respeta la orientación (vertical → retrato)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await openProps(page);
     // Un jugador + orientación vertical.
-    await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();
+    await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip[data-orient="vertical"]')
+      .click();
     await useTool(page, 'Jugador propio');
     const box = (await page.locator('.board-host').boundingBox())!;
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.5);
@@ -672,7 +753,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     expect(dims.h).toBe(480);
   });
 
-  test('el inspector de jugador NO ofrece Tipo/Portero y sí permite cambiar la opacidad', async ({ page }) => {
+  test('el inspector de jugador NO ofrece Tipo/Portero y sí permite cambiar la opacidad', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -689,13 +772,17 @@ test.describe('EntrenoLab funcionalidades', () => {
     // FASE C: el inspector de jugador ya NO ofrece el control "Tipo" (ni la opción Portero).
     await expect(page.locator('.inspector .field', { hasText: 'Tipo' })).toHaveCount(0);
 
-    const op = page.locator('.inspector .field', { hasText: 'Opacidad' }).locator('input[type="range"]');
+    const op = page
+      .locator('.inspector .field', { hasText: 'Opacidad' })
+      .locator('input[type="range"]');
     await op.fill('0.5');
     await op.dispatchEvent('change');
     await expect(page.getByText('Opacidad — 50%')).toBeVisible();
   });
 
-  test('cambia el color de un elemento ya colocado desde el inspector y persiste al reabrir', async ({ page }) => {
+  test('cambia el color de un elemento ya colocado desde el inspector y persiste al reabrir', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -710,9 +797,15 @@ test.describe('EntrenoLab funcionalidades', () => {
 
     // Seleccionar y cambiar el color a rojo (2º swatch de la paleta del inspector).
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
-    await page.mouse.click((a[0] + box.x + box.width * 0.6) / 2, (a[1] + box.y + box.height * 0.5) / 2);
+    await page.mouse.click(
+      (a[0] + box.x + box.width * 0.6) / 2,
+      (a[1] + box.y + box.height * 0.5) / 2,
+    );
     await expect(page.locator('.inspector')).toBeVisible();
-    const swatchRed = page.locator('.inspector .field', { hasText: 'Color' }).locator('.swatch').nth(1);
+    const swatchRed = page
+      .locator('.inspector .field', { hasText: 'Color' })
+      .locator('.swatch')
+      .nth(1);
     await swatchRed.click();
     await expect(swatchRed).toHaveClass(/swatch-active/);
 
@@ -720,7 +813,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await fillBoardTitle(page, 'ColorRojo');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
-    const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
+    const ex = JSON.parse(
+      (await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!,
+    )[0];
     expect(ex.canvas.frames[0].elements[0].c).toBe('#c0392b');
   });
 
@@ -760,7 +855,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.field-count')).toHaveText('1');
   });
 
-  test('la selección múltiple se mueve como un GRUPO (no solo el último clic)', async ({ page }) => {
+  test('la selección múltiple se mueve como un GRUPO (no solo el último clic)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -782,9 +879,14 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     const readEls = async () =>
-      JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0].canvas.frames[0].elements.map(
-        (e: { id: string; t: string; x: number; y: number }) => ({ id: e.id, t: e.t, x: e.x, y: e.y })
-      );
+      JSON.parse(
+        (await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!,
+      )[0].canvas.frames[0].elements.map((e: { id: string; t: string; x: number; y: number }) => ({
+        id: e.id,
+        t: e.t,
+        x: e.x,
+        y: e.y,
+      }));
     const orig = await readEls();
 
     // Reabrir y selección múltiple: clic en A + Shift-clic en B.
@@ -810,8 +912,12 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.waitForURL('**/library');
     const fin = await readEls();
     const byId = (id: string) => fin.find((e: { id: string }) => e.id === id)!;
-    const a = orig[0], b = orig[1], c = orig[2];
-    const a1 = byId(a.id), b1 = byId(b.id), c1 = byId(c.id);
+    const a = orig[0],
+      b = orig[1],
+      c = orig[2];
+    const a1 = byId(a.id),
+      b1 = byId(b.id),
+      c1 = byId(c.id);
     // A y B se movieron; C no.
     const movedA = Math.abs(a.x - a1.x) + Math.abs(a.y - a1.y);
     const movedB = Math.abs(b.x - b1.x) + Math.abs(b.y - b1.y);
@@ -820,8 +926,8 @@ test.describe('EntrenoLab funcionalidades', () => {
     expect(movedB).toBeGreaterThan(0.005);
     expect(movedC).toBeLessThan(0.005);
     // El grupo se traslada entero: A y B tienen exactamente el mismo delta.
-    expect(Math.abs((a1.x - a.x) - (b1.x - b.x))).toBeLessThan(0.0001);
-    expect(Math.abs((a1.y - a.y) - (b1.y - b.y))).toBeLessThan(0.0001);
+    expect(Math.abs(a1.x - a.x - (b1.x - b.x))).toBeLessThan(0.0001);
+    expect(Math.abs(a1.y - a.y - (b1.y - b.y))).toBeLessThan(0.0001);
   });
 
   test('la pizarra es estática: no hay ningún control de animación', async ({ page }) => {
@@ -842,24 +948,73 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('[aria-label="Limpiar pizarra"]')).toBeVisible();
   });
 
-  test('un documento con varios fotogramas conserva los fotogramas al abrir, editar y guardar', async ({ page }) => {
+  test('un documento con varios fotogramas conserva los fotogramas al abrir, editar y guardar', async ({
+    page,
+  }) => {
     const now = new Date().toISOString();
     await seed(page);
     // Sembrar un ejercicio con 3 fotogramas (doc antiguo).
-    await page.addInitScript(({ now }) => {
-      localStorage.setItem('entrenolab:exercises', JSON.stringify([{
-        id: 'x-multi', teamId: 't1', folderId: null, title: 'Multi-frame', description: '', explanation: '',
-        category: 'Técnica', objectives: [], materials: [], durationMinutes: 10, minPlayers: null, maxPlayers: null,
-        loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null,
-        isTemplate: false,
-        canvas: { version: 2, schemaVersion: 3, field: 'full', frames: [
-          { duration: 800, elements: [{ id: 'a', t: 'player', x: 0.2, y: 0.5, n: 1, c: '#1a73e8', side: 'own' }] },
-          { duration: 1200, elements: [{ id: 'a', t: 'player', x: 0.5, y: 0.5, n: 1, c: '#1a73e8', side: 'own' }] },
-          { duration: 600, elements: [{ id: 'a', t: 'player', x: 0.8, y: 0.5, n: 1, c: '#1a73e8', side: 'own' }] },
-        ], orientation: 'horizontal', grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a' },
-        thumbnail: null, savedAt: now,
-      }]));
-    }, { now });
+    await page.addInitScript(
+      ({ now }) => {
+        localStorage.setItem(
+          'entrenolab:exercises',
+          JSON.stringify([
+            {
+              id: 'x-multi',
+              teamId: 't1',
+              folderId: null,
+              title: 'Multi-frame',
+              description: '',
+              explanation: '',
+              category: 'Técnica',
+              objectives: [],
+              materials: [],
+              durationMinutes: 10,
+              minPlayers: null,
+              maxPlayers: null,
+              loadMode: 'fixed',
+              seriesCount: null,
+              repetitionsCount: null,
+              workSeconds: null,
+              restSeconds: null,
+              isTemplate: false,
+              canvas: {
+                version: 2,
+                schemaVersion: 3,
+                field: 'full',
+                frames: [
+                  {
+                    duration: 800,
+                    elements: [
+                      { id: 'a', t: 'player', x: 0.2, y: 0.5, n: 1, c: '#1a73e8', side: 'own' },
+                    ],
+                  },
+                  {
+                    duration: 1200,
+                    elements: [
+                      { id: 'a', t: 'player', x: 0.5, y: 0.5, n: 1, c: '#1a73e8', side: 'own' },
+                    ],
+                  },
+                  {
+                    duration: 600,
+                    elements: [
+                      { id: 'a', t: 'player', x: 0.8, y: 0.5, n: 1, c: '#1a73e8', side: 'own' },
+                    ],
+                  },
+                ],
+                orientation: 'horizontal',
+                grass: 'stripes',
+                lineColor: '#ffffff',
+                backgroundColor: '#31834a',
+              },
+              thumbnail: null,
+              savedAt: now,
+            },
+          ]),
+        );
+      },
+      { now },
+    );
 
     await page.goto('/library');
     await page.locator('.ex-card').first().hover();
@@ -881,7 +1036,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await fillBoardTitle(page, 'Fotogramas');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
-    const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
+    const ex = JSON.parse(
+      (await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!,
+    )[0];
     expect(ex.canvas.frames.length).toBe(3);
   });
 
@@ -929,10 +1086,12 @@ test.describe('EntrenoLab funcionalidades', () => {
       img.src = 'data:image/png;base64,' + b64;
       await img.decode();
       const c = document.createElement('canvas');
-      c.width = img.width; c.height = img.height;
+      c.width = img.width;
+      c.height = img.height;
       const ctx = c.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
-      let transparent = 0, total = 0;
+      let transparent = 0,
+        total = 0;
       for (let y = 0; y < img.height; y += 4) {
         for (let x = 0; x < img.width; x += 4) {
           total++;
@@ -945,7 +1104,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     expect(res.transparent).toBeGreaterThan(res.total * 0.1);
   });
 
-  test('la miniatura del ejercicio incluye el material en su posición (región, no colores globales)', async ({ page }) => {
+  test('la miniatura del ejercicio incluye el material en su posición (región, no colores globales)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -994,7 +1155,8 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.side-panel-left .roster-item')).toHaveCount(2);
 
     const box = (await page.locator('.board-host').boundingBox())!;
-    const pt = (fx: number, fy: number) => [box.x + box.width * fx, box.y + box.height * fy] as const;
+    const pt = (fx: number, fy: number) =>
+      [box.x + box.width * fx, box.y + box.height * fy] as const;
 
     // Tocar un jugador ARMA la colocación (no coloca aún). FASE B: el panel no se cierra.
     await page.locator('.side-panel-left .roster-item').nth(0).click();
@@ -1014,7 +1176,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await seed(page);
     await page.goto('/board');
     await openProps(page);
-    const vert = page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]');
+    const vert = page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip[data-orient="vertical"]');
     await vert.click();
     await expect(vert).toHaveClass(/chip-active/);
 
@@ -1030,7 +1194,8 @@ test.describe('EntrenoLab funcionalidades', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
-    const pt = (fx: number, fy: number) => [box.x + box.width * fx, box.y + box.height * fy] as const;
+    const pt = (fx: number, fy: number) =>
+      [box.x + box.width * fx, box.y + box.height * fy] as const;
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.tray-player[title="Jugador Azul"]').click();
     await expect(page.locator('.field-count')).toHaveText('0'); // armado, aún no coloca
@@ -1071,7 +1236,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.getByText('2 tareas')).toBeVisible();
   });
 
-  test('la colocación de material es CONTINUA (Fase 3): queda armado y cada clic coloca una instancia', async ({ page }) => {
+  test('la colocación de material es CONTINUA (Fase 3): queda armado y cada clic coloca una instancia', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -1158,7 +1325,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.field-count')).toHaveText('0');
   });
 
-  test('las herramientas de dibujo vuelven a Seleccionar tras crear (un solo uso)', async ({ page }) => {
+  test('las herramientas de dibujo vuelven a Seleccionar tras crear (un solo uso)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -1183,7 +1352,9 @@ test.describe('EntrenoLab funcionalidades', () => {
       expected++;
       await expect(page.locator('.field-count')).toHaveText(String(expected));
       // Vuelve a Seleccionar automáticamente.
-      await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
+      await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(
+        /rail-active/,
+      );
       // Un clic posterior en la misma zona no vuelve a dibujar (solo selecciona).
       await page.mouse.click(x + 40, y + 30);
       await expect(page.locator('.field-count')).toHaveText(String(expected));
@@ -1256,21 +1427,31 @@ test.describe('EntrenoLab funcionalidades', () => {
     await useTool(page, 'Texto');
     await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
     // El texto queda seleccionado → inspector con Ancho/Alto y clipPath que recorta el contenido.
-    await expect(page.locator('.studio-panel .inspector .field', { hasText: 'Ancho' }).locator('input')).toBeVisible();
-    const hasClip = await page.evaluate(() => document.querySelector('.board-canvas clipPath') != null);
+    await expect(
+      page.locator('.studio-panel .inspector .field', { hasText: 'Ancho' }).locator('input'),
+    ).toBeVisible();
+    const hasClip = await page.evaluate(
+      () => document.querySelector('.board-canvas clipPath') != null,
+    );
     expect(hasClip).toBe(true);
     // Cambiar Ancho y Alto.
-    const ancho = page.locator('.studio-panel .inspector .field', { hasText: 'Ancho' }).locator('input');
+    const ancho = page
+      .locator('.studio-panel .inspector .field', { hasText: 'Ancho' })
+      .locator('input');
     await ancho.fill('40');
     await ancho.dispatchEvent('change');
-    const alto = page.locator('.studio-panel .inspector .field', { hasText: 'Alto' }).locator('input');
+    const alto = page
+      .locator('.studio-panel .inspector .field', { hasText: 'Alto' })
+      .locator('input');
     await alto.fill('25');
     await alto.dispatchEvent('change');
     // Guardar → reabrir → w/h persisten.
     await fillBoardTitle(page, 'FeaturesText');
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
-    const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
+    const ex = JSON.parse(
+      (await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!,
+    )[0];
     const t = ex.canvas.frames[0].elements[0];
     expect(t.w).toBeCloseTo(0.4, 2);
     expect(t.h).toBeCloseTo(0.25, 2);
@@ -1299,7 +1480,10 @@ test.describe('EntrenoLab funcionalidades', () => {
     // Guardar y salir → guarda y vuelve a la biblioteca.
     await fillBoardTitle(page, 'Confirmacion');
     await page.locator('[title="Volver"]').click();
-    await page.getByRole('dialog', { name: 'Cambios sin guardar' }).getByText('Guardar y salir').click();
+    await page
+      .getByRole('dialog', { name: 'Cambios sin guardar' })
+      .getByText('Guardar y salir')
+      .click();
     await page.waitForURL('**/library');
     await expect(page.locator('.ex-card')).toHaveCount(1);
 
@@ -1310,7 +1494,10 @@ test.describe('EntrenoLab funcionalidades', () => {
     await useTool(page, 'Jugador propio');
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.5);
     await page.locator('[title="Volver"]').click();
-    await page.getByRole('dialog', { name: 'Cambios sin guardar' }).getByText('Salir sin guardar').click();
+    await page
+      .getByRole('dialog', { name: 'Cambios sin guardar' })
+      .getByText('Salir sin guardar')
+      .click();
     await page.waitForURL('**/library');
   });
 
@@ -1354,7 +1541,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     // Función: posición actual del cono en pantalla (después de zoom/pan).
     const coneScreen = () =>
       page.evaluate(() => {
-        const r = (document.querySelector('.board-canvas image') as SVGGraphicsElement).getBoundingClientRect().toJSON();
+        const r = (document.querySelector('.board-canvas image') as SVGGraphicsElement)
+          .getBoundingClientRect()
+          .toJSON();
         return { cx: r!.x + r!.width / 2, cy: r!.y + r!.height / 2 };
       });
 
@@ -1395,7 +1584,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.inspector')).toBeVisible();
   });
 
-  test('zoom y desplazamiento deterministas: el elemento se mantiene clicable y se selecciona (100-300%, pan ±, H y V)', async ({ page }) => {
+  test('zoom y desplazamiento deterministas: el elemento se mantiene clicable y se selecciona (100-300%, pan ±, H y V)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -1415,7 +1606,9 @@ test.describe('EntrenoLab funcionalidades', () => {
 
     const coneCenter = () =>
       page.evaluate(() => {
-        const r = (document.querySelector('.board-canvas image') as SVGGraphicsElement).getBoundingClientRect().toJSON();
+        const r = (document.querySelector('.board-canvas image') as SVGGraphicsElement)
+          .getBoundingClientRect()
+          .toJSON();
         return { cx: r!.x + r!.width / 2, cy: r!.y + r!.height / 2 };
       });
 
@@ -1455,7 +1648,10 @@ test.describe('EntrenoLab funcionalidades', () => {
     // Orientación VERTICAL: el cono rota pero su centro sigue dentro del host y se
     // selecciona con el mismo clic en el centro visual (round-trip coherente H/V).
     await openProps(page);
-    await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();
+    await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip[data-orient="vertical"]')
+      .click();
     await setZoomPan(2, 30, 20);
     const cv = await coneCenter();
     expect(cv.cx).toBeGreaterThan(box.x);
@@ -1466,7 +1662,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.inspector')).toBeVisible();
   });
 
-  test('la barra contextual NO tapa el panel de Propiedades ni su botón de cerrar (escritorio)', async ({ page }) => {
+  test('la barra contextual NO tapa el panel de Propiedades ni su botón de cerrar (escritorio)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -1476,7 +1674,20 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
-    const img = (await page.locator('.board-canvas image').first().boundingBox())!;
+    // El `<image>` del material puede tener caja 0×0 en el repintado siguiente a colocarlo (el SVG
+    // se reemplaza por `innerHTML`), y entonces `boundingBox()` devuelve `null`: en el Nightly este
+    // test moría con `Cannot read properties of null (reading 'x')`. Se espera a una caja REAL —
+    // misma clase de defecto que el (0, 0) medido en el trace de `e1-mobile-props`.
+    const cajaCono = async () => {
+      const b = await page.locator('.board-canvas image').first().boundingBox();
+      return b && b.width > 0 && b.height > 0 ? b : null;
+    };
+    await expect
+      .poll(async () => (await cajaCono()) !== null, {
+        message: 'la caja del cono es real (no 0×0) antes de pulsarla',
+      })
+      .toBe(true);
+    const img = (await cajaCono())!;
 
     // REGRESIÓN (medida en móvil y verificada aquí): la barra contextual llevaba `z-index: 89`
     // y se montaba ENCIMA de los paneles laterales (`z-index: 40`), tapando su botón de cerrar:
@@ -1489,13 +1700,22 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.context-bar')).toBeVisible();
 
     // Datos de la pila: el panel debe estar POR ENCIMA de la barra.
-    const zBarra = Number(await page.locator('.context-bar').evaluate((el) => getComputedStyle(el).zIndex));
-    const zPanel = Number(await page.locator('.studio-panel').evaluate((el) => getComputedStyle(el).zIndex));
+    const zBarra = Number(
+      await page.locator('.context-bar').evaluate((el) => getComputedStyle(el).zIndex),
+    );
+    const zPanel = Number(
+      await page.locator('.studio-panel').evaluate((el) => getComputedStyle(el).zIndex),
+    );
     expect(zPanel, 'el panel lateral gana a la barra contextual').toBeGreaterThan(zBarra);
-    const enPunto = await page.locator('.studio-panel .panel-close').first().evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      return document.elementsFromPoint(r.x + r.width / 2, r.y + r.height / 2).some((n) => n.closest('.context-bar') !== null);
-    });
+    const enPunto = await page
+      .locator('.studio-panel .panel-close')
+      .first()
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return document
+          .elementsFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+          .some((n) => n.closest('.context-bar') !== null);
+      });
     expect(enPunto, 'nada de la barra contextual intercepta el botón de cerrar').toBe(false);
 
     // Y el clic lo cierra de verdad.
@@ -1503,7 +1723,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.studio-panel')).toHaveCount(0);
   });
 
-  test('un elemento bloqueado se puede re-seleccionar y desbloquear (el bloqueo no es permanente)', async ({ page }) => {
+  test('un elemento bloqueado se puede re-seleccionar y desbloquear (el bloqueo no es permanente)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -1542,7 +1764,8 @@ test.describe('EntrenoLab funcionalidades', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
-    const pt = (fx: number, fy: number) => [box.x + box.width * fx, box.y + box.height * fy] as const;
+    const pt = (fx: number, fy: number) =>
+      [box.x + box.width * fx, box.y + box.height * fy] as const;
 
     // Herramientas que se dibujan arrastrando.
     const draw: Array<[string, number, number]> = [
@@ -1597,7 +1820,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.field-count')).toHaveText(String(total));
   });
 
-  test('la biblioteca guarda y recupera descripción, material, duración y jugadores', async ({ page }) => {
+  test('la biblioteca guarda y recupera descripción, material, duración y jugadores', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/library');
     await page.getByText('Crear ejercicio').first().click();
@@ -1614,7 +1839,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     // Reabrir en edición → los campos se mantienen.
     await page.locator('.ex-card').first().locator('.ex-more-btn').click();
     await page.locator('[title="Editar datos"]').first().click();
-    await expect(page.locator('.modal textarea[name="description"]')).toHaveValue('Conservación del balón');
+    await expect(page.locator('.modal textarea[name="description"]')).toHaveValue(
+      'Conservación del balón',
+    );
     await expect(page.locator('.modal textarea[name="explanation"]')).toHaveValue('4 contra 2');
     await expect(page.locator('.modal input[name="materials"]')).toHaveValue('Conos, balón');
     await expect(page.locator('.modal input[name="duration"]')).toHaveValue('15');
@@ -1679,7 +1906,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     expect(html2).toContain('cone-red.png');
   });
 
-  test('el botón Atrás del navegador no sale de /board con cambios sin guardar', async ({ page }) => {
+  test('el botón Atrás del navegador no sale de /board con cambios sin guardar', async ({
+    page,
+  }) => {
     await seed(page);
     // Crear una actividad y abrirla en la pizarra (navegación SPA pushState /library → /board).
     await page.goto('/library');
@@ -1689,7 +1918,10 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.waitForURL('**/board');
     // Modificar algo que marque dirty (campo base).
     await openProps(page);
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('half');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('half');
     // Atrás del navegador (popstate SPA).
     await page.goBack();
     // El guard bloquea: aparece el diálogo y la pizarra (overlay .studio) sigue en pantalla.
@@ -1720,7 +1952,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.bar-variant-pop')).toHaveCount(0);
   });
 
-  test('long-press táctil (pointerType touch) abre el selector de variantes y no coloca', async ({ page }) => {
+  test('long-press táctil (pointerType touch) abre el selector de variantes y no coloca', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
@@ -1730,16 +1964,48 @@ test.describe('EntrenoLab funcionalidades', () => {
     const cy = b.y + b.height / 2;
 
     // pointerdown táctil real (PointerEvent) sobre la herramienta.
-    await cone.evaluate((el, p) => {
-      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: p.x, clientY: p.y, button: 0, buttons: 1 }));
-    }, { x: cx, y: cy });
+    await cone.evaluate(
+      (el, p) => {
+        el.dispatchEvent(
+          new PointerEvent('pointerdown', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 7,
+            pointerType: 'touch',
+            isPrimary: true,
+            clientX: p.x,
+            clientY: p.y,
+            button: 0,
+            buttons: 1,
+          }),
+        );
+      },
+      { x: cx, y: cy },
+    );
     await page.waitForTimeout(650); // > 500 ms → long-press
 
     // pointerup + click: el long-press anula la colocación.
-    await cone.evaluate((el, p) => {
-      el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: p.x, clientY: p.y, button: 0, buttons: 0 }));
-      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y }));
-    }, { x: cx, y: cy });
+    await cone.evaluate(
+      (el, p) => {
+        el.dispatchEvent(
+          new PointerEvent('pointerup', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 7,
+            pointerType: 'touch',
+            isPrimary: true,
+            clientX: p.x,
+            clientY: p.y,
+            button: 0,
+            buttons: 0,
+          }),
+        );
+        el.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y }),
+        );
+      },
+      { x: cx, y: cy },
+    );
 
     await expect(page.locator('.bar-variant-pop')).toBeVisible();
     await expect(page.locator('.field-count')).toHaveText('0');
@@ -1748,7 +2014,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.bar-variant-pop')).toHaveCount(0);
   });
 
-  test('long-press con stylus (pointerType pen) abre el selector de variantes', async ({ page }) => {
+  test('long-press con stylus (pointerType pen) abre el selector de variantes', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
@@ -1757,20 +2025,54 @@ test.describe('EntrenoLab funcionalidades', () => {
     const cx = b.x + b.width / 2;
     const cy = b.y + b.height / 2;
 
-    await cone.evaluate((el, p) => {
-      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 3, pointerType: 'pen', isPrimary: true, clientX: p.x, clientY: p.y, button: 0, buttons: 1 }));
-    }, { x: cx, y: cy });
+    await cone.evaluate(
+      (el, p) => {
+        el.dispatchEvent(
+          new PointerEvent('pointerdown', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 3,
+            pointerType: 'pen',
+            isPrimary: true,
+            clientX: p.x,
+            clientY: p.y,
+            button: 0,
+            buttons: 1,
+          }),
+        );
+      },
+      { x: cx, y: cy },
+    );
     await page.waitForTimeout(650);
-    await cone.evaluate((el, p) => {
-      el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 3, pointerType: 'pen', isPrimary: true, clientX: p.x, clientY: p.y, button: 0, buttons: 0 }));
-      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y }));
-    }, { x: cx, y: cy });
+    await cone.evaluate(
+      (el, p) => {
+        el.dispatchEvent(
+          new PointerEvent('pointerup', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 3,
+            pointerType: 'pen',
+            isPrimary: true,
+            clientX: p.x,
+            clientY: p.y,
+            button: 0,
+            buttons: 0,
+          }),
+        );
+        el.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y }),
+        );
+      },
+      { x: cx, y: cy },
+    );
 
     await expect(page.locator('.bar-variant-pop')).toBeVisible();
     await expect(page.locator('.field-count')).toHaveText('0');
   });
 
-  test('long-press cancelado por movimiento (pointermove > 10px) no abre el selector', async ({ page }) => {
+  test('long-press cancelado por movimiento (pointermove > 10px) no abre el selector', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
@@ -1779,9 +2081,24 @@ test.describe('EntrenoLab funcionalidades', () => {
     const cx = b.x + b.width / 2;
     const cy = b.y + b.height / 2;
 
-    await cone.evaluate((el, p) => {
-      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 5, pointerType: 'touch', isPrimary: true, clientX: p.x, clientY: p.y, button: 0, buttons: 1 }));
-    }, { x: cx, y: cy });
+    await cone.evaluate(
+      (el, p) => {
+        el.dispatchEvent(
+          new PointerEvent('pointerdown', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 5,
+            pointerType: 'touch',
+            isPrimary: true,
+            clientX: p.x,
+            clientY: p.y,
+            button: 0,
+            buttons: 1,
+          }),
+        );
+      },
+      { x: cx, y: cy },
+    );
     // SIN dormir entre bajar y mover: la ventana de la pulsación larga de la barra es de 500 ms
     // (`beginBarPress`) y aquí se comprueba justo que un movimiento la CANCELA antes de que
     // venza. Un `waitForTimeout(200)` en medio se comía el 40 % del margen y, con la máquina
@@ -1790,21 +2107,55 @@ test.describe('EntrenoLab funcionalidades', () => {
     // movimiento … no abre el selector»). Los eventos se procesan en orden, así que mover
     // enseguida es exactamente el escenario que la prueba quiere medir.
     // Se mueve > 10 px → cancelación por movimiento.
-    await cone.evaluate((el, p) => {
-      el.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 5, pointerType: 'touch', isPrimary: true, clientX: p.x, clientY: p.y, button: 0, buttons: 1 }));
-    }, { x: cx + 20, y: cy + 12 });
+    await cone.evaluate(
+      (el, p) => {
+        el.dispatchEvent(
+          new PointerEvent('pointermove', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 5,
+            pointerType: 'touch',
+            isPrimary: true,
+            clientX: p.x,
+            clientY: p.y,
+            button: 0,
+            buttons: 1,
+          }),
+        );
+      },
+      { x: cx + 20, y: cy + 12 },
+    );
     await page.waitForTimeout(650);
-    await cone.evaluate((el, p) => {
-      el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 5, pointerType: 'touch', isPrimary: true, clientX: p.x, clientY: p.y, button: 0, buttons: 0 }));
-      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y }));
-    }, { x: cx, y: cy });
+    await cone.evaluate(
+      (el, p) => {
+        el.dispatchEvent(
+          new PointerEvent('pointerup', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 5,
+            pointerType: 'touch',
+            isPrimary: true,
+            clientX: p.x,
+            clientY: p.y,
+            button: 0,
+            buttons: 0,
+          }),
+        );
+        el.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y }),
+        );
+      },
+      { x: cx, y: cy },
+    );
 
     // No se abre el selector y, al ser clic normal, NO coloca nada (sigue en la barra).
     await expect(page.locator('.bar-variant-pop')).toHaveCount(0);
     await expect(page.locator('.field-count')).toHaveText('0');
   });
 
-  test('el clic derecho abre el mismo selector de variantes que la pulsación larga', async ({ page }) => {
+  test('el clic derecho abre el mismo selector de variantes que la pulsación larga', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
@@ -1823,11 +2174,14 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.locator('.bar-variant-pop')).toHaveCount(0);
   });
 
-  test('crea rectángulo, línea, texto y material; mueve la línea, edita el texto y persiste con igualdad de modelo', async ({ page }) => {
+  test('crea rectángulo, línea, texto y material; mueve la línea, edita el texto y persiste con igualdad de modelo', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
-    const pt = (fx: number, fy: number) => [box.x + box.width * fx, box.y + box.height * fy] as const;
+    const pt = (fx: number, fy: number) =>
+      [box.x + box.width * fx, box.y + box.height * fy] as const;
 
     // Rectángulo (arrastre).
     await useTool(page, 'Rectángulo');
@@ -1875,7 +2229,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.waitForURL('**/library');
 
     // Modelo tras guardar: 4 elementos, texto v, material con assetKind+asset.
-    const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
+    const ex = JSON.parse(
+      (await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!,
+    )[0];
     const els = ex.canvas.frames[0].elements;
     expect(els).toHaveLength(4);
     const text = els.find((e: { t: string }) => e.t === 'text');
@@ -1903,7 +2259,10 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.waitForURL('**/board');
     // Modificar (dirty).
     await openProps(page);
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('half');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('half');
     // Atrás (destino original: /library) → diálogo → Salir sin guardar → vuelve a /library.
     await page.goBack();
     const dialog = page.getByRole('dialog', { name: 'Cambios sin guardar' });
@@ -1940,7 +2299,9 @@ test.describe('EntrenoLab funcionalidades', () => {
     await expect(page.getByText('Mi sesión')).toBeVisible();
   });
 
-  test('respaldo: exporta un JSON versionado y rechaza un archivo inválido sin perder datos', async ({ page }) => {
+  test('respaldo: exporta un JSON versionado y rechaza un archivo inválido sin perder datos', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/team');
     await page.locator('[title="Ajustes"]').click();
@@ -1948,7 +2309,10 @@ test.describe('EntrenoLab funcionalidades', () => {
 
     // Exportar → descarga con contenido versionado y los datos actuales.
     const dl = page.waitForEvent('download');
-    await page.locator('.settings', { hasText: 'Exportar respaldo' }).getByRole('button', { name: 'Exportar' }).click();
+    await page
+      .locator('.settings', { hasText: 'Exportar respaldo' })
+      .getByRole('button', { name: 'Exportar' })
+      .click();
     const download = await dl;
     const buf = fs.readFileSync((await download.path())!);
     const backup = JSON.parse(buf.toString());
@@ -1960,18 +2324,44 @@ test.describe('EntrenoLab funcionalidades', () => {
 
     // Importar un archivo corrupto → error visible y ningún dato destruido.
     const beforeHtml = await page.locator('.settings').innerHTML();
-    await page.locator('.settings', { hasText: 'Importar respaldo' }).locator('input[type="file"]').setInputFiles({ name: 'mal.json', mimeType: 'application/json', buffer: Buffer.from('esto no es json') });
-    await expect(page.locator('.settings', { hasText: 'El archivo no es JSON válido.' })).toBeVisible();
+    await page
+      .locator('.settings', { hasText: 'Importar respaldo' })
+      .locator('input[type="file"]')
+      .setInputFiles({
+        name: 'mal.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from('esto no es json'),
+      });
+    await expect(
+      page.locator('.settings', { hasText: 'El archivo no es JSON válido.' }),
+    ).toBeVisible();
     expect(await page.locator('.settings').innerHTML()).toContain('Exportar respaldo'); // no se ha roto
 
     // Importar el respaldo válido (reemplazar) → recarga y conserva el equipo.
-    await page.locator('.settings', { hasText: 'Importar respaldo' }).locator('input[type="file"]').setInputFiles({ name: 'b.json', mimeType: 'application/json', buffer: buf });
+    await page
+      .locator('.settings', { hasText: 'Importar respaldo' })
+      .locator('input[type="file"]')
+      .setInputFiles({ name: 'b.json', mimeType: 'application/json', buffer: buf });
     await expect(page.locator('.settings', { hasText: 'Respaldo válido' })).toBeVisible();
-    await page.locator('.settings', { hasText: 'Respaldo válido' }).getByRole('button', { name: 'Reemplazar' }).click();
+    await page
+      .locator('.settings', { hasText: 'Respaldo válido' })
+      .getByRole('button', { name: 'Reemplazar' })
+      .click();
     // FASE G: observable — el equipo exportado ya está restaurado en localStorage (no espera fija).
-    await expect.poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem('entrenolab:teams') ?? '[]') as unknown[]).length), { timeout: 5000 }).toBeGreaterThan(0);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (JSON.parse(localStorage.getItem('entrenolab:teams') ?? '[]') as unknown[]).length,
+          ),
+        { timeout: 5000 },
+      )
+      .toBeGreaterThan(0);
     // El equipo exportado sigue presente (fuente de verdad: localStorage) y la app recargada.
-    const teams = await page.evaluate(() => JSON.parse(localStorage.getItem('entrenolab:teams') ?? '[]'));
+    const teams = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('entrenolab:teams') ?? '[]'),
+    );
     expect(teams.length).toBeGreaterThan(0);
     await page.goto('/team');
     await expect(page.getByText('Primer Equipo').first()).toBeVisible();

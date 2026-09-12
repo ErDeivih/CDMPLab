@@ -15,7 +15,15 @@
 // =============================================================
 
 import { Injectable, computed, signal } from '@angular/core';
-import { Exercise, ExerciseFolder, Player, Session, Team, ELEMENT_TYPES, FIELD_TYPES } from './models';
+import {
+  Exercise,
+  ExerciseFolder,
+  Player,
+  Session,
+  Team,
+  ELEMENT_TYPES,
+  FIELD_TYPES,
+} from './models';
 import { environment } from '../../environments/environment';
 import type { DataSource } from './repositories/data-source';
 import { DataError } from './repositories/data-source';
@@ -80,7 +88,9 @@ function save<T>(key: string, value: T[]): void {
     localStorage.setItem(key, JSON.stringify(value));
     onStorageError?.(null);
   } catch {
-    onStorageError?.('No se pudo guardar en el navegador (localStorage lleno o bloqueado). Revisa el espacio o el modo privado.');
+    onStorageError?.(
+      'No se pudo guardar en el navegador (localStorage lleno o bloqueado). Revisa el espacio o el modo privado.',
+    );
   }
 }
 
@@ -99,7 +109,7 @@ export class StoreService {
   private readonly _activeTeamId = signal<string | null>(
     // El equipo activo ELEGIDO por el usuario se recuerda entre recargas; si no hay
     // preferencia se mantiene el comportamiento anterior (el primero disponible).
-    this.readActiveTeamId() ?? (load<{ id: string }>(this.key(KEY_TEAMS)).length ? null : 'team-1')
+    this.readActiveTeamId() ?? (load<{ id: string }>(this.key(KEY_TEAMS)).length ? null : 'team-1'),
   );
 
   readonly activeTeam = computed(() => {
@@ -114,7 +124,7 @@ export class StoreService {
   });
 
   private readonly _demoSeeded = signal<boolean>(
-    typeof localStorage !== 'undefined' && !!localStorage.getItem('entrenolab:seeded')
+    typeof localStorage !== 'undefined' && !!localStorage.getItem('entrenolab:seeded'),
   );
 
   private readonly _storageError = signal<string | null>(null);
@@ -131,7 +141,11 @@ export class StoreService {
   private readonly _canRetry = signal(false);
 
   /** Conflicto de revisión detectado (otro usuario modificó el ejercicio). */
-  private readonly _lastConflict = signal<{ exerciseId: string; latest: Exercise; attempted: Exercise } | null>(null);
+  private readonly _lastConflict = signal<{
+    exerciseId: string;
+    latest: Exercise;
+    attempted: Exercise;
+  } | null>(null);
   readonly lastConflict = this._lastConflict.asReadonly();
 
   /** ¿Hay una copia automática restaurable? Se escribe ANTES de cada importación, así que
@@ -206,7 +220,16 @@ export class StoreService {
     }
   }
 
-  private hydrate(dataset: { team: Team | null; players: Player[]; folders: ExerciseFolder[]; exercises: Exercise[]; sessions: Session[] }, teamId: string): void {
+  private hydrate(
+    dataset: {
+      team: Team | null;
+      players: Player[];
+      folders: ExerciseFolder[];
+      exercises: Exercise[];
+      sessions: Session[];
+    },
+    teamId: string,
+  ): void {
     // La copia automática vive bajo la clave usuario+equipo: al hidratar un contexto nuevo
     // hay que recalcular si existe antes de que la UI la ofrezca.
     this._autoBackup.set(this.readAutoBackup());
@@ -278,7 +301,7 @@ export class StoreService {
     rollback: () => void = () => {
       /* por defecto no hay rollback */
     },
-    onDone?: (value: T) => void
+    onDone?: (value: T) => void,
   ): void {
     // Cada operación remota recibe una GENERACIÓN. Una respuesta que llegue cuando ya ha
     // empezado otra operación es TARDÍA: no puede ofrecer reintento, porque el estado que
@@ -407,7 +430,8 @@ export class StoreService {
         () => this._players.update((list) => [...list, player]),
         () => ds.addPlayer(input),
         () => this._players.update((list) => list.filter((p) => p.id !== player.id)),
-        (saved) => this._players.update((list) => list.map((p) => (p.id === player.id ? saved : p)))
+        (saved) =>
+          this._players.update((list) => list.map((p) => (p.id === player.id ? saved : p))),
       );
       return;
     }
@@ -420,16 +444,18 @@ export class StoreService {
     const prev = this._players().find((p) => p.id === id);
     if (ds) {
       this.applyRemote(
-        () => this._players.update((list) => list.map((p) => (p.id === id ? { ...p, ...patch } : p))),
+        () =>
+          this._players.update((list) => list.map((p) => (p.id === id ? { ...p, ...patch } : p))),
         () => ds.updatePlayer(id, patch),
-        () => this._players.update((list) => list.map((p) => (p.id === id && prev ? { ...p, ...prev } : p))),
-        (saved) => this._players.update((list) => list.map((p) => (p.id === id ? saved : p)))
+        () =>
+          this._players.update((list) =>
+            list.map((p) => (p.id === id && prev ? { ...p, ...prev } : p)),
+          ),
+        (saved) => this._players.update((list) => list.map((p) => (p.id === id ? saved : p))),
       );
       return;
     }
-    this._players.update((list) =>
-      list.map((p) => (p.id === id ? { ...p, ...patch } : p))
-    );
+    this._players.update((list) => list.map((p) => (p.id === id ? { ...p, ...patch } : p)));
     save(this.key(KEY_PLAYERS), this._players());
   }
 
@@ -438,9 +464,15 @@ export class StoreService {
     const prev = this._players().find((p) => p.id === id);
     if (ds) {
       this.applyRemote(
-        () => this._players.update((list) => list.map((p) => (p.id === id ? { ...p, active: false } : p))),
+        () =>
+          this._players.update((list) =>
+            list.map((p) => (p.id === id ? { ...p, active: false } : p)),
+          ),
         () => ds.removePlayer(id),
-        () => this._players.update((list) => list.map((p) => (p.id === id && prev ? { ...p, ...prev } : p)))
+        () =>
+          this._players.update((list) =>
+            list.map((p) => (p.id === id && prev ? { ...p, ...prev } : p)),
+          ),
       );
       return;
     }
@@ -518,7 +550,8 @@ export class StoreService {
       },
       () => ds.saveExercise(base, expectedRevision),
       () => {
-        if (existing) this._exercises.update((list) => list.map((e) => (e.id === ex.id ? existing : e)));
+        if (existing)
+          this._exercises.update((list) => list.map((e) => (e.id === ex.id ? existing : e)));
         else this._exercises.update((list) => list.filter((e) => e.id !== ex.id));
       },
       (res) => {
@@ -531,9 +564,11 @@ export class StoreService {
         }
         this._exercises.update((list) => {
           const idx = list.findIndex((e) => e.id === ex.id);
-          return idx === -1 ? [...list, res.exercise] : list.map((e) => (e.id === ex.id ? res.exercise : e));
+          return idx === -1
+            ? [...list, res.exercise]
+            : list.map((e) => (e.id === ex.id ? res.exercise : e));
         });
-      }
+      },
     );
   }
 
@@ -556,7 +591,10 @@ export class StoreService {
     const unlink = (list: Session[]): Session[] =>
       list.map((s) =>
         s.tasks.some((t) => t.exerciseId === id)
-          ? { ...s, tasks: s.tasks.map((t) => (t.exerciseId === id ? { ...t, exerciseId: null } : t)) }
+          ? {
+              ...s,
+              tasks: s.tasks.map((t) => (t.exerciseId === id ? { ...t, exerciseId: null } : t)),
+            }
           : s,
       );
     if (ds) {
@@ -569,7 +607,7 @@ export class StoreService {
         () => {
           this._exercises.set(prevExercises);
           this._sessions.set(prevSessions);
-        }
+        },
       );
       return;
     }
@@ -599,7 +637,7 @@ export class StoreService {
       this.applyRemote(
         () => this._exercises.update((list) => [...list, copy]),
         () => ds.saveExercise(copy),
-        () => this._exercises.update((list) => list.filter((e) => e.id !== copy.id))
+        () => this._exercises.update((list) => list.filter((e) => e.id !== copy.id)),
       );
       return;
     }
@@ -625,7 +663,8 @@ export class StoreService {
         () => this._folders.update((list) => [...list, folder]),
         () => ds.createFolder(teamId, name, parentId),
         () => this._folders.update((list) => list.filter((f) => f.id !== folder.id)),
-        (saved) => this._folders.update((list) => list.map((f) => (f.id === folder.id ? saved : f)))
+        (saved) =>
+          this._folders.update((list) => list.map((f) => (f.id === folder.id ? saved : f))),
       );
       return;
     }
@@ -651,7 +690,7 @@ export class StoreService {
     if (ds) {
       this.applyRemote(
         () => this._folders.update((list) => list.map((f) => (f.id === id ? { ...f, name } : f))),
-        () => ds.renameFolder(id, name)
+        () => ds.renameFolder(id, name),
       );
       return;
     }
@@ -671,13 +710,15 @@ export class StoreService {
       this.applyRemote(
         () => {
           this._folders.update((list) => list.filter((f) => !idsToDelete.has(f.id)));
-          this._exercises.update((list) => list.map((e) => (idsToDelete.has(e.folderId as string) ? { ...e, folderId: null } : e)));
+          this._exercises.update((list) =>
+            list.map((e) => (idsToDelete.has(e.folderId as string) ? { ...e, folderId: null } : e)),
+          );
         },
         () => ds.deleteFolder(id),
         () => {
           this._folders.set(prevFolders);
           this._exercises.set(prevExercises);
-        }
+        },
       );
       return;
     }
@@ -687,7 +728,9 @@ export class StoreService {
       return next;
     });
     this._exercises.update((list) => {
-      const next = list.map((e) => (idsToDelete.has(e.folderId as string) ? { ...e, folderId: null } : e));
+      const next = list.map((e) =>
+        idsToDelete.has(e.folderId as string) ? { ...e, folderId: null } : e,
+      );
       save(this.key(KEY_EXERCISES), next);
       return next;
     });
@@ -697,8 +740,11 @@ export class StoreService {
     const ds = this.dataSource;
     if (ds) {
       this.applyRemote(
-        () => this._exercises.update((list) => list.map((e) => (e.id === exerciseId ? { ...e, folderId } : e))),
-        () => ds.moveExerciseToFolder(exerciseId, folderId)
+        () =>
+          this._exercises.update((list) =>
+            list.map((e) => (e.id === exerciseId ? { ...e, folderId } : e)),
+          ),
+        () => ds.moveExerciseToFolder(exerciseId, folderId),
       );
       return;
     }
@@ -714,8 +760,11 @@ export class StoreService {
     const set = new Set(ids);
     if (ds) {
       this.applyRemote(
-        () => this._exercises.update((list) => list.map((e) => (set.has(e.id) ? { ...e, folderId } : e))),
-        () => ds.moveExercisesToFolder(ids, folderId)
+        () =>
+          this._exercises.update((list) =>
+            list.map((e) => (set.has(e.id) ? { ...e, folderId } : e)),
+          ),
+        () => ds.moveExercisesToFolder(ids, folderId),
       );
       return;
     }
@@ -743,7 +792,7 @@ export class StoreService {
         () => {
           /* rollback: recargar desde servidor */
           return this.connectDataSource(ds, ds.teamId ?? '');
-        }
+        },
       );
       return;
     }
@@ -787,7 +836,9 @@ export class StoreService {
     while (stack.length) {
       const cur = stack.pop()!;
       result.add(cur);
-      this._folders().filter((f) => f.parentId === cur).forEach((f) => stack.push(f.id));
+      this._folders()
+        .filter((f) => f.parentId === cur)
+        .forEach((f) => stack.push(f.id));
     }
     return result;
   }
@@ -815,21 +866,25 @@ export class StoreService {
         },
         () => ds.saveSession(base),
         () => {
-          if (existing) this._sessions.update((list) => list.map((s) => (s.id === session.id ? existing : s)));
+          if (existing)
+            this._sessions.update((list) => list.map((s) => (s.id === session.id ? existing : s)));
           else this._sessions.update((list) => list.filter((s) => s.id !== session.id));
         },
         (saved) => {
           this._sessions.update((list) => {
             const idx = list.findIndex((s) => s.id === session.id);
-            return idx === -1 ? [...list, saved] : list.map((s) => (s.id === session.id ? saved : s));
+            return idx === -1
+              ? [...list, saved]
+              : list.map((s) => (s.id === session.id ? saved : s));
           });
-        }
+        },
       );
       return;
     }
     this._sessions.update((list) => {
       const idx = list.findIndex((s) => s.id === session.id);
-      const next = idx === -1 ? [...list, session] : list.map((s) => (s.id === session.id ? session : s));
+      const next =
+        idx === -1 ? [...list, session] : list.map((s) => (s.id === session.id ? session : s));
       save(this.key(KEY_SESSIONS), next);
       return next;
     });
@@ -844,7 +899,7 @@ export class StoreService {
         () => ds.deleteSession(id),
         () => {
           if (prev) this._sessions.update((list) => [...list, prev]);
-        }
+        },
       );
       return;
     }
@@ -895,7 +950,8 @@ export class StoreService {
     const isStr = (v: unknown): v is string => typeof v === 'string';
     for (const k of ['teams', 'players', 'folders', 'exercises', 'sessions'] as const) {
       if (!isArr(b[k])) return { ok: false, error: `El campo "${k}" no es una lista.` };
-      if (b[k].length > MAX_ITEMS) return { ok: false, error: `El campo "${k}" supera el tamaño máximo.` };
+      if (b[k].length > MAX_ITEMS)
+        return { ok: false, error: `El campo "${k}" supera el tamaño máximo.` };
     }
 
     const teams = b.teams as any[];
@@ -910,7 +966,8 @@ export class StoreService {
       if (!isStr(t.id) || !t.id.trim()) return { ok: false, error: 'Un equipo no tiene id.' };
       if (teamIds.has(t.id)) return { ok: false, error: `Id de equipo duplicado: ${t.id}.` };
       teamIds.add(t.id);
-      if (!isStr(t.name) || !isStr(t.accentColor) || !isStr(t.createdAt)) return { ok: false, error: 'Equipo incompleto.' };
+      if (!isStr(t.name) || !isStr(t.accentColor) || !isStr(t.createdAt))
+        return { ok: false, error: 'Equipo incompleto.' };
     }
 
     const playerIds = new Set<string>();
@@ -918,8 +975,10 @@ export class StoreService {
       if (!isStr(p.id) || !p.id.trim()) return { ok: false, error: 'Un jugador no tiene id.' };
       if (playerIds.has(p.id)) return { ok: false, error: `Id de jugador duplicado: ${p.id}.` };
       playerIds.add(p.id);
-      if (!isStr(p.teamId) || !teamIds.has(p.teamId)) return { ok: false, error: 'Jugador con referencia de equipo inválida.' };
-      if (!isStr(p.name) || typeof p.number !== 'number') return { ok: false, error: 'Jugador incompleto.' };
+      if (!isStr(p.teamId) || !teamIds.has(p.teamId))
+        return { ok: false, error: 'Jugador con referencia de equipo inválida.' };
+      if (!isStr(p.name) || typeof p.number !== 'number')
+        return { ok: false, error: 'Jugador incompleto.' };
     }
 
     // Carpetas: recogemos TODAS primero para validar de forma independiente del
@@ -930,16 +989,20 @@ export class StoreService {
       if (!isStr(f.id) || !f.id.trim()) return { ok: false, error: 'Una carpeta no tiene id.' };
       if (folderIds.has(f.id)) return { ok: false, error: `Id de carpeta duplicado: ${f.id}.` };
       folderIds.add(f.id);
-      if (!isStr(f.teamId) || !teamIds.has(f.teamId)) return { ok: false, error: 'Carpeta con referencia de equipo inválida.' };
-      if (f.parentId !== null && !isStr(f.parentId)) return { ok: false, error: 'Carpeta con parentId inválido.' };
+      if (!isStr(f.teamId) || !teamIds.has(f.teamId))
+        return { ok: false, error: 'Carpeta con referencia de equipo inválida.' };
+      if (f.parentId !== null && !isStr(f.parentId))
+        return { ok: false, error: 'Carpeta con parentId inválido.' };
       if (!isStr(f.name)) return { ok: false, error: 'Carpeta incompleta.' };
       folderTeam.set(f.id, f.teamId);
     }
     // Segunda pasada: el padre debe existir y pertenecer al MISMO equipo.
     for (const f of folders) {
       if (isStr(f.parentId)) {
-        if (!folderIds.has(f.parentId)) return { ok: false, error: 'Carpeta con parentId no existente.' };
-        if (folderTeam.get(f.parentId) !== f.teamId) return { ok: false, error: 'Carpeta con padre de otro equipo.' };
+        if (!folderIds.has(f.parentId))
+          return { ok: false, error: 'Carpeta con parentId no existente.' };
+        if (folderTeam.get(f.parentId) !== f.teamId)
+          return { ok: false, error: 'Carpeta con padre de otro equipo.' };
       }
     }
     // Sin ciclos en la jerarquía de carpetas.
@@ -961,19 +1024,36 @@ export class StoreService {
     // son campos de PRIMER nivel del producto). Con una lista local aquí, un respaldo
     // con un campo que SÍ existe en el catálogo se rechazaba entero como "canvas
     // inválido": pasó con 'f7' y volvió a pasar con 'two_halves'.
+    const elementoValido = (e: unknown): boolean => {
+      if (!e || typeof e !== 'object') return false;
+      const el = e as { t?: unknown; fillOpacity?: unknown; fillColor?: unknown };
+      if (!isStr(el.t) || !ELEMENT_TYPES.has(el.t)) return false;
+      // Fase 2: relleno/opacidad opcionales deben ser válidos (si están presentes).
+      if (
+        el.fillOpacity !== undefined &&
+        (typeof el.fillOpacity !== 'number' || el.fillOpacity < 0 || el.fillOpacity > 1)
+      )
+        return false;
+      if (el.fillColor !== undefined && !isStr(el.fillColor)) return false;
+      return true;
+    };
+
     const isValidCanvas = (c: unknown): boolean => {
       if (c === null) return true;
+      // v1: lista PLANA de elementos. `normalizeCanvas` la acepta y la migra a v2 (retrocompatibilidad
+      // del modelo), así que el respaldo tiene que aceptarla igual: antes se rechazaba el respaldo
+      // ENTERO si contenía un canvas v1 —el propio export del usuario, de una versión anterior— y no
+      // había forma de reimportarlo.
+      if (Array.isArray(c)) return c.every(elementoValido);
       if (!c || typeof c !== 'object') return false;
-      const doc = c as any;
-      if (typeof doc.field !== 'string' || !FIELD_TYPES.has(doc.field)) return false;
-      if (!isArr(doc.frames) || doc.frames.length === 0) return false;
+      const doc = c as { field?: unknown; frames?: unknown };
+      if (!isStr(doc.field) || !FIELD_TYPES.has(doc.field)) return false;
+      if (!Array.isArray(doc.frames) || doc.frames.length === 0) return false;
       for (const fr of doc.frames) {
-        if (!fr || !isArr((fr as any).elements)) return false;
-        for (const e of (fr as any).elements as any[]) {
-          if (!isStr(e.t) || !ELEMENT_TYPES.has(e.t)) return false;
-          // Fase 2: relleno/opacidad opcionales deben ser válidos (si están presentes).
-          if (e.fillOpacity !== undefined && (typeof e.fillOpacity !== 'number' || e.fillOpacity < 0 || e.fillOpacity > 1)) return false;
-          if (e.fillColor !== undefined && !isStr(e.fillColor)) return false;
+        const els = (fr as { elements?: unknown } | null)?.elements;
+        if (!Array.isArray(els)) return false;
+        for (const e of els) {
+          if (!elementoValido(e)) return false;
         }
       }
       return true;
@@ -983,14 +1063,19 @@ export class StoreService {
     const exerciseTeam = new Map<string, string>();
     for (const ex of exercises) {
       if (!isStr(ex.id) || !ex.id.trim()) return { ok: false, error: 'Un ejercicio no tiene id.' };
-      if (exerciseIds.has(ex.id)) return { ok: false, error: `Id de ejercicio duplicado: ${ex.id}.` };
+      if (exerciseIds.has(ex.id))
+        return { ok: false, error: `Id de ejercicio duplicado: ${ex.id}.` };
       exerciseIds.add(ex.id);
-      if (!isStr(ex.teamId) || !teamIds.has(ex.teamId)) return { ok: false, error: 'Ejercicio con referencia de equipo inválida.' };
+      if (!isStr(ex.teamId) || !teamIds.has(ex.teamId))
+        return { ok: false, error: 'Ejercicio con referencia de equipo inválida.' };
       if (ex.folderId !== null) {
-        if (typeof ex.folderId !== 'string' || !folderIds.has(ex.folderId)) return { ok: false, error: 'Ejercicio con carpeta inválida.' };
-        if (folderTeam.get(ex.folderId) !== ex.teamId) return { ok: false, error: 'Ejercicio con carpeta de otro equipo.' };
+        if (typeof ex.folderId !== 'string' || !folderIds.has(ex.folderId))
+          return { ok: false, error: 'Ejercicio con carpeta inválida.' };
+        if (folderTeam.get(ex.folderId) !== ex.teamId)
+          return { ok: false, error: 'Ejercicio con carpeta de otro equipo.' };
       }
-      if (!Array.isArray(ex.objectives) || !Array.isArray(ex.materials)) return { ok: false, error: 'Ejercicio incompleto.' };
+      if (!Array.isArray(ex.objectives) || !Array.isArray(ex.materials))
+        return { ok: false, error: 'Ejercicio incompleto.' };
       if (!isValidCanvas(ex.canvas)) return { ok: false, error: 'Ejercicio con canvas inválido.' };
       exerciseTeam.set(ex.id, ex.teamId);
     }
@@ -1000,13 +1085,17 @@ export class StoreService {
       if (!isStr(s.id) || !s.id.trim()) return { ok: false, error: 'Una sesión no tiene id.' };
       if (sessionIds.has(s.id)) return { ok: false, error: `Id de sesión duplicado: ${s.id}.` };
       sessionIds.add(s.id);
-      if (!isStr(s.teamId) || !teamIds.has(s.teamId)) return { ok: false, error: 'Sesión con referencia de equipo inválida.' };
+      if (!isStr(s.teamId) || !teamIds.has(s.teamId))
+        return { ok: false, error: 'Sesión con referencia de equipo inválida.' };
       if (!Array.isArray(s.tasks)) return { ok: false, error: 'Sesión incompleta.' };
       for (const tk of s.tasks as any[]) {
         if (tk.exerciseId === null) continue;
-        if (typeof tk.exerciseId !== 'string') return { ok: false, error: 'Tarea de sesión con ejercicio inválido.' };
-        if (!exerciseIds.has(tk.exerciseId)) return { ok: false, error: 'Tarea de sesión con ejercicio inexistente.' };
-        if (exerciseTeam.get(tk.exerciseId) !== s.teamId) return { ok: false, error: 'Tarea de sesión con ejercicio de otro equipo.' };
+        if (typeof tk.exerciseId !== 'string')
+          return { ok: false, error: 'Tarea de sesión con ejercicio inválido.' };
+        if (!exerciseIds.has(tk.exerciseId))
+          return { ok: false, error: 'Tarea de sesión con ejercicio inexistente.' };
+        if (exerciseTeam.get(tk.exerciseId) !== s.teamId)
+          return { ok: false, error: 'Tarea de sesión con ejercicio de otro equipo.' };
       }
     }
 
@@ -1018,7 +1107,10 @@ export class StoreService {
    * memoria, escribe en localStorage y, si cualquier escritura falla, restaura el
    * estado anterior y devuelve un error.
    */
-  importBackup(json: string, mode: 'replace' | 'merge'): { ok: boolean; error?: string; count?: number } {
+  importBackup(
+    json: string,
+    mode: 'replace' | 'merge',
+  ): { ok: boolean; error?: string; count?: number } {
     const v = this.validateBackup(json);
     if (!v.ok) return v;
     const b = JSON.parse(json) as BackupBundle;
@@ -1046,8 +1138,11 @@ export class StoreService {
       [this.key(KEY_SESSIONS)]: localStorage.getItem(this.key(KEY_SESSIONS)),
     };
     const prevSig = {
-      teams: this._teams(), players: this._players(), folders: this._folders(),
-      exercises: this._exercises(), sessions: this._sessions(),
+      teams: this._teams(),
+      players: this._players(),
+      folders: this._folders(),
+      exercises: this._exercises(),
+      sessions: this._sessions(),
     };
 
     const write = (key: string, value: unknown[]): boolean => {
@@ -1060,8 +1155,11 @@ export class StoreService {
     };
 
     if (
-      !write(this.key(KEY_TEAMS), teams) || !write(this.key(KEY_PLAYERS), players) || !write(this.key(KEY_FOLDERS), folders) ||
-      !write(this.key(KEY_EXERCISES), exercises) || !write(this.key(KEY_SESSIONS), sessions)
+      !write(this.key(KEY_TEAMS), teams) ||
+      !write(this.key(KEY_PLAYERS), players) ||
+      !write(this.key(KEY_FOLDERS), folders) ||
+      !write(this.key(KEY_EXERCISES), exercises) ||
+      !write(this.key(KEY_SESSIONS), sessions)
     ) {
       // Rollback: restaurar el estado previo y señalar el error.
       for (const [k, raw] of Object.entries(prevRaw)) {
@@ -1073,7 +1171,10 @@ export class StoreService {
       this._folders.set(prevSig.folders);
       this._exercises.set(prevSig.exercises);
       this._sessions.set(prevSig.sessions);
-      return { ok: false, error: 'No se pudo escribir el respaldo (almacenamiento lleno o bloqueado).' };
+      return {
+        ok: false,
+        error: 'No se pudo escribir el respaldo (almacenamiento lleno o bloqueado).',
+      };
     }
 
     this._teams.set(teams);
@@ -1084,7 +1185,8 @@ export class StoreService {
     if (!this._teams().some((t) => t.id === this._activeTeamId())) {
       this._activeTeamId.set(this._teams()[0]?.id ?? null);
     }
-    const count = teams.length + players.length + folders.length + exercises.length + sessions.length;
+    const count =
+      teams.length + players.length + folders.length + exercises.length + sessions.length;
     return { ok: true, count };
   }
 
@@ -1093,7 +1195,9 @@ export class StoreService {
   readonly autoBackupAvailable = this._autoBackup.asReadonly();
 
   private readAutoBackup(): boolean {
-    return !!(typeof localStorage !== 'undefined' && localStorage.getItem(this.key(KEY_AUTO_BACKUP)));
+    return !!(
+      typeof localStorage !== 'undefined' && localStorage.getItem(this.key(KEY_AUTO_BACKUP))
+    );
   }
 
   hasAutoBackup(): boolean {
@@ -1147,7 +1251,13 @@ export class StoreService {
     const key = this.draftKey(teamId, exerciseId);
     const prev = this.loadDraft(teamId, exerciseId);
     const data: ExerciseDraftData = {
-      ...(prev ?? { title: '', category: 'Técnica', durationMinutes: null, description: '', explanation: '' }),
+      ...(prev ?? {
+        title: '',
+        category: 'Técnica',
+        durationMinutes: null,
+        description: '',
+        explanation: '',
+      }),
       ...patch,
       savedAt: new Date().toISOString(),
     };
