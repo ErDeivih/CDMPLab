@@ -73,12 +73,45 @@ function deepClone<T>(value: T): T {
 
 // Reporter de fallos de almacenamiento (lo asigna el StoreService).
 let onStorageError: ((msg: string | null) => void) | null = null;
+// Mensajes emitidos ANTES de que el servicio conecte su reporter: las cargas iniciales corren como
+// inicializadores de campo, o sea ANTES del constructor que asigna `onStorageError`, así que un dato
+// corrupto detectado al arrancar se perdía en silencio. Se guarda y el constructor lo vuelca.
+let storageErrorPendiente: string | null = null;
+
+function reportarErrorAlmacenamiento(msg: string | null): void {
+  // Se guarda SIEMPRE un mensaje nuevo (no solo cuando no hay reporter): las cargas iniciales de
+  // una instancia corren antes de su constructor, y el reporter global puede pertenecer a otra
+  // instancia ya creada, con lo que el aviso acabaría en la equivocada. La instancia que se está
+  // construyendo lo recoge en su constructor.
+  if (msg) storageErrorPendiente = msg;
+  onStorageError?.(msg);
+}
+
+/** Recoge (y limpia) el aviso pendiente para la instancia que se está construyendo. */
+function consumirStorageErrorPendiente(): string | null {
+  const msg = storageErrorPendiente;
+  storageErrorPendiente = null;
+  return msg;
+}
 
 function load<T>(key: string): T[] {
+  const raw = localStorage.getItem(key);
+  if (!raw) return [];
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T[]) : [];
+    const parsed = JSON.parse(raw) as T[];
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
+    // Datos CORRUPTOS: antes se devolvía `[]` en silencio, así que la pantalla decía «no hay nada»
+    // y la siguiente escritura de esa colección machacaba el contenido dañado (por si quedaba algo
+    // rescatable dentro). Ahora se conserva el crudo en una clave aparte y se avisa al usuario.
+    try {
+      localStorage.setItem(`${key}:corrupto`, raw);
+    } catch {
+      /* sin espacio para la copia: se avisa igualmente */
+    }
+    reportarErrorAlmacenamiento(
+      'Los datos guardados en este navegador están dañados y no se han podido leer. Se ha conservado una copia del contenido original para poder recuperarlo.',
+    );
     return [];
   }
 }
@@ -86,9 +119,9 @@ function load<T>(key: string): T[] {
 function save<T>(key: string, value: T[]): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-    onStorageError?.(null);
+    reportarErrorAlmacenamiento(null);
   } catch {
-    onStorageError?.(
+    reportarErrorAlmacenamiento(
       'No se pudo guardar en el navegador (localStorage lleno o bloqueado). Revisa el espacio o el modo privado.',
     );
   }
@@ -167,6 +200,11 @@ export class StoreService {
 
   constructor() {
     onStorageError = (msg) => this._storageError.set(msg);
+    // Aviso de almacenamiento emitido por las cargas iniciales: corren como inicializadores de
+    // campo (antes del constructor) y en ese momento el reporter global puede pertenecer a otra
+    // instancia, así que se recoge aquí para no perderlo.
+    const avisoInicial = consumirStorageErrorPendiente();
+    if (avisoInicial) this._storageError.set(avisoInicial);
     this._autoBackup.set(this.readAutoBackup());
     // Si el equipo recordado ya no existe (o nunca hubo elección), se toma el primero.
     if (this._teams().length && !this._teams().some((t) => t.id === this._activeTeamId())) {
@@ -1188,8 +1226,20 @@ export class StoreService {
     const exercises = mode === 'replace' ? b.exercises : mergeById(this._exercises(), b.exercises);
     const sessions = mode === 'replace' ? b.sessions : mergeById(this._sessions(), b.sessions);
 
-    // Copia automática recuperable del estado actual ANTES de importar.
-    localStorage.setItem(this.key(KEY_AUTO_BACKUP), this.exportBackup());
+    // Copia automática recuperable del estado actual ANTES de importar. Esta escritura duplica
+    // TODOS los datos, así que es justo la que falla con la cuota llena: antes la excepción
+    // escapaba del método —que promete devolver `{ ok: false }` sin haber tocado nada— y el
+    // usuario no se enteraba ni quedaba red de seguridad. Si no cabe la copia, se ABORTA la
+    // importación: importar sin poder deshacer es peor que no importar.
+    try {
+      localStorage.setItem(this.key(KEY_AUTO_BACKUP), this.exportBackup());
+    } catch {
+      return {
+        ok: false,
+        error:
+          'No hay espacio en el navegador para guardar la copia de seguridad previa a importar. Libera espacio (o exporta y borra datos) e inténtalo de nuevo.',
+      };
+    }
     this._autoBackup.set(true);
 
     // Snapshot para rollback si falla una escritura (cuota de localStorage).
@@ -1310,6 +1360,16 @@ export class StoreService {
       if (typeof data.savedAt !== 'string') return null;
       return data;
     } catch {
+      // Borrador corrupto: se avisa (antes se devolvía `null` en silencio, como si no hubiera
+      // borrador) y se conserva el crudo por si se puede rescatar a mano.
+      try {
+        localStorage.setItem(`${key}:corrupto`, raw);
+      } catch {
+        /* sin espacio para la copia: se avisa igualmente */
+      }
+      reportarErrorAlmacenamiento(
+        'El borrador guardado en este navegador está dañado y no se ha podido recuperar. Se ha conservado una copia del contenido original.',
+      );
       return null;
     }
   }
@@ -1328,7 +1388,16 @@ export class StoreService {
       ...patch,
       savedAt: new Date().toISOString(),
     };
-    localStorage.setItem(key, JSON.stringify(data));
+    // El autoguardado va en cada pulsación: si la cuota está llena, antes la excepción subía por el
+    // evento del formulario. Se captura y se avisa, como hace el helper `save()`.
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      reportarErrorAlmacenamiento(null);
+    } catch {
+      reportarErrorAlmacenamiento(
+        'No se pudo guardar el borrador en el navegador (almacenamiento lleno o bloqueado). Revisa el espacio o el modo privado.',
+      );
+    }
   }
 
   clearDraft(teamId: string, exerciseId: string | null): void {

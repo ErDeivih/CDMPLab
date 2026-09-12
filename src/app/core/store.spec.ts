@@ -13,6 +13,42 @@ describe('StoreService', () => {
     store = new StoreService();
   });
 
+  it('los datos corruptos del navegador no se pierden en silencio (se conservan y se avisa)', () => {
+    // Antes `load()` devolvía `[]` al fallar el `JSON.parse`: la pantalla decía «no hay nada» y la
+    // siguiente escritura de esa colección machacaba el contenido dañado, por si quedaba algo
+    // rescatable dentro. Además el aviso tiene que llegar AUNQUE la corrupción se detecte al
+    // arrancar (las cargas corren antes del constructor).
+    localStorage.setItem('entrenolab:exercises', '{esto no es json');
+    const otro = new StoreService();
+    expect(otro.exercises()).toEqual([]);
+    expect(localStorage.getItem('entrenolab:exercises:corrupto')).toBe('{esto no es json');
+    expect(otro.storageError()).toContain('dañados');
+  });
+
+  it('sin espacio en el navegador no se rompe el contrato de la importación (ni el autoguardado)', () => {
+    const team = store.createTeam('Primer Equipo', '#3056d3');
+    const respaldo = store.exportBackup();
+    // Cuota llena: toda escritura falla.
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new DOMException('QuotaExceededError');
+    };
+    try {
+      // La importación promete `{ ok: false }` sin haber tocado nada: antes la excepción de la
+      // copia de seguridad previa escapaba del método.
+      const res = store.importBackup(respaldo, 'replace');
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain('espacio');
+      // Y el autoguardado del borrador (va en cada pulsación) tampoco puede lanzar.
+      expect(() => store.saveDraft(team.id, null, { title: 'Borrador' })).not.toThrow();
+      expect(store.storageError()).toContain('borrador');
+    } finally {
+      Storage.prototype.setItem = original;
+    }
+    // El estado en memoria sigue siendo el de antes: la importación no dejó nada a medias.
+    expect(store.teams()).toHaveLength(1);
+  });
+
   it('creates a team and sets it active', () => {
     const team = store.createTeam('Primer Equipo', '#3056d3');
     expect(store.teams().length).toBe(1);
