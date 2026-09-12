@@ -92,7 +92,9 @@ export function toDataError(err: unknown, fallbackCode = 'unknown'): DataError {
   if (err instanceof DataError) return err;
   const raw = err as { code?: string; message?: string } | { code?: string };
   const code = raw?.code ?? fallbackCode;
-  const message = (err as Error)?.message?.trim() ? (err as Error).message : 'Error al comunicarse con el servidor.';
+  const message = (err as Error)?.message?.trim()
+    ? (err as Error).message
+    : 'Error al comunicarse con el servidor.';
   return new DataError(code, message);
 }
 
@@ -103,6 +105,9 @@ export interface SaveExerciseResult {
   conflict?: boolean;
   /** Revisión final en el servidor (útil para "guardar como copia"). */
   revision: number;
+  /** true si el ejercicio se VOLVIÓ A CREAR porque su fila ya no existía (lo borró otra persona) y
+   *  quien llama lo pidió expresamente con `recreateIfMissing` («Guardar mi copia»). */
+  recreated?: boolean;
 }
 
 /** Resultado de una mutación (booleano de éxito + error opcional). */
@@ -168,7 +173,18 @@ export interface DataSource {
   moveExercisesToFolder(ids: string[], folderId: string | null): Promise<void>;
 
   // ---- Ejercicios ----
-  saveExercise(ex: Exercise, expectedRevision?: number): Promise<SaveExerciseResult>;
+  /**
+   * Guarda un ejercicio con concurrencia optimista.
+   *
+   * `recreateIfMissing` solo lo usa «Guardar mi copia»: si la fila ya no existe (la borró otra
+   * persona), el UPDATE afecta 0 filas y el conflicto se repetiría para siempre —el trabajo del
+   * usuario no se podría guardar nunca—. Con la bandera se vuelve a crear con SU versión.
+   */
+  saveExercise(
+    ex: Exercise,
+    expectedRevision?: number,
+    opts?: { recreateIfMissing?: boolean },
+  ): Promise<SaveExerciseResult>;
   deleteExercise(id: string): Promise<void>;
   duplicateExercise(id: string): Promise<Exercise>;
 
@@ -193,12 +209,13 @@ export interface DataSource {
   setProfileStatus(userId: string, status: ProfileStatus): Promise<void>;
 
   // ---- Importación local→Supabase (idempotente) ----
-  importLocalData(teamId: string, data: {
-    players: Player[];
-    folders: ExerciseFolder[];
-    exercises: Exercise[];
-    sessions: Session[];
-  }): Promise<ImportCounts>;
+  importLocalData(
+    teamId: string,
+    data: {
+      players: Player[];
+      folders: ExerciseFolder[];
+      exercises: Exercise[];
+      sessions: Session[];
+    },
+  ): Promise<ImportCounts>;
 }
-
-

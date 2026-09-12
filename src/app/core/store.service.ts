@@ -334,6 +334,53 @@ export class StoreService {
   /** Generación de la última operación remota lanzada (ver `applyRemote`). */
   private opSeq = 0;
 
+  /**
+   * Rollback INCREMENTAL: reinserta SOLO lo que esta operación quitó, sobre el estado ACTUAL.
+   *
+   * Antes los rollbacks hacían `this._x.set(fotoCompleta)` con una copia tomada antes de la
+   * operación. Si esa operación fallaba DESPUÉS de que otra escritura ya hubiera tenido éxito, la
+   * foto revertía también la escritura nueva: el usuario veía desaparecer su cambio (y volver el
+   * objeto borrado) hasta recargar. Reinsertar solo lo quitado deja intacto todo lo demás.
+   */
+  private reinsertar<T extends { id: string }>(actual: T[], quitados: T[]): T[] {
+    const presentes = new Set(actual.map((x) => x.id));
+    const faltan = quitados.filter((q) => !presentes.has(q.id));
+    return faltan.length ? [...actual, ...faltan] : actual;
+  }
+
+  /** Restaura el vínculo `folderId` que esta operación quitó, sobre el estado ACTUAL. */
+  private revincularCarpetas(
+    actual: Exercise[],
+    previos: Exercise[],
+    ids: Set<string>,
+  ): Exercise[] {
+    const previoPorId = new Map(previos.map((e) => [e.id, e]));
+    return actual.map((e) => {
+      if (e.folderId !== null) return e;
+      const previo = previoPorId.get(e.id);
+      return previo && ids.has(previo.folderId as string) ? { ...e, folderId: previo.folderId } : e;
+    });
+  }
+
+  /** Restaura el vínculo `exerciseId` de las tareas que esta operación desvinculó, sobre el
+   *  estado ACTUAL (solo esas tareas, sin tocar nada más). */
+  private revincularTareas(actual: Session[], previas: Session[], exerciseId: string): Session[] {
+    const previaPorId = new Map(previas.map((s) => [s.id, s]));
+    return actual.map((s) => {
+      const previa = previaPorId.get(s.id);
+      if (!previa) return s;
+      let cambiado = false;
+      const tareas = s.tasks.map((t) => {
+        if (t.exerciseId !== null) return t;
+        const tPrevia = previa.tasks.find((pt) => pt.id === t.id && pt.exerciseId === exerciseId);
+        if (!tPrevia) return t;
+        cambiado = true;
+        return { ...t, exerciseId };
+      });
+      return cambiado ? { ...s, tasks: tareas } : s;
+    });
+  }
+
   /** Última operación que falló contra el servidor (para «Reintentar»). */
   private failedOp: {
     apply: () => void;
@@ -527,7 +574,7 @@ export class StoreService {
     return this._exercises().filter((e) => e.teamId === teamId);
   }
 
-  saveExercise(ex: Exercise): void {
+  saveExercise(ex: Exercise, opts?: { recreateIfMissing?: boolean }): void {
     const ds = this.dataSource;
     if (!ds) {
       this._exercises.update((list) => {
@@ -548,7 +595,7 @@ export class StoreService {
           return idx === -1 ? [...list, base] : list.map((e) => (e.id === ex.id ? base : e));
         });
       },
-      () => ds.saveExercise(base, expectedRevision),
+      () => ds.saveExercise(base, expectedRevision, opts),
       () => {
         if (existing)
           this._exercises.update((list) => list.map((e) => (e.id === ex.id ? existing : e)));
@@ -605,8 +652,15 @@ export class StoreService {
         },
         () => ds.deleteExercise(id),
         () => {
-          this._exercises.set(prevExercises);
-          this._sessions.set(prevSessions);
+          // Rollback INCREMENTAL (ver `reinsertar`): vuelve el ejercicio borrado y se restauran
+          // los vínculos de tarea que esta operación quitó, sin pisar cambios posteriores.
+          this._exercises.update((list) =>
+            this.reinsertar(
+              list,
+              prevExercises.filter((e) => e.id === id),
+            ),
+          );
+          this._sessions.update((list) => this.revincularTareas(list, prevSessions, id));
         },
       );
       return;
@@ -716,8 +770,17 @@ export class StoreService {
         },
         () => ds.deleteFolder(id),
         () => {
-          this._folders.set(prevFolders);
-          this._exercises.set(prevExercises);
+          // Rollback INCREMENTAL (ver `reinsertar`/`revincularCarpetas`): vuelven SOLO las carpetas
+          // de este subárbol y los vínculos que esta operación quitó, sin pisar cambios posteriores.
+          this._folders.update((list) =>
+            this.reinsertar(
+              list,
+              prevFolders.filter((f) => idsToDelete.has(f.id)),
+            ),
+          );
+          this._exercises.update((list) =>
+            this.revincularCarpetas(list, prevExercises, idsToDelete),
+          );
         },
       );
       return;
@@ -1224,7 +1287,11 @@ export class StoreService {
     const c = this._lastConflict();
     if (!c) return;
     this._lastConflict.set(null);
-    this.saveExercise({ ...c.attempted, revision: c.latest.revision });
+    // `recreateIfMissing`: si el ejercicio se había BORRADO (no solo modificado), reenviar un
+    // UPDATE con cualquier revisión vuelve a afectar 0 filas y el conflicto se repetiría para
+    // siempre —el trabajo del usuario no se guardaba nunca—. Con la bandera, el repositorio lo
+    // vuelve a crear con MI versión.
+    this.saveExercise({ ...c.attempted, revision: c.latest.revision }, { recreateIfMissing: true });
   }
 
   /** «Descartar»: se queda la versión del servidor y se cierra el aviso. */

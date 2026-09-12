@@ -1135,6 +1135,35 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
     expect(invRowMember?.status).toBe('revoked');
   });
 
+  it('«Guardar mi copia» sobre un ejercicio BORRADO lo vuelve a crear (antes: conflicto eterno)', async () => {
+    const { ownerRepo, editorRepo, team } = await fullJourney();
+    const original = (await ownerRepo.loadTeam(team.id)).exercises.find((e) => e.id === 'ex-1')!;
+    expect(original, 'el viaje completo deja el ejercicio ex-1').toBeTruthy();
+    await ownerRepo.deleteExercise(original.id);
+
+    // Sin la bandera, guardar con la revisión leída NO resucita nada: sigue siendo conflicto.
+    const conflicto = await editorRepo.saveExercise(
+      makeExercise({ id: original.id, teamId: team.id, title: 'Mi versión' }),
+      original.revision,
+    );
+    expect(conflicto.conflict).toBe(true);
+
+    // Con la bandera («Guardar mi copia») sí se guarda: antes reenviaba un UPDATE que volvía a
+    // afectar 0 filas, así que el conflicto se repetía para siempre y el trabajo del usuario no se
+    // podía guardar nunca. Se conserva el id para no romper las tareas de sesión que lo referencian.
+    const copia = await editorRepo.saveExercise(
+      makeExercise({ id: original.id, teamId: team.id, title: 'Mi versión' }),
+      original.revision,
+      { recreateIfMissing: true },
+    );
+    expect(copia.conflict).toBeFalsy();
+    expect(copia.recreated).toBe(true);
+    const guardado = (await ownerRepo.loadTeam(team.id)).exercises.find(
+      (e) => e.id === original.id,
+    );
+    expect(guardado?.title).toBe('Mi versión');
+  });
+
   it('un usuario EXTRAÑO nunca ve los datos del equipo', async () => {
     const { backend, team } = await fullJourney();
     const foreignRepo = makeRepo(backend, FOREIGN, null);

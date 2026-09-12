@@ -579,7 +579,11 @@ export class SupabaseRepository implements DataSource {
 
   // ---------------- Ejercicios ----------------
 
-  async saveExercise(ex: Exercise, expectedRevision?: number): Promise<SaveExerciseResult> {
+  async saveExercise(
+    ex: Exercise,
+    expectedRevision?: number,
+    opts?: { recreateIfMissing?: boolean },
+  ): Promise<SaveExerciseResult> {
     const row = exerciseRowForInsert(ex);
     let saved: Exercise;
     if (expectedRevision != null) {
@@ -612,12 +616,26 @@ export class SupabaseRepository implements DataSource {
         .select();
       if (error) throw errorToDataError(error, 'exercise_save');
       if (!data || data.length === 0) {
-        // La revisión no coincidió → otro usuario lo modificó.
+        // La revisión no coincidió → otro usuario lo modificó. Se LEE la fila para distinguir ese
+        // caso del de una fila que ya NO existe (la borró otra persona).
         const { data: latest } = await this.client
           .from('exercises')
           .select('*')
           .eq('id', ex.id)
           .maybeSingle();
+        if (!latest && opts?.recreateIfMissing) {
+          // «Guardar mi copia» sobre un ejercicio BORRADO: se vuelve a crear con la versión del
+          // usuario. Sin esto el UPDATE volvía a afectar 0 filas y el conflicto se repetía para
+          // siempre: el trabajo del usuario no se podía guardar NUNCA. Se conserva el id para no
+          // romper las tareas de sesión que lo referencian (el servidor las desvinculó al borrarlo).
+          const { data: creada, error: errInsert } = await this.client
+            .from('exercises')
+            .insert(row)
+            .select()
+            .single();
+          if (errInsert) throw errorToDataError(errInsert, 'exercise_save');
+          return { exercise: exerciseFromRow(creada), revision: creada.revision, recreated: true };
+        }
         return {
           conflict: true,
           revision: latest?.revision ?? 1,
