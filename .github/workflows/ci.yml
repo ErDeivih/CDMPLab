@@ -8,8 +8,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Base del trinquete de deuda (lint y formato): el commit ANTERIOR del push. Sin esto,
+      # `git show HEAD:<fichero>` compara el árbol consigo mismo —porque en CI HEAD es justo el
+      # commit que se está comprobando— y las dos puertas pasaban SIEMPRE, incluso con un fichero
+      # nuevo sin formatear o con reglas de lint nuevas (hallazgo de la auditoría). Si no hay SHA
+      # anterior (primer push de una rama, PR, clon superficial) los scripts avisan y siguen
+      # comparando contra HEAD, como antes.
+      RATCHET_BASE: ${{ github.event.before }}
     steps:
+      # `fetch-depth: 0`: hace falta el commit anterior en el clon para poder comparar contra él.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -20,14 +31,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Formato y lint van ANTES de los tests: son baratos y fallan pronto. Los dos son
-      # trinquetes de deuda previa: exigen impecable todo fichero nuevo o ya conforme en
-      # HEAD, y solo toleran (informando de cuánto queda) lo que ya venía mal.
+      # Formato y lint van ANTES de los tests: son baratos y fallan pronto. Los tres son
+      # trinquetes de deuda previa: exigen impecable todo fichero nuevo o ya conforme en la BASE
+      # del push, y solo toleran (informando de cuánto queda) lo que ya venía mal.
       - name: Format check
         run: npm run format:check
 
       - name: Lint
         run: npm run lint
+
+      # `e2e/**` no lo cubría ningún proyecto TypeScript (los specs transpilaban sin comprobar
+      # tipos). Esta puerta los type-checkea con la deuda previa declarada como base.
+      - name: Type-check de las pruebas E2E
+        run: npm run typecheck:e2e
 
       - name: Unit tests
         run: npm run test:unit

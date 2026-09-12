@@ -1,0 +1,21 @@
+/* Proyecto TypeScript SOLO para las pruebas E2E (`e2e/**`).
+ *
+ * Auditoría: ningún proyecto cubría `e2e/` — `tsconfig.app.json` excluye los specs y
+ * `tsconfig.spec.json` solo incluye `src/**` —, así que Playwright transpilaba esos ~100 ficheros
+ * SIN comprobar tipos: un método inventado o un `await` de menos solo se descubría al ejecutar el
+ * test (o no se descubría, si esa rama no corría). Esta puerta los type-checkea de verdad.
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "esModuleInterop": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": false
+  },
+  "include": ["e2e/**/*.ts", "playwright*.config.ts"]
+}

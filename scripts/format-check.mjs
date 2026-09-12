@@ -84,12 +84,37 @@ async function compliance(rel, source) {
   }
 }
 
-/** Contenido del fichero en HEAD, o null si no existía (fichero nuevo de este cambio).
+/**
+ * Referencia contra la que se mide la deuda: por defecto `HEAD`.
+ *
+ * IMPORTANTE (auditoría): en CI, `HEAD` es el propio commit que se acaba de subir, así que el
+ * contenido «de HEAD» es idéntico al del árbol y el trinquete pasaba SIEMPRE —un fichero nuevo sin
+ * formatear incluido—. Los workflows definen `RATCHET_BASE` con el SHA ANTERIOR del push
+ * (`github.event.before`) para que la comparación tenga sentido. Si la referencia no existe (primer
+ * push de una rama, PR, clon superficial), se avisa y se vuelve al comportamiento anterior.
+ */
+const BASE =
+  process.env.RATCHET_BASE && !/^0+$/.test(process.env.RATCHET_BASE)
+    ? process.env.RATCHET_BASE
+    : 'HEAD';
+let avisoBase = null;
+if (BASE !== 'HEAD') {
+  try {
+    execFileSync('git', ['rev-parse', '--verify', '--quiet', `${BASE}^{commit}`], {
+      stdio: 'ignore',
+    });
+  } catch {
+    avisoBase = `[aviso] RATCHET_BASE=${BASE} no está en este clon: se compara contra HEAD (la puerta NO puede detectar deuda nueva en este caso).`;
+  }
+}
+
+/** Contenido del fichero en la referencia, o null si no existía (fichero nuevo de este cambio).
  *  El stderr de git se silencia: para un fichero nuevo `git show` falla y su mensaje
  *  ("exists on disk, but not in 'HEAD'") es la respuesta esperada, no un error de la puerta. */
 function fromHead(rel) {
+  const ref = avisoBase ? 'HEAD' : BASE;
   try {
-    return execFileSync('git', ['show', `HEAD:${rel}`], {
+    return execFileSync('git', ['show', `${ref}:${rel}`], {
       encoding: 'utf8',
       maxBuffer: 128 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -125,8 +150,9 @@ if (process.argv.includes('--list-debt')) {
   process.exit(0);
 }
 
+if (avisoBase) console.warn(avisoBase);
 console.log(
-  `Formato: ${files.length} ficheros · ${pending.length} exigidos (nuevos o ya conformes en HEAD) · ${exempt.size} exentos por deuda previa.`,
+  `Formato: ${files.length} ficheros · ${pending.length} exigidos (${BASE === 'HEAD' ? 'nuevos o ya conformes en HEAD' : `nuevos o ya conformes en ${BASE.slice(0, 7)}`}) · ${exempt.size} exentos por deuda previa.`,
 );
 if (failing.length) {
   console.error(`\nFORMATO INCORRECTO en ${failing.length} fichero(s):`);
