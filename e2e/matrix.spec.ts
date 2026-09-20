@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import type { CanvasDocument, CanvasElement } from '../src/app/core/models';
 import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO, tacticAsset, TacticalKind } from '../src/app/core/tactic-assets';
@@ -215,6 +216,7 @@ async function seed(page: Page): Promise<void> {
 
 /** Activa la categoría correcta y pulsa la herramienta por su título. */
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
+  await abrirHerramientas(page);
   if (category) await page.locator('.tools-cat', { hasText: category }).click();
   if (title === 'Jugador propio' || title === 'Jugador rival') {
     // FASE C: se retiraron los botones "Jugador propio/rival". El genérico se arma con
@@ -303,7 +305,7 @@ const FAMILIES: Family[] = [
   { name: 'vball', tool: 'Fitball', category: 'Material', draw: false, assetKind: 'vball', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'peto', tool: 'Peto', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'chaleco', tool: 'Chaleco lastrado', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'pica', tool: 'Pica coloreable', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'pica', tool: 'Pica', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'goal', tool: 'Portería grande', category: 'Material', draw: false, assetKind: 'goal', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'mannequin_row', tool: 'Barrera de maniquíes', category: 'Material', draw: false, assetKind: 'mannequin_row', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'dumbbell', tool: 'Mancuerna / pesa', category: 'Material', draw: false, assetKind: 'dumbbell', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
@@ -724,7 +726,7 @@ test('objeto estrecho/rotado (pica girada con ±90°): se re-selecciona desde su
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
-  await useTool(page, 'Pica coloreable', 'Material');
+  await useTool(page, 'Pica', 'Material');
   await page.mouse.click(...normToScreen(0.5, 0.5, box), { button: 'right' });
   await expect(page.locator('.field-count')).toHaveText('1');
   await save(page);
@@ -963,6 +965,7 @@ async function pngRegionDiff(page: Page, a: Buffer, b: Buffer, nx: number, ny: n
 /** Coloca un material eligiendo ANTES la variante (si aplica) y devuelve el modelo. */
 async function placeElement(page: Page, fam: Family, box: Box, nx = 0.5, ny = 0.5): Promise<CanvasElement> {
   if (fam.caps.supportsVariants && fam.variantKind) {
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: fam.category! }).click();
     // Elegir la variante (swatch índice 1 = la primera NO por defecto) ANTES de colocar.
     const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${fam.tool}"]`) });

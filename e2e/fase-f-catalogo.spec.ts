@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import { visibleMaterials } from '../src/app/core/material-registry';
 
 // =============================================================
@@ -68,6 +69,7 @@ test.describe('FASE F — catálogo canónico de materiales', () => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     // El nº de tarjetas del panel se calcula del registro (no es una constante).
@@ -83,6 +85,7 @@ test.describe('FASE F — catálogo canónico de materiales', () => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     const host = await hostBox(page);
@@ -106,6 +109,7 @@ test.describe('FASE F — catálogo canónico de materiales', () => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     const host = await hostBox(page);
@@ -127,6 +131,7 @@ test.describe('FASE F — catálogo canónico de materiales', () => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     const host = await hostBox(page);
@@ -183,6 +188,7 @@ test.describe('FASE F — catálogo canónico de materiales', () => {
     await expect(page.locator('.board-canvas svg [data-el-type="net"]')).toHaveCount(1);
     await expect(page.locator('.board-canvas svg [data-el-type="cone"]')).toHaveCount(1);
     // NO aparece: el panel de Material NO ofrece el material retirado.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     await expect(page.locator('.rail-btn[title="Red"]'), 'retirado «Red» no aparece en el panel').toHaveCount(0);

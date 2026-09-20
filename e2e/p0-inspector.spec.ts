@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -23,6 +24,7 @@ test.describe('Botones del inspector en panel oscuro', () => {
 
     // Colocar un material (cono). Fase 3: la colocación es continua, así que tras colocar
     // se DESARMA con Seleccionar y se hace clic sobre él para seleccionarlo (abre inspector).
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     const box = (await page.locator('.board-host').boundingBox())!;

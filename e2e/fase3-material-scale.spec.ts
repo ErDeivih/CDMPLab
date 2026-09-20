@@ -14,11 +14,12 @@
 //      Tamaño como Rotación se conservan al Guardar/reabrir/duplicar.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO } from '../src/app/core/tactic-assets';
 
 const SHOTS = 'e2e/shots/fase3-material-scale';
 import fs from 'node:fs';
-import { longPress, fillBoardTitle } from './gesture-helpers';
+import { longPress, fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 fs.mkdirSync(SHOTS, { recursive: true });
 
 interface Box { x: number; y: number; width: number; height: number }
@@ -55,7 +56,7 @@ async function openBoard(page: Page): Promise<void> {
   // Fuerza "Campo completo" (letterbox) para que el helper norm→pantalla coincida.
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
 }
@@ -71,6 +72,7 @@ async function placeMaterial(page: Page, box: Box, tool: string, nx: number, ny:
   // cerraría el panel y el .rail-btn del material siguiente ya no sería visible.
   const panel = page.locator('.side-panel-left.tools-panel-side');
   if (!(await panel.isVisible().catch(() => false))) {
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
   }
   const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${tool}"]`) });
@@ -128,7 +130,7 @@ test.describe('Fase 3 — escala del material y selección táctil robusta', () 
     const ys = [0.13, 0.36, 0.59, 0.82];
     const recipe: Array<[string, number]> = [
       ['Balón', 0], ['Fitball', 0], ['Cono', 0], ['BOSU', 0], ['Banderín', 0],
-      ['Chino', 0], ['Pica coloreable', 0], ['Pértiga / poste', 0], ['Maniquí individual', 0], ['Barrera de maniquíes', 0],
+      ['Chino', 0], ['Pica', 0], ['Pértiga / poste', 0], ['Maniquí individual', 0], ['Barrera de maniquíes', 0],
       ['Miniportería', 0], ['Portería grande', 0], ['Valla', 0], ['Aro', 0], ['Escalera', 0],
       ['Minitrampolín', 0], ['Peto', 0], ['Chaleco lastrado', 0], ['Mancuerna / pesa', 0],
     ];

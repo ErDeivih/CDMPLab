@@ -14,6 +14,7 @@
 // URL (debe permanecer en /board).
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -43,6 +44,7 @@ async function openBoard(page: Page): Promise<void> {
 }
 
 async function placeCone(page: Page, nx: number, ny: number): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
   const box = (await page.locator('.board-host').boundingBox())!;

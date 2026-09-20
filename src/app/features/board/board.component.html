@@ -7,7 +7,7 @@
       <div class="top-title">
         <img
           class="brand-shield"
-          src="assets/brand/cdm-pizarrales-original.jpg"
+          src="assets/brand/cdm-pizarrales-escudo.png"
           alt="CDM Pizarrales"
         />
         <span class="brand">CDMPLab</span>
@@ -23,6 +23,22 @@
       </div>
     </div>
     <div class="top-right">
+      <!-- FASE 3.3: mientras hay una herramienta de colocación continua activa (jugadores, material
+           o dibujo), aparece un botón pequeño y EVIDENTE para volver a Cursor. Vive en la cabecera
+           a propósito: hacerlo flotar sobre el campo tapaba la banda inferior y impedía colocar ahí
+           (medido y revertido), y la cabecera no quita ni un píxel al campo. -->
+      @if (tool() !== 'select' && tool() !== 'hand') {
+        <button
+          class="edge-btn chip-cursor"
+          type="button"
+          title="Volver a Cursor (terminar de colocar)"
+          aria-label="Volver a Cursor"
+          (click)="setTool('select')"
+        >
+          <span class="msi" aria-hidden="true">near_me</span>
+          <span class="chip-cursor-label">Cursor</span>
+        </button>
+      }
       <button
         class="edge-btn"
         [class.edge-on]="panelOpen()"
@@ -32,15 +48,21 @@
       >
         <span class="msi">{{ panelOpen() ? 'close' : 'tune' }}</span>
       </button>
+      <!-- Estado de guardado integrado en el botón que ya existía (icono + aria-label):
+           el dueño pidió quitar la franja de estado, así que «Guardando…»/«Guardado» ya no
+           ocupan una fila propia. `estadoGuardado()` alimenta también la región viva de
+           abajo para que un lector de pantalla anuncie el cambio. -->
       <button
         class="chip-icon chip-icon-primary"
-        title="Guardar ejercicio"
-        aria-label="Guardar"
+        [attr.data-guardado]="saving() ? 'guardando' : saved() ? 'guardado' : 'pendiente'"
+        [title]="estadoGuardado()"
+        [attr.aria-label]="estadoGuardado()"
         [disabled]="saving()"
         (click)="saveToExercise()"
       >
-        <span class="msi">{{ saved() ? 'check' : 'save' }}</span>
+        <span class="msi">{{ saving() ? 'hourglass_top' : saved() ? 'check' : 'save' }}</span>
       </button>
+      <span class="sr-only" role="status">{{ estadoGuardado() }}</span>
       <button
         class="edge-btn"
         [class.edge-on]="exportMenuOpen()"
@@ -64,44 +86,42 @@
 
   <div class="studio-main">
     <div class="studio-field">
-      <div class="field-status">
-        <!-- Decisión del dueño: se retira el mensaje informativo («Selecciona y mueve
-             elementos…») porque no aportaba nada y ocupaba la parte superior del lienzo.
-             Se conservan el estado de guardado, el contador y el botón de encuadre. -->
-        @if (saving()) {
-          <span class="save-state saving" role="status"
-            ><span class="msi">hourglass_top</span> Guardando…</span
-          >
-        } @else if (saved()) {
-          <span class="save-state saved" role="status"
-            ><span class="msi">check</span> Guardado</span
-          >
-        }
-        <span class="field-count tnum">{{ view().length }}</span>
-        <button
-          class="field-fit-toggle"
-          [class.fit-on]="fillScreen()"
-          [attr.aria-pressed]="fillScreen()"
-          [attr.aria-label]="fillScreen() ? 'Ver campo completo' : 'Llenar pantalla'"
-          [title]="fillScreen() ? 'Ver campo completo' : 'Llenar pantalla'"
-          (click)="toggleFillScreen()"
-        >
-          <span class="msi">{{ fillScreen() ? 'fullscreen_exit' : 'fullscreen' }}</span>
-        </button>
-        @if (vistaAlterada()) {
-          <!-- Pedido del dueño: el zoom se puede hacer, pero también DESHACER. Aparece solo
-               cuando hay zoom o paneo aplicados y devuelve el encuadre neutro (100 %, sin
-               desplazamiento), de modo que el campo vuelve a verse entero. -->
+      <!-- Contador de elementos: YA NO se muestra. El dueño pidió retirar la franja de estado
+           (`.field-status`), que era la banda negra que comía la parte superior del campo en
+           escritorio y en móvil. Se conserva como nodo invisible —`sr-only`, sin altura,
+           margen ni hueco— porque la suite e2e lo usa como observable del número de elementos;
+           queda declarado en el informe como deuda de test a migrar a un atributo de datos. -->
+      <span class="field-count tnum" aria-hidden="true">{{ view().length }}</span>
+      <!-- FASE 4: aviso corto y descartable cuando el navegador no permite girar/bloquear la
+           pantalla. No bloquea nada: solo explica qué hacer. -->
+      @if (avisoOrientacion()) {
+        <div class="orient-hint orient-aviso" role="status" [attr.aria-label]="avisoSinBloqueo">
+          <span class="msi">screen_rotation</span>
+          <span class="orient-hint-text">{{ avisoSinBloqueo }}</span>
           <button
-            class="field-fit-toggle"
-            title="Volver al encuadre (100 %)"
-            aria-label="Volver al encuadre"
-            (click)="resetView()"
+            class="orient-hint-btn"
+            title="Entendido"
+            aria-label="Entendido, ocultar el aviso"
+            (click)="descartarAvisoOrientacion()"
           >
-            <span class="msi">zoom_out_map</span>
+            Entendido
           </button>
-        }
-      </div>
+        </div>
+      }
+      <!-- FASE 4.9: un ejercicio YA GUARDADO no se reescribe en silencio: si su campo no cuadra con
+           la pantalla, se ofrece adaptarlo a mano. -->
+      @if (puedeAdaptarPantalla()) {
+        <button
+          class="adaptar-pantalla"
+          type="button"
+          title="Adaptar el ejercicio a la orientación de la pantalla"
+          aria-label="Adaptar a la pantalla"
+          (click)="adaptarAlaPantalla()"
+        >
+          <span class="msi" aria-hidden="true">screen_rotation</span>
+          <span>Adaptar a la pantalla</span>
+        </button>
+      }
       @if (orientHintVisible()) {
         <div
           class="orient-hint"
@@ -293,9 +313,39 @@
           </button>
         </div>
       }
+      @if (vistaAlterada()) {
+        <!-- Pedido del dueño: el zoom se puede hacer, pero también DESHACER. Es el único
+             control que flota sobre el campo (pequeño, esquina inferior derecha) y aparece
+             SOLO cuando hay zoom o paneo aplicados; devuelve el encuadre neutro (100 %, sin
+             desplazamiento). «Llenar pantalla / Ver campo completo» ya no vive aquí: se movió
+             al menú «Más» del encabezado para no reservar ninguna fila sobre el campo. -->
+        <button
+          class="field-fit-toggle vista-reset"
+          title="Volver al encuadre (100 %)"
+          aria-label="Volver al encuadre"
+          (click)="resetView()"
+        >
+          <span class="msi">zoom_out_map</span>
+        </button>
+      }
     </div>
 
-    @if (showPropsPanel()) {
+    @if (panelMinimizado() && panelTab(); as tab) {
+      <!-- Pestaña estrecha del panel minimizado: el campo vuelve a verse y operarse, y un solo
+           toque devuelve el panel tal cual estaba (no se pierde nada de su estado). -->
+      <button
+        type="button"
+        class="panel-tab"
+        [attr.aria-label]="'Abrir panel de ' + tab.label"
+        aria-controls="panel-minimizado"
+        (click)="restaurarPanel($event)"
+      >
+        <span class="msi" aria-hidden="true">{{ tab.icon }}</span>
+        <span class="panel-tab-nombre">{{ tab.label }}</span>
+        <span class="msi panel-tab-flecha" aria-hidden="true">chevron_right</span>
+      </button>
+    }
+    @if (showPropsPanel() && !panelMinimizado()) {
       <aside
         class="side-panel studio-panel side-panel-right"
         role="dialog"
@@ -303,6 +353,14 @@
       >
         <div class="panel-head">
           <h3 class="panel-title">Propiedades</h3>
+          <button
+            class="panel-min"
+            aria-label="Minimizar panel de Propiedades"
+            title="Minimizar"
+            (click)="minimizarPanel()"
+          >
+            <span class="msi">collapse_content</span>
+          </button>
           <button class="panel-close" aria-label="Cerrar panel" (click)="closePropsPanel()">
             <span class="msi">close</span>
           </button>
@@ -818,10 +876,18 @@
       </aside>
     }
 
-    @if (jugadoresOpen()) {
+    @if (jugadoresOpen() && !panelMinimizado()) {
       <aside class="side-panel side-panel-left" role="dialog" aria-label="Jugadores">
         <div class="panel-head">
           <h3 class="panel-title">Jugadores</h3>
+          <button
+            class="panel-min"
+            aria-label="Minimizar panel de Jugadores"
+            title="Minimizar"
+            (click)="minimizarPanel()"
+          >
+            <span class="msi">collapse_content</span>
+          </button>
           <button class="panel-close" aria-label="Cerrar panel" (click)="toggleJugadores()">
             <span class="msi">close</span>
           </button>
@@ -849,8 +915,8 @@
               >
                 <span
                   class="mini-avatar"
-                  [style.background]="p.color"
-                  [style.color]="textColor(p.color)"
+                  [style.background]="colorDeJugadorDe(p)"
+                  [style.color]="textColor(colorDeJugadorDe(p))"
                   >{{ p.number ?? '·' }}</span
                 >
                 <span class="mini-name">{{
@@ -858,12 +924,14 @@
                 }}</span>
                 <span class="mini-pos">{{ positionLabel(p.position) }}</span>
               </button>
-              <!-- Fase 12: color rápido, sin abrir el inspector. -->
+              <!-- Fase 12 / FASE 2: color del jugador DENTRO DE ESTE EJERCICIO (la plantilla no
+                   se toca). El color mostrado es el del ejercicio (`colorDeJugadorDe`). -->
               <button
                 class="roster-color"
-                [style.background]="p.color"
-                [attr.aria-label]="'Cambiar color de ' + p.name"
-                title="Cambiar color"
+                [style.background]="colorDeJugadorDe(p)"
+                [attr.data-color-ejercicio]="colorDeJugadorDe(p)"
+                [attr.aria-label]="'Cambiar color de ' + p.name + ' en este ejercicio'"
+                title="Cambiar color en este ejercicio"
                 (click)="toggleRosterColor(p.id, $event)"
               >
                 <span class="msi">palette</span>
@@ -873,17 +941,26 @@
                   class="roster-color-menu"
                   (click)="$event.stopPropagation()"
                   role="menu"
-                  [attr.aria-label]="'Paleta de color de ' + p.name"
+                  [attr.aria-label]="'Paleta de color de ' + p.name + ' en este ejercicio'"
                 >
-                  @for (c of palette; track c) {
+                  @for (c of paletaJugador; track c.color) {
                     <button
                       class="swatch"
-                      [style.background]="c"
-                      [class.swatch-active]="p.color === c"
-                      [attr.aria-label]="'Color ' + colorName(c)"
-                      [title]="'Color ' + colorName(c)"
-                      (click)="setRosterColor(p.id, c, $event)"
-                    ></button>
+                      role="menuitemradio"
+                      [style.background]="c.color"
+                      [class.swatch-active]="colorDeJugadorDe(p) === c.color"
+                      [attr.aria-checked]="colorDeJugadorDe(p) === c.color"
+                      [attr.data-color]="c.color"
+                      [attr.aria-label]="
+                        'Color ' + c.nombre + (colorDeJugadorDe(p) === c.color ? ' (elegido)' : '')
+                      "
+                      [title]="'Color ' + c.nombre"
+                      (click)="setRosterColor(p.id, c.color, $event)"
+                    >
+                      @if (colorDeJugadorDe(p) === c.color) {
+                        <span class="msi" aria-hidden="true">check</span>
+                      }
+                    </button>
                   }
                 </div>
               }
@@ -952,7 +1029,7 @@
       </aside>
     }
 
-    @if (panelCat()) {
+    @if (panelCat() && !panelMinimizado()) {
       <aside
         class="side-panel side-panel-left tools-panel-side"
         role="dialog"
@@ -965,6 +1042,14 @@
           @case ('material') {
             <div class="panel-head">
               <div class="tools-panel-title">Material</div>
+              <button
+                class="panel-min"
+                aria-label="Minimizar panel de Material"
+                title="Minimizar"
+                (click)="minimizarPanel()"
+              >
+                <span class="msi">collapse_content</span>
+              </button>
               <button class="panel-close" aria-label="Cerrar panel" (click)="closeToolPanel()">
                 <span class="msi">close</span>
               </button>
@@ -1042,6 +1127,14 @@
           @case ('dibujo') {
             <div class="panel-head">
               <div class="tools-panel-title">Dibujo y formas</div>
+              <button
+                class="panel-min"
+                aria-label="Minimizar panel de Material"
+                title="Minimizar"
+                (click)="minimizarPanel()"
+              >
+                <span class="msi">collapse_content</span>
+              </button>
               <button class="panel-close" aria-label="Cerrar panel" (click)="closeToolPanel()">
                 <span class="msi">close</span>
               </button>
@@ -1117,6 +1210,23 @@
            pulsado el objeto para abrir el menú contextual. NO se devuelven a la barra
            persistente (`.tools-persist`): en 360 px sus 7 controles ya ocupan una única
            fila y dos botones más de 40 px la harían desbordar (ver board.component.scss). -->
+      <!-- «Llenar pantalla / Ver campo completo» se movió aquí (menú «Más») por decisión del
+           dueño: la franja de estado del campo desaparece, así que el control de encuadre deja
+           de ocupar una fila propia. Conserva la clase `.field-fit-toggle` a propósito, para
+           que la suite siga midiendo el MISMO control (ahora dentro del menú). -->
+      <button
+        class="rail-btn rail-row field-fit-toggle"
+        [class.rail-active]="fillScreen()"
+        [attr.aria-pressed]="fillScreen()"
+        [attr.aria-label]="fillScreen() ? 'Ver campo completo' : 'Llenar pantalla'"
+        [title]="fillScreen() ? 'Ver campo completo' : 'Llenar pantalla'"
+        (click)="toggleFillScreen(); closeMas()"
+      >
+        <span class="msi">{{ fillScreen() ? 'fullscreen_exit' : 'fullscreen' }}</span>
+        <span class="rail-label">{{
+          fillScreen() ? 'Ver campo completo' : 'Llenar pantalla'
+        }}</span>
+      </button>
       <button
         class="rail-btn rail-row"
         [disabled]="!canUndo()"
@@ -1136,6 +1246,18 @@
       >
         <span class="msi">redo</span>
         <span class="rail-label">Rehacer</span>
+      </button>
+      <!-- FASE 4.5/4.6: pantalla completa + bloqueo de orientación como acción EXPLÍCITA. Intentarlo
+           automáticamente (al entrar o al primer toque) secuestraba la pantalla y dejaba la ventana
+           en un modo que el navegador ya no dejaba redimensionar (medido dos veces). -->
+      <button
+        class="rail-btn rail-row"
+        title="Pantalla completa (y bloquear la orientación)"
+        aria-label="Pantalla completa"
+        (click)="pantallaCompleta()"
+      >
+        <span class="msi">fullscreen</span>
+        <span class="rail-label">Pantalla completa</span>
       </button>
       <button
         class="rail-btn rail-row btn-danger-row"
@@ -1175,37 +1297,60 @@
         <span class="msi">pan_tool</span>
       </button>
       <div class="tools-sep"></div>
+      <!-- FASE 3: botón flotante «Herramientas». Sustituye al tramo de categorías que la
+           barra inferior mostraba SIEMPRE y que costaba 57 px de alto de layout. Es un
+           `toggle` con `aria-expanded`/`aria-controls` sobre el menú de categorías. -->
       <button
-        class="tools-cat"
-        [class.cat-active]="jugadoresOpen()"
-        [attr.aria-label]="'Jugadores'"
-        title="Jugadores"
-        (click)="toggleJugadores()"
+        class="tools-toggle"
+        type="button"
+        [class.cat-active]="herramientasOpen()"
+        [attr.aria-expanded]="herramientasOpen()"
+        aria-controls="tools-menu"
+        aria-label="Herramientas"
+        title="Herramientas"
+        (click)="toggleHerramientas()"
       >
-        <span class="msi tools-cat-icon" aria-hidden="true">groups</span>
-        <span class="tools-cat-label">Jugadores</span>
-      </button>
-      <button
-        class="tools-cat"
-        [class.cat-active]="panelCat() === 'material'"
-        [attr.aria-label]="'Material'"
-        title="Material"
-        (click)="setToolCategory('material')"
-      >
-        <span class="msi tools-cat-icon" aria-hidden="true">sports_soccer</span>
-        <span class="tools-cat-label">Material</span>
-      </button>
-      <button
-        class="tools-cat"
-        [class.cat-active]="panelCat() === 'dibujo'"
-        [attr.aria-label]="'Dibujo'"
-        title="Dibujo"
-        (click)="setToolCategory('dibujo')"
-      >
-        <span class="msi tools-cat-icon" aria-hidden="true">draw</span>
-        <span class="tools-cat-label">Dibujo</span>
+        <span class="msi tools-cat-icon" aria-hidden="true">handyman</span>
+        <span class="tools-cat-label">Herramientas</span>
       </button>
     </div>
+    <!-- Menú de categorías (solo existe en el DOM mientras está abierto: cerrado no se
+         puede tabular ni pulsar). Se cierra solo al elegir categoría, para no tapar la
+         banda inferior del campo mientras se colocan objetos. -->
+    @if (herramientasOpen()) {
+      <div class="tools-menu" id="tools-menu" role="group" aria-label="Categorías">
+        <button
+          class="tools-cat"
+          [class.cat-active]="jugadoresOpen()"
+          [attr.aria-label]="'Jugadores'"
+          title="Jugadores"
+          (click)="toggleJugadores()"
+        >
+          <span class="msi tools-cat-icon" aria-hidden="true">groups</span>
+          <span class="tools-cat-label">Jugadores</span>
+        </button>
+        <button
+          class="tools-cat"
+          [class.cat-active]="panelCat() === 'material'"
+          [attr.aria-label]="'Material'"
+          title="Material"
+          (click)="setToolCategory('material')"
+        >
+          <span class="msi tools-cat-icon" aria-hidden="true">sports_soccer</span>
+          <span class="tools-cat-label">Material</span>
+        </button>
+        <button
+          class="tools-cat"
+          [class.cat-active]="panelCat() === 'dibujo'"
+          [attr.aria-label]="'Dibujo'"
+          title="Dibujo"
+          (click)="setToolCategory('dibujo')"
+        >
+          <span class="msi tools-cat-icon" aria-hidden="true">draw</span>
+          <span class="tools-cat-label">Dibujo</span>
+        </button>
+      </div>
+    }
     <div class="tools-caption" [class.tools-caption-color]="isColorTool()">
       <span class="tools-caption-title">{{ activeToolTitle() }}</span>
       <!-- Bloque E: trazo Continuo/Discontinuo para Línea y Flecha (preferencia por herramienta). -->
@@ -1369,51 +1514,6 @@
       [grass]="grass()"
       (closed)="closeExport()"
     />
-  }
-
-  @if (fieldDialogOpen()) {
-    <div
-      class="unsaved-backdrop"
-      (click)="decideFieldChange('cancel')"
-      (document:keydown.escape)="decideFieldChange('cancel')"
-    >
-      <div
-        class="unsaved field-change-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Cambiar de campo"
-        (click)="$event.stopPropagation()"
-      >
-        <div class="unsaved-head">
-          <h3>Cambiar a medio campo</h3>
-          <button
-            class="btn btn-ghost btn-icon"
-            aria-label="Cerrar"
-            (click)="decideFieldChange('cancel')"
-          >
-            <span class="msi">close</span>
-          </button>
-        </div>
-        <p class="unsaved-msg">
-          Vas a cambiar de campo completo a un medio campo. ¿Cómo quieres conservar los elementos?
-        </p>
-        <div class="unsaved-actions">
-          <button class="btn btn-primary" (click)="decideFieldChange('two-halves')">
-            Dos medios campos — recomendado
-          </button>
-          <button class="btn btn-ghost" (click)="decideFieldChange('fit-half')">
-            Encajar todo en un medio campo
-          </button>
-          <!-- Petición del dueño: poder cambiar de campo CONSERVANDO los objetos donde están,
-               sin obligar a elegir entre «dos medios campos» y «encajar». Es la única forma de
-               llegar a F7 (o a cualquier campo de media extensión) sin recolocar nada. -->
-          <button class="btn btn-ghost" (click)="decideFieldChange('keep')">
-            Mantener los objetos donde están
-          </button>
-          <button class="btn btn-ghost" (click)="decideFieldChange('cancel')">Cancelar</button>
-        </div>
-      </div>
-    </div>
   }
 
   @if (notice()) {

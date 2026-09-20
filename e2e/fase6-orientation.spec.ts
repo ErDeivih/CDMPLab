@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 function seed() {
   return `(() => {
@@ -56,6 +57,7 @@ test.describe('Fase 6 — aviso de orientación móvil', () => {
     await page.addInitScript(seed());
     await openBoard(page);
     await expect(page.locator('.orient-hint')).toBeVisible();
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left').first().waitFor();
     await page.locator('.tray-player[title="Jugador Azul"]').click();

@@ -1,5 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
+import { toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/fase3';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -259,13 +261,13 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
       await expect(page.locator('.edge-pan-right')).toBeVisible();
 
       // Cambiar a "Campo completo": el campo cabe entero → sin pan → sin indicadores.
-      await page.locator('.field-fit-toggle').click();
+      await toggleFillScreen(page);
       await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
       await expect(page.locator('.edge-pan-left')).toBeHidden();
       await expect(page.locator('.edge-pan-right')).toBeHidden();
 
       // Volver a "Llenar pantalla": reaparecen.
-      await page.locator('.field-fit-toggle').click();
+      await toggleFillScreen(page);
       await expect(page.locator('.board-host')).toHaveClass(/board-fill/);
       await expect(page.locator('.edge-pan-left')).toBeVisible();
       await expect(page.locator('.edge-pan-right')).toBeVisible();
@@ -289,6 +291,7 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
     const S = normToScreen(P.x, P.y, host, 'height', panX);
 
     // Colocar un Portero en S.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -404,6 +407,7 @@ test.describe('Fase 3 — capturas (indicadores + pista y tras paneo)', () => {
       await openClosed(page);
       await expectFillMode(page);
       // Un Portero visible para que la pizarra no esté vacía (no abre inspector).
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       await page.locator('.tray-player[title="Jugador Azul"]').click();

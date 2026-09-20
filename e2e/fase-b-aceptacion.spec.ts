@@ -1,4 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 // =============================================================
 // FASE B — Aceptación: paneles persistentes + colocación continua.
@@ -162,6 +163,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 1366, height: 900 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       // Elegir un color: el panel permanece abierto.
@@ -180,6 +182,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 1366, height: 900 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const p = normToScreen(0.5, 0.5, await hostBox(page), await fitMode(page));
@@ -191,10 +194,12 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 1366, height: 900 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       await page.locator('.side-panel-left .panel-close').click();
       await expect(page.locator('.side-panel-left')).toHaveCount(0);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
     });
@@ -203,6 +208,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 1366, height: 900 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await page.locator('.tray-player[title="Jugador Azul"]').click();
       const host = await hostBox(page);
@@ -223,6 +229,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 1366, height: 900 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await page.locator('.tray-player[title="Jugador Azul"]').click();
       const chip = page.locator('.tray-player[title="Jugador Azul"]');
@@ -247,6 +254,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       const chip = page.locator('.tray-player[title="Jugador Azul"]');
@@ -265,6 +273,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       const chip = page.locator('.tray-player[title="Jugador Azul"]');
@@ -285,6 +294,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const bar = await page.locator('.studio-tools').boundingBox();
@@ -301,6 +311,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       const host = await hostBox(page);
@@ -320,6 +331,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       const host = await hostBox(page);
@@ -339,6 +351,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page, [realPlayer()]);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       const item = page.locator('.side-panel-left .roster-item').first();
@@ -357,6 +370,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const host = await hostBox(page);
@@ -373,6 +387,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const host = await hostBox(page);
@@ -387,6 +402,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       // Toque corto sobre la tarjeta del Cono (down+up sin mover): puede armar la colocación
@@ -403,6 +419,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const card = page.locator('.rail-btn[title="Cono"]');
@@ -422,6 +439,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const host = await hostBox(page);
@@ -437,6 +455,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const card = page.locator('.rail-btn[title="Cono"]');
@@ -460,6 +479,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const host = await hostBox(page);
@@ -475,6 +495,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       const host = await hostBox(page);
@@ -496,6 +517,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const card = page.locator('.rail-btn[title="Cono"]');
@@ -516,6 +538,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       const chip = page.locator('.tray-player[title="Jugador Azul"]');
@@ -535,6 +558,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page, [realPlayer()]);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       const item = page.locator('.side-panel-left .roster-item').first();
@@ -554,6 +578,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       const chip = page.locator('.tray-player[title="Jugador Verde"]');
@@ -573,6 +598,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 1366, height: 900 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       // Enfocar la tarjeta del Cono y activarla por teclado (Enter): no es un toque táctil.
@@ -590,6 +616,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const host = await hostBox(page);
@@ -613,6 +640,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       const host = await hostBox(page);
@@ -636,6 +664,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const host = await hostBox(page);
@@ -661,6 +690,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const host = await hostBox(page);
@@ -685,6 +715,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const host = await hostBox(page);
@@ -706,6 +737,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 1366, height: 900 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       // Clic de ratón en el Cono arma la colocación continuada (escritorio).
@@ -718,6 +750,7 @@ test.describe('FASE B — aceptación de paneles persistentes y colocación cont
       await page.setViewportSize({ width: 844, height: 390 });
       await seed(page);
       await openBoard(page);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       const host = await hostBox(page);

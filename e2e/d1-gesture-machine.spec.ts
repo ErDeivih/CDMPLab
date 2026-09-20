@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 // Rect canónico de contenido (largo→X, ancho→Y) de un campo 105×68 en el viewBox 100×80.
 const RECT = { x: 4, y: 10, w: 92, h: (92 * 68) / 105 };
@@ -190,6 +191,7 @@ async function twoFinger(page: Page, cx: number, cy: number, spreads: number[]):
 
 /** Coloca un Portero (jugador genérico) en el norm (nx,ny) y devuelve su centro en pantalla. */
 async function placeComodinAt(page: Page, nx: number, ny: number): Promise<Pt> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -214,6 +216,7 @@ async function placeComodinAt(page: Page, nx: number, ny: number): Promise<Pt> {
 /** Coloca un Portero en el CENTRO del host (norm 0.5,0.5 en horizontal Y vertical),
  *  sin depender de la fórmula norm→pantalla (que solo es válida en horizontal). */
 async function placeComodinAtCenter(page: Page): Promise<Pt> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -250,6 +253,7 @@ async function resetBoardView(page: Page): Promise<void> {
 
 /** Coloca un Cono (material) en el norm (nx,ny); ciérra Propiedades si se abre. */
 async function placeConeAt(page: Page, nx: number, ny: number): Promise<Pt> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
   // FASE B (paneles persistentes): el panel Material sigue abierto y en móvil tapa el centro
@@ -271,12 +275,14 @@ async function placeConeAt(page: Page, nx: number, ny: number): Promise<Pt> {
 
 /** Arma una colocación (Cono) desde el panel Material, sin colocar nada. */
 async function armCone(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
 }
 
 /** Arma la colocación de un jugador de plantilla (roster) sin colocar nada. */
 async function armRoster(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.side-panel-left .roster-item').first().click();
@@ -284,12 +290,14 @@ async function armRoster(page: Page): Promise<void> {
 
 /** Arma la herramienta de dibujo Texto (sin colocar nada). */
 async function armText(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Texto"]').click();
 }
 
 /** Arma la herramienta de dibujo Flecha (arrow) (sin colocar nada). */
 async function armArrow(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Flecha (movimiento)"]').click();
 }
@@ -550,6 +558,7 @@ test.describe('Máquina de gestos táctil: dedo único ↔ pinch en la pizarra',
     const cy = host.y + host.height / 2;
 
     // TAP táctil con puntual (Portero): coloca en el punto del tap.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.tray-player[title="Jugador Azul"]').click();
     // FASE B (paneles persistentes): elegir un jugador NO cierra el panel Jugadores.

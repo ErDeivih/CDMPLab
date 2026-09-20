@@ -1,15 +1,17 @@
 <!doctype html>
 <html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>CDMPLab</title>
-  <base href="/">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/jpeg" href="assets/brand/cdm-pizarrales-original.jpg">
-  <link rel="apple-touch-icon" href="assets/brand/cdm-pizarrales-original.jpg">
-  <!-- Iconos de línea y tipografía AUTOALOJADOS (sin Google Fonts). -->
-</head>
-<body>
-  <app-root></app-root>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>CDMPLab</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- FASE 8A: escudo PNG con el exterior TRANSPARENTE (antes era el JPG de fondo blanco
+       cuadrado). Se regenera con: GENERAR_ESCUDO=1 npx playwright test e2e/marca-escudo.spec.ts -->
+    <link rel="icon" type="image/png" href="assets/brand/cdm-pizarrales-escudo.png" />
+    <link rel="apple-touch-icon" href="assets/brand/cdm-pizarrales-escudo.png" />
+    <!-- Iconos de línea y tipografía AUTOALOJADOS (sin Google Fonts). -->
+  </head>
+  <body>
+    <app-root></app-root>
+  </body>
 </html>

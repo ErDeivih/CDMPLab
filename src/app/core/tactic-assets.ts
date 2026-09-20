@@ -1,7 +1,7 @@
 // =============================================================
 // EntrenoLab — Manifiesto tipado de material táctico (PNG).
 // Solo referencia assets que EXISTEN en public/assets/tactical/.
-// Clasificación VISUAL (auditada): 
+// Clasificación VISUAL (auditada):
 //   hurdle = valla; minigoal = portería blanca; ring = aro;
 //   trampoline = minitrampolín; vball = balón morado.
 // 'ball' (balón de fútbol) usa ball.png (procedente de la referencia
@@ -61,13 +61,28 @@ export const TACTIC_ASSETS: TacticAsset[] = [
   { kind: 'cone_white', asset: `${P}cone-white.png`, label: 'Cono (blanco)', color: '#e8edf2' },
   { kind: 'cone_blue2', asset: `${P}cone-blue-2.png`, label: 'Cono (azul 2)', color: '#3b82c4' },
   { kind: 'mannequin', asset: `${P}mannequin.png`, label: 'Maniquí', color: '#e8edf2' },
-  { kind: 'mannequin_row', asset: `${P}mannequin-row.png`, label: 'Maniquí (fila)', color: '#f6c945' },
+  {
+    kind: 'mannequin_row',
+    asset: `${P}mannequin-row.png`,
+    label: 'Maniquí (fila)',
+    color: '#f6c945',
+  },
   { kind: 'goal', asset: '', label: 'Portería grande', color: '#ffffff' },
   { kind: 'flag', asset: `${P}flag.png`, label: 'Banderín', color: '#f6c945' },
-  { kind: 'ladder', asset: `${P}ladder.png`, label: 'Escalera', color: '#e8edf2' },
-  { kind: 'ladder_yellow', asset: `${P}ladder-yellow.png`, label: 'Escalera (amarilla)', color: '#f6c945' },
+  // FASE 4 del encargo de materiales: estos cuatro se dibujan SIEMPRE en VECTOR (asset vacío) porque
+  // el PNG no era reconocible a tamaño pequeño (la escalera y la miniportería se confundían entre sí
+  // y con la portería). Los PNG siguen en el repositorio: los documentos antiguos conservan su
+  // `asset` guardado, pero el render los pinta vectoriales por la lista `SIEMPRE_VECTOR`.
+  { kind: 'ladder', asset: '', label: 'Escalera', color: '#e8edf2' },
+  {
+    kind: 'ladder_yellow',
+    asset: '',
+    label: 'Escalera (amarilla)',
+    color: '#f6c945',
+  },
   { kind: 'hurdle', asset: `${P}hurdle.png`, label: 'Valla', color: '#e8edf2' },
-  { kind: 'minigoal', asset: `${P}minigoal.png`, label: 'Miniportería', color: '#e8edf2' },
+  // FASE 4: miniportería VECTORIAL (ver nota de la escalera).
+  { kind: 'minigoal', asset: '', label: 'Miniportería', color: '#e8edf2' },
   { kind: 'ring', asset: `${P}ring.png`, label: 'Aro', color: '#e8c3c9' },
   { kind: 'ring_flat', asset: `${P}ring-flat.png`, label: 'Aro plano', color: '#e67e22' },
   { kind: 'trampoline', asset: `${P}trampoline.png`, label: 'Minitrampolín', color: '#e8edf2' },
@@ -146,7 +161,10 @@ export const TACTICAL_SIZE: Record<string, number> = {
   trampoline: 1.15,
   pole: 1.6,
   disc: 0.95,
-  target: 0.95,
+  // FASE 8B: el encargo pide que el chino sea PEQUEÑO respecto al cono (1.0). Antes medía 0.95
+  // (casi igual); ahora 0.62, claramente menor. Los elementos ya guardados conservan su `size`
+  // persistido, así que ningún documento existente cambia de tamaño.
+  target: 0.62,
   net: 1.2,
   vball: 0.95,
   ball_football: 1.5,
@@ -182,7 +200,10 @@ export const TACTICAL_BBOX: Record<string, BBoxFrac> = {
   cone_blue2: { w: 0.56, h: 1 },
   mannequin: { w: 0.28, h: 1 },
   mannequin_row: { w: 1, h: 0.733 },
-  goal: { w: 1, h: 0.573 },
+  // FASE 8C: la portería grande se dibuja FRONTAL con proporción real (7,32 × 2,44 ≈ 3:1), así que
+  // su caja visible es mucho más plana que antes (0.573 → 0.34). Sin este ajuste el área táctil
+  // seleccionaba césped vacío por encima y por debajo del marco.
+  goal: { w: 1, h: 0.34 },
   flag: { w: 0.367, h: 1 },
   ladder: { w: 1, h: 0.28 },
   ladder_yellow: { w: 0.293, h: 1 },
@@ -193,7 +214,14 @@ export const TACTICAL_BBOX: Record<string, BBoxFrac> = {
   trampoline: { w: 1, h: 0.507 },
   pole: { w: 0.347, h: 1 },
   disc: { w: 1, h: 0.84 },
-  target: { w: 1, h: 1 },
+  // FASE 8B: el chino es un platillo PLANO (más ancho que alto): su caja visible sigue la figura y
+  // no un cuadrado. Nació en 1 × 0,5 y pasó por 0,6 × 0,62.
+  // Cierre del encargo de materiales: la CAJA TÁCTIL del chino se ajusta al dibujo AGRANDADO. El
+  // cuerpo mide 2,0 de semiancho (+0,07 de trazo) y la sombra baja hasta 1,94 de semialto sobre una
+  // caja de 5,2 unidades × size: 0,8077 → 0,81 de ancho y 0,7462 → 0,75 de alto de la MITAD de la
+  // caja (antes 0,6 × 0,62 con el dibujo pequeño). El marco de selección y el hit-test usan esto,
+  // así que caja y figura siguen coincidiendo.
+  target: { w: 0.81, h: 0.75 },
   net: { w: 1, h: 0.96 },
   vball: { w: 1, h: 1 },
   ball_football: { w: 0.649, h: 0.635 },
@@ -214,7 +242,7 @@ export const TACTICAL_BBOX: Record<string, BBoxFrac> = {
  *  del MODELO (no CSS): se persiste, se exporta y aparece en miniaturas. Para los
  *  documentos preexistentes se aplica UNA sola vez vía `normalizeCanvas` (migración
  *  por `schemaVersion`, versionada e idempotente); nunca se re-encoge en cada apertura. */
-export const MATERIAL_SIZE_RATIO = 0.60;
+export const MATERIAL_SIZE_RATIO = 0.6;
 
 /** Tamaño base de un material a partir de su clave (`assetKind` o `t`), ya reducido
  *  por `MATERIAL_SIZE_RATIO`: es la base que nace por defecto al colocar el objeto

@@ -14,8 +14,9 @@
 // comparten las mismas constantes.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { longPress } from './gesture-helpers';
+import { longPress, toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/fase4-final';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -73,7 +74,7 @@ async function openBoardDesktop(page: Page): Promise<void> {
   await dismissHelp(page);
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
 }
@@ -93,6 +94,7 @@ async function openProps(page: Page): Promise<void> {
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
+  await abrirHerramientas(page);
   if (category) await page.locator('.tools-cat', { hasText: category }).click();
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
@@ -141,6 +143,7 @@ async function deselect(page: Page): Promise<void> {
  *  Se coloca QUEDAMENTE por encima del centro: así en la captura el objeto queda
  *  claramente visible sin que la pista centrada lo tape. */
 async function placeComodin(page: Page, host: Box, nx = 0.5, ny = 0.3): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -443,7 +446,7 @@ test.describe('Fase 4 — revisión visual final (capturas)', () => {
     // el clic sobre el conmutador de campo.
     await page.keyboard.press('Escape');
     // Cambiar a Campo completo: caben todo → sin pan → sin indicadores.
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
     await expect(page.locator('.edge-pan-left')).toBeHidden();
     await expect(page.locator('.edge-pan-right')).toBeHidden();

@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 /**
  * FASE 3: el menú contextual de la pizarra se abre exclusivamente por PULSACIÓN LARGA
@@ -54,6 +54,46 @@ export async function waitForTransitions(page: Page, selector: string): Promise<
   await page.waitForFunction((sel) => {
     const el = document.querySelector(sel);
     if (!el) return true;
-    return (el as Element).getAnimations().every((a) => a.playState !== 'running' && a.playState !== 'pending');
+    return (el as Element)
+      .getAnimations()
+      .every((a) => a.playState !== 'running' && a.playState !== 'pending');
   }, selector);
+}
+/**
+ * Abre el diálogo de Ajustes.
+ *
+ * CONTRATO ACTUALIZADO (fase shell+móvil): el botón de Ajustes vivía en la barra superior, que se
+ * ha ELIMINADO del DOM; ahora se entra desde el menú de cuenta (botón al pie de la barra lateral en
+ * escritorio, «Más» en móvil). El diálogo y todo lo que hay dentro son los mismos: cambia la puerta
+ * de entrada, no la función. Este helper evita repetir la secuencia en cada spec.
+ */
+export async function abrirAjustes(page: Page): Promise<void> {
+  await page.locator('.cuenta-btn:visible, .nav-mas:visible').first().click();
+  await expect(page.locator('.cuenta-panel')).toBeVisible();
+  await page.locator('.cuenta-accion', { hasText: 'Ajustes' }).click();
+  await expect(page.locator('.settings')).toBeVisible();
+}
+
+/**
+ * Abre el menú «Más» de la PIZARRA (`.top-pop-mas`).
+ *
+ * CONTRATO ACTUALIZADO (franja de estado retirada): «Llenar pantalla / Ver campo completo» ya no
+ * vive en la franja superior del campo —el dueño la retiró porque comía altura del campo—, sino
+ * dentro de este menú. El disparador se busca DENTRO de `.studio-top` a propósito: el shell tiene
+ * otro «Más» en su barra inferior (`.nav-mas`) y en móvil los dos existen en el DOM.
+ */
+export async function abrirMasPizarra(page: Page): Promise<void> {
+  if (await page.locator('.top-pop-mas').isVisible().catch(() => false)) return;
+  await page.locator('.studio-top button[aria-label="Más"]').click();
+  await expect(page.locator('.top-pop-mas')).toBeVisible();
+}
+
+/**
+ * Alterna «Llenar pantalla» / «Ver campo completo». Es el MISMO control de siempre (conserva la
+ * clase `.field-fit-toggle` para no cambiar el observable de los tests), pero ahora hay que abrir
+ * el menú «Más» de la pizarra antes de pulsarlo.
+ */
+export async function toggleFillScreen(page: Page): Promise<void> {
+  await abrirMasPizarra(page);
+  await page.locator('.top-pop-mas .field-fit-toggle').click();
 }

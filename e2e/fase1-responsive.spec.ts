@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 
 const SHOTS = 'e2e/shots/fase1';
@@ -11,22 +12,88 @@ const MOBILE = [
 ];
 const DESKTOP = [1024, 1280, 1366, 1440, 1920];
 const TABLET: Array<[number, number]> = [[768, 1024]];
-const ALL = [...MOBILE, ...TABLET.map(([w, h]) => [w, h] as [number, number]), ...DESKTOP.map((w) => [w, 900] as [number, number])];
+const ALL = [
+  ...MOBILE,
+  ...TABLET.map(([w, h]) => [w, h] as [number, number]),
+  ...DESKTOP.map((w) => [w, 900] as [number, number]),
+];
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-    ]));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([
-      { id: 'e1', teamId: 't1', folderId: null, title: 'Rondos', description: 'Conservación', explanation: '', category: 'Técnica', objectives: [], materials: [], durationMinutes: 12, minPlayers: 6, maxPlayers: 8, loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false, canvas: { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [] }], orientation: 'horizontal', grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a' }, thumbnail: null, savedAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Pau',
+          number: 10,
+          position: 'MF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
+    localStorage.setItem(
+      'entrenolab:folders',
+      JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]),
+    );
+    localStorage.setItem(
+      'entrenolab:exercises',
+      JSON.stringify([
+        {
+          id: 'e1',
+          teamId: 't1',
+          folderId: null,
+          title: 'Rondos',
+          description: 'Conservación',
+          explanation: '',
+          category: 'Técnica',
+          objectives: [],
+          materials: [],
+          durationMinutes: 12,
+          minPlayers: 6,
+          maxPlayers: 8,
+          loadMode: 'fixed',
+          seriesCount: null,
+          repetitionsCount: null,
+          workSeconds: null,
+          restSeconds: null,
+          isTemplate: false,
+          canvas: {
+            version: 2,
+            schemaVersion: 3,
+            field: 'full',
+            frames: [{ duration: 1000, elements: [] }],
+            orientation: 'horizontal',
+            grass: 'stripes',
+            lineColor: '#ffffff',
+            backgroundColor: '#31834a',
+          },
+          thumbnail: null,
+          savedAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
@@ -36,7 +103,12 @@ async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   // Descartar la ayuda (no debe cubrir el campo de forma permanente).
-  if (await page.locator('.help-close').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.help-close').click();
   }
 }
@@ -49,12 +121,16 @@ function ratio(b: Box, s: Box, axis: 'w' | 'h'): number {
 
 /** Coloca un Portero (no selecciona → no abre el panel de Propiedades). */
 async function placeGenericPlayer(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
   // FASE B (paneles persistentes): tocar un genérico ARMA la colocación pero NO
   // cierra el panel — el panel Jugadores permanece abierto. El clic en el campo coloca.
-  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await expect(
+    page.locator('.side-panel-left'),
+    'el panel Jugadores permanece abierto',
+  ).toBeVisible();
   // En móvil vertical el centro del campo queda bajo el panel y las capturas posteriores
   // ("todo cerrado") necesitan el panel fuera de juego: se cierra con su X (el cierre NO
   // desarma la colocación) antes de pinchar el campo.
@@ -64,7 +140,12 @@ async function placeGenericPlayer(page: Page): Promise<void> {
   await expect(page.locator('.field-count')).toHaveText('1');
 }
 
-const MAIN_PANEL_SELECTORS = ['.studio-panel', '.side-panel-left', '.top-pop-export', '.top-pop-mas'];
+const MAIN_PANEL_SELECTORS = [
+  '.studio-panel',
+  '.side-panel-left',
+  '.top-pop-export',
+  '.top-pop-mas',
+];
 
 /** Cuenta cuántos paneles "principales" están visibles. */
 async function visibleMainPanels(page: Page): Promise<number> {
@@ -82,7 +163,9 @@ async function visibleMainPanels(page: Page): Promise<number> {
 
 test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => {
   for (const [w, h] of ALL) {
-    test(`[${w}x${h}] el campo ocupa ≥90% del ancho y la mayor altura posible con todo cerrado`, async ({ page }) => {
+    test(`[${w}x${h}] el campo ocupa ≥90% del ancho y la mayor altura posible con todo cerrado`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
       await openClosed(page);
@@ -94,7 +177,9 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
     });
   }
 
-  test('abrir/cerrar cada panel NO muta el documento subyacente (frame/campo/elemento)', async ({ page }) => {
+  test('abrir/cerrar cada panel NO muta el documento subyacente (frame/campo/elemento)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openClosed(page);
@@ -116,6 +201,8 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
       ['Más', '[aria-label="Más"]'],
     ];
     for (const [name, trigger] of panels) {
+      // FASE 3: las categorías viven en el menú «Herramientas» y no están en el DOM si está cerrado.
+      if (trigger.includes('.tools-cat')) await abrirHerramientas(page);
       await page.locator(trigger).click();
       await page.waitForTimeout(80);
       expect(await read(), `documento cambiado al abrir ${name}`).toEqual(baseline);
@@ -128,7 +215,9 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
     }
   });
 
-  test('cada panel se cierra con su botón visible y ningún panel se queda atascado', async ({ page }) => {
+  test('cada panel se cierra con su botón visible y ningún panel se queda atascado', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -142,8 +231,17 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
       ['Más', '[aria-label="Más"]'],
     ];
     for (const [name, trigger] of openers) {
+      // FASE 3: las categorías viven en el menú «Herramientas» y no están en el DOM si está cerrado.
+      if (trigger.includes('.tools-cat')) await abrirHerramientas(page);
       await page.locator(trigger).click();
-      const panel = name === 'Jugadores' || name === 'Material' || name === 'Dibujo' ? '.side-panel-left' : name === 'Exportar' ? '.top-pop-export' : name === 'Más' ? '.top-pop-mas' : '.studio-panel';
+      const panel =
+        name === 'Jugadores' || name === 'Material' || name === 'Dibujo'
+          ? '.side-panel-left'
+          : name === 'Exportar'
+            ? '.top-pop-export'
+            : name === 'Más'
+              ? '.top-pop-mas'
+              : '.studio-panel';
       const el = page.locator(panel);
       await expect(el, `el panel «${name}» se abre`).toBeVisible();
       const close = el.locator('.panel-close').first();
@@ -167,6 +265,8 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
       ['Más', '[aria-label="Más"]'],
     ];
     for (const [, trigger] of openers) {
+      // FASE 3: las categorías viven en el menú «Herramientas» y no están en el DOM si está cerrado.
+      if (trigger.includes('.tools-cat')) await abrirHerramientas(page);
       await page.locator(trigger).click();
       // FASE G: observable — esperamos a que haya exactamente UN panel principal visible.
       await expect.poll(() => visibleMainPanels(page), { timeout: 4000 }).toBe(1);
@@ -182,7 +282,10 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
     await openClosed(page);
     expect(await page.locator('[aria-label="Guardar"]').count()).toBe(1);
     expect(await page.locator('[aria-label="Exportar"]').count()).toBe(1);
-    expect(await page.locator('[aria-label="Jugadores"]').count()).toBe(1);
+    // FASE 3: «Jugadores» ya no está siempre en el DOM, vive en el menú flotante «Herramientas». Se
+    // cuenta con el menú ABIERTO y sigue habiendo exactamente uno (ni duplicado ni perdido).
+    await abrirHerramientas(page);
+    expect(await page.locator('.tools-menu [aria-label="Jugadores"]').count()).toBe(1);
   });
 
   test('todo botón tiene un nombre accesible (aria-label, texto o title)', async ({ page }) => {
@@ -218,6 +321,9 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
       // Fase 3: Deshacer/Rehacer ya no están en la barra; viven en el menú contextual.
       '[aria-label="Seleccionar y mover"]',
     ];
+    // FASE 3: Material y Dibujo viven en el menú «Herramientas»; se mide con el menú abierto para
+    // comprobar el mismo objetivo táctil de 44×44 dentro del menú.
+    await abrirHerramientas(page);
     for (const sel of selectors) {
       const box = await page.locator(sel).first().boundingBox();
       expect(box, `no visible ${sel}`).not.toBeNull();
@@ -240,6 +346,7 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
     await page.keyboard.press('Escape');
 
     // Panel izquierdo (Jugadores).
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     const lpanel = (await page.locator('.side-panel-left').boundingBox())!;
     const lfield = (await page.locator('.studio-field').boundingBox())!;
@@ -247,6 +354,7 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
     await page.keyboard.press('Escape');
 
     // Material (lateral izquierdo).
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     const bhost = (await page.locator('.board-host').boundingBox())!;
@@ -278,6 +386,8 @@ test.describe('Fase 1 — capturas (pizarra cerrada y cada lado abierto)', () =>
       for (const [side, trigger] of opens) {
         await page.keyboard.press('Escape');
         await page.waitForTimeout(50);
+        // FASE 3: las categorías viven en el menú «Herramientas» (Escape lo cierra).
+        if (trigger.includes('.tools-cat')) await abrirHerramientas(page);
         await page.locator(trigger).click();
         await expect(page.locator('.panel-close').first()).toBeVisible();
         await page.waitForTimeout(120);

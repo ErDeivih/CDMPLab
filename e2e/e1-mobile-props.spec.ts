@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import { longPress } from './gesture-helpers';
 
@@ -252,6 +253,7 @@ async function fieldCount(page: Page): Promise<number> {
 
 /** Arma la colocación de un Cono (material). */
 async function armCone(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
   await expect(page.locator('.placement-hint')).toBeVisible();
@@ -264,6 +266,7 @@ async function armCone(page: Page): Promise<void> {
 
 /** Arma la colocación de un Portero (jugador genérico). */
 async function armComodin(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 
 // Capturas de las fases 7-9 (pulsación larga abre el menú contextual → Duplicar, Mano, papelera).
@@ -151,6 +152,7 @@ async function imageNorm(page: Page, selector: string): Promise<Pt> {
  *  (Fase 3): la colocación de genéricos es CONTINUA, así que tras colocar este helper
  *  vuelve a "Seleccionar" para que el test que continúa opere sobre el objeto.) */
 async function placeComodinAt(page: Page, nx: number, ny: number): Promise<Pt> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -168,6 +170,7 @@ async function placeComodinAt(page: Page, nx: number, ny: number): Promise<Pt> {
 /** Coloca un Cono (material) en el norm (nx,ny); ciérra Propiedades si se abre.
  *  (Fase 3): la colocación es continua; este helper vuelve a "Seleccionar" al final. */
 async function placeConeAt(page: Page, nx: number, ny: number): Promise<Pt> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
   const host = await hostBox(page);
@@ -185,6 +188,7 @@ async function placeConeAt(page: Page, nx: number, ny: number): Promise<Pt> {
 
 /** Coloca un jugador de PLANTILLA (roster, playerId) en el norm (nx,ny). */
 async function placeRosterAt(page: Page, nx: number, ny: number): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.side-panel-left .roster-item').first().click();

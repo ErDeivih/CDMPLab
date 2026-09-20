@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
 import { longPress } from './gesture-helpers';
@@ -92,6 +93,7 @@ async function openCat(page: Page, category: string): Promise<void> {
     Dibujo: '.side-panel-left[aria-label="Herramientas de Dibujo"]',
   };
   if (await page.locator(probe[category]).isVisible().catch(() => false)) return;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: category }).click();
   await expect(page.locator(probe[category])).toBeVisible();
 }

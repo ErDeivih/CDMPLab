@@ -33,7 +33,7 @@ import {
 } from './render';
 import { CanvasElement } from './models';
 import { MATERIAL_SIZE_RATIO, TACTICAL_SIZE } from './tactic-assets';
-import { fieldGeometry, F7_LINE_COLOR, OFFICIAL_PITCH_COLOR } from './field';
+import { fieldGeometry, F7_LINE_COLOR, OFFICIAL_PITCH_COLOR, goalBoxUnits } from './field';
 
 function mkPlayer(id: string, x: number, y: number, n = 9): CanvasElement {
   return { id, t: 'player', x, y, n, c: '#1a73e8', side: 'own' };
@@ -51,7 +51,7 @@ function normToScreenPoint(
   g: Geometry,
   panX: number,
   panY: number,
-  zoom: number
+  zoom: number,
 ): { x: number; y: number } {
   const s = Math.min(host.width / g.vbW, host.height / g.vbH);
   const offX = (host.width - g.vbW * s) / 2;
@@ -91,7 +91,7 @@ function normToScreenPointFit(
   g: Geometry,
   panX: number,
   panY: number,
-  zoom: number
+  zoom: number,
 ): { x: number; y: number } {
   const dimVert = g.vertical ? g.rect.w : g.rect.h;
   const dimHor = g.vertical ? g.rect.h : g.rect.w;
@@ -169,7 +169,15 @@ describe('render', () => {
   });
 
   it('Fase 8: el nombre y el número de un jugador se CONTRARROTAN (quedan derechos) y el círculo conserva la rotación', () => {
-    const p0: CanvasElement = { id: 'p0', t: 'player', x: 0.5, y: 0.5, n: 7, label: 'Sergio', rot: 90 };
+    const p0: CanvasElement = {
+      id: 'p0',
+      t: 'player',
+      x: 0.5,
+      y: 0.5,
+      n: 7,
+      label: 'Sergio',
+      rot: 90,
+    };
     const svg = renderBoardSvg('full', [p0], {});
     // El jugador girado lleva el texto compensado con -rot (rotate(-90)) dentro del grupo.
     expect(svg).toContain('rotate(-90 0 0)');
@@ -187,16 +195,30 @@ describe('render', () => {
     const svg = renderBoardSvg('full', [p0], { orientation: 'vertical' });
     expect(svg).toContain('rotate(-90 0 0)');
     // Un jugador girado ±90 en vertical compensa -(90+rot) → para rot=90, rotate(-180 0 0).
-    const p2: CanvasElement = { id: 'p2', t: 'player', x: 0.5, y: 0.5, n: 8, label: 'Pau', rot: 90 };
+    const p2: CanvasElement = {
+      id: 'p2',
+      t: 'player',
+      x: 0.5,
+      y: 0.5,
+      n: 8,
+      label: 'Pau',
+      rot: 90,
+    };
     const svg2 = renderBoardSvg('full', [p2], { orientation: 'vertical' });
     expect(svg2).toContain('rotate(-180 0 0)');
     // Horizontal: un jugador sin rotación NO compensa la orientación (queda a 0°).
-    const svgH = renderBoardSvg('full', [{ id: 'p3', t: 'player', x: 0.5, y: 0.5, n: 9 }], { orientation: 'horizontal' });
+    const svgH = renderBoardSvg('full', [{ id: 'p3', t: 'player', x: 0.5, y: 0.5, n: 9 }], {
+      orientation: 'horizontal',
+    });
     expect(svgH).not.toContain('rotate(-90 ');
   });
 
   it('A7: el césped es el OFICIAL único (se ignora backgroundColor), las líneas son SIEMPRE blancas y el césped de franjas', () => {
-    const svg = renderBoardSvg('full', [], { backgroundColor: '#123456', lineColor: '#ff0000', grass: 'plain' });
+    const svg = renderBoardSvg('full', [], {
+      backgroundColor: '#123456',
+      lineColor: '#ff0000',
+      grass: 'plain',
+    });
     // A7: el render usa el césped oficial, NO el backgroundColor del documento.
     expect(svg).not.toContain('#123456');
     expect(svg).toContain(OFFICIAL_PITCH_COLOR);
@@ -210,7 +232,10 @@ describe('render', () => {
     // Existe la franja exterior con su clase estable.
     expect(svg).toContain('class="entrenolab-strip"');
     // La franja es un rect LISO (fill=base, sin rayas) que rodea el rect de contenido.
-    const strip = /<g class="entrenolab-strip"[^>]*><rect x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="([^"]+)"/.exec(svg);
+    const strip =
+      /<g class="entrenolab-strip"[^>]*><rect x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="([^"]+)"/.exec(
+        svg,
+      );
     expect(strip, 'debe existir el <rect> de la franja').not.toBeNull();
     expect(parseFloat(strip![1])).toBeLessThan(0); // se extiende a la izquierda del rect
     expect(parseFloat(strip![2])).toBeLessThan(0); // y por arriba
@@ -251,7 +276,15 @@ describe('render', () => {
   });
 
   it('scales rect/zone by the ACTIVE geometry (vertical rota el contenido canónico)', () => {
-    const rect: CanvasElement = { id: 'r', t: 'rect', x: 0.1, y: 0.1, w: 0.5, h: 0.5, c: '#ff0000' };
+    const rect: CanvasElement = {
+      id: 'r',
+      t: 'rect',
+      x: 0.1,
+      y: 0.1,
+      w: 0.5,
+      h: 0.5,
+      c: '#ff0000',
+    };
     const h = renderBoardSvg('full', [rect], { orientation: 'horizontal' });
     const v = renderBoardSvg('full', [rect], { orientation: 'vertical' });
     expect(h).toContain('width="46"'); // 0.5 * 92 (espacio canónico)
@@ -272,7 +305,16 @@ describe('render', () => {
   });
 
   it('renders an ellipse and hit-tests inside vs outside', () => {
-    const el: CanvasElement = { id: 'e', t: 'ellipse', x: 0.2, y: 0.2, w: 0.4, h: 0.3, fill: false, c: '#ff0000' };
+    const el: CanvasElement = {
+      id: 'e',
+      t: 'ellipse',
+      x: 0.2,
+      y: 0.2,
+      w: 0.4,
+      h: 0.3,
+      fill: false,
+      c: '#ff0000',
+    };
     const svg = renderBoardSvg('full', [el], {});
     expect(svg).toContain('<ellipse');
     expect(hitTestElement({ x: 0.4, y: 0.35 }, [el])).toBe('e');
@@ -280,7 +322,15 @@ describe('render', () => {
   });
 
   it('renders freehand polyline and hit-tests on the stroke', () => {
-    const el: CanvasElement = { id: 'f', t: 'freehand', points: [[0.2, 0.2], [0.4, 0.5], [0.6, 0.2]] };
+    const el: CanvasElement = {
+      id: 'f',
+      t: 'freehand',
+      points: [
+        [0.2, 0.2],
+        [0.4, 0.5],
+        [0.6, 0.2],
+      ],
+    };
     const svg = renderBoardSvg('full', [el], {});
     expect(svg).toContain('<polyline');
     expect(hitTestElement({ x: 0.4, y: 0.49 }, [el])).toBe('f');
@@ -288,7 +338,16 @@ describe('render', () => {
   });
 
   it('renders a curved arrow path and hit-tests near it', () => {
-    const el: CanvasElement = { id: 'c', t: 'curve', x1: 0.2, y1: 0.3, c1x: 0.5, c1y: 0.7, x2: 0.8, y2: 0.3 };
+    const el: CanvasElement = {
+      id: 'c',
+      t: 'curve',
+      x1: 0.2,
+      y1: 0.3,
+      c1x: 0.5,
+      c1y: 0.7,
+      x2: 0.8,
+      y2: 0.3,
+    };
     const svg = renderBoardSvg('full', [el], {});
     expect(svg).toContain('<path d="M');
     expect(svg).toContain('Q ');
@@ -296,8 +355,26 @@ describe('render', () => {
   });
 
   it('FASE 5: dos curvaturas opuestas (Curva izq/der) dibujan puntos de control opuestos', () => {
-    const up: CanvasElement = { id: 'l', t: 'curve', x1: 0.2, y1: 0.3, c1x: 0.5, c1y: 0.3 - 0.14, x2: 0.8, y2: 0.3 };
-    const down: CanvasElement = { id: 'r', t: 'curve', x1: 0.2, y1: 0.3, c1x: 0.5, c1y: 0.3 + 0.14, x2: 0.8, y2: 0.3 };
+    const up: CanvasElement = {
+      id: 'l',
+      t: 'curve',
+      x1: 0.2,
+      y1: 0.3,
+      c1x: 0.5,
+      c1y: 0.3 - 0.14,
+      x2: 0.8,
+      y2: 0.3,
+    };
+    const down: CanvasElement = {
+      id: 'r',
+      t: 'curve',
+      x1: 0.2,
+      y1: 0.3,
+      c1x: 0.5,
+      c1y: 0.3 + 0.14,
+      x2: 0.8,
+      y2: 0.3,
+    };
     const svgUp = renderBoardSvg('full', [up], {});
     const svgDown = renderBoardSvg('full', [down], {});
     // Valores en píxeles: py(c1y) = c1y*r.h + r.y. El control del curve_left (arriba) es
@@ -320,7 +397,16 @@ describe('render', () => {
   });
 
   it('renders text content, is selectable, and shows its editing rect ONLY when selected', () => {
-    const t: CanvasElement = { id: 't', t: 'text', x: 0.3, y: 0.3, v: 'Hola', size: 4, w: 0.2, h: 0.09 };
+    const t: CanvasElement = {
+      id: 't',
+      t: 'text',
+      x: 0.3,
+      y: 0.3,
+      v: 'Hola',
+      size: 4,
+      w: 0.2,
+      h: 0.09,
+    };
     // Render en LIMPIO (sin selección): aparece el texto pero NO el cuadro punteado.
     const clean = renderBoardSvg('blank', [t], {});
     expect(clean).toContain('Hola');
@@ -391,7 +477,9 @@ describe('render', () => {
     return out;
   }
   /** Línea base ABSOLUTA de cada tspan (la 1ª usa y= y el resto acumula dy=). */
-  function tspanBaselines(tsps: Array<{ text: string; y: number | null; dy: number | null }>): number[] {
+  function tspanBaselines(
+    tsps: Array<{ text: string; y: number | null; dy: number | null }>,
+  ): number[] {
     const res: number[] = [];
     let cur = 0;
     tsps.forEach((t, i) => {
@@ -407,7 +495,10 @@ describe('render', () => {
   }
   /** Rect del clipPath del cuadro de texto (x,y,ancho,alto). */
   function clipRect(svg: string): { x: number; y: number; w: number; h: number } {
-    const m = /<clipPath id="txtclip-[^"]*">\s*<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"\s*\/>/.exec(svg);
+    const m =
+      /<clipPath id="txtclip-[^"]*">\s*<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"\s*\/>/.exec(
+        svg,
+      );
     if (!m) throw new Error('no clip rect');
     return { x: +m[1], y: +m[2], w: +m[3], h: +m[4] };
   }
@@ -443,7 +534,16 @@ describe('render', () => {
     const size = DEFAULT_TEXT_SIZE;
     const boxW = DEFAULT_TEXT_W * R.w;
     const h = autoTextBoxH('A\nB\nC', size, boxW); // 3 líneas
-    const t: CanvasElement = { id: 't', t: 'text', x: 0.3, y: 0.3, v: 'A', size, w: DEFAULT_TEXT_W, h };
+    const t: CanvasElement = {
+      id: 't',
+      t: 'text',
+      x: 0.3,
+      y: 0.3,
+      v: 'A',
+      size,
+      w: DEFAULT_TEXT_W,
+      h,
+    };
     const svg = renderBoardSvg('blank', [t], {});
     // El texto cabe de sobra; ninguna línea se corta y queda todo visible.
     const tsps = parseTspans(svg);
@@ -480,11 +580,22 @@ describe('render', () => {
     expect(tsps[tsps.length - 1].text.endsWith('…')).toBe(true);
     // Ninguna línea pintada se corta por abajo (líneas enteras).
     const y = 0.3 * R.h + R.y;
-    tspanBaselines(tsps).forEach((b) => expect(b + under(size)).toBeLessThanOrEqual(y + boxH + 0.001));
+    tspanBaselines(tsps).forEach((b) =>
+      expect(b + under(size)).toBeLessThanOrEqual(y + boxH + 0.001),
+    );
   });
 
   it('el cuadro punteado NO sale en limpio/miniatura y sí cuando está seleccionado', () => {
-    const t: CanvasElement = { id: 't', t: 'text', x: 0.4, y: 0.4, v: 'Texto', size: DEFAULT_TEXT_SIZE, w: DEFAULT_TEXT_W, h: DEFAULT_TEXT_H };
+    const t: CanvasElement = {
+      id: 't',
+      t: 'text',
+      x: 0.4,
+      y: 0.4,
+      v: 'Texto',
+      size: DEFAULT_TEXT_SIZE,
+      w: DEFAULT_TEXT_W,
+      h: DEFAULT_TEXT_H,
+    };
     // Render limpio (es el que usan la miniatura al guardar y el PNG exportado).
     const clean = renderBoardSvg('full', [t], {});
     expect(clean).not.toContain('text-edit-rect');
@@ -504,17 +615,37 @@ describe('render', () => {
       [0.66, 0.82],
     ];
     for (const [sx, sy] of spots) {
-      const t: CanvasElement = { id: `t-${sx}-${sy}`, t: 'text', x: sx, y: sy, v: 'Borde', size, w: DEFAULT_TEXT_W, h: DEFAULT_TEXT_H };
+      const t: CanvasElement = {
+        id: `t-${sx}-${sy}`,
+        t: 'text',
+        x: sx,
+        y: sy,
+        v: 'Borde',
+        size,
+        w: DEFAULT_TEXT_W,
+        h: DEFAULT_TEXT_H,
+      };
       const svg = renderBoardSvg('blank', [t], {});
       const box = clipRect(svg);
       expect(box.x).toBeGreaterThanOrEqual(R.x - 0.001);
       expect(box.y).toBeGreaterThanOrEqual(R.y - 0.001);
       expect(box.x + box.w).toBeLessThanOrEqual(R.x + R.w + 0.001);
       expect(box.y + box.h).toBeLessThanOrEqual(R.y + R.h + 0.001);
-      expect(hitTestElement({ x: sx + DEFAULT_TEXT_W / 2, y: sy + DEFAULT_TEXT_H / 2 }, [t])).toBe(t.id);
+      expect(hitTestElement({ x: sx + DEFAULT_TEXT_W / 2, y: sy + DEFAULT_TEXT_H / 2 }, [t])).toBe(
+        t.id,
+      );
     }
     // Un cuadro pegado al borde derecho NO desborda horizontalmente (clamp al campo).
-    const edge: CanvasElement = { id: 'edge', t: 'text', x: 0.95, y: 0.1, v: 'Borde', size, w: DEFAULT_TEXT_W, h: DEFAULT_TEXT_H };
+    const edge: CanvasElement = {
+      id: 'edge',
+      t: 'text',
+      x: 0.95,
+      y: 0.1,
+      v: 'Borde',
+      size,
+      w: DEFAULT_TEXT_W,
+      h: DEFAULT_TEXT_H,
+    };
     const boxE = clipRect(renderBoardSvg('blank', [edge], {}));
     expect(boxE.x + boxE.w).toBeLessThanOrEqual(R.x + R.w + 0.001);
   });
@@ -528,9 +659,28 @@ describe('render', () => {
   });
 
   it('rota texto y curva en el render (rotWrap con su centro)', () => {
-    const t: CanvasElement = { id: 't', t: 'text', x: 0.3, y: 0.3, w: 0.2, h: 0.1, v: 'X', rot: 45 };
+    const t: CanvasElement = {
+      id: 't',
+      t: 'text',
+      x: 0.3,
+      y: 0.3,
+      w: 0.2,
+      h: 0.1,
+      v: 'X',
+      rot: 45,
+    };
     expect(renderBoardSvg('full', [t], {})).toContain('rotate(45 ');
-    const c: CanvasElement = { id: 'c', t: 'curve', x1: 0.2, y1: 0.3, c1x: 0.5, c1y: 0.7, x2: 0.8, y2: 0.3, rot: 30 };
+    const c: CanvasElement = {
+      id: 'c',
+      t: 'curve',
+      x1: 0.2,
+      y1: 0.3,
+      c1x: 0.5,
+      c1y: 0.7,
+      x2: 0.8,
+      y2: 0.3,
+      rot: 30,
+    };
     expect(renderBoardSvg('full', [c], {})).toContain('rotate(30 ');
   });
 
@@ -572,8 +722,14 @@ describe('render', () => {
     // estricta destapaba. Este test lo fija para que sean exactos en panorámico.
     const g = boardGeometry('horizontal');
     const host: HostRect = { left: 10, top: 98, width: 1346, height: 563 };
-    for (const [panX, panY] of [[0, 0], [40, -30]] as Array<[number, number]>) {
-      for (const [nx, ny] of ([[0.55, 0.5], [0.2, 0.8]] as Array<[number, number]>)) {
+    for (const [panX, panY] of [
+      [0, 0],
+      [40, -30],
+    ] as Array<[number, number]>) {
+      for (const [nx, ny] of [
+        [0.55, 0.5],
+        [0.2, 0.8],
+      ] as Array<[number, number]>) {
         const f = normToScreenPointFit(nx, ny, host, g, panX, panY, 1);
         const inv = screenToNorm(f.x, f.y, host, g, panX, panY, 1, 'height');
         expect(inv.x, `x para (${nx},${ny})`).toBeCloseTo(nx, 3);
@@ -586,16 +742,22 @@ describe('render', () => {
   });
 
   it('renderBoardSvg dibuja el overlay F7 cuando está activado (no cuando no)', () => {
-    const on = renderBoardSvg('full', [], { f7: { enabled: true, color: '#2563eb', thickness: 0.8, opacity: 0.8 } });
+    const on = renderBoardSvg('full', [], {
+      f7: { enabled: true, color: '#2563eb', thickness: 0.8, opacity: 0.8 },
+    });
     expect(on).toContain('stroke="#2563eb"');
     expect(on).toContain('stroke-opacity="0.8"');
-    const off = renderBoardSvg('full', [], { f7: { enabled: false, color: '#2563eb', thickness: 0.8, opacity: 0.8 } });
+    const off = renderBoardSvg('full', [], {
+      f7: { enabled: false, color: '#2563eb', thickness: 0.8, opacity: 0.8 },
+    });
     expect(off).not.toContain('stroke="#2563eb"');
   });
 
   it('el F7 real tiene límites, líneas de fuera de juego y SIN línea/círculo central', () => {
     // Campo en blanco para aislar el overlay F7 (sin las líneas/círculo del campo).
-    const svg = renderBoardSvg('blank', [], { f7: { enabled: true, color: '#2563eb', thickness: 0.8, opacity: 0.8 } });
+    const svg = renderBoardSvg('blank', [], {
+      f7: { enabled: true, color: '#2563eb', thickness: 0.8, opacity: 0.8 },
+    });
     // Los fondos del F7 coinciden con las bandas del F11: ancho completo 92.
     expect(svg).toContain('width="92"');
     // Las líneas interiores coinciden con los laterales del área grande F11.
@@ -614,7 +776,9 @@ describe('render', () => {
     const svg = renderBoardSvg('f7', [], { lineColor: '#ff0000', grid: false });
     // FASE 4/8b: el F7 usa el medio campo F11 APISAADO (68 m en X → 59,58 de ancho).
     const halfW = 68 * (92 / 105);
-    const cont = /<rect x="4" y="4" width="([\d.]+)" height="([\d.]+)"[^>]*stroke="#ffffff"/.exec(svg);
+    const cont = /<rect x="4" y="4" width="([\d.]+)" height="([\d.]+)"[^>]*stroke="#ffffff"/.exec(
+      svg,
+    );
     expect(cont, 'el medio campo F11 apaisado dibuja su contorno').not.toBeNull();
     expect(parseFloat(cont![1])).toBeCloseTo(halfW, 3);
     expect(svg).toContain('stroke="#ffffff"');
@@ -629,7 +793,9 @@ describe('render', () => {
     expect(svg).toContain('rgba(255,255,255,0.25)');
     // Contorno del medio campo apaisado (68 m en X → 59,58 de ancho).
     const halfW = 68 * (92 / 105);
-    const cont = /<rect x="4" y="4" width="([\d.]+)" height="([\d.]+)"[^>]*stroke="#ffffff"/.exec(svg);
+    const cont = /<rect x="4" y="4" width="([\d.]+)" height="([\d.]+)"[^>]*stroke="#ffffff"/.exec(
+      svg,
+    );
     expect(cont).not.toBeNull();
     expect(parseFloat(cont![1])).toBeCloseTo(halfW, 3);
     // El F7 transversal se dibuja en SU color de contraste, separado del fondo blanco.
@@ -673,22 +839,32 @@ describe('render', () => {
     expect(g.match(/<g[^>]*data-el-type="goal"[^>]*>(.*?)<\/g>/)![1]).toContain('<rect');
     const mr = renderBoardSvg('full', [{ id: 'm', t: 'mannequin_row', x: 0.5, y: 0.5 }], {});
     expect(mr).toContain('data-el-type="mannequin_row"');
-    expect(mr.match(/<g[^>]*data-el-type="mannequin_row"[^>]*>(.*?)<\/g>/)![1]).toContain('<circle');
+    expect(mr.match(/<g[^>]*data-el-type="mannequin_row"[^>]*>(.*?)<\/g>/)![1]).toContain(
+      '<circle',
+    );
   });
 
-  it('FASE 6: un material se ve a la MITAD de tamaño aparente en medio campo que en campo completo', () => {
+  it('FASE 2 (materiales): la escala del medio campo es MAYOR que la de campo completo', () => {
     const cone = (id: string): CanvasElement => ({ id, t: 'cone', x: 0.5, y: 0.5 });
     const get = (svg: string): number[] => {
       const re = /<g transform="translate\([^)]+\) scale\(([\d.]+)\)"/g;
-      const out: number[] = []; let m: RegExpExecArray | null;
+      const out: number[] = [];
+      let m: RegExpExecArray | null;
       while ((m = re.exec(svg))) out.push(Number(m[1]));
       return out;
     };
     const fullScale = get(renderBoardSvg('full', [cone('a')], {}))[0];
     const halfScale = get(renderBoardSvg('half', [cone('b')], {}))[0];
     expect(fullScale).toBeGreaterThan(0);
-    // Campo completo objectScale=1; medio campo ≈0,5 (mitad de tamaño aparente).
-    expect(halfScale).toBeCloseTo(fullScale * 0.5, 5);
+    // CAMBIO DE CONTRATO INTENCIONADO (encargo de materiales, FASE 2): antes el factor del medio
+    // campo era 0,5, que dejaba el tamaño aparente IGUAL que en campo completo. Ahora es
+    // 0,5 × 1,62 = 0,81, que hace que en medio campo se vea un 20 % MAYOR (política medida en
+    // píxeles en `e2e/fase-materiales-escala.spec.ts`).
+    expect(halfScale).toBeCloseTo(fullScale * 0.81, 5);
+    // OJO: la escala en UNIDADES del viewBox es menor en medio campo (0,81) porque el campo también
+    // es más corto; el tamaño APARENTE en píxeles es MAYOR (×1,20) porque el campo se ve más de
+    // cerca. Esa parte se mide en píxeles en `e2e/fase-materiales-escala.spec.ts`, que es donde
+    // tiene sentido medirla.
     // No se re-escribe `size` del documento (el modelo conserva el tamaño base).
     expect(cone('c').size).toBeUndefined();
   });
@@ -717,7 +893,11 @@ describe('render', () => {
   });
 
   it('renderiza la flecha de doble sentido (dos puntas)', () => {
-    const svg = renderBoardSvg('full', [{ id: 'd', t: 'doubleArrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3 }], {});
+    const svg = renderBoardSvg(
+      'full',
+      [{ id: 'd', t: 'doubleArrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3 }],
+      {},
+    );
     expect(svg).toContain(`stroke="${DEFAULT_ELEMENT_COLOR}"`);
     expect(svg).toContain('<path');
   });
@@ -735,18 +915,28 @@ describe('render', () => {
     };
     // El color por defecto es el MISMO blanco con el que el campo dibuja sus marcas.
     expect(DEFAULT_ELEMENT_COLOR).toBe('#ffffff');
-    expect(contrast(DEFAULT_ELEMENT_COLOR, OFFICIAL_PITCH_COLOR), 'el default debe superar 4:1 sobre el césped').toBeGreaterThan(4);
+    expect(
+      contrast(DEFAULT_ELEMENT_COLOR, OFFICIAL_PITCH_COLOR),
+      'el default debe superar 4:1 sobre el césped',
+    ).toBeGreaterThan(4);
     // El default anterior (#1f2933) se quedaba en ~3,1:1: justo en el mínimo de WCAG
     // para objetos gráficos y por debajo en las franjas oscuras del césped.
-    expect(contrast('#1f2933', OFFICIAL_PITCH_COLOR), 'el default anterior no llegaba (motivo del cambio)').toBeLessThan(4);
+    expect(
+      contrast('#1f2933', OFFICIAL_PITCH_COLOR),
+      'el default anterior no llegaba (motivo del cambio)',
+    ).toBeLessThan(4);
   });
 
   it('renderiza la herramienta de medición con su etiqueta', () => {
-    const svg = renderBoardSvg('full', [{ id: 'm', t: 'measure', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, v: '15 m' }], {});
+    const svg = renderBoardSvg(
+      'full',
+      [{ id: 'm', t: 'measure', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, v: '15 m' }],
+      {},
+    );
     expect(svg).toContain('15 m');
   });
 
-  it('renderiza la pica coloreable (SVG nativo)', () => {
+  it('renderiza la pica (SVG nativo, coloreable)', () => {
     const svg = renderBoardSvg('full', [{ id: 'p', t: 'pica', x: 0.5, y: 0.5, c: '#1a73e8' }], {});
     expect(svg).toContain('fill="#1a73e8"');
   });
@@ -850,14 +1040,25 @@ describe('render', () => {
       const g = boardGeometry('horizontal');
       const s = host.height / g.rect.h;
       expect(g.rect.h * s).toBeCloseTo(host.height, 6); // el contenido llena la altura
-      expect(g.rect.w * s, 'el campo sobrepasa el ancho (se panea en horizontal)').toBeGreaterThan(host.width);
+      expect(g.rect.w * s, 'el campo sobrepasa el ancho (se panea en horizontal)').toBeGreaterThan(
+        host.width,
+      );
     }
   });
 
   it('en fit=height el centro del host mapea al centro del campo (sin deporta)', () => {
     const g = boardGeometry('horizontal');
     const host = { left: 0, top: 0, width: 390, height: 844 };
-    const c = screenToNorm(host.left + host.width / 2, host.top + host.height / 2, host, g, 0, 0, 1, 'height');
+    const c = screenToNorm(
+      host.left + host.width / 2,
+      host.top + host.height / 2,
+      host,
+      g,
+      0,
+      0,
+      1,
+      'height',
+    );
     expect(c.x).toBeCloseTo(0.5, 2);
     expect(c.y).toBeCloseTo(0.5, 2);
   });
@@ -901,7 +1102,10 @@ describe('render', () => {
       [0.1, 0.2],
       [0.9, 0.8],
     ];
-    for (const [panX, panY] of [[0, 0], [20, -10]] as Array<[number, number]>) {
+    for (const [panX, panY] of [
+      [0, 0],
+      [20, -10],
+    ] as Array<[number, number]>) {
       for (const [nx, ny] of pts) {
         const f = normToScreenPointFit(nx, ny, host, g, panX, panY, 1.5);
         const inv = screenToNorm(f.x, f.y, host, g, panX, panY, 1.5, 'height');
@@ -915,13 +1119,27 @@ describe('render', () => {
 
   it('materialSize usa el tamaño explícito o la base normalizada del tipo (reducida a ~75 % en Fase 4)', () => {
     // Fase 4: la base por defecto (sin `size`) es 0.75 × la base antigua (cone 1.0 → 0.75).
-    expect(materialSize({ id: 'a', t: 'cone', assetKind: 'cone_red', asset: '/x.png' })).toBeCloseTo(1.0 * MATERIAL_SIZE_RATIO, 6);
-    expect(materialSize({ id: 'b', t: 'pole', assetKind: 'pole', asset: '/x.png' })).toBeCloseTo(1.6 * MATERIAL_SIZE_RATIO, 6);
-    expect(materialSize({ id: 'c', t: 'cone', assetKind: 'cone_red', asset: '/x.png', size: 2 })).toBe(2);
+    expect(
+      materialSize({ id: 'a', t: 'cone', assetKind: 'cone_red', asset: '/x.png' }),
+    ).toBeCloseTo(1.0 * MATERIAL_SIZE_RATIO, 6);
+    expect(materialSize({ id: 'b', t: 'pole', assetKind: 'pole', asset: '/x.png' })).toBeCloseTo(
+      1.6 * MATERIAL_SIZE_RATIO,
+      6,
+    );
+    expect(
+      materialSize({ id: 'c', t: 'cone', assetKind: 'cone_red', asset: '/x.png', size: 2 }),
+    ).toBe(2);
   });
 
   it('el <image> del material escala con size y usa la base normalizada si no hay size', () => {
-    const cone: CanvasElement = { id: 'c', t: 'cone', x: 0.5, y: 0.5, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
+    const cone: CanvasElement = {
+      id: 'c',
+      t: 'cone',
+      x: 0.5,
+      y: 0.5,
+      assetKind: 'cone_red',
+      asset: '/assets/tactical/cone-red.png',
+    };
     // Sin `size`: base normalizada cone_red = 0.75 → caja 5.2·0.75 (reducida en Fase 4).
     const coneW = MATERIAL_BOX * materialSize(cone);
     expect(renderBoardSvg('full', [cone], {})).toContain(`width="${coneW}"`);
@@ -930,14 +1148,28 @@ describe('render', () => {
     expect(renderBoardSvg('full', [big], {})).toContain(`width="${MATERIAL_BOX * 2}"`);
     expect(renderBoardSvg('full', [big], {})).toContain(`height="${MATERIAL_BOX * 2}"`);
     // Los elementos de longitud de campo (pértiga) nacen mayores que los compactos.
-    const pole: CanvasElement = { id: 'p', t: 'pole', x: 0.5, y: 0.5, assetKind: 'pole', asset: '/assets/tactical/pole.png' };
+    const pole: CanvasElement = {
+      id: 'p',
+      t: 'pole',
+      x: 0.5,
+      y: 0.5,
+      assetKind: 'pole',
+      asset: '/assets/tactical/pole.png',
+    };
     const poleW = MATERIAL_BOX * materialSize(pole);
     expect(renderBoardSvg('full', [pole], {})).toContain(`width="${poleW}"`);
     expect(materialSize(pole)).toBeCloseTo(TACTICAL_SIZE['pole'] * MATERIAL_SIZE_RATIO, 6);
   });
 
   it('hit-test de un material estrecho usa la caja (bbox) y respeta size/rot', () => {
-    const pole: CanvasElement = { id: 'p', t: 'pole', x: 0.5, y: 0.5, assetKind: 'pole', asset: '/assets/tactical/pole.png' };
+    const pole: CanvasElement = {
+      id: 'p',
+      t: 'pole',
+      x: 0.5,
+      y: 0.5,
+      assetKind: 'pole',
+      asset: '/assets/tactical/pole.png',
+    };
     // A mitad de altura del poste (dentro de la caja, fuera del radio antiguo 0.05).
     expect(hitTestElement({ x: 0.5, y: 0.5 - 0.06 }, [pole])).toBe('p');
     // Perpendicular (lado del poste estrecho): fuera del ancho táctil.
@@ -947,7 +1179,15 @@ describe('render', () => {
   });
 
   it('hit-test respeta la rotación de un material estrecho (pértiga a 90°)', () => {
-    const pole: CanvasElement = { id: 'p', t: 'pole', x: 0.5, y: 0.5, assetKind: 'pole', asset: '/assets/tactical/pole.png', rot: 90 };
+    const pole: CanvasElement = {
+      id: 'p',
+      t: 'pole',
+      x: 0.5,
+      y: 0.5,
+      assetKind: 'pole',
+      asset: '/assets/tactical/pole.png',
+      rot: 90,
+    };
     // Tras rotar 90°, el poste queda horizontal: un punto a la derecha del centro,
     // en el espacio local, cae dentro de la caja del poste.
     expect(hitTestElement({ x: 0.5 + 0.06, y: 0.5 }, [pole])).toBe('p');
@@ -963,7 +1203,15 @@ describe('render', () => {
     // cubre el mínimo táctil (una caja cuadrada de ~44 px por lado) y el intercambio no cambia
     // nada.
     const R = BOARD_CANON_RECT;
-    const ladder: CanvasElement = { id: 'l', t: 'ladder', x: 0.5, y: 0.5, size: 2, assetKind: 'ladder', asset: '/assets/tactical/ladder.png' };
+    const ladder: CanvasElement = {
+      id: 'l',
+      t: 'ladder',
+      x: 0.5,
+      y: 0.5,
+      size: 2,
+      assetKind: 'ladder',
+      asset: '/assets/tactical/ladder.png',
+    };
     const { hw, hh } = materialHitHalfExtents(ladder);
     // Semiejes de la caja GIRADA: el intercambio es en UNIDADES del viewBox, así que en norm hay
     // que reescalar por eje (norm X = 92 u, norm Y = 59,6 u). Intercambiar los norm sin más deja
@@ -976,8 +1224,12 @@ describe('render', () => {
     const yMedio = (hh + hhV) / 2;
     const xMedio = (hw + hwV) / 2;
     // VERTICAL (último argumento `true`): la caja es ALTA → el extremo visible selecciona.
-    expect(hitTestElement({ x: 0.5, y: 0.5 + yMedio }, [ladder], undefined, 1, undefined, true)).toBe('l');
-    expect(hitTestElement({ x: 0.5 + xMedio, y: 0.5 }, [ladder], undefined, 1, undefined, true)).toBeNull();
+    expect(
+      hitTestElement({ x: 0.5, y: 0.5 + yMedio }, [ladder], undefined, 1, undefined, true),
+    ).toBe('l');
+    expect(
+      hitTestElement({ x: 0.5 + xMedio, y: 0.5 }, [ladder], undefined, 1, undefined, true),
+    ).toBeNull();
     // HORIZONTAL (comportamiento de siempre): la caja es ANCHA.
     expect(hitTestElement({ x: 0.5 + xMedio, y: 0.5 }, [ladder])).toBe('l');
     expect(hitTestElement({ x: 0.5, y: 0.5 + yMedio }, [ladder])).toBeNull();
@@ -988,8 +1240,24 @@ describe('render', () => {
   });
 
   it('la hit-box de un material crece con size (por encima del mínimo táctil)', () => {
-    const small: CanvasElement = { id: 's', t: 'pole', x: 0.5, y: 0.5, assetKind: 'pole', asset: '/assets/tactical/pole.png', size: 1 };
-    const big: CanvasElement = { id: 'b', t: 'pole', x: 0.5, y: 0.5, assetKind: 'pole', asset: '/assets/tactical/pole.png', size: 2 };
+    const small: CanvasElement = {
+      id: 's',
+      t: 'pole',
+      x: 0.5,
+      y: 0.5,
+      assetKind: 'pole',
+      asset: '/assets/tactical/pole.png',
+      size: 1,
+    };
+    const big: CanvasElement = {
+      id: 'b',
+      t: 'pole',
+      x: 0.5,
+      y: 0.5,
+      assetKind: 'pole',
+      asset: '/assets/tactical/pole.png',
+      size: 2,
+    };
     // size=1: la mitad de la caja cae bajo el mínimo táctil → NO llega a 0.08.
     expect(hitTestElement({ x: 0.5, y: 0.42 }, [small])).toBeNull();
     // size=2: la caja crece y sí alcanza 0.08 (octava parte de la altura del campo).
@@ -1002,8 +1270,22 @@ describe('render', () => {
     // punto claramente fuera (a medio camino vacío) no elige a ninguno.
     const r = BOARD_CANON_RECT;
     const pxScreen = { screenPx: 6, zoom: 1, scale: 14 };
-    const a: CanvasElement = { id: 'a', t: 'cone', x: 0.4, y: 0.5, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
-    const b: CanvasElement = { id: 'b', t: 'cone', x: 0.42, y: 0.5, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
+    const a: CanvasElement = {
+      id: 'a',
+      t: 'cone',
+      x: 0.4,
+      y: 0.5,
+      assetKind: 'cone_red',
+      asset: '/assets/tactical/cone-red.png',
+    };
+    const b: CanvasElement = {
+      id: 'b',
+      t: 'cone',
+      x: 0.42,
+      y: 0.5,
+      assetKind: 'cone_red',
+      asset: '/assets/tactical/cone-red.png',
+    };
     // Sobre A → A (A está más cerca; no devuelve B).
     expect(hitTestElement({ x: 0.4, y: 0.5 }, [a, b], r, 1, pxScreen)).toBe('a');
     // Sobre B → B (aunque esté a 0.02, su propia caja lo captura y es la de encima si pisa A).
@@ -1012,13 +1294,23 @@ describe('render', () => {
     expect(hitTestElement({ x: 0.3, y: 0.5 }, [a, b], r, 1, pxScreen)).toBeNull();
     // A zoom 2 la tolerancia NORM se reduce (misma zona de px de pantalla): los conos se
     // siguen seleccionando por separado.
-    expect(hitTestElement({ x: 0.4, y: 0.5 }, [a, b], r, 1, { screenPx: 6, zoom: 2, scale: 14 })).toBe('a');
-    expect(hitTestElement({ x: 0.42, y: 0.5 }, [a, b], r, 1, { screenPx: 6, zoom: 2, scale: 14 })).toBe('b');
+    expect(
+      hitTestElement({ x: 0.4, y: 0.5 }, [a, b], r, 1, { screenPx: 6, zoom: 2, scale: 14 }),
+    ).toBe('a');
+    expect(
+      hitTestElement({ x: 0.42, y: 0.5 }, [a, b], r, 1, { screenPx: 6, zoom: 2, scale: 14 }),
+    ).toBe('b');
   });
 
-
   it('materialHitHalfExtents nunca baja del mínimo táctil de ~44px y escala con size', () => {
-    const cone: CanvasElement = { id: 'c', t: 'cone', x: 0.5, y: 0.5, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
+    const cone: CanvasElement = {
+      id: 'c',
+      t: 'cone',
+      x: 0.5,
+      y: 0.5,
+      assetKind: 'cone_red',
+      asset: '/assets/tactical/cone-red.png',
+    };
     const h = materialHitHalfExtents(cone);
     // Mínimo táctil: 4.4 unidades de viewBox → nunca por debajo.
     expect(h.hw).toBeGreaterThanOrEqual(4.4 / 92);
@@ -1057,14 +1349,14 @@ describe('render', () => {
     // Lejos (más que la tolerancia táctil en px, ~0.012 norm) → NO.
     expect(hitTestElement({ x: 0.5, y: 0.5 + 0.06 }, [line], r, 1, px)).toBeNull();
     // A zoom 2 la tolerancia NORM se reduce (misma zona de px) → a la misma distancia NO.
-    expect(hitTestElement({ x: 0.5, y: 0.5 + 0.06 }, [line], r, 1, { screenPx: 8, zoom: 2, scale: 11 })).toBeNull();
+    expect(
+      hitTestElement({ x: 0.5, y: 0.5 + 0.06 }, [line], r, 1, { screenPx: 8, zoom: 2, scale: 11 }),
+    ).toBeNull();
     // Texto con caja: se selecciona dentro de la caja y NO fuera por la radio por defecto.
     const text: CanvasElement = { id: 't', t: 'text', x: 0.4, y: 0.4, w: 0.2, h: 0.1, v: 'X' };
     expect(hitTestElement({ x: 0.5, y: 0.45 }, [text], r, 1, px)).toBe('t');
     expect(hitTestElement({ x: 0.5, y: 0.6 }, [text], r, 1, px)).toBeNull();
   });
-
-
 
   // ---------- Fase 2 — unidades humanas: % ↔ normalizado y ajuste al contenido ----------
 
@@ -1139,7 +1431,11 @@ describe('render', () => {
   });
 
   it('fitTextToContent respeta maxW (no desborda el campo por la derecha)', () => {
-    const fit = fitTextToContent('Un texto muy largo que debería recortarse al ancho máximo permitido', 3, 0.1);
+    const fit = fitTextToContent(
+      'Un texto muy largo que debería recortarse al ancho máximo permitido',
+      3,
+      0.1,
+    );
     expect(fit.w).toBeCloseTo(0.1, 2); // el ancho queda limitado a maxW=0.1
     // El alto crece porque el texto se envuelve en más líneas.
     expect(fit.h).toBeGreaterThan(0.02);
@@ -1163,7 +1459,9 @@ describe('geometría dinámica del medio campo (52,5×68) en render y screen↔n
     const g = fieldGeometry('half', 'horizontal');
     expect(svg).toContain(`viewBox="0 0 ${g.vbW} ${g.vbH}"`);
     // El rect del campo (el más ancho del grupo de marcas) tiene proporción 52,5/68.
-    const outer = [...svg.matchAll(/<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/g)]
+    const outer = [
+      ...svg.matchAll(/<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/g),
+    ]
       .map((m) => ({ w: +m[3], h: +m[4] }))
       .find((r) => Math.abs(r.w - g.rect.w) < 0.01 && Math.abs(r.h - g.rect.h) < 0.01);
     expect(outer).toBeDefined();
@@ -1176,7 +1474,9 @@ describe('geometría dinámica del medio campo (52,5×68) en render y screen↔n
     expect(svg).toContain(`viewBox="0 0 ${g.vbW} ${g.vbH}"`);
     expect(svg).toContain('rotate(90)');
     // El bbox del campo tras la rotación es ancho×alto = 68×52,5.
-    const outer = [...svg.matchAll(/<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/g)]
+    const outer = [
+      ...svg.matchAll(/<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/g),
+    ]
       .map((m) => ({ w: +m[3], h: +m[4] }))
       .find((r) => Math.abs(r.w - g.rect.w) < 0.01 && Math.abs(r.h - g.rect.h) < 0.01);
     expect(outer).toBeDefined();
@@ -1190,8 +1490,16 @@ describe('geometría dinámica del medio campo (52,5×68) en render y screen↔n
       { left: 0, top: 0, width: 390, height: 844 },
     ];
     const zooms = [1, 1.5, 2, 3];
-    const pans: Array<[number, number]> = [[0, 0], [30, 20], [-50, -35]];
-    const pts: Array<[number, number]> = [[0.4, 0.5], [0.1, 0.2], [0.9, 0.8]];
+    const pans: Array<[number, number]> = [
+      [0, 0],
+      [30, 20],
+      [-50, -35],
+    ];
+    const pts: Array<[number, number]> = [
+      [0.4, 0.5],
+      [0.1, 0.2],
+      [0.9, 0.8],
+    ];
     for (const host of hosts) {
       const g = fieldGeometry('half', 'horizontal');
       for (const zoom of zooms) {
@@ -1210,8 +1518,16 @@ describe('geometría dinámica del medio campo (52,5×68) en render y screen↔n
   it('round-trip norm→pantalla→norm es la identidad en el medio campo vertical', () => {
     const host: HostRect = { left: 0, top: 0, width: 640, height: 800 };
     const zooms = [1, 1.5, 2, 3];
-    const pans: Array<[number, number]> = [[0, 0], [30, 20], [-50, -35]];
-    const pts: Array<[number, number]> = [[0.4, 0.5], [0.1, 0.2], [0.9, 0.8]];
+    const pans: Array<[number, number]> = [
+      [0, 0],
+      [30, 20],
+      [-50, -35],
+    ];
+    const pts: Array<[number, number]> = [
+      [0.4, 0.5],
+      [0.1, 0.2],
+      [0.9, 0.8],
+    ];
     const g = fieldGeometry('half', 'vertical');
     for (const zoom of zooms) {
       for (const [panX, panY] of pans) {
@@ -1247,11 +1563,30 @@ describe('Fase 3/4 — trazo táctico fino y tamaño inicial reducido', () => {
     ];
     for (const [name, el] of cases) {
       const svg = renderBoardSvg('full', [el], {});
-      expect(svg, `grosor por defecto de ${name}`).toContain(`stroke-width="${DEFAULT_STROKE_WIDTH}"`);
+      expect(svg, `grosor por defecto de ${name}`).toContain(
+        `stroke-width="${DEFAULT_STROKE_WIDTH}"`,
+      );
     }
-    const curve = renderBoardSvg('full', [{ id: 'x', t: 'curve', x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.4 }], {});
+    const curve = renderBoardSvg(
+      'full',
+      [{ id: 'x', t: 'curve', x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.4 }],
+      {},
+    );
     expect(curve).toContain(`stroke-width="${DEFAULT_STROKE_WIDTH}"`);
-    const freehand = renderBoardSvg('full', [{ id: 'f', t: 'freehand', points: [[0.2, 0.2], [0.6, 0.4]] }], {});
+    const freehand = renderBoardSvg(
+      'full',
+      [
+        {
+          id: 'f',
+          t: 'freehand',
+          points: [
+            [0.2, 0.2],
+            [0.6, 0.4],
+          ],
+        },
+      ],
+      {},
+    );
     expect(freehand).toContain(`stroke-width="${DEFAULT_STROKE_WIDTH}"`);
   });
 
@@ -1265,7 +1600,10 @@ describe('Fase 3/4 — trazo táctico fino y tamaño inicial reducido', () => {
 
   it('la punta de flecha es proporcional al grosor (0.8 → 2.8, default 0.4 → 1.4)', () => {
     expect(arrowHeadSize(0.8)).toBeCloseTo(2.8, 6);
-    expect(arrowHeadSize(DEFAULT_STROKE_WIDTH)).toBeCloseTo(DEFAULT_STROKE_WIDTH * ARROW_HEAD_FACTOR, 6);
+    expect(arrowHeadSize(DEFAULT_STROKE_WIDTH)).toBeCloseTo(
+      DEFAULT_STROKE_WIDTH * ARROW_HEAD_FACTOR,
+      6,
+    );
     expect(arrowHeadSize(DEFAULT_STROKE_WIDTH)).toBeCloseTo(1.4, 6);
     // Una flecha horizontal: la punta (polygon) usa size = dx_entre punta y base / cos(0.5).
     const headSize = (svg: string): number => {
@@ -1276,8 +1614,16 @@ describe('Fase 3/4 — trazo táctico fino y tamaño inicial reducido', () => {
       const dx = Math.abs(tip[0] - p1[0]);
       return dx / Math.cos(0.5);
     };
-    const thin = renderBoardSvg('full', [{ id: 'a', t: 'arrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3 }], {});
-    const thick = renderBoardSvg('full', [{ id: 'a', t: 'arrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, strokeWidth: 0.8 }], {});
+    const thin = renderBoardSvg(
+      'full',
+      [{ id: 'a', t: 'arrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3 }],
+      {},
+    );
+    const thick = renderBoardSvg(
+      'full',
+      [{ id: 'a', t: 'arrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, strokeWidth: 0.8 }],
+      {},
+    );
     // El default (0.4) produce una punta más pequeña que la de un trazo 0.8 antiguo.
     expect(headSize(thin)).toBeLessThan(headSize(thick));
     expect(headSize(thin)).toBeCloseTo(arrowHeadSize(DEFAULT_STROKE_WIDTH), 5);
@@ -1285,7 +1631,11 @@ describe('Fase 3/4 — trazo táctico fino y tamaño inicial reducido', () => {
   });
 
   it('respeta el grosor EXPLÍCITO de un documento antiguo (no lo cambia)', () => {
-    const arrow = renderBoardSvg('full', [{ id: 'a', t: 'arrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, strokeWidth: 1.2 }], {});
+    const arrow = renderBoardSvg(
+      'full',
+      [{ id: 'a', t: 'arrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, strokeWidth: 1.2 }],
+      {},
+    );
     expect(arrow).toContain('stroke-width="1.2"');
   });
 
@@ -1313,7 +1663,11 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
   }
 
   it('la flecha normal tiene EXACTAMENTE una punta en el extremo final', () => {
-    const svg = renderBoardSvg('full', [{ id: 'a', t: 'arrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, c: '#e11d48' }], {});
+    const svg = renderBoardSvg(
+      'full',
+      [{ id: 'a', t: 'arrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, c: '#e11d48' }],
+      {},
+    );
     const h = heads(svg);
     expect(h).toHaveLength(1);
     const [tip] = h[0];
@@ -1323,7 +1677,11 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
   });
 
   it('la flecha doble tiene EXACTAMENTE dos puntas simétricas, una en cada extremo', () => {
-    const svg = renderBoardSvg('full', [{ id: 'd', t: 'doubleArrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, c: '#e11d48' }], {});
+    const svg = renderBoardSvg(
+      'full',
+      [{ id: 'd', t: 'doubleArrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, c: '#e11d48' }],
+      {},
+    );
     const h = heads(svg);
     expect(h).toHaveLength(2);
     const tip0 = h[0][0];
@@ -1338,8 +1696,16 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
   });
 
   it('el tamaño de las puntas depende del grosor del trazo en ambos extremos', () => {
-    const thin = renderBoardSvg('full', [{ id: 'd', t: 'doubleArrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3 }], {});
-    const thick = renderBoardSvg('full', [{ id: 'd', t: 'doubleArrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, strokeWidth: 0.8 }], {});
+    const thin = renderBoardSvg(
+      'full',
+      [{ id: 'd', t: 'doubleArrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3 }],
+      {},
+    );
+    const thick = renderBoardSvg(
+      'full',
+      [{ id: 'd', t: 'doubleArrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, strokeWidth: 0.8 }],
+      {},
+    );
     const hs = heads(thin)[0];
     const hk = heads(thick)[0];
     const sizeThin = Math.hypot(hs[0][0] - hs[1][0], hs[0][1] - hs[1][1]);
@@ -1352,7 +1718,8 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
     // El path debe terminar EXACTAMENTE en el punto final en píxeles (ax2,ay2).
     const path = /<path d="([^"]+)"/.exec(svg);
     expect(path).not.toBeNull();
-    const coords = path![1].match(/[^ML ]+ [^ ]+/g)?.map((pt) => pt.trim().split(' ').map(Number)) ?? [];
+    const coords =
+      path![1].match(/[^ML ]+ [^ ]+/g)?.map((pt) => pt.trim().split(' ').map(Number)) ?? [];
     const last = coords[coords.length - 1];
     expect(last![0]).toBeCloseTo(0.8 * 92 + 4, 4);
     expect(last![1]).toBeCloseTo(0.6 * g.h + g.y, 4);
@@ -1412,7 +1779,8 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       expect(svg).not.toMatch(/NaN|Infinity|undefined/);
       // Los dos extremos del path deben ser finitos y coincidir con el punto final.
       const path = /<path d="([^"]+)"/.exec(svg)!;
-      const coords = path[1].match(/[^ML ]+ [^ ]+/g)?.map((pt) => pt.trim().split(' ').map(Number)) ?? [];
+      const coords =
+        path[1].match(/[^ML ]+ [^ ]+/g)?.map((pt) => pt.trim().split(' ').map(Number)) ?? [];
       for (const c of coords) {
         expect(Number.isFinite(c[0])).toBe(true);
         expect(Number.isFinite(c[1])).toBe(true);
@@ -1421,18 +1789,46 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
   });
 
   it('Bloque F #21 — línea y flecha con trazo DISCONTINUO se renderizan con stroke-dasharray; las continuas no', () => {
-    const dashedLine: CanvasElement = { id: 'l1', t: 'line', x1: 0.2, y1: 0.4, x2: 0.8, y2: 0.4, style: 'dashed' };
-    const solidArrow: CanvasElement = { id: 'a1', t: 'arrow', x1: 0.2, y1: 0.6, x2: 0.8, y2: 0.6, style: 'solid' };
-    const dashedArrow: CanvasElement = { id: 'a2', t: 'arrow', x1: 0.2, y1: 0.7, x2: 0.8, y2: 0.7, style: 'dashed' };
+    const dashedLine: CanvasElement = {
+      id: 'l1',
+      t: 'line',
+      x1: 0.2,
+      y1: 0.4,
+      x2: 0.8,
+      y2: 0.4,
+      style: 'dashed',
+    };
+    const solidArrow: CanvasElement = {
+      id: 'a1',
+      t: 'arrow',
+      x1: 0.2,
+      y1: 0.6,
+      x2: 0.8,
+      y2: 0.6,
+      style: 'solid',
+    };
+    const dashedArrow: CanvasElement = {
+      id: 'a2',
+      t: 'arrow',
+      x1: 0.2,
+      y1: 0.7,
+      x2: 0.8,
+      y2: 0.7,
+      style: 'dashed',
+    };
     // Línea discontinua → dasharray.
     const svgLine = renderBoardSvg('full', [dashedLine], {});
     expect(svgLine, 'la línea discontinua lleva stroke-dasharray').toContain('stroke-dasharray');
     // Flecha SOLID (continua) → SIN dasharray.
     const svgArrowSolid = renderBoardSvg('full', [solidArrow], {});
-    expect(svgArrowSolid, 'la flecha continua NO lleva dasharray').not.toMatch(/<line[^>]*stroke-dasharray/);
+    expect(svgArrowSolid, 'la flecha continua NO lleva dasharray').not.toMatch(
+      /<line[^>]*stroke-dasharray/,
+    );
     // Flecha discontinua → dasharray.
     const svgArrowDash = renderBoardSvg('full', [dashedArrow], {});
-    expect(svgArrowDash, 'la flecha discontinua lleva dasharray').toMatch(/<line[^>]*stroke-dasharray/);
+    expect(svgArrowDash, 'la flecha discontinua lleva dasharray').toMatch(
+      /<line[^>]*stroke-dasharray/,
+    );
   });
 
   // Pedido del dueño: los objetos NO deben salir girados al cambiar de campo. Un cono tiene
@@ -1453,7 +1849,9 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       const grupos = svg.match(/<g [^>]*data-el-type[^>]*>/g) ?? [];
       expect(grupos, 'hay un grupo por material').toHaveLength(materiales.length);
       for (const g of grupos) {
-        expect(g, `material derecho por pantalla: ${g.slice(0, 60)}`).toMatch(/rotate\(-90 [\d.]+ [\d.]+\)/);
+        expect(g, `material derecho por pantalla: ${g.slice(0, 60)}`).toMatch(
+          /rotate\(-90 [\d.]+ [\d.]+\)/,
+        );
       }
       // Y en horizontal NO hay contrarrotación: el dibujo ya está derecho.
       const svgH = renderBoardSvg('full', materiales, {});
@@ -1476,13 +1874,162 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
     });
 
     it('la contrarrotación no depende del TIPO de campo (medio campo, futsal, F7, lienzo)', () => {
-      for (const campo of ['half', 'third', 'box', 'futsal', 'f7', 'two_halves', 'blank'] as const) {
+      for (const campo of [
+        'half',
+        'third',
+        'box',
+        'futsal',
+        'f7',
+        'two_halves',
+        'blank',
+      ] as const) {
         const svg = renderBoardSvg(campo, [{ id: 'c1', t: 'cone', x: 0.5, y: 0.5 }], {
           orientation: 'vertical',
         });
         const grupo = (svg.match(/<g [^>]*data-el-type="cone"[^>]*>/) ?? [''])[0];
         expect(grupo, `el cono se ve derecho en ${campo}`).toMatch(/rotate\(-90 [\d.]+ [\d.]+\)/);
       }
+    });
+  });
+
+  describe('FASE 8C — la portería grande es una portería FRONTAL, no una escalera', () => {
+    const svgPorteria = () => {
+      const svg = renderBoardSvg('full', [{ id: 'g1', t: 'goal', x: 0.5, y: 0.5 }], {});
+      return (svg.match(/<g [^>]*data-el-type="goal"[^>]*>[\s\S]*?<\/g>/) ?? [''])[0];
+    };
+    /** Rectángulos del dibujo con sus medidas numéricas (los flotantes salen como 2.4800000000000004:
+     *  comparar cadenas exactas hacía fallar la prueba por formateo, no por dibujo). */
+    const rectangulos = (g: string) =>
+      [...g.matchAll(/<rect ([^>]*?)\/>/g)].map((m) => {
+        const attrs = m[1];
+        const num = (name: string) =>
+          Number(new RegExp(`${name}="([\\d.eE+-]+)"`).exec(attrs)?.[1] ?? NaN);
+        return { x: num('x'), y: num('y'), w: num('width'), h: num('height'), relleno: attrs };
+      });
+    const caminos = (g: string) =>
+      [...g.matchAll(/<path d="([^"]+)"([^>]*?)\/>/g)].map((m) => ({ d: m[1], attrs: m[2] }));
+
+    it('tiene larguero y dos postes GRUESOS y su anchura es la REGLAMENTARIA del campo', () => {
+      const g = svgPorteria();
+      expect(g, 'se dibuja la portería').not.toBe('');
+      const rects = rectangulos(g);
+      // CAMBIO DE CONTRATO (encargo de materiales, FASE 3): la anchura ya no es la constante 6,6
+      // heredada, sino la REGLAMENTARIA del campo activo (7,32 m × PX_PER_M ≈ 6,41 unidades en F11),
+      // justo para que coincida con la portería dibujada en el campo. El marco es proporcionalmente
+      // más grueso (antes 0,28 fijo).
+      const larguero = rects.find((r) => r.w > 6 && r.h < 0.6);
+      expect(larguero, 'larguero horizontal ancho y fino').toBeTruthy();
+      const grosor = larguero!.h;
+      const postes = rects.filter((r) => Math.abs(r.w - grosor) < 0.001 && r.h > 1.5);
+      expect(postes.length, 'dos postes verticales').toBe(2);
+      // Los postes bajan desde el larguero hasta la línea de suelo: mismo alto los dos.
+      expect(Math.abs(postes[0].h - postes[1].h)).toBeLessThan(0.001);
+      // Marco GRUESO respecto a la anchura (no una línea fina).
+      expect(grosor / larguero!.w, 'marco grueso').toBeGreaterThan(0.04);
+    });
+
+    it('su anchura coincide con la portería del campo y cambia con el TIPO de campo', () => {
+      // FASE 3: criterio medible — anchura de la portería de MATERIAL = anchura reglamentaria del
+      // campo (7,32 m F11 · 6 m F7 · 3 m fútbol sala) × PX_PER_M. Aquí en unidades del viewBox.
+      const ancho = (campo: 'full' | 'f7' | 'futsal'): number => {
+        const svg = renderBoardSvg(campo, [{ id: 'g', t: 'goal', x: 0.5, y: 0.5 }], {});
+        const g = (svg.match(/<g [^>]*data-el-type="goal"[^>]*>[\s\S]*?<\/g>/) ?? [''])[0];
+        const fondo = rectangulos(g).find((r) => r.relleno.includes('#ffffff1f'));
+        expect(fondo, `fondo de red en ${campo}`).toBeTruthy();
+        // El rect va DENTRO del grupo escalado: la anchura DIBUJADA es atributo × escala del grupo.
+        const escala = Number(/scale\(([\d.]+)\)/.exec(g)?.[1] ?? '1');
+        return fondo!.w * escala;
+      };
+      const anchoF11 = ancho('full');
+      expect(anchoF11, 'F11: 7,32 m').toBeCloseTo((7.32 * 92) / 105, 1);
+      // En F7 la portería DIBUJADA es la del medio campo F11 que sirve de fondo (el diseño F7 dibuja
+      // zonas, no una portería propia), así que la de material usa la MISMA anchura para coincidir.
+      expect(ancho('f7'), 'F7: la portería visible es la del F11').toBeCloseTo(
+        (7.32 * 92) / 105,
+        1,
+      );
+      expect(ancho('futsal'), 'fútbol sala: 3 m (mucho más estrecha)').toBeCloseTo(
+        (3 * 92) / 105,
+        1,
+      );
+      expect(ancho('futsal'), 'la de fútbol sala es la menor').toBeLessThan(anchoF11);
+    });
+
+    it('tiene RED de malla legible (sin diagonales y sin masa de líneas)', () => {
+      const g = svgPorteria();
+      // Las dos capas de red: dos <path> con trazo fino proporcional a la anchura.
+      const malla = caminos(g).filter((p) => /stroke-width="0\.1\d*"/.test(p.attrs));
+      expect(malla.length, 'dos capas de red (verticales y horizontales)').toBe(2);
+      const verticales = (malla[0].d.match(/M/g) ?? []).length;
+      const horizontales = (malla[1].d.match(/M/g) ?? []).length;
+      // Red LEGIBLE al reducirse: pocas líneas (antes 11 + 4 se convertían en una masa gris).
+      expect(verticales, 'entre 4 y 8 verticales de red').toBeGreaterThanOrEqual(4);
+      expect(verticales).toBeLessThanOrEqual(8);
+      expect(horizontales, 'entre 2 y 3 horizontales de red').toBeGreaterThanOrEqual(2);
+      expect(horizontales).toBeLessThanOrEqual(3);
+      // Las líneas de red son AXIS-ALINEADAS: una escalera o el antiguo aspa en X tendrían
+      // diagonales, que es justo lo que hacía que la portería se confundiera con una escalera.
+      const coords = [
+        ...malla
+          .map((p) => p.d)
+          .join(' ')
+          .matchAll(/M([-\d.]+) ([-\d.]+) L([-\d.]+) ([-\d.]+)/g),
+      ];
+      expect(coords.length, 'la red tiene todas sus líneas').toBe(verticales + horizontales);
+      for (const [, ax, ay, bx, by] of coords) {
+        expect(ax === bx || ay === by, `sin diagonales (${ax},${ay}→${bx},${by})`).toBe(true);
+      }
+    });
+
+    it('mantiene proporción realista (≈3:1), fondo transparente y sin relleno blanco grande', () => {
+      const g = svgPorteria();
+      const rects = rectangulos(g);
+      const fondoRed = rects.find((r) => r.relleno.includes('#ffffff1f'));
+      expect(fondoRed, 'fondo de red tenue').toBeTruthy();
+      expect(fondoRed!.w / fondoRed!.h, 'proporción 3:1 de portería reglamentaria').toBeGreaterThan(
+        2.8,
+      );
+      expect(fondoRed!.w / fondoRed!.h).toBeLessThan(3.2);
+      // Ningún rectángulo blanco OPACO grande: los únicos blancos son larguero y postes.
+      // CAMBIO DE CONTRATO (encargo de materiales, FASE 4): el marco es proporcionalmente más GRUESO
+      // para que la portería no se confunda con una escalera al reducirse, así que el límite se mide
+      // como fracción de la anchura (≤ 6 %) y no con la constante 0,28 de antes.
+      const blancos = rects.filter((r) => /fill="#ffffff"/.test(r.relleno));
+      expect(blancos.length, 'larguero y dos postes').toBe(3);
+      for (const r of blancos)
+        expect(Math.min(r.w, r.h) / fondoRed!.w, 'marco fino respecto a la anchura').toBeLessThanOrEqual(
+          0.06,
+        );
+    });
+
+    it('la caja táctil de la portería coincide con el marco REGLAMENTARIO', () => {
+      // CAMBIO DE CONTRATO (encargo de materiales, FASE 3): la caja táctil de la portería ya no sale
+      // del tamaño genérico (`TACTICAL_BBOX.goal`), sino de la caja reglamentaria del campo
+      // (7,32 × 2,44 m → proporción 3:1), que es lo que se dibuja. Aquí se comprueba que con el
+      // campo indicado la caja es la del dibujo; sin campo se mantiene la caja histórica.
+      const R = BOARD_CANON_RECT;
+      const porteria: CanvasElement = { id: 'g', t: 'goal', x: 0.5, y: 0.5 };
+      // `pxTol` a cero: sin el MÍNIMO TÁCTIL, que es lo que interesa medir aquí (la caja de la
+      // figura); con el mínimo, una portería pequeña se agranda hasta ~44 px de área táctil.
+      const sinMinimo = { x: 0, y: 0 };
+      const conCampo = materialHitHalfExtents(porteria, R, 1, sinMinimo, false, 'full');
+      const dibujo = goalBoxUnits('full');
+      // La caja se devuelve NORMALIZADA (0..1): para compararla con la geometría hay que volver a
+      // unidades multiplicando por el rect del campo.
+      expect(
+        conCampo.hw * 2 * R.w,
+        'ancho de la caja = ancho reglamentario',
+      ).toBeCloseTo(dibujo.w, 5);
+      expect(conCampo.hh * 2 * R.h, 'alto de la caja = alto reglamentario').toBeCloseTo(dibujo.h, 5);
+      // Y en fútbol sala la caja (y el dibujo) son más pequeños.
+      const enFutsal = materialHitHalfExtents(porteria, R, 1, sinMinimo, false, 'futsal');
+      expect(enFutsal.hw * 2 * R.w, 'portería de fútbol sala más estrecha').toBeLessThan(
+        conCampo.hw * 2 * R.w,
+      );
+      expect(enFutsal.hw * 2 * R.w).toBeCloseTo(goalBoxUnits('futsal').w, 5);
+      // Sin campo se conserva el comportamiento histórico (compatibilidad de llamadas antiguas).
+      const sinCampo = materialHitHalfExtents(porteria, R, 1);
+      expect(sinCampo.hw).toBeGreaterThan(0);
     });
   });
 });

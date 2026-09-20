@@ -24,6 +24,7 @@
 //   · movil-horizontal-*.png           (conservadas) móvil horizontal con menús
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import { longPress, fillBoardTitle } from './gesture-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -48,7 +49,10 @@ function normToScreen(nx: number, ny: number, host: Box, fit: Fit): { x: number;
   const cyg = ny * RECT.h + RECT.y;
   const cx = offX + cxg * s;
   const cy = offY + cyg * s;
-  return { x: host.x + host.width / 2 + (cx - host.width / 2), y: host.y + host.height / 2 + (cy - host.height / 2) };
+  return {
+    x: host.x + host.width / 2 + (cx - host.width / 2),
+    y: host.y + host.height / 2 + (cy - host.height / 2),
+  };
 }
 
 async function hostBox(page: Page): Promise<Box> {
@@ -63,11 +67,19 @@ async function fitMode(page: Page): Promise<Fit> {
 }
 
 /** Seed del borrador de IA (vía /board/draft) con orientación/players/formaciones. */
-function seedDraft(orientation: 'horizontal' | 'vertical', players: unknown[], formations?: { own: string; rival: string }) {
+function seedDraft(
+  orientation: 'horizontal' | 'vertical',
+  players: unknown[],
+  formations?: { own: string; rival: string },
+) {
   const draft = {
-    schemaVersion: 1, title: `Cierre ${orientation}`, field: 'full', orientation,
+    schemaVersion: 1,
+    title: `Cierre ${orientation}`,
+    field: 'full',
+    orientation,
     players: players.length ? players : undefined,
-    ownFormation: formations?.own, rivalFormation: formations?.rival,
+    ownFormation: formations?.own,
+    rivalFormation: formations?.rival,
   };
   return `(() => {
     // Limpiar claves previas para que un segundo seed (en la misma página) re-siembre.
@@ -86,14 +98,39 @@ function seedDraft(orientation: 'horizontal' | 'vertical', players: unknown[], f
 /** Seed de la pizarra normal (vía /board) con plantilla mínima. */
 async function seedBoard(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Sergio', number: 8, position: 'MC', color: '#1f7a4d', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Diego', number: 10, position: 'DF', color: '#c0392b', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Sergio',
+          number: 8,
+          position: 'MC',
+          color: '#1f7a4d',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Diego',
+          number: 10,
+          position: 'DF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
@@ -103,7 +140,13 @@ async function seedBoard(page: Page): Promise<void> {
 
 async function dismissHelp(page: Page): Promise<void> {
   for (const sel of ['.help-close', '.fill-hint-close']) {
-    if (await page.locator(sel).isVisible().catch(() => false)) await page.locator(sel).click();
+    if (
+      await page
+        .locator(sel)
+        .isVisible()
+        .catch(() => false)
+    )
+      await page.locator(sel).click();
   }
 }
 
@@ -115,6 +158,7 @@ async function openBoard(page: Page): Promise<void> {
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
+  await abrirHerramientas(page);
   if (category) await page.locator('.tools-cat', { hasText: category }).click();
   if (title === 'Jugador propio' || title === 'Jugador rival') {
     const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
@@ -151,10 +195,19 @@ async function pickDrawTool(page: Page, title: string, colorIndex?: number): Pro
 }
 
 /** Coloca un material (con variante opcional) mediante clic. */
-async function placeMaterial(page: Page, tool: string, nx: number, ny: number, variantIndex?: number): Promise<void> {
+async function placeMaterial(
+  page: Page,
+  tool: string,
+  nx: number,
+  ny: number,
+  variantIndex?: number,
+): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   if (variantIndex != null) {
-    const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${tool}"]`) });
+    const card = page.locator('.tools-material-card', {
+      has: page.locator(`.rail-btn[title="${tool}"]`),
+    });
     const variantCount = await card.locator('.variant-swatch').count();
     if (variantCount > 0) await card.locator('.variant-swatch').nth(variantIndex).click();
   }
@@ -168,7 +221,12 @@ async function placeMaterial(page: Page, tool: string, nx: number, ny: number, v
 }
 
 /** Pulsación larga para abrir el menú contextual y girar ±90°. */
-async function rotateSelected(page: Page, nx: number, ny: number, dir: 'left' | 'right'): Promise<void> {
+async function rotateSelected(
+  page: Page,
+  nx: number,
+  ny: number,
+  dir: 'left' | 'right',
+): Promise<void> {
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
   const box = await hostBox(page);
   const fit = await fitMode(page);
@@ -197,15 +255,22 @@ async function selectByNorm(page: Page, nx: number, ny: number): Promise<void> {
 // GALERÍA — capturas de FUNCIONALIDAD
 // =============================================================
 test.describe('CIERRE — galería visual de funcionalidad (revisión final)', () => {
-  test('herramientas-colocadas: todas las formas/herramientas dibujadas con varios colores', async ({ page }) => {
+  test('herramientas-colocadas: todas las formas/herramientas dibujadas con varios colores', async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 900 });
     await seedBoard(page);
     await openBoard(page);
 
     // Línea (indigo) y flecha normal (rojo) y flecha doble (verde) — reconocibles.
+    // FASE 3 — MEDICIÓN QUE CORRIGE LA PRUEBA (no la app): los trazos que empezaban en x=0,08 se
+    // mueven a x=0,17. Al retirar la barra inferior el campo gana 57 px de alto y su escala crece, así
+    // que con el panel de Dibujo abierto el borde izquierdo del campo cae POR DEBAJO del panel
+    // (medido: el pointerdown lo recibía el panel y 3 de las 10 figuras no se creaban; antes pasaba
+    // por 5 px de margen). El propósito —cada forma con su color— no cambia.
     await pickDrawTool(page, 'Línea', 0);
-    await drawShape(page, [0.08, 0.1], [0.3, 0.14]);
+    await drawShape(page, [0.17, 0.1], [0.3, 0.14]);
     await deselect(page);
     await pickDrawTool(page, 'Flecha (movimiento)', 1);
     await drawShape(page, [0.38, 0.1], [0.58, 0.16]);
@@ -216,7 +281,7 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
 
     // Curva izquierda (naranja) y curva derecha (azul) claramente distintas.
     await pickDrawTool(page, 'Curva izquierda', 3);
-    await drawShape(page, [0.08, 0.26], [0.3, 0.4]);
+    await drawShape(page, [0.17, 0.26], [0.3, 0.4]);
     await deselect(page);
     await pickDrawTool(page, 'Curva derecha', 4);
     await drawShape(page, [0.38, 0.26], [0.58, 0.4]);
@@ -229,7 +294,7 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
 
     // Mano alzada (cian) y rectángulo (rojo) y elipse (verde).
     await pickDrawTool(page, 'Dibujo a mano alzada', 6);
-    await drawShape(page, [0.08, 0.5], [0.3, 0.66]);
+    await drawShape(page, [0.17, 0.5], [0.3, 0.66]);
     await deselect(page);
     await pickDrawTool(page, 'Rectángulo', 1);
     await drawShape(page, [0.38, 0.5], [0.58, 0.62]);
@@ -257,7 +322,9 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/herramientas-colocadas.png` });
   });
 
-  test('materiales-colocados-1: materiales distribuidos (1/2), alguno rotado ±90°', async ({ page }) => {
+  test('materiales-colocados-1: materiales distribuidos (1/2), alguno rotado ±90°', async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 900 });
     await seedBoard(page);
@@ -269,7 +336,7 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await placeMaterial(page, 'BOSU', 0.28, 0.3);
     await placeMaterial(page, 'Banderín', 0.42, 0.3);
     await placeMaterial(page, 'Chino', 0.56, 0.3);
-    await placeMaterial(page, 'Pica coloreable', 0.7, 0.3);
+    await placeMaterial(page, 'Pica', 0.7, 0.3);
     await placeMaterial(page, 'Maniquí individual', 0.14, 0.46, 0);
     await placeMaterial(page, 'Miniportería', 0.3, 0.46);
     // Rotado +90° para demostrar que un material puede girar.
@@ -281,7 +348,9 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/materiales-colocados-1.png` });
   });
 
-  test('materiales-colocados-2: materiales distribuidos (2/2), alguno rotado -90°', async ({ page }) => {
+  test('materiales-colocados-2: materiales distribuidos (2/2), alguno rotado -90°', async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 900 });
     await seedBoard(page);
@@ -303,7 +372,9 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/materiales-colocados-2.png` });
   });
 
-  test('interaccion-seleccion: asas de resize, extremos, C1, material sin resize y menú contextual', async ({ page }) => {
+  test('interaccion-seleccion: asas de resize, extremos, C1, material sin resize y menú contextual', async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 900 });
     await seedBoard(page);
@@ -387,9 +458,11 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     test.setTimeout(120_000);
     // Jugador vertical con nombre/dorsal legible.
     await page.setViewportSize({ width: 1366, height: 900 });
-    await page.addInitScript(seedDraft('vertical', [
-      { id: 'own-1', team: 'own', position: { x: 0.5, y: 0.5 }, label: 'Sergio', number: 8 },
-    ]));
+    await page.addInitScript(
+      seedDraft('vertical', [
+        { id: 'own-1', team: 'own', position: { x: 0.5, y: 0.5 }, label: 'Sergio', number: 8 },
+      ]),
+    );
     await page.goto('/board/draft');
     await expect(page.locator('.board-host')).toBeVisible();
     await dismissHelp(page);
@@ -404,7 +477,9 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await dismissHelp(page);
     await page.waitForTimeout(400);
     await expect(page.locator('.field-count')).toHaveText('22');
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/formacion-vertical-legible.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/formacion-vertical-legible.png` });
   });
 
   test('formaciones-propio-rival (conservada): 4-3-3 propia + 4-4-2 rival', async ({ page }) => {
@@ -419,14 +494,17 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/formaciones-propio-rival.png` });
   });
 
-  test('ejercicio-guardado-reabierto (conservada): guardar en pizarra y reabrir', async ({ page }) => {
+  test('ejercicio-guardado-reabierto (conservada): guardar en pizarra y reabrir', async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 900 });
     await seedBoard(page);
     await openBoard(page);
 
     await useTool(page, 'Jugador propio', 'Jugadores');
-    let box = await hostBox(page); let fit = await fitMode(page);
+    let box = await hostBox(page);
+    let fit = await fitMode(page);
     const pp = normToScreen(0.3, 0.3, box, fit);
     await page.mouse.click(pp.x, pp.y);
     await deselect(page);
@@ -444,17 +522,21 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await page.locator('[title="Diseñar en pizarra"]').first().click();
     await page.waitForURL('**/board');
     await expect(page.locator('.field-count')).toHaveText('3');
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/ejercicio-guardado-reabierto.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/ejercicio-guardado-reabierto.png` });
   });
 
   test('movil-horizontal-menus-cerrados y menús (conservadas)', async ({ page }) => {
     test.setTimeout(120_000);
     // Menús cerrados.
     await page.setViewportSize({ width: 844, height: 390 });
-    await page.addInitScript(seedDraft('horizontal', [
-      { id: 'own-1', team: 'own', position: { x: 0.3, y: 0.4 }, label: 'Sergio', number: 8 },
-      { id: 'rival-1', team: 'rival', position: { x: 0.6, y: 0.6 }, label: 'Diego', number: 10 },
-    ]));
+    await page.addInitScript(
+      seedDraft('horizontal', [
+        { id: 'own-1', team: 'own', position: { x: 0.3, y: 0.4 }, label: 'Sergio', number: 8 },
+        { id: 'rival-1', team: 'rival', position: { x: 0.6, y: 0.6 }, label: 'Diego', number: 10 },
+      ]),
+    );
     await page.goto('/board/draft');
     await expect(page.locator('.board-host')).toBeVisible();
     await dismissHelp(page);
@@ -473,26 +555,34 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
       return n;
     });
     expect(open, 'no hay menús principales abiertos').toBe(0);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/movil-horizontal-menus-cerrados.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/movil-horizontal-menus-cerrados.png` });
 
     // Menú Jugadores abierto.
     await seedBoard(page);
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left[aria-label="Jugadores"]')).toBeVisible();
     await page.waitForTimeout(150);
     await expect(page.locator('.roster-list')).toBeVisible();
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/movil-horizontal-menu-jugadores.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/movil-horizontal-menu-jugadores.png` });
 
     // Menú Dibujo abierto.
     await page.keyboard.press('Escape');
     await page.waitForTimeout(120);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     await page.waitForTimeout(150);
     const buttons = page.locator('.tools-panel-side .rail-btn');
     expect(await buttons.count()).toBeGreaterThanOrEqual(10);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/movil-horizontal-menu-dibujo.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/movil-horizontal-menu-dibujo.png` });
   });
 });
 

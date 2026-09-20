@@ -1,4 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
+import { toggleFillScreen } from './gesture-helpers';
 
 // FASE 1 — color independiente por herramienta + pulsación larga para abrir la paleta.
 const VBW = 100;
@@ -34,7 +36,7 @@ async function openBoard(page: Page): Promise<void> {
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     // FASE G: el letterbox se espera con la ausencia de board-fill (sin wait fijo).
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
@@ -46,6 +48,7 @@ async function armTool(page: Page, title: string): Promise<void> {
   // ya no sería visible). En el test 1 se arma dos veces seguidas (Línea→Flecha).
   const panel = page.locator('.side-panel-left.tools-panel-side');
   if (!(await panel.isVisible().catch(() => false))) {
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   }
   await page.locator(`.rail-btn[title="${title}"]`).click();
@@ -88,6 +91,7 @@ test('pulsación larga abre la paleta de color de la herramienta (sin crear obje
   await openBoard(page);
   const before = await page.locator('.board-canvas svg [data-el-type]').count();
 
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   const btn = page.locator('.side-panel-left .rail-btn[title="Línea"]');
   const box = (await btn.boundingBox())!;

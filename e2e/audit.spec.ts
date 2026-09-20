@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 // =============================================================
 // Auditoría #10: sin errores de consola ni peticiones fallidas
@@ -14,8 +15,26 @@ async function seed(page: Page): Promise<void> {
     const now = new Date().toISOString();
     const team = { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now };
     const players = [
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
+      {
+        id: 'p1',
+        teamId: 't1',
+        name: 'Marcos',
+        number: 2,
+        position: 'DF',
+        color: '#1a73e8',
+        active: true,
+        createdAt: now,
+      },
+      {
+        id: 'p2',
+        teamId: 't1',
+        name: 'Pau',
+        number: 10,
+        position: 'MF',
+        color: '#c0392b',
+        active: true,
+        createdAt: now,
+      },
     ];
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem('entrenolab:teams', JSON.stringify([team]));
@@ -39,7 +58,14 @@ async function openCatalog(page: Page, category: string): Promise<void> {
       : category === 'Material'
         ? '.side-panel-left.tools-panel-side[aria-label="Herramientas de Material"]'
         : '.side-panel-left.tools-panel-side[aria-label="Herramientas de Dibujo"]';
-  if (await page.locator(sel).isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator(sel)
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: category }).click();
 }
 
@@ -56,19 +82,29 @@ async function useTool(page: Page, title: string, category?: string): Promise<vo
 
 /** Abre el panel Propiedades (derecha), que empieza cerrado (Fase 1). */
 async function openProps(page: Page): Promise<void> {
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
   await page.locator('button[aria-label="Propiedades"]').click();
   await expect(page.locator('.studio-panel')).toBeVisible();
   await page.waitForTimeout(60);
 }
 
-test('no hay errores de consola ni peticiones fallidas en los flujos de la pizarra', async ({ page }) => {
+test('no hay errores de consola ni peticiones fallidas en los flujos de la pizarra', async ({
+  page,
+}) => {
   const problems: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') problems.push(`console.error: ${msg.text()}`);
   });
   page.on('pageerror', (err) => problems.push(`pageerror: ${err.message}`));
-  page.on('requestfailed', (req) => problems.push(`requestfailed: ${req.url()} (${req.failure()?.errorText ?? 'sin error'})`));
+  page.on('requestfailed', (req) =>
+    problems.push(`requestfailed: ${req.url()} (${req.failure()?.errorText ?? 'sin error'})`),
+  );
   page.on('response', (res) => {
     if (res.status() >= 400) problems.push(`${res.status()} ${res.url()}`);
   });
@@ -118,17 +154,19 @@ test('no hay errores de consola ni peticiones fallidas en los flujos de la pizar
   await page.mouse.up();
 
   // Cambiar campo (half) y orientación (vertical). (La "Rejilla" fue retirada por el dueño.)
-  // FASE 5: al pasar de un campo completo A UN medio campo con elementos se abre el
-  // diálogo de conversión; se elige expresamente "Encajar todo" para que el test no quede
-  // bloqueado por el backdrop y la conversión sea la intencionada.
+  // CORRECCIÓN URGENTE (dueño): el cambio de campo es DIRECTO. Ya no hay diálogo de conversión ni
+  // backdrop que pueda bloquear la prueba: el campo cambia con el propio `selectOption`.
   await openProps(page);
-  await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('half');
-  const dialog = page.locator('.field-change-dialog');
-  if (await dialog.isVisible().catch(() => false)) {
-    await dialog.getByText('Encajar todo').click();
-    await expect(dialog).toHaveCount(0);
-  }
-  await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();
+  await page
+    .locator('.studio-panel .field', { hasText: 'Campo base' })
+    .locator('select')
+    .selectOption('half');
+  await expect(page.locator('.field-change-dialog'), 'sin diálogo de conversión').toHaveCount(0);
+  await expect(page.locator('.board-host')).toHaveAttribute('data-field', 'half');
+  await page
+    .locator('.studio-panel .field', { hasText: 'Orientación' })
+    .locator('.chip[data-orient="vertical"]')
+    .click();
 
   // Guardar → reabrir (thumbnail + normalización). A5: el título es obligatorio, así
   // que se escribe antes de guardar (si no, el guardado se bloquea y no navega).
@@ -151,13 +189,17 @@ test('no hay errores de consola ni peticiones fallidas en los flujos de la pizar
   expect(problems).toEqual([]);
 });
 
-test('no hay errores de consola ni peticiones fallidas en plantilla, biblioteca y sesiones', async ({ page }) => {
+test('no hay errores de consola ni peticiones fallidas en plantilla, biblioteca y sesiones', async ({
+  page,
+}) => {
   const problems: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') problems.push(`console.error: ${msg.text()}`);
   });
   page.on('pageerror', (err) => problems.push(`pageerror: ${err.message}`));
-  page.on('requestfailed', (req) => problems.push(`requestfailed: ${req.url()} (${req.failure()?.errorText ?? 'sin error'})`));
+  page.on('requestfailed', (req) =>
+    problems.push(`requestfailed: ${req.url()} (${req.failure()?.errorText ?? 'sin error'})`),
+  );
   page.on('response', (res) => {
     if (res.status() >= 400) problems.push(`${res.status()} ${res.url()}`);
   });
@@ -184,7 +226,9 @@ test('no hay errores de consola ni peticiones fallidas en plantilla, biblioteca 
   await expect(page.locator('.ex-card')).toHaveCount(1);
   await page.locator('.ex-card').first().locator('.ex-more-btn').click();
   await page.locator('[title="Editar datos"]').first().click();
-  await expect(page.locator('.modal textarea[name="description"]')).toHaveValue('Conservación del balón');
+  await expect(page.locator('.modal textarea[name="description"]')).toHaveValue(
+    'Conservación del balón',
+  );
   await page.getByText('Guardar').click();
 
   // Sesiones: crear una sesión con la tarea.

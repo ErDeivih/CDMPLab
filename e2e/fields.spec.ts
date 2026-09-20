@@ -9,7 +9,10 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
     localStorage.setItem('entrenolab:players', JSON.stringify([]));
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
@@ -19,7 +22,13 @@ async function seed(page: Page): Promise<void> {
 
 /** Abre el panel Propiedades (derecha), que empieza cerrado (Fase 1). */
 async function openProps(page: Page): Promise<void> {
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
   await page.locator('button[aria-label="Propiedades"]').click();
   // FASE G: el panel se espera con el `.toBeVisible()` siguiente (observable); sin wait fijo.
   await expect(page.locator('.studio-panel')).toBeVisible();
@@ -38,7 +47,8 @@ async function hugeShapes(page: Page): Promise<unknown[]> {
       } catch {
         continue;
       }
-      if (b.width > 30 || b.height > 30) bad.push({ tag: el.tagName, w: b.width, h: b.height, x: b.x, y: b.y });
+      if (b.width > 30 || b.height > 30)
+        bad.push({ tag: el.tagName, w: b.width, h: b.height, x: b.x, y: b.y });
     }
     return bad;
   });
@@ -55,8 +65,14 @@ test.describe('Campos (geometría y evidencia visual)', () => {
       for (const field of fields) {
         await page.goto('/board');
         await openProps(page);
-        await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator(`.chip[data-orient="${orient}"]`).click();
-        await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption(field);
+        await page
+          .locator('.studio-panel .field', { hasText: 'Orientación' })
+          .locator(`.chip[data-orient="${orient}"]`)
+          .click();
+        await page
+          .locator('.studio-panel .field', { hasText: 'Campo base' })
+          .locator('select')
+          .selectOption(field);
         await page.waitForTimeout(250);
         const name = `${orient}-${field}`;
         await page.screenshot({ path: `${SHOTS}/${name}.png` });
@@ -66,17 +82,34 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     }
   });
 
-  test('los arcos de penalti del medio campo sobresalen hacia el centro, no hacia el área', async ({ page }) => {
+  test('los arcos de penalti del medio campo sobresalen hacia el centro, no hacia el área', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await openProps(page);
     // Seleccionar el medio campo lo pone en vertical por defecto; pasamos a horizontal
     // para medir el arco del área (pendiente) en el eje X.
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('half');
-    await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="horizontal"]').click();
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('half');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip[data-orient="horizontal"]')
+      .click();
     // FASE G: condición observable — el medio campo tiene arcos (corner/penalti: paths con
     // 'A'); esperamos a que estén renderizados en lugar de un wait fijo.
-    await expect.poll(async () => page.evaluate(() => [...document.querySelectorAll('.board-canvas path')].filter((p) => (p.getAttribute('d') ?? '').includes('A')).length)).toBeGreaterThan(0);
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          () =>
+            [...document.querySelectorAll('.board-canvas path')].filter((p) =>
+              (p.getAttribute('d') ?? '').includes('A'),
+            ).length,
+        ),
+      )
+      .toBeGreaterThan(0);
 
     // El medio campo 52,5×68 se dibuja en el rect canónico {4,4,46,59.58}; el borde lejano
     // del área grande desde la portería (l=16,5/52,5) está en x = 4 + (16,5/52,5)*46.
@@ -95,20 +128,33 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     expect(penalty!.midX).toBeGreaterThan(boxEdgeX);
   });
 
-  test('campo base F7: plantilla compuesta activable desde el selector, sin toggle overlay', async ({ page }) => {
+  test('campo base F7: plantilla compuesta activable desde el selector, sin toggle overlay', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await openProps(page);
 
     // El toggle overlay "F7" en Ayudas ya NO existe: el F7 es ahora una plantilla base.
-    await expect(page.locator('.studio-panel .field', { hasText: 'Ayudas' }).locator('.chip', { hasText: 'F7' })).toHaveCount(0);
+    await expect(
+      page
+        .locator('.studio-panel .field', { hasText: 'Ayudas' })
+        .locator('.chip', { hasText: 'F7' }),
+    ).toHaveCount(0);
 
     // El campo base F7 se elige desde el selector y dibuja la plantilla compuesta
     // (medio campo F11 + F7 perpendicular): aparece la portería del F11 y el rect del F7.
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('f7');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('f7');
     // FASE G: condición observable — esperamos a que el SVG renderice el medio campo F11
     // apaisado (height="46") en lugar de un wait fijo.
-    await expect.poll(async () => (await page.locator('.board-canvas svg').first().innerHTML()).includes('height="46"')).toBe(true);
+    await expect
+      .poll(async () =>
+        (await page.locator('.board-canvas svg').first().innerHTML()).includes('height="46"'),
+      )
+      .toBe(true);
     await expect(page.locator('.board-canvas svg').first()).toBeVisible();
     const svg = await page.locator('.board-canvas svg').first().innerHTML();
     // FASE 4/8b: el F7 usa el medio campo F11 APISAADO (68 m en X, 52,5 m en Y → 46 de alto).
@@ -118,8 +164,13 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     // Guardar → reabrir → el campo compuesto se conserva y se vuelve a dibujar.
     // A5: el título es obligatorio; se escribe antes de guardar.
     await openProps(page);
-    await page.locator('.studio-panel input[aria-label="Título del ejercicio"]').fill('F7 compuesto');
-    await page.locator('[title="Guardar ejercicio"]').click();
+    await page
+      .locator('.studio-panel input[aria-label="Título del ejercicio"]')
+      .fill('F7 compuesto');
+    // CONTRATO ACTUALIZADO (defecto 2): el `title` del botón de guardar ya no es fijo
+    // («Guardar ejercicio») sino el ESTADO del guardado, porque el estado vive ahora en el propio
+    // botón (se retiró la franja superior del campo). El observable estable es su clase.
+    await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     await page.locator('.ex-card').first().hover();
     await page.locator('[title="Diseñar en pizarra"]').first().click();
@@ -131,25 +182,36 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     expect(svg2).toContain('height="46"');
     expect(svg2).toContain('rgba(255,255,255,0.25)');
     // Al reabrir tampoco aparece el toggle overlay.
-    await expect(page.locator('.studio-panel .field', { hasText: 'Ayudas' }).locator('.chip', { hasText: 'F7' })).toHaveCount(0);
+    await expect(
+      page
+        .locator('.studio-panel .field', { hasText: 'Ayudas' })
+        .locator('.chip', { hasText: 'F7' }),
+    ).toHaveCount(0);
   });
 
   test('"Sin líneas" (blank) no dibuja ni marcas ni puntos de ajuste', async ({ page }) => {
     await seed(page);
     await page.goto('/board');
     await openProps(page);
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('blank');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('blank');
     // FASE G: condición observable — un campo "blank" no dibuja círculos; esperamos a que
     // el conteo llegue a 0 en lugar de un wait fijo.
     await expect.poll(() => page.locator('.board-canvas circle').count()).toBe(0);
     // La capa de puntos de ajuste (snapDots) fue RETIRADA por decisión del dueño.
     // En un lienzo "blank" (sin líneas) no hay marcas reglamentarias ni snap dots,
     // así que NO debe haber ningún círculo.
-    const circles = await page.evaluate(() => document.querySelectorAll('.board-canvas circle').length);
+    const circles = await page.evaluate(
+      () => document.querySelectorAll('.board-canvas circle').length,
+    );
     expect(circles).toBe(0);
   });
 
-  test('no existe la opción "Rejilla" y en un campo real solo quedan las marcas reglamentarias', async ({ page }) => {
+  test('no existe la opción "Rejilla" y en un campo real solo quedan las marcas reglamentarias', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await openProps(page);
@@ -158,23 +220,36 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     // En un campo completo real solo permanecen las marcas reglamentarias: los 2 puntos
     // de penalti (r=0.35) y el círculo central. NO los puntos de ajuste/snap que antes se
     // dibujaban con la cuadrícula activada o por defecto.
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('full');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('full');
     // FASE G: condición observable — el campo completo dibuja exactamente los 2 puntos de
     // penalti; esperamos a que el conteo llegue a 2 en lugar de un wait fijo.
     await expect.poll(() => page.locator('.board-canvas circle').count()).toBe(2);
-    const circleCount = await page.evaluate(() => document.querySelectorAll('.board-canvas circle').length);
+    const circleCount = await page.evaluate(
+      () => document.querySelectorAll('.board-canvas circle').length,
+    );
     // El campo completo dibuja exactamente los 2 puntos de penalti (los extrados del
     // punto central los dibuja el círculo central, que es una <ellipse>). Con snapDots
     // retirado no hay puntos de ajuste (esquinas/lados/centro) añadidos.
     expect(circleCount).toBe(2);
   });
 
-  test('campo completo vertical: porterías arriba y abajo y círculo central circular (no lateral)', async ({ page }) => {
+  test('campo completo vertical: porterías arriba y abajo y círculo central circular (no lateral)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await openProps(page);
-    await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('full');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip[data-orient="vertical"]')
+      .click();
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('full');
     await page.waitForTimeout(250);
 
     const res = await page.evaluate(() => {
@@ -210,7 +285,9 @@ test.describe('Campos (geometría y evidencia visual)', () => {
     expect(Math.abs(res.center!.w - res.center!.h)).toBeLessThan(1);
   });
 
-  test('FASE 3: la galería visual de campos muestra tarjetas con miniatura REAL, estado seleccionado y es navegable', async ({ page }) => {
+  test('FASE 3: la galería visual de campos muestra tarjetas con miniatura REAL, estado seleccionado y es navegable', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await openProps(page);

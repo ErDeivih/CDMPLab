@@ -285,6 +285,22 @@ export class SupabaseRepository implements DataSource {
    * significa que ya no queda nada más (una página llena puede ser la última, así que se pide
    * la siguiente y esa vuelve vacía: una petición de más a cambio de no adivinar el total).
    */
+  /**
+   * Lee TODAS las páginas de una tabla.
+   *
+   * El bucle NO puede depender de que el servidor devuelva exactamente `PAGE_SIZE` filas: PostgREST
+   * recorta cada respuesta a su `max_rows` (por defecto 1000, pero configurable y a veces menor). La
+   * versión anterior pedía 1000, avanzaba SIEMPRE 1000 y terminaba en cuanto la página venía
+   * incompleta —así que con `max_rows = 500` daba por buena la primera mitad y TRUNCABA los datos en
+   * silencio—.
+   *
+   * Ahora:
+   * - se avanza por el número REAL de filas recibidas (funciona con cualquier `max_rows`);
+   * - se termina solo con una página VACÍA;
+   * - se sigue detectando el servidor que ignora el `Range` (misma primera fila que la página
+   *   anterior) y se falla claro en vez de girar sin fin;
+   * - el orden lo fija cada consulta con una clave determinista, así que las fronteras no se mueven.
+   */
   private async loadAllPages<T>(
     code: string,
     page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
@@ -292,16 +308,18 @@ export class SupabaseRepository implements DataSource {
     const rows: T[] = [];
     let from = 0;
     let firstRow: string | null = null;
-    let pending = true;
-    while (pending) {
+    for (;;) {
       const { data, error } = await page(from, from + PAGE_SIZE - 1);
       if (error) throw errorToDataError(error, code);
       const pageRows = data ?? [];
-      // Red de seguridad: si el servidor devolviera SIEMPRE la misma página (un proxy que se
-      // coma el `Range`, por ejemplo) el bucle no terminaría nunca y la app se colgaría
-      // llenando memoria. Se detecta en la primera página que no avanza y se falla claro.
-      const firstOfPage = pageRows.length === PAGE_SIZE ? JSON.stringify(pageRows[0]) : null;
-      if (firstOfPage !== null && firstOfPage === firstRow) {
+      // Página vacía = se acabó. Es la ÚNICA condición de fin: una página «corta» puede ser
+      // simplemente el límite del servidor con más filas detrás.
+      if (pageRows.length === 0) break;
+      const firstOfPage = JSON.stringify(pageRows[0]);
+      // Red de seguridad: si el servidor devolviera SIEMPRE la misma página (un proxy que se coma
+      // el `Range`, por ejemplo) el bucle no terminaría nunca y la app se colgaría llenando
+      // memoria. Se detecta en la primera página que no avanza y se falla claro.
+      if (firstOfPage === firstRow) {
         throw new DataError(
           'pagination_stuck',
           'No se pudo leer el equipo completo: el servidor devuelve siempre la misma página.',
@@ -309,9 +327,7 @@ export class SupabaseRepository implements DataSource {
       }
       firstRow = firstOfPage;
       rows.push(...pageRows);
-      from += PAGE_SIZE;
-      // Una página incompleta es la última: ya no queda nada más que traer.
-      pending = pageRows.length === PAGE_SIZE;
+      from += pageRows.length;
     }
     return rows;
   }

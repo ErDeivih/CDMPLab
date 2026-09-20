@@ -7,13 +7,14 @@
 // izquierda, zigzag (conducción), mano alzada, rect perímetro, rect
 // relleno, elipse perímetro, elipse relleno, texto, jugador propio,
 // jugador rival, portero, balón, fitball, cono, BOSU, banderín, chino,
-// pica coloreable, pértiga, maniquí individual, barrera de maniquíes,
+// pica, pértiga, maniquí individual, barrera de maniquíes,
 // miniportería, portería grande, valla, aro, escalera, minitrampolín,
 // peto, chaleco lastrado, mancuerna / pesa. Al terminar: nada
 // seleccionado, sin paneles abiertos, y se asevera que CADA familia
 // está presente en el modelo persistido.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import { fillBoardTitle } from './gesture-helpers';
 
@@ -71,6 +72,7 @@ async function openBoardDesktop(page: Page): Promise<void> {
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
+  await abrirHerramientas(page);
   if (category) await page.locator('.tools-cat', { hasText: category }).click();
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
@@ -87,6 +89,7 @@ async function deselect(page: Page): Promise<void> {
 }
 
 async function placePlayer(page: Page, title: string, nx: number, ny: number, tray = false): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   const isPlayerTool = title === 'Jugador propio' || title === 'Jugador rival';
   if (tray) {
@@ -109,6 +112,7 @@ async function placePlayer(page: Page, title: string, nx: number, ny: number, tr
 }
 
 async function placeMaterial(page: Page, tool: string, nx: number, ny: number): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${tool}"]`) });
   const variantCount = await card.locator('.variant-swatch').count();
@@ -181,7 +185,7 @@ test('composición completa: cada familia presente en el modelo, nada selecciona
   // 2) Materiales (cada familia puntual) en la fila 1-2 de la franja superior.
   const materials: Array<[string, number, number]> = [
     ['Balón', 0, 1], ['Fitball', 1, 1], ['Cono', 2, 1], ['BOSU', 3, 1],
-    ['Banderín', 4, 1], ['Chino', 5, 1], ['Pica coloreable', 6, 1], ['Pértiga / poste', 7, 1],
+    ['Banderín', 4, 1], ['Chino', 5, 1], ['Pica', 6, 1], ['Pértiga / poste', 7, 1],
     ['Maniquí individual', 8, 1], ['Barrera de maniquíes', 9, 1],
     ['Miniportería', 0, 2], ['Portería grande', 1, 2], ['Valla', 2, 2], ['Aro', 3, 2],
     ['Escalera', 4, 2], ['Minitrampolín', 5, 2], ['Peto', 6, 2], ['Chaleco lastrado', 7, 2],

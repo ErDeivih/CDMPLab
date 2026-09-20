@@ -295,6 +295,28 @@ export class LibraryComponent implements OnDestroy {
   protected readonly draftIndicator = signal<null | 'saved' | 'loaded'>(null);
   protected readonly saving = signal(false);
 
+  /**
+   * Ejercicios cuya miniatura guardada NO se pudo cargar en el navegador.
+   *
+   * FASE 1.5 del encargo: una miniatura histórica rota (data URL truncada, formato antiguo,
+   * asset perdido) no debe mostrar el icono de imagen rota. Cuando el `<img>` falla se marca
+   * aquí y la tarjeta pasa al diagrama SVG en vivo del ejercicio, que es un fallback limpio
+   * del campo con sus objetos. El estado es por sesión: si el usuario recarga, se reintenta
+   * la miniatura guardada (no se borra nada del ejercicio).
+   */
+  private readonly miniaturasRotas = signal<ReadonlySet<string>>(new Set());
+
+  protected miniaturaRota(id: string): boolean {
+    return this.miniaturasRotas().has(id);
+  }
+
+  protected marcarMiniaturaRota(id: string): void {
+    if (this.miniaturasRotas().has(id)) return;
+    const next = new Set(this.miniaturasRotas());
+    next.add(id);
+    this.miniaturasRotas.set(next);
+  }
+
   private draftTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Caché de miniaturas. La clave guarda lo que cambia el dibujo, así que filtrar,

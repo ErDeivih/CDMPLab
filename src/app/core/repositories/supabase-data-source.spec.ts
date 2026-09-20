@@ -889,15 +889,20 @@ describe('SupabaseRepository · paginación del dataset del equipo', () => {
     const server = seededServer();
     await makePagedRepo(server).loadTeam(PAGINATED_TEAM_ID);
 
-    // Cada tabla se pidió entera: bloques de 1000 y una última página incompleta.
+    // Cada tabla se pidió entera. CONTRATO ACTUALIZADO (fase de paginación robusta): ahora la
+    // ÚNICA condición de fin es una página VACÍA —una página corta puede ser el límite del
+    // servidor con más filas detrás—, así que cada lectura hace UNA petición más para confirmar
+    // que no queda nada. Es el precio de no truncar en silencio cuando `max_rows` < 1000.
     expect(selectRanges(server, 'players')).toEqual([
       { from: 0, to: 999 },
       { from: 1000, to: 1999 },
       { from: 2000, to: 2999 },
+      { from: 2500, to: 3499 }, // página vacía: fin confirmado
     ]);
     expect(selectRanges(server, 'exercise_folders')).toEqual([
       { from: 0, to: 999 },
       { from: 1000, to: 1999 },
+      { from: 1200, to: 2199 }, // vacía
     ]);
     expect(selectRanges(server, 'exercises').slice(0, 2)).toEqual([
       { from: 0, to: 999 },
@@ -906,6 +911,7 @@ describe('SupabaseRepository · paginación del dataset del equipo', () => {
     expect(selectRanges(server, 'sessions')).toEqual([
       { from: 0, to: 999 },
       { from: 1000, to: 1999 },
+      { from: 1100, to: 2099 }, // vacía
     ]);
 
     // Ninguna petición pidió más de una página, y todas pidieron un rango explícito.
@@ -938,6 +944,75 @@ describe('SupabaseRepository · paginación del dataset del equipo', () => {
       expect(selectCalls(server, table).length).toBeGreaterThan(0);
       expect(selectCalls(server, table)[0].orders.map((o) => o.column)).toEqual(columns);
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // FASE 5 — límites de servidor distintos de 1000 (defecto real: con `max_rows = 500` la
+  // lectura pedía 1000, avanzaba 1000 y terminaba al ver una página «corta», así que TRUNCABA
+  // la mitad de los datos en silencio).
+  // -------------------------------------------------------------------------
+  describe('paginación robusta con cualquier max_rows', () => {
+    for (const maxRows of [500, 1000]) {
+      for (const total of [0, 1, 499, 500, 501, 999, 1000, 1001]) {
+        it(`max_rows=${maxRows} y ${total} jugadores: los lee TODOS, sin truncar ni duplicar`, async () => {
+          const server = new FakePostgrestServer(maxRows);
+          server.seed('players', playerRows(total));
+          const repo = makePagedRepo(server);
+
+          const dataset = await repo.loadTeam(PAGINATED_TEAM_ID);
+
+          expect(dataset.players).toHaveLength(total);
+          expect(dataset.players.map((p) => p.id).sort()).toEqual(idsOf(server.rowsOf('players')));
+        });
+      }
+    }
+
+    it('varias páginas con max_rows=500: 2500 filas llegan completas', async () => {
+      const server = new FakePostgrestServer(500);
+      server.seed('players', playerRows(2500));
+      const dataset = await makePagedRepo(server).loadTeam(PAGINATED_TEAM_ID);
+
+      expect(dataset.players).toHaveLength(2500);
+      expect(dataset.players.map((p) => p.id).sort()).toEqual(idsOf(server.rowsOf('players')));
+      // Avanza por lo RECIBIDO (500), no por lo pedido (1000).
+      expect(selectRanges(server, 'players').slice(0, 3)).toEqual([
+        { from: 0, to: 999 },
+        { from: 500, to: 1499 },
+        { from: 1000, to: 1999 },
+      ]);
+    });
+
+    it('servidor que IGNORA el rango con max_rows=500: falla claro, no gira sin fin', async () => {
+      const server = new FakePostgrestServer(500, true);
+      server.seed('players', playerRows(2500));
+      const repo = makePagedRepo(server);
+
+      await expect(repo.loadTeam(PAGINATED_TEAM_ID)).rejects.toMatchObject({
+        code: 'pagination_stuck',
+      });
+      expect(selectCalls(server, 'players')).toHaveLength(2); // detectado en la segunda página
+    });
+
+    it('error en una página INTERMEDIA: se propaga y no se devuelve un dataset a medias', async () => {
+      class ServerQueFalla extends FakePostgrestServer {
+        override respond(
+          table: string,
+          rows: FakeRow[],
+          range: FakeRange | null,
+          orders: FakeOrder[],
+        ): FakeResponse {
+          if (table === 'players' && range?.from === 500) {
+            return { data: null, error: { code: '57014', message: 'statement timeout' } };
+          }
+          return super.respond(table, rows, range, orders);
+        }
+      }
+      const server = new ServerQueFalla(500);
+      server.seed('players', playerRows(1200));
+      const repo = makePagedRepo(server);
+
+      await expect(repo.loadTeam(PAGINATED_TEAM_ID)).rejects.toMatchObject({ code: '57014' });
+    });
   });
 
   it('una edición a mitad de lectura no duplica ni pierde ejercicios (orden por clave INMUTABLE)', async () => {

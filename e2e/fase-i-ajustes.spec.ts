@@ -6,6 +6,7 @@
 // el usuario que se equivocaba al importar no tenía vuelta atrás.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirAjustes } from './gesture-helpers';
 
 const TEAM = {
   id: 't1',
@@ -56,7 +57,7 @@ async function seed(page: Page): Promise<void> {
 }
 
 async function openSettings(page: Page): Promise<void> {
-  await page.locator('button[aria-label="Ajustes"]').click();
+  await abrirAjustes(page);
   await expect(page.locator('.settings')).toBeVisible();
 }
 

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 // Rect canónico de contenido (largo→X, ancho→Y) de un campo 105×68 en el viewBox 100×80.
 const RECT = { x: 4, y: 10, w: 92, h: (92 * 68) / 105 };
@@ -66,6 +67,7 @@ function fieldCount(page: Page): Promise<number> {
 
 /** Pulsa la herramienta de dibujo (por título) en el panel "Dibujo". */
 async function useDrawTool(page: Page, title: string): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator(`.rail-btn[title="${title}"]`).click();
   // FASE B (paneles persistentes): el panel Dibujo queda desplegado y cubriría el

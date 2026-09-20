@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 const P = (id: number, name: string, number: number, position: string) =>
   ({ id: `p${id}`, teamId: 't1', name, number, position, color: '#1a73e8', active: true, createdAt: '2026-01-01T00:00:00.000Z' });
@@ -32,6 +33,7 @@ async function openJugadores(page: Page): Promise<void> {
   // desplegado (porque ya no se cierra al elegir un jugador) no lo re-togglea
   // (lo cerraría).
   if (await page.locator('.side-panel-left').isVisible().catch(() => false)) return;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
 }

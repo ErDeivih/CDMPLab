@@ -18,7 +18,11 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /cdmplab-pages\.spec\.ts/,
+  // `cdmplab-pages`: el artefacto de Pages (rutas, assets, guards). `prod-campos`: comprueba que el
+  // bundle del artefacto CONTIENE la corrección del cambio de campo y del fútbol sala azul (los seis
+  // campos y los colores nuevos). La verificación INTERACTIVA del cambio de campo en Pages no es
+  // posible sin una sesión real de Supabase, que el encargo prohíbe tocar.
+  testMatch: /(cdmplab-pages|prod-campos)\.spec\.ts/,
   timeout: 90_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,

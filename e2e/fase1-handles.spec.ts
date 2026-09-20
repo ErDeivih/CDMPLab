@@ -14,8 +14,9 @@
 // fase5-captures.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { longPress } from './gesture-helpers';
+import { longPress, toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/fase1';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -70,7 +71,7 @@ async function openBoardDesktop(page: Page): Promise<void> {
   await dismissHelp(page);
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
 }
@@ -93,6 +94,7 @@ async function useTool(page: Page, title: string, category?: string): Promise<vo
   if (category) {
     // FASE B: el catálogo persiste abierto; solo se abre si su herramienta no está visible.
     if (!(await page.locator(`.rail-btn[title="${title}"]`).isVisible().catch(() => false))) {
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: category }).click();
     }
   }

@@ -4,7 +4,8 @@
   gap: 0;
   max-width: 1400px;
   margin: 0 auto;
-  min-height: calc(100vh - var(--topbar-h) - 48px);
+  // Sin barra superior: la altura mínima solo descuenta el pie de la vista.
+  min-height: calc(100vh - 48px);
 }
 
 // ---------- Sidebar de carpetas ----------
@@ -333,9 +334,13 @@
 }
 
 // ---------- Grid ----------
+// FASE 7: en escritorio, 3 tarjetas por fila en 1366 px (y hasta 4 en pantallas más anchas).
+// Medido con `minmax(250px, 1fr)`: en 1366 la rejilla mide 778 px, así que 3×250 + 2 huecos de 16
+// se pasaban por 4 px y solo cabían DOS tarjetas de 381 px (las "excesivamente grandes" que vio el
+// dueño). Con 220 px caben tres y las tarjetas quedan ~249 px.
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: var(--space-4);
 }
 
@@ -653,10 +658,16 @@
   display: none;
 }
 
-@media (max-width: 768px) {
+// El criterio coincide con el del shell y el de la pizarra (`isCompactViewport`): móvil vertical
+// Y teléfono girado. Antes solo miraba `max-width: 768px`, así que un móvil en horizontal
+// (844×390) NO recibía la rejilla de dos columnas y mostraba UNA tarjeta gigante por fila
+// (medido: 1/1/1/1/1/1 en 844×390).
+@media (max-width: 768px), (max-height: 480px) and (max-width: 1000px) {
   .library {
     grid-template-columns: 1fr;
-    min-height: calc(100dvh - var(--topbar-h) - 56px);
+    // Antes descontaba `--topbar-h`: la barra superior ya no existe, así que solo hay que dejar
+    // sitio a la barra de navegación inferior (56 px) y a la safe area.
+    min-height: calc(100dvh - var(--bottom-nav-h) - env(safe-area-inset-bottom, 0px));
   }
 
   .lib-main {
@@ -679,9 +690,11 @@
 
   .lib-sidebar {
     position: fixed;
-    top: var(--topbar-h);
+    // La barra superior ya no existe: el panel móvil arranca en el borde superior y deja libre la
+    // barra de navegación inferior.
+    top: 0;
+    bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
     left: 0;
-    bottom: 0;
     width: 260px;
     max-width: 82vw;
     z-index: 70;
@@ -699,7 +712,7 @@
   .sidebar-backdrop {
     display: block;
     position: fixed;
-    inset: var(--topbar-h) 0 0 0;
+    inset: 0 0 calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px)) 0;
     z-index: 65;
     background: rgba(23, 25, 28, 0.4);
   }
@@ -722,12 +735,31 @@
   }
 
   // ---------- Tarjeta de ejercicio compacta en móvil ----------
+  // FASE 7 del encargo: EXACTAMENTE dos tarjetas por fila, también a 360 px de ancho, con
+  // separación compacta y miniatura 16:9. Con `auto-fill/minmax(250px)` a 360 px cabía UNA sola
+  // tarjeta (360 − padding = ~336 px), que es lo que el dueño veía como tarjetas gigantes.
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+
   .ex-thumb {
     aspect-ratio: 16 / 9;
   }
 
+  .ex-title {
+    // Título como máximo en DOS líneas (nunca una tarjeta deformada por un título largo).
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 13px;
+    line-height: 1.25;
+  }
+
   .ex-body {
-    padding: var(--space-3);
+    padding: var(--space-2);
     gap: 6px;
   }
 

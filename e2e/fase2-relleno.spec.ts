@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
-import { fillBoardTitle } from './gesture-helpers';
+import { abrirHerramientas } from './board-helpers';
+import { fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 
 // FASE 2 — perímetro, relleno y opacidad INDEPENDIENTES en rect/elipse/zona.
 const VBW = 100;
@@ -35,7 +36,7 @@ async function openBoard(page: Page): Promise<void> {
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     // FASE G: condición observable — el letterbox se espera con la ausencia de board-fill.
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
@@ -65,6 +66,7 @@ test('FASE 10: rectángulo con perímetro rojo y relleno rojo al 50% (el relleno
   await openBoard(page);
   const host = (await page.locator('.board-host').boundingBox())!;
 
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Rectángulo"]').click();
   // Perímetro ROJO (contenedor 0).
@@ -87,6 +89,7 @@ test('solo perímetro: fill:false no rellena', async ({ page }) => {
   await seed(page);
   await openBoard(page);
   const host = (await page.locator('.board-host').boundingBox())!;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Rectángulo"]').click();
   await page.locator('.tools-caption .chip', { hasText: 'Perímetro' }).click();
@@ -102,6 +105,7 @@ test('FASE 10: guardar/reabrir y respaldo conservan relleno, color y opacidad (v
   const host = (await page.locator('.board-host').boundingBox())!;
   // Rectángulo con relleno (shapeFill por defecto true). Fase 8: la herramienta "Zona"
   // fue retirada; Fase 10: el relleno usa el mismo color que el perímetro.
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Rectángulo"]').click();
   await drawShape(page, host, [0.2, 0.3], [0.6, 0.6]);

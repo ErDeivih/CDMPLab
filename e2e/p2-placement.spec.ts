@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import { fillBoardTitle } from './gesture-helpers';
 
 async function seed(page: Page): Promise<void> {
@@ -23,6 +24,7 @@ async function openJugadores(page: Page): Promise<void> {
   // FASE B (paneles persistentes): abrir Jugadores es IDEMPOTENTE: si ya está
   // desplegado (porque ya no se cierra al elegir un jugador) no lo re-togglea.
   if (await page.locator('.side-panel-left').isVisible().catch(() => false)) return;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
 }
@@ -101,6 +103,7 @@ test.describe('Fase 2 — colocación humana (jugadores / materiales / genérico
   test('el tap sobre el propio material armado MANTIENE el modo de colocación continua (Fase 3)', async ({ page }) => {
     await seed(page);
     await page.goto('/board');
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await expect(page.locator('.field-count')).toHaveText('0');
@@ -137,6 +140,7 @@ test.describe('Fase 2 — colocación humana (jugadores / materiales / genérico
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await expect(page.locator('.field-count')).toHaveText('0'); // armado

@@ -5,29 +5,64 @@
 // Se generan con la UI real (Playwright) y se copian a
 // `docs/screenshots/bloque-capturas/`, junto a un `contact-sheet.html`
 // con cada imagen + su pie de foto.
+//
+// CORRECCIÓN URGENTE (dueño): «Dos medios campos» (`two_halves`) ya NO se ofrece en la galería ni
+// existe el diálogo de conversión, así que sus dos capturas se generan abriendo un DOCUMENTO
+// HISTÓRICO con ese campo. Es la evidencia visual de que un ejercicio antiguo se sigue abriendo y
+// dibujando igual (compatibilidad), no de una opción del producto que se haya retirado.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
+import { toggleFillScreen } from './gesture-helpers';
 
 const OUT = 'docs/screenshots/bloque-capturas';
 fs.mkdirSync(OUT, { recursive: true });
 
 // [filename, caption] — orden de la hoja de contacto.
 const CAPTIONS: Array<[string, string]> = [
-  ['dos-medios-campos-horizontal.png', 'Dos medios campos (two_halves) en horizontal: dos medios campos juntos, izquierda y derecha, sin líneas dobles gruesas en la unión central.'],
-  ['dos-medios-campos-vertical.png', 'Dos medios campos (two_halves) en vertical: dos medios campos, arriba y abajo, cada uno con sus áreas, portería, punto, arco y semicírculo central.'],
-  ['fichas-rapidas-por-color.png', 'Incremento C1: cinco fichas rápidas de jugador GENÉRICO por color (azul, rojo, amarillo, verde, morado); la diferenciación es por color, sin nombre ni playerId.'],
-  ['menu-contextual-45-90.png', 'Menú contextual (barra) con los giros ±45° y ±90° (Bloque D2): Deshacer/Rehacer, ±45° izq/der, ±90° izq/der, Duplicar y Eliminar.'],
-  ['linea-flecha-discontinuas.png', 'Trazo discontinuo por herramienta (Bloque E): la Línea discontinua y la Flecha continua coexisten con preferencias independientes.'],
-  ['catalogo-materiales-actual.png', 'Panel de Material: catálogo agrupado con miniaturas reales (PNG) y variantes de cono. Nomenclatura canónica (Chino, BOSU, Fitball, Maniquí individual, Miniportería, Mancuerna / pesa).'],
-  ['composicion-final-con-objetos.png', 'Composición final: portería, jugadores propios/rivales, balón, cono, línea y rectángulo sobre el campo.'],
-  ['dos-medios-vs-encajar-todo.png', 'Comparación entre "Dos medios campos" (two_halves) y "Encajar todo en un medio campo" (fit-half): campos distintos, composición distinta en la primera mitad.'],
-  ['pizarra-final-png.png', 'PNG exportado de la pizarra (composición con varios tipos de objeto).'],
+  [
+    'dos-medios-campos-horizontal.png',
+    'Dos medios campos (two_halves) en horizontal, abierto desde un DOCUMENTO HISTÓRICO: el campo retirado de la galería se sigue dibujando con sus dos medios campos, izquierda y derecha, sin líneas dobles gruesas en la unión central.',
+  ],
+  [
+    'dos-medios-campos-vertical.png',
+    'Dos medios campos (two_halves) histórico en vertical: dos medios campos, arriba y abajo, cada uno con sus áreas, portería, punto, arco y semicírculo central.',
+  ],
+  [
+    'fichas-rapidas-por-color.png',
+    'Incremento C1: cinco fichas rápidas de jugador GENÉRICO por color (azul, rojo, amarillo, verde, morado); la diferenciación es por color, sin nombre ni playerId.',
+  ],
+  [
+    'menu-contextual-45-90.png',
+    'Menú contextual (barra) con los giros ±45° y ±90° (Bloque D2): Deshacer/Rehacer, ±45° izq/der, ±90° izq/der, Duplicar y Eliminar.',
+  ],
+  [
+    'linea-flecha-discontinuas.png',
+    'Trazo discontinuo por herramienta (Bloque E): la Línea discontinua y la Flecha continua coexisten con preferencias independientes.',
+  ],
+  [
+    'catalogo-materiales-actual.png',
+    'Panel de Material: catálogo agrupado con miniaturas reales (PNG) y variantes de cono. Nomenclatura canónica (Chino, BOSU, Fitball, Maniquí individual, Miniportería, Mancuerna / pesa).',
+  ],
+  [
+    'composicion-final-con-objetos.png',
+    'Composición final: portería, jugadores propios/rivales, balón, cono, línea y rectángulo sobre el campo.',
+  ],
+  [
+    'dos-medios-campos-con-objetos.png',
+    'Documento histórico «Dos medios campos» CON objetos: al abrirlo se conservan los elementos y sus coordenadas (compatibilidad de `two_halves`).',
+  ],
+  [
+    'pizarra-final-png.png',
+    'PNG exportado de la pizarra (composición con varios tipos de objeto).',
+  ],
 ];
 
 // Campo → pantalla (horizontal, contain) para colocar y dibujar en puntos conocidos.
-const VBW = 100, VBH = 80;
+const VBW = 100,
+  VBH = 80;
 const RECT = { x: 4, y: 10, w: 92, h: 92 / (105 / 68) };
 type Box = { x: number; y: number; width: number; height: number };
 function normToScreen(nx: number, ny: number, b: Box): [number, number] {
@@ -42,10 +77,18 @@ function normToScreen(nx: number, ny: number, b: Box): [number, number] {
 /** Abre un catálogo lateral solo si no está ya abierto (idempotente, FASE B). */
 async function openCat(page: Page, cat: string): Promise<void> {
   const probe =
-    cat === 'Jugadores' ? '.side-panel-left[aria-label="Jugadores"]'
-    : cat === 'Material' ? '.side-panel-left[aria-label="Herramientas de Material"]'
-    : '.side-panel-left[aria-label="Herramientas de Dibujo"]';
-  if (!(await page.locator(probe).isVisible().catch(() => false))) {
+    cat === 'Jugadores'
+      ? '.side-panel-left[aria-label="Jugadores"]'
+      : cat === 'Material'
+        ? '.side-panel-left[aria-label="Herramientas de Material"]'
+        : '.side-panel-left[aria-label="Herramientas de Dibujo"]';
+  if (
+    !(await page
+      .locator(probe)
+      .isVisible()
+      .catch(() => false))
+  ) {
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: cat }).click();
   }
 }
@@ -63,10 +106,25 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
@@ -79,11 +137,25 @@ async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await expect(page.locator('.board-canvas svg')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
-  const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.fill-hint-close').click();
+  const fill = await page
+    .locator('.board-host')
+    .evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await page.waitForTimeout(120);
   }
 }
@@ -92,25 +164,86 @@ async function hostBox(page: Page): Promise<Box> {
   return (await page.locator('.board-host').boundingBox())!;
 }
 
-async function setField(page: Page, field: string): Promise<void> {
-  await page.locator('button[aria-label="Propiedades"]').click();
-  await expect(page.locator('.studio-panel [aria-label="Campo base"]')).toBeVisible();
-  await page.locator('.studio-panel [aria-label="Campo base"]').selectOption(field);
-  await expect.poll(() => page.locator('.board-host').getAttribute('data-field'), { timeout: 4000 }).toBe(field);
-  // Cerrar el panel para que no tape el campo en la captura.
-  if (await page.locator('.studio-panel button[aria-label="Cerrar panel"]').isVisible().catch(() => false)) {
-    await page.locator('.studio-panel button[aria-label="Cerrar panel"]').click();
-  }
+/** Abre en la pizarra un DOCUMENTO HISTÓRICO con el campo indicado (los campos retirados de la
+ *  galería —`two_halves`, `box`— ya no se pueden elegir, así que su evidencia visual se genera
+ *  cargando un ejercicio antiguo, que es justo la compatibilidad que hay que demostrar). */
+async function abrirHistorico(page: Page, campo: string, conObjetos: boolean): Promise<void> {
+  const elementos = conObjetos
+    ? [
+        { id: 'e1', t: 'player', x: 0.3, y: 0.35, n: 9, c: '#1a73e8' },
+        { id: 'e2', t: 'player', x: 0.7, y: 0.65, n: 4, c: '#1a73e8' },
+        { id: 'e3', t: 'cone', x: 0.5, y: 0.5, c: '#f9ab00' },
+        { id: 'e4', t: 'ball', x: 0.55, y: 0.45, c: '#ffffff' },
+      ]
+    : [];
+  await page.addInitScript(
+    ([campoDoc, els]: [string, unknown[]]) => {
+      localStorage.clear();
+      const now = new Date().toISOString();
+      localStorage.setItem('entrenolab:seeded', '1');
+      localStorage.setItem('entrenolab:board-hints', '1');
+      localStorage.setItem('entrenolab:fill-hint', '1');
+      localStorage.setItem(
+        'entrenolab:teams',
+        JSON.stringify([
+          { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now },
+        ]),
+      );
+      localStorage.setItem('entrenolab:players', JSON.stringify([]));
+      localStorage.setItem('entrenolab:folders', JSON.stringify([]));
+      localStorage.setItem(
+        'entrenolab:exercises',
+        JSON.stringify([
+          {
+            id: 'legacy-dos-medios',
+            teamId: 't1',
+            folderId: null,
+            title: 'Antiguo dos medios',
+            description: '',
+            explanation: '',
+            category: 'Técnica',
+            objectives: [],
+            materials: [],
+            durationMinutes: 15,
+            minPlayers: null,
+            maxPlayers: null,
+            loadMode: 'fixed',
+            seriesCount: null,
+            repetitionsCount: null,
+            workSeconds: null,
+            restSeconds: null,
+            isTemplate: false,
+            canvas: {
+              version: 2,
+              schemaVersion: 4,
+              field: campoDoc,
+              orientation: 'horizontal',
+              frames: [{ duration: 1000, elements: els }],
+              grass: 'stripes',
+            },
+            thumbnail: null,
+            savedAt: '2026-01-01T10:00:00.000Z',
+          },
+        ]),
+      );
+      localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
+    },
+    [campo, elementos] as [string, unknown[]],
+  );
+  await page.goto('/library');
+  await page.locator('.ex-card').first().hover();
+  await page.locator('[title="Diseñar en pizarra"]').first().click();
+  await page.waitForURL('**/board');
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
+  await expect(page.locator('.board-host')).toHaveAttribute('data-field', campo);
 }
 
 test.setTimeout(120_000);
 
 test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas', () => {
-  test('dos medios campos horizontal y vertical', async ({ page }) => {
+  test('dos medios campos horizontal y vertical (documento histórico)', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
-    await seed(page);
-    await openBoard(page);
-    await setField(page, 'two_halves');
+    await abrirHistorico(page, 'two_halves', false);
     // Horizontal (por defecto).
     await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(OUT, 'dos-medios-campos-horizontal.png') });
@@ -119,7 +252,12 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     await expect(page.locator('.studio-panel')).toBeVisible();
     await page.locator('.studio-panel .chip[data-orient="vertical"]').click();
     await page.waitForTimeout(200);
-    if (await page.locator('.studio-panel button[aria-label="Cerrar panel"]').isVisible().catch(() => false)) {
+    if (
+      await page
+        .locator('.studio-panel button[aria-label="Cerrar panel"]')
+        .isVisible()
+        .catch(() => false)
+    ) {
       await page.locator('.studio-panel button[aria-label="Cerrar panel"]').click();
     }
     await page.screenshot({ path: path.join(OUT, 'dos-medios-campos-vertical.png') });
@@ -149,7 +287,9 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     await page.mouse.up();
     await expect(page.locator('.context-bar')).toBeVisible();
     // Confirmar que hay botones ±45 y ±90.
-    await expect(page.locator('.context-bar [aria-label="Girar 45° a la izquierda"]')).toBeVisible();
+    await expect(
+      page.locator('.context-bar [aria-label="Girar 45° a la izquierda"]'),
+    ).toBeVisible();
     await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toBeVisible();
     await page.screenshot({ path: path.join(OUT, 'menu-contextual-45-90.png') });
   });
@@ -162,11 +302,16 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     await openCat(page, 'Dibujo');
     // Línea discontinua.
     await page.locator('.rail-btn[title="Línea"]').click();
-    await expect(page.locator('.tools-caption .chip[aria-label="Trazo discontinuo"]')).toBeVisible();
+    await expect(
+      page.locator('.tools-caption .chip[aria-label="Trazo discontinuo"]'),
+    ).toBeVisible();
     await page.locator('.tools-caption .chip[aria-label="Trazo discontinuo"]').click();
     const [a1, b1] = normToScreen(0.15, 0.35, box);
     const [a2, b2] = normToScreen(0.5, 0.35, box);
-    await page.mouse.move(a1, a2); await page.mouse.down(); await page.mouse.move(b1, b2, { steps: 5 }); await page.mouse.up();
+    await page.mouse.move(a1, a2);
+    await page.mouse.down();
+    await page.mouse.move(b1, b2, { steps: 5 });
+    await page.mouse.up();
     // Flecha continua (independiente). FASE B: el panel Dibujo persiste abierto, así
     // que NO se re-togglea la categoría (eso lo cerraría); se usa el panel desplegado.
     await page.locator('.rail-btn[title="Flecha (movimiento)"]').click();
@@ -174,14 +319,19 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     await page.locator('.tools-caption .chip[aria-label="Trazo continuo"]').click();
     const [c1, d1] = normToScreen(0.15, 0.6, box);
     const [c2, d2] = normToScreen(0.5, 0.6, box);
-    await page.mouse.move(c1, c2); await page.mouse.down(); await page.mouse.move(d1, d2, { steps: 5 }); await page.mouse.up();
+    await page.mouse.move(c1, c2);
+    await page.mouse.down();
+    await page.mouse.move(d1, d2, { steps: 5 });
+    await page.mouse.up();
     await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
     await page.keyboard.press('Escape');
     await page.waitForTimeout(150);
     await page.screenshot({ path: path.join(OUT, 'linea-flecha-discontinuas.png') });
   });
 
-  test('catálogo de material corregido (nombres canónicos y miniaturas reales)', async ({ page }) => {
+  test('catálogo de material corregido (nombres canónicos y miniaturas reales)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
@@ -189,7 +339,12 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     await expect(page.locator('.tools-material-card')).toHaveCount(19);
     // El panel muestra el catálogo canónico (sin iconos genéricos). Momentáneamente
     // pude quedar abierto el panel de Propiedades; se cierra si existe.
-    if (await page.locator('.side-panel-right').isVisible().catch(() => false)) {
+    if (
+      await page
+        .locator('.side-panel-right')
+        .isVisible()
+        .catch(() => false)
+    ) {
       await page.locator('.side-panel-right button[aria-label="Cerrar panel"]').click();
     }
     await page.screenshot({ path: path.join(OUT, 'catalogo-materiales-actual.png') });
@@ -229,12 +384,18 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     await clickTool('Dibujo', 'Rectángulo');
     const [qa, qb] = normToScreen(0.15, 0.2, box);
     const [ra, rb] = normToScreen(0.28, 0.32, box);
-    await page.mouse.move(qa, qb); await page.mouse.down(); await page.mouse.move(ra, rb, { steps: 5 }); await page.mouse.up();
+    await page.mouse.move(qa, qb);
+    await page.mouse.down();
+    await page.mouse.move(ra, rb, { steps: 5 });
+    await page.mouse.up();
     await openCat(page, 'Dibujo');
     await page.locator('.rail-btn[title="Línea"]').click();
     const [la, lb] = normToScreen(0.15, 0.72, box);
     const [ma, mb] = normToScreen(0.5, 0.72, box);
-    await page.mouse.move(la, lb); await page.mouse.down(); await page.mouse.move(ma, mb, { steps: 5 }); await page.mouse.up();
+    await page.mouse.move(la, lb);
+    await page.mouse.down();
+    await page.mouse.move(ma, mb, { steps: 5 });
+    await page.mouse.up();
     // Deseleccionar y capturar la composición.
     await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
     await page.keyboard.press('Escape');
@@ -242,17 +403,18 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     await page.screenshot({ path: path.join(OUT, 'composicion-final-con-objetos.png') });
   });
 
-  test('comparación "Dos medios campos" vs "Encajar todo" (fit-half)', async ({ page }) => {
+  test('documento histórico "Dos medios campos" CON objetos (compatibilidad)', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
-    await seed(page);
-    await openBoard(page);
-    // Dos medios campos.
-    await setField(page, 'two_halves');
+    // CAMBIO DE CONTRATO: la comparación «Dos medios campos» vs «Encajar todo» ya no existe (las dos
+    // opciones del diálogo se retiraron con el cambio de campo directo). Lo que SÍ debe seguir
+    // demostrándose es que un ejercicio antiguo con `two_halves` se abre con sus objetos intactos.
+    await abrirHistorico(page, 'two_halves', true);
+    await expect(
+      page.locator('.field-count'),
+      'los objetos del documento antiguo siguen ahí',
+    ).toHaveText('4');
     await page.waitForTimeout(200);
-    if (await page.locator('.studio-panel button[aria-label="Cerrar panel"]').isVisible().catch(() => false)) {
-      await page.locator('.studio-panel button[aria-label="Cerrar panel"]').click();
-    }
-    await page.screenshot({ path: path.join(OUT, 'dos-medios-vs-encajar-todo.png') });
+    await page.screenshot({ path: path.join(OUT, 'dos-medios-campos-con-objetos.png') });
   });
 
   test('PNG exportado de la pizarra final', async ({ page }) => {
@@ -265,7 +427,10 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     const box = await hostBox(page);
     const [qa, qb] = normToScreen(0.2, 0.2, box);
     const [ra, rb] = normToScreen(0.5, 0.4, box);
-    await page.mouse.move(qa, qb); await page.mouse.down(); await page.mouse.move(ra, rb, { steps: 5 }); await page.mouse.up();
+    await page.mouse.move(qa, qb);
+    await page.mouse.down();
+    await page.mouse.move(ra, rb, { steps: 5 });
+    await page.mouse.up();
     await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
     // Descargar el PNG y guardar una copia a OUT.
     const dlPromise = page.waitForEvent('download');
@@ -282,7 +447,7 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
       ([name, desc]) => `<figure class="shot">
   <img src="${name}" alt="${desc}" loading="lazy">
   <figcaption><strong>${name}</strong> — ${desc}</figcaption>
-</figure>`
+</figure>`,
     ).join('\n');
     const html = `<!doctype html>
 <html lang="es">

@@ -11,6 +11,7 @@
 // líneas, y que un ejercicio guardado/reabierto conserva esas posiciones.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 
 const SHOTS = 'e2e/shots/fase2-franja';
@@ -112,6 +113,7 @@ test.describe('FASE 2 — césped único y franja exterior', () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await expect(page.locator('.placement-hint')).toBeVisible();
@@ -153,6 +155,7 @@ test.describe('FASE 2 — césped único y franja exterior', () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     await page.locator('.tray-player[title="Jugador Azul"]').click();

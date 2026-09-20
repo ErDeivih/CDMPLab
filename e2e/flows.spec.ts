@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { fillBoardTitle } from './gesture-helpers';
+import { fillBoardTitle, abrirAjustes } from './gesture-helpers';
 
 // Sembramos un equipo con jugadores en localStorage para que los flujos
 // sean deterministas (la app arranca con ese equipo activo).
@@ -11,10 +12,46 @@ async function seed(page: Page): Promise<void> {
     const now = new Date().toISOString();
     const team = { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now };
     const players = [
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-      { id: 'p3', teamId: 't1', name: 'Adrián', number: 7, position: 'FW', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p4', teamId: 't1', name: 'Dani', number: 1, position: 'GK', color: '#1a73e8', active: true, createdAt: now },
+      {
+        id: 'p1',
+        teamId: 't1',
+        name: 'Marcos',
+        number: 2,
+        position: 'DF',
+        color: '#1a73e8',
+        active: true,
+        createdAt: now,
+      },
+      {
+        id: 'p2',
+        teamId: 't1',
+        name: 'Pau',
+        number: 10,
+        position: 'MF',
+        color: '#c0392b',
+        active: true,
+        createdAt: now,
+      },
+      {
+        id: 'p3',
+        teamId: 't1',
+        name: 'Adrián',
+        number: 7,
+        position: 'FW',
+        color: '#1a73e8',
+        active: true,
+        createdAt: now,
+      },
+      {
+        id: 'p4',
+        teamId: 't1',
+        name: 'Dani',
+        number: 1,
+        position: 'GK',
+        color: '#1a73e8',
+        active: true,
+        createdAt: now,
+      },
     ];
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem('entrenolab:teams', JSON.stringify([team]));
@@ -43,6 +80,7 @@ test.describe('EntrenoLab flujos', () => {
     await expect(page.locator('.field-count')).toHaveText('0');
 
     // Colocamos un jugador desde el panel Jugadores (izquierda, antes abierto por defecto).
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .roster-item').first().click();
     // Tocar un jugador ARMA la colocación (no coloca aún). FASE B: el panel permanece abierto.
@@ -90,7 +128,9 @@ test.describe('EntrenoLab flujos', () => {
     await expect(page.getByText('Sesión de posesión')).toBeVisible();
   });
 
-  test('borrar un ejercicio usado en una sesión lo desvincula y avisa (la tarea no se pierde)', async ({ page }) => {
+  test('borrar un ejercicio usado en una sesión lo desvincula y avisa (la tarea no se pierde)', async ({
+    page,
+  }) => {
     await seed(page);
     // 1) Ejercicio en la biblioteca.
     await page.goto('/library');
@@ -128,7 +168,9 @@ test.describe('EntrenoLab flujos', () => {
     await expect(page.locator('.task-badge')).toHaveText('Ejercicio eliminado de biblioteca');
   });
 
-  test('el respaldo exportado se puede reimportar aunque una tarea haya perdido su ejercicio', async ({ page }) => {
+  test('el respaldo exportado se puede reimportar aunque una tarea haya perdido su ejercicio', async ({
+    page,
+  }) => {
     await seed(page);
     // Ejercicio + sesión vinculada.
     await page.goto('/library');
@@ -152,18 +194,29 @@ test.describe('EntrenoLab flujos', () => {
 
     // …y el respaldo exportado se vuelve a importar sin errores (antes se rechazaba el
     // fichero ENTERO con "Tarea de sesión con ejercicio inexistente").
-    await page.locator('button[aria-label="Ajustes"]').click();
+    await abrirAjustes(page);
     const dlPromise = page.waitForEvent('download');
-    await page.locator('.settings-row', { hasText: 'Exportar respaldo' }).locator('button', { hasText: 'Exportar' }).click();
+    await page
+      .locator('.settings-row', { hasText: 'Exportar respaldo' })
+      .locator('button', { hasText: 'Exportar' })
+      .click();
     const path = await (await dlPromise).path();
     const parsed = JSON.parse(fs.readFileSync(path!, 'utf8'));
     expect(parsed.exercises, 'el ejercicio se borró de la biblioteca').toHaveLength(0);
     expect(parsed.sessions[0].tasks[0].exerciseId, 'la tarea queda desvinculada').toBeNull();
-    expect(parsed.sessions[0].tasks[0].title, 'la tarea conserva su título').toBe('Rondo de posesión');
+    expect(parsed.sessions[0].tasks[0].title, 'la tarea conserva su título').toBe(
+      'Rondo de posesión',
+    );
 
-    await page.locator('.settings-row', { hasText: 'Importar respaldo' }).locator('input[type="file"]').setInputFiles(path!);
+    await page
+      .locator('.settings-row', { hasText: 'Importar respaldo' })
+      .locator('input[type="file"]')
+      .setInputFiles(path!);
     await expect(page.locator('.settings-row', { hasText: 'Respaldo válido' })).toBeVisible();
-    await page.locator('.settings-row', { hasText: 'Respaldo válido' }).locator('button', { hasText: 'Reemplazar' }).click();
+    await page
+      .locator('.settings-row', { hasText: 'Respaldo válido' })
+      .locator('button', { hasText: 'Reemplazar' })
+      .click();
     // FASE G: observable — el respaldo importado vuelve a estar en localStorage con la
     // tarea desvinculada (antes este paso fallaba y no se importaba nada).
     await expect

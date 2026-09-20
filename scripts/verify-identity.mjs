@@ -43,7 +43,8 @@ async function checkDesktop(name, viewport) {
   page.on('response', (res) => {
     const u = res.url();
     if (u.includes('/assets/fonts/')) fontStatus[u] = res.status();
-    if (u.includes('cdm-pizarrales-original.jpg') && res.status() !== 200)
+    // FASE 8A: el escudo servido es el PNG con exterior transparente.
+    if (u.includes('cdm-pizarrales-escudo.png') && res.status() !== 200)
       errors.push(`escudo ${res.status()} ${u}`);
   });
   page.on('console', (msg) => {

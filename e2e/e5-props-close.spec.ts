@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 
 const SHOTS = 'e2e/shots/e5-props-close';
@@ -74,6 +75,7 @@ async function fieldCount(page: Page): Promise<number> {
 }
 
 async function armCone(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
   await expect(page.locator('.placement-hint')).toBeVisible();

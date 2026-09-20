@@ -64,7 +64,12 @@ describe('tactic-assets — manifiesto de material', () => {
     });
 
     it('los compactos usan la caja completa (o casi) por defecto', () => {
-      expect(materialHitFrac('target').w).toBe(1);
+      // CAMBIO DE CONTRATO (cierre del encargo de materiales): el chino se AGRANDÓ en el dibujo
+      // (disco de 2,0 de semiancho + trazo y sombra hasta 1,94 de semialto sobre la caja 5,2 × size),
+      // así que su caja táctica ya no es la caja entera sino la figura: 0,81 × 0,75 de la mitad de la
+      // caja. Antes valía 0,6 × 0,62 (y aún antes 1 × 0,5, que seleccionaba césped vacío a los lados).
+      expect(materialHitFrac('target').w).toBe(0.81);
+      expect(materialHitFrac('target').h).toBe(0.75);
       expect(materialHitFrac('unknown').w).toBe(1);
       expect(materialHitFrac('unknown').h).toBe(1);
     });

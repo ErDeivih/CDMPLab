@@ -32,15 +32,19 @@ export interface FieldSpec {
  *  (`models.FIELD_TYPES`) y el normalizador lo migra a `half` + orientación vertical.
  *
  *  `store.spec.ts` comprueba que la galería es un subconjunto de los admitidos y que la
- *  diferencia entre ambas listas es EXACTAMENTE la de alias de compatibilidad. */
+ *  diferencia entre ambas listas son alias/compatibilidad.
+ *
+ *  CORRECCIÓN URGENTE (dueño): la galería se queda con SEIS campos. Se retiran de la oferta
+ *  «Área y portería» (`box`) y «Dos medios campos» (`two_halves`) porque el dueño no los usa y
+ *  hacían ruido en el selector. NO se eliminan del modelo: `box` y `two_halves` siguen en
+ *  `FieldType`/`FIELD_TYPES`, siguen renderizándose y los ejercicios antiguos que los traen se
+ *  abren igual; simplemente dejan de ofrecerse para ejercicios nuevos. */
 export const FIELD_BASE_SPECS: FieldSpec[] = [
   { type: 'full', label: 'Campo completo' },
   { type: 'half', label: 'Medio campo' },
   { type: 'third', label: 'Tercio de campo' },
-  { type: 'box', label: 'Área y portería' },
   { type: 'futsal', label: 'Fútbol sala' },
   { type: 'f7', label: 'F7 transversal' },
-  { type: 'two_halves', label: 'Dos medios campos' },
   { type: 'blank', label: 'Lienzo' },
 ];
 
@@ -286,21 +290,91 @@ export const STRIP_MARGIN_NORM = STRIP_FRAC;
 export const OFFICIAL_PITCH_COLOR = '#31834a';
 export const OFFICIAL_GRASS_MODE = 'stripes';
 
-/** ESCALA VISUAL APARENTE de los objetos por TIPO de campo (FASE 6).
- *  Los materiales/jugadores se dibujan con un tamaño fijo en unidades de viewBox. Como
- *  el viewBox de un campo reducido encaja un campo MÁS CORTO en el MISMO host que un
- *  campo completo (105 m), los objetos se verían proporcionalmente MÁS GRANDES. Este
- *  factor compensa esa dilatación (escala ≤1 en campos reducidos) para que el tamaño
- *  APARENTE sea el mismo en cualquier campo, sin tocar el tamaño `size` guardado.
- *  Se deriva de la longitud física real del campo (fuente: fieldDimensions):
- *  completo = 1; medio campo/F7 (52,5 m) ≈ 0,5; fútbol sala (40 m) = 40/105. */
+/** FÚTBOL SALA (petición del dueño): su superficie es AZUL LISA, no césped. Fuente ÚNICA de los
+ *  dos colores del campo azul: los consumen el tablero (`render.ts`), la miniatura de la galería
+ *  (`fieldPreviewSvg`), la miniatura de biblioteca y el PNG exportado (todos pasan por
+ *  `renderBoardSvg`), así que el diseño no puede divergir entre pantallas. */
+export const FUTSAL_SURFACE_COLOR = '#1e3a8a';
+/** Áreas de penalti del fútbol sala: el mismo azul, más CLARO. Va relleno detrás de las líneas. */
+export const FUTSAL_AREA_COLOR = '#2563eb';
+
+/** Superficie de un campo: color + textura. Fútbol sala = azul LISO (sin franjas, damero ni
+ *  césped); el resto = césped oficial de franjas. Fuente única para render y miniaturas. */
+export function fieldSurface(field: FieldType): {
+  color: string;
+  grass: 'stripes' | 'plain' | 'checker';
+} {
+  if (field === 'futsal') return { color: FUTSAL_SURFACE_COLOR, grass: 'plain' };
+  return { color: OFFICIAL_PITCH_COLOR, grass: OFFICIAL_GRASS_MODE };
+}
+
+/**
+ * FACTOR DE ESCALA APARENTE por campo (encargo de materiales, FASE 2).
+ *
+ * CONTRATO NUEVO (el anterior ya no vale): el tamaño aparente NO debe ser igual en todos los campos.
+ * En un campo más corto (medio, tercio, F7, fútbol sala) los objetos deben verse ALGO MAYORES, porque
+ * el campo se ve más «de cerca» y el entrenador trabaja sobre menos terreno.
+ *
+ * Estos factores están CALIBRADOS POR MEDICIÓN en píxeles con el mismo viewport y el mismo objeto
+ * (`e2e/fase-materiales-escala.spec.ts`). Medido ANTES (ancho en px, base = campo completo):
+ *   medio 0,74 · tercio 0,64 · fútbol sala 0,71 · F7 0,59 · lienzo 0,80
+ * Objetivo del dueño y resultado tras aplicar estos factores:
+ *   medio 1,20 (115-125 %) · tercio 1,28 (120-135 %) · fútbol sala 1,18 (110-125 %) ·
+ *   F7 1,18 (110-125 %) · lienzo 1,00 (documentado: mismo tamaño aparente que campo completo).
+ *
+ * Los campos RETIRADOS de la oferta (`box`, `two_halves`) conservan su escala anterior (factor 1)
+ * para no cambiar la apariencia de documentos históricos.
+ */
+export const ESCALA_APARENTE_POR_CAMPO: Record<string, number> = {
+  full: 1.0,
+  half: 1.62,
+  vertical_half: 1.62, // alias histórico del medio campo
+  third: 1.99,
+  futsal: 1.66,
+  f7: 1.99,
+  blank: 1.25,
+  two_halves: 1.0, // retirado de la oferta: apariencia histórica intacta
+  box: 1.0,
+};
+
+/** Anchura REGLAMENTARIA (m) de la portería del campo: F11 7,32 · fútbol sala 3. Es la referencia con
+ *  la que se dibuja la portería de MATERIAL, de modo que ambas coincidan (criterio medible 0,90-1,10).
+ *  En F7 se usa la del F11 a propósito: la plantilla F7 se dibuja SOBRE un medio campo F11 y la única
+ *  portería DIBUJADA en ese campo es la del F11 (el diseño F7 dibuja zonas —áreas y línea de fuera de
+ *  juego—, no una portería propia), así que la de material tiene que medir lo mismo que la visible.
+ *  En «Lienzo» tampoco hay portería dibujada: se usa la del F11 (documentado). */
+export function goalWidthMeters(field: FieldType): number {
+  if (field === 'futsal') return 3;
+  return 7.32;
+}
+
+/** Altura reglamentaria (m) de la portería del campo (F11 2,44 · fútbol sala 2). */
+export function goalHeightMeters(field: FieldType): number {
+  if (field === 'futsal') return 2;
+  return 2.44;
+}
+
+/** Caja de la portería del campo en UNIDADES de viewBox (misma escala física que el campo): la usa
+ *  el render de la portería de MATERIAL para coincidir con la portería dibujada (FASE 3). */
+export function goalBoxUnits(field: FieldType): { w: number; h: number } {
+  return { w: goalWidthMeters(field) * PX_PER_M, h: goalHeightMeters(field) * PX_PER_M };
+}
+
+/** ESCALA VISUAL APARENTE de los objetos por TIPO de campo (FASE 6 del encargo anterior, revisada
+ *  por el encargo de materiales FASE 2). Los materiales/jugadores se dibujan con un tamaño fijo en
+ *  unidades de viewBox; como cada campo tiene su propia geometría, este factor mantiene la coherencia
+ *  y ahora, además, aplica la escala aparente pedida (`ESCALA_APARENTE_POR_CAMPO`).
+ *  Se deriva de la longitud física real del campo (fuente: fieldDimensions). */
 export function fieldObjectScale(
   field: FieldType,
   orientation: Orientation = 'horizontal',
 ): number {
-  // Relación longitudReal/longitudReferencia(105). No depende de la orientación (la
-  // dilatación es la misma). Futsal (40 m) pasa de 1 a 40/105 al tener geometría propia.
-  return fieldDimensions(field).len / 105;
+  // Relación longitudReal/longitudReferencia(105) — compensación de la dilatación del viewBox.
+  const compensacion = fieldDimensions(field).len / 105;
+  // Corrección por campo: lo que hace que el tamaño APARENTE siga la política pedida (medida en px).
+  const factor = ESCALA_APARENTE_POR_CAMPO[field] ?? 1;
+  void orientation; // la dilatación no depende de la orientación (se mantiene la firma histórica)
+  return compensacion * factor;
 }
 
 /**
@@ -344,10 +418,16 @@ const rect = (
   l1: number,
   w1: number,
   fill = 'none',
+  // Clase opcional para dar un gancho ESTABLE a las pruebas (p. ej. la portería dibujada en el
+  // campo, que se compara con la portería de material en el encargo de materiales, FASE 3).
+  cls = '',
 ) => {
   const [x1, y1] = at(r, o, Math.min(l0, l1), Math.min(w0, w1));
   const [x2, y2] = at(r, o, Math.max(l0, l1), Math.max(w0, w1));
-  return `<rect x="${x1}" y="${y1}" width="${x2 - x1}" height="${y2 - y1}" fill="${fill}" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
+  // La clase va AL FINAL de la etiqueta: varios parsers de pruebas leen `<rect x=… y=… width=…
+  // height=… fill=…>` en ese orden exacto, así que insertarla antes de `x` los rompería sin motivo.
+  const clase = cls ? ` class="${cls}"` : '';
+  return `<rect x="${x1}" y="${y1}" width="${x2 - x1}" height="${y2 - y1}" fill="${fill}" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}"${clase} />`;
 };
 
 /** Punto de penalti (marca blanca). */
@@ -454,7 +534,16 @@ function fullField(r: Rect, o: Orientation): string {
     const s0 = left ? 0 : 1 - sixL;
     s += rect(r, o, s0, centerW - sixHW, s0 + sixL, centerW + sixHW);
     const g0 = left ? -goalL : 1;
-    s += rect(r, o, g0, centerW - goalHW, g0 + goalL, centerW + goalHW, 'rgba(255,255,255,0.25)');
+    s += rect(
+      r,
+      o,
+      g0,
+      centerW - goalHW,
+      g0 + goalL,
+      centerW + goalHW,
+      'rgba(255,255,255,0.25)',
+      'entrenolab-goal-field',
+    );
     const pl = left ? spotL : 1 - spotL;
     s += spot(r, o, pl, centerW);
     s += penaltyArc(r, o, left, lf);
@@ -481,7 +570,16 @@ function halfField(r: Rect, o: Orientation): string {
   s += rect(r, o, 0, 0, 1, 1);
   s += rect(r, o, 0, centerW - boxHW, boxL, centerW + boxHW); // área grande (portería a l=0)
   s += rect(r, o, 0, centerW - sixHW, sixL, centerW + sixHW); // área pequeña (portería a l=0)
-  s += rect(r, o, -goalL, centerW - goalHW, 0, centerW + goalHW, 'rgba(255,255,255,0.25)'); // portería
+  s += rect(
+    r,
+    o,
+    -goalL,
+    centerW - goalHW,
+    0,
+    centerW + goalHW,
+    'rgba(255,255,255,0.25)',
+    'entrenolab-goal-field',
+  ); // portería
   s += spot(r, o, spotL, centerW); // punto de penalti
   s += penaltyArc(r, o, true, hlf); // arco de penalti
   // Semicírculo central en la línea de medio campo (hacia el interior del campo).
@@ -519,7 +617,16 @@ function halfFieldFlipped(r: Rect, o: Orientation): string {
   // Áreas/portería junto a l=1 (portería a la derecha en horizontal):
   s += rect(r, o, 1 - boxL, centerW - boxHW, 1, centerW + boxHW);
   s += rect(r, o, 1 - sixL, centerW - sixHW, 1, centerW + sixHW);
-  s += rect(r, o, 1, centerW - goalHW, 1 + goalL, centerW + goalHW, 'rgba(255,255,255,0.25)');
+  s += rect(
+    r,
+    o,
+    1,
+    centerW - goalHW,
+    1 + goalL,
+    centerW + goalHW,
+    'rgba(255,255,255,0.25)',
+    'entrenolab-goal-field',
+  );
   s += spot(r, o, 1 - spotL, centerW);
   const Rm = 9.15;
   const rxL = hlf(Rm);
@@ -585,7 +692,16 @@ function thirdField(r: Rect, o: Orientation): string {
   const spotL = tl(11);
   let s = '';
   s += rect(r, o, 0, 0, 1, 1);
-  s += rect(r, o, -goalL, centerW - goalHW, 0, centerW + goalHW, 'rgba(255,255,255,0.25)'); // portería
+  s += rect(
+    r,
+    o,
+    -goalL,
+    centerW - goalHW,
+    0,
+    centerW + goalHW,
+    'rgba(255,255,255,0.25)',
+    'entrenolab-goal-field',
+  ); // portería
   s += rect(r, o, 0, centerW - boxHW, boxL, centerW + boxHW); // área grande
   s += rect(r, o, 0, centerW - sixHW, sixL, centerW + sixHW); // área pequeña
   s += spot(r, o, spotL, centerW); // punto de penalti
@@ -611,7 +727,16 @@ function boxField(r: Rect, o: Orientation): string {
   const spotL = bl(11);
   let s = '';
   s += rect(r, o, 0, 0, 1, 1);
-  s += rect(r, o, -goalL, centerW - goalHW, 0, centerW + goalHW, 'rgba(255,255,255,0.25)'); // portería
+  s += rect(
+    r,
+    o,
+    -goalL,
+    centerW - goalHW,
+    0,
+    centerW + goalHW,
+    'rgba(255,255,255,0.25)',
+    'entrenolab-goal-field',
+  ); // portería
   s += rect(r, o, 0, centerW - boxHW, boxL, centerW + boxHW); // área penal
   s += rect(r, o, 0, centerW - sixHW, sixL, centerW + sixHW); // área pequeña
   s += spot(r, o, spotL, centerW); // punto de penalti
@@ -687,6 +812,41 @@ function futsalPenaltyArea(r: Rect, o: Orientation, left: boolean): string {
   return s;
 }
 
+/** RELLENO azul claro del área de penalti de fútbol sala, por DEBAJO de sus líneas blancas.
+ *  Misma geometría que `futsalPenaltyArea` (arcos de 6 m desde cada poste + el tramo recto de
+ *  6 m que los une, cerrado por la línea de portería), pero como UNA sola figura cerrada. */
+function futsalPenaltyAreaFill(r: Rect, o: Orientation, left: boolean): string {
+  const flf = (m: number) => m / 40;
+  const fwf = (m: number) => m / 20;
+  const rl = flf(6);
+  const rw = fwf(6);
+  const centerW = 0.5;
+  const goalHW = fwf(3) / 2;
+  const postL = centerW - goalHW;
+  const postR = centerW + goalHW;
+  const gl = left ? 0 : 1;
+  const dl = left ? rl : 1 - rl;
+  const rx = o === 'vertical' ? rw * r.w : rl * r.w;
+  const ry = o === 'vertical' ? rl * r.h : rw * r.h;
+  const sweep = (esPosteBajo: boolean): number => {
+    const base = left === esPosteBajo ? 1 : 0;
+    return o === 'vertical' ? 1 - base : base;
+  };
+  const [sx, sy] = at(r, o, gl, postL - rw); // primer arco: arranca en la línea de portería
+  const [mx, my] = at(r, o, dl, postL); // …y termina en la línea de 6 m
+  const [nx, ny] = at(r, o, dl, postR); // tramo recto de 6 m entre los dos arcos
+  const [ex, ey] = at(r, o, gl, postR + rw); // segundo arco: vuelve a la línea de portería
+  // El segundo arco se recorre AL REVÉS (de la línea de 6 m a la portería); invertir el sentido
+  // de avance invierte el `sweep`, igual que en las líneas.
+  return (
+    `<path class="entrenolab-area-fill" d="M ${sx} ${sy} ` +
+    `A ${rx} ${ry} 0 0 ${sweep(true)} ${mx} ${my} ` +
+    `L ${nx} ${ny} ` +
+    `A ${rx} ${ry} 0 0 ${1 - sweep(false)} ${ex} ${ey} Z" ` +
+    `fill="${FUTSAL_AREA_COLOR}" stroke="none" />`
+  );
+}
+
 /** Campo de FÚTBOL SALA (40×20 m) realmente reglamentario: superficie 2:1, línea de medio
  *  campo, círculo central de 3 m, portería 3×2 m, área de penalti en D (arcos de 6 m desde
  *  cada poste + tramo), punto de penalti a 6 m, segundo punto a 10 m y arcos de esquina de
@@ -701,6 +861,10 @@ function futsalField(r: Rect, o: Orientation): string {
   const spot2 = flf(10); // segundo punto a 10 m (doble penalti)
   let s = '';
   s += rect(r, o, 0, 0, 1, 1);
+  // Petición del dueño: las dos áreas de penalti van RELLENAS de un azul más claro y ese relleno
+  // queda DETRÁS de sus líneas blancas (se emite antes que las líneas del campo).
+  s += futsalPenaltyAreaFill(r, o, true);
+  s += futsalPenaltyAreaFill(r, o, false);
   s += line(r, o, 0.5, 0, 0.5, 1, false); // línea de medio campo (continua)
   // Círculo central r=3 m (circular en píxeles).
   const [ccx, ccy] = at(r, o, 0.5, centerW);
@@ -709,7 +873,16 @@ function futsalField(r: Rect, o: Orientation): string {
   s += `<ellipse cx="${ccx}" cy="${ccy}" rx="${crx}" ry="${cry}" fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
   for (const left of [true, false]) {
     const g0 = left ? -goalL : 1;
-    s += rect(r, o, g0, centerW - goalHW, g0 + goalL, centerW + goalHW, 'rgba(255,255,255,0.25)'); // portería 3×2
+    s += rect(
+      r,
+      o,
+      g0,
+      centerW - goalHW,
+      g0 + goalL,
+      centerW + goalHW,
+      'rgba(255,255,255,0.25)',
+      'entrenolab-goal-field',
+    ); // portería 3×2
     s += futsalPenaltyArea(r, o, left); // área de penalti en D (no rectángulo 6×20)
     s += spot(r, o, left ? spot1 : 1 - spot1, centerW); // punto de penalti 6 m
     s += spot(r, o, left ? spot2 : 1 - spot2, centerW); // segundo punto 10 m
@@ -733,12 +906,16 @@ function halfRectAtTop(
   fl1: number,
   fw1: number,
   fill = 'none',
+  // Clase opcional, igual que en `rect()`: gancho estable para las pruebas (la portería dibujada en
+  // el campo se compara con la portería de MATERIAL en el encargo de materiales, FASE 3).
+  cls = '',
 ): string {
   const [x1, y1] = halfAtTop(r, fl0, fw0);
   const [x2, y2] = halfAtTop(r, fl1, fw1);
   const x = Math.min(x1, x2);
   const y = Math.min(y1, y2);
-  return `<rect x="${x}" y="${y}" width="${Math.abs(x2 - x1)}" height="${Math.abs(y2 - y1)}" fill="${fill}" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" />`;
+  const clase = cls ? ` class="${cls}"` : '';
+  return `<rect x="${x}" y="${y}" width="${Math.abs(x2 - x1)}" height="${Math.abs(y2 - y1)}" fill="${fill}" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}"${clase} />`;
 }
 
 /** Punto de penalti del medio campo F11 (portería arriba). */
@@ -798,7 +975,15 @@ function halfPitchAtTop(r: Rect): string {
   s += halfRectAtTop(r, 0, 0, 1, 1); // contorno (la arista inferior ES la línea de medio campo)
   s += halfRectAtTop(r, 1 - boxL, centerW - boxHW, 1, centerW + boxHW); // área grande
   s += halfRectAtTop(r, 1 - sixL, centerW - sixHW, 1, centerW + sixHW); // área pequeña
-  s += halfRectAtTop(r, 1, centerW - goalHW, 1 + goalL, centerW + goalHW, 'rgba(255,255,255,0.25)'); // portería
+  s += halfRectAtTop(
+    r,
+    1,
+    centerW - goalHW,
+    1 + goalL,
+    centerW + goalHW,
+    'rgba(255,255,255,0.25)',
+    'entrenolab-goal-field',
+  ); // portería
   s += halfSpotAtTop(r, 1 - spotL, centerW); // punto de penalti
   s += halfPenaltyArcAtTop(r); // arco de penalti
   s += halfCenterSemiAtTop(r); // semicírculo de la línea de medio campo
@@ -905,10 +1090,17 @@ export const FIELD_RECT: Rect = { x: 4, y: 10, w: 92, h: 70 };
 export function fieldPreviewSvg(field: FieldType, orientation: Orientation = 'horizontal'): string {
   const geo = fieldGeometry(field, orientation);
   const fieldStr = fieldSvg(field, geo.rect, 'horizontal');
+  // Petición del dueño: la miniatura de la galería muestra el MISMO diseño que el tablero, así que
+  // el fútbol sala sale con su superficie azul lisa y sus áreas azul claro (no un fondo verde ni
+  // transparente). El fondo de superficie va dentro del grupo para que también se oriente.
+  const surface = fieldSurface(field);
+  const conFondo =
+    `<rect x="${geo.rect.x}" y="${geo.rect.y}" width="${geo.rect.w}" height="${geo.rect.h}" fill="${surface.color}"/>` +
+    fieldStr;
   const inner =
     orientation === 'vertical'
-      ? `<g transform="translate(${geo.vbW / 2 + (geo.rect.y + geo.rect.h / 2)} 0) rotate(90)">${fieldStr}</g>`
-      : fieldStr;
+      ? `<g transform="translate(${geo.vbW / 2 + (geo.rect.y + geo.rect.h / 2)} 0) rotate(90)">${conFondo}</g>`
+      : conFondo;
   return (
     `<svg class="field-preview-svg" viewBox="0 0 ${geo.vbW} ${geo.vbH}" xmlns="http://www.w3.org/2000/svg">` +
     `<g fill="none" stroke="#ffffff" stroke-width="${FIELD_LINE_WIDTH}" stroke-linecap="round">${inner}</g>` +

@@ -1,6 +1,14 @@
-import { CanvasDocument, CanvasFrame, CanvasElement, ElementType, FieldType, ELEMENT_TYPES } from './models';
+import {
+  CanvasDocument,
+  CanvasFrame,
+  CanvasElement,
+  ElementType,
+  FieldType,
+  ELEMENT_TYPES,
+} from './models';
 import { TACTIC_ASSETS, MATERIAL_SIZE_RATIO } from './tactic-assets';
 import { MARGIN_STRIP } from './render';
+import { normalizarMapaColores } from './player-colors';
 
 const VALID_KINDS = new Set<string>(TACTIC_ASSETS.map((a) => a.kind));
 
@@ -61,14 +69,30 @@ function normalizeElement(raw: unknown): CanvasElement | null {
   if (typeof out.fillOpacity === 'number') {
     out.fillOpacity = Math.max(0, Math.min(1, out.fillOpacity));
   }
-  if (out.fillColor && typeof out.fillColor === 'string' && !/^#?[0-9a-fA-F]{3,8}$/.test(out.fillColor)) {
+  if (
+    out.fillColor &&
+    typeof out.fillColor === 'string' &&
+    !/^#?[0-9a-fA-F]{3,8}$/.test(out.fillColor)
+  ) {
     delete out.fillColor; // relleno con color inválido: se deriva del perímetro
   }
   if (el.t === 'freehand') {
     out.points = Array.isArray(out.points)
       ? (out.points as unknown[])
-          .filter((pt): pt is [number, number] => Array.isArray(pt) && pt.length === 2 && num(pt[0]) !== undefined && num(pt[1]) !== undefined)
-          .map((pt) => [clampStrip(num(pt[0]) as number), clampStrip(num(pt[1]) as number)] as [number, number])
+          .filter(
+            (pt): pt is [number, number] =>
+              Array.isArray(pt) &&
+              pt.length === 2 &&
+              num(pt[0]) !== undefined &&
+              num(pt[1]) !== undefined,
+          )
+          .map(
+            (pt) =>
+              [clampStrip(num(pt[0]) as number), clampStrip(num(pt[1]) as number)] as [
+                number,
+                number,
+              ],
+          )
       : [];
   }
   if (el.t === 'curve') {
@@ -84,8 +108,30 @@ function normalizeElement(raw: unknown): CanvasElement | null {
 
 /** Tipos "puntuales"/materiales cuyo `size` controla el tamaño visual. */
 const POINT_LIKE: ReadonlySet<string> = new Set([
-  'player', 'ball', 'cone', 'mannequin', 'mannequin_row', 'minigoal', 'goal', 'pole', 'marker', 'hurdle', 'ring', 'ladder',
-  'flag', 'trampoline', 'target', 'net', 'vball', 'coachC', 'peto', 'chaleco', 'bosu', 'fitball', 'pica', 'dumbbell',
+  'player',
+  'ball',
+  'cone',
+  'mannequin',
+  'mannequin_row',
+  'minigoal',
+  'goal',
+  'pole',
+  'marker',
+  'hurdle',
+  'ring',
+  'ladder',
+  'flag',
+  'trampoline',
+  'target',
+  'net',
+  'vball',
+  'coachC',
+  'peto',
+  'chaleco',
+  'bosu',
+  'fitball',
+  'pica',
+  'dumbbell',
 ]);
 
 /** La base por defecto de los objetos puntuales/materiales/texto (Fase 3: el dueño
@@ -111,13 +157,17 @@ function scaleElementSize(el: CanvasElement, factor: number): CanvasElement {
 
 /** Aplica la migración de tamaños a todos los elementos de todos los frames. */
 function migrateSizes(frames: CanvasFrame[], factor: number): CanvasFrame[] {
-  return frames.map((f) => ({ ...f, elements: f.elements.map((el) => scaleElementSize(el, factor)) }));
+  return frames.map((f) => ({
+    ...f,
+    elements: f.elements.map((el) => scaleElementSize(el, factor)),
+  }));
 }
 
 function normalizeFrame(frame: Partial<CanvasFrame>): CanvasFrame {
   const rawEls = Array.isArray(frame.elements) ? frame.elements : [];
   return {
-    duration: typeof frame.duration === 'number' && frame.duration > 0 ? Math.round(frame.duration) : 1000,
+    duration:
+      typeof frame.duration === 'number' && frame.duration > 0 ? Math.round(frame.duration) : 1000,
     elements: rawEls.map(normalizeElement).filter((e): e is CanvasElement => e !== null),
   };
 }
@@ -170,7 +220,8 @@ export function normalizeCanvas(raw: unknown): CanvasDocument {
     } else {
       frames = [{ duration: 1000, elements: [] }];
     }
-    const incomingVersion = typeof r['schemaVersion'] === 'number' ? (r['schemaVersion'] as number) : 3;
+    const incomingVersion =
+      typeof r['schemaVersion'] === 'number' ? (r['schemaVersion'] as number) : 3;
     const factor = sizeFactorForVersion(incomingVersion);
     if (factor !== 1) {
       frames = migrateSizes(frames, factor);
@@ -189,6 +240,9 @@ export function normalizeCanvas(raw: unknown): CanvasDocument {
       grid: Boolean(r['grid']),
       guide: (r['guide'] as CanvasDocument['guide']) ?? 'none',
       f7: (r['f7'] as CanvasDocument['f7']) ?? null,
+      // FASE 2: el mapa de colores por ejercicio sobrevive al guardado/carga. Los documentos
+      // antiguos no lo traen → `{}` (cada ficha conserva el color de su propio elemento).
+      playerColors: normalizarMapaColores(r['playerColors']),
     };
   }
 

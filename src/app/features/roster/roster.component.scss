@@ -104,7 +104,120 @@
   width: 420px;
 }
 
-// ---------- Filtros de la plantilla ----------
+// La línea compacta con dorsal y posición solo aparece en móvil (ver el bloque de abajo).
+.cell-meta {
+  display: none;
+}
+
+// ---------- FASE 6: Plantilla COMPACTA en móvil ----------
+// Medido antes de este cambio (12 jugadores): a 360×800 la tabla empezaba en y=195 y solo se veían
+// 3 filas; cada fila medía ~199 px porque las cinco columnas (avatar, jugador, dorsal, posición,
+// acciones) no caben en 336 px y las celdas se apilaban. Ahora: cabecera y filtros más juntos, las
+// columnas Dorsal y Posición se pliegan dentro de la celda del nombre y las filas son de una línea.
+@media (max-width: 768px), (max-height: 480px) and (max-width: 1000px) {
+  .page-head {
+    margin-bottom: var(--space-2);
+    gap: var(--space-2);
+  }
+
+  .page-title {
+    font-size: 18px;
+  }
+
+  .page-sub {
+    margin-top: 0;
+    font-size: 12px;
+  }
+
+  .roster-filters {
+    gap: 6px;
+    margin-bottom: var(--space-2);
+  }
+
+  .table-card {
+    margin-top: 0;
+  }
+
+  // MEDIDO: el patrón global convierte las tablas en «tarjetas apiladas» en móvil (thead oculto y
+  // cada `td` en bloque a todo el ancho). En la Plantilla eso daba filas de 150 px y solo se veían
+  // 3 jugadores. La Plantilla es una LISTA: se vuelve a una fila de UNA LÍNEA, con las columnas
+  // Dorsal y Posición plegadas en la celda del nombre (`.cell-meta`). Es un ajuste local: las demás
+  // tablas (Sesiones, etc.) conservan el patrón global.
+  .roster .data-table {
+    display: table;
+  }
+
+  .roster .data-table thead {
+    display: table-header-group;
+  }
+
+  .roster .data-table tbody {
+    display: table-row-group;
+  }
+
+  .roster .data-table tr {
+    display: table-row;
+    border: none;
+    border-radius: 0;
+    margin-bottom: 0;
+    padding: 0;
+  }
+
+  .roster .data-table th,
+  .roster .data-table td {
+    display: table-cell;
+    width: auto;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border);
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  // Las dos columnas que se pliegan dentro del nombre. La especificidad importa: el ajuste de
+  // arriba (`.roster .data-table td { display: table-cell }`) ganaba a un `.cell-pos` suelto y las
+  // columnas seguían ocupando 130 px de ancho (medido: tabla de 427 px en un viewport de 360).
+  .roster .data-table .cell-dorsal,
+  .roster .data-table .cell-pos {
+    display: none;
+  }
+
+  .roster .data-table th,
+  .roster .data-table td {
+    width: auto;
+  }
+
+  .roster .data-table td:last-child {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .cell-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  .cell-meta-num {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .cell-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 // Se envuelven solos: en 390 px la table ya scrollea, pero la fila de filtros no debe
 // provocar desborde horizontal (lo comprueba `responsive.spec.ts`).
 .roster-filters {

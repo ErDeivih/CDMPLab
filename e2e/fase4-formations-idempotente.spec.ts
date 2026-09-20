@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import { fillBoardTitle } from './gesture-helpers';
 
 type PlayerSeed = { id: string; number: number; position: string; name: string };
@@ -44,6 +45,7 @@ async function applyForm(page: Page, mirror: boolean, f: string): Promise<void> 
   // FASE B (paneles persistentes): abrir Jugadores es IDEMPOTENTE — si ya está
   // desplegado (porque ya no se cierra al armar un color) no se re-togglea (lo cerraría).
   if (!(await page.locator('.side-panel-left').isVisible().catch(() => false))) {
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   }
   await page.locator('.side-panel-left').first().waitFor();
@@ -98,6 +100,7 @@ test.describe('Fase 4 — formaciones correctas e idempotentes', () => {
     await page.addInitScript(seed(ELEVEN));
     await openClosed(page);
     // Colocar manualmente al jugador p1 (plantilla, con playerId).
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left').first().waitFor();
     await page.locator('.side-panel-left .roster-item').first().click(); // p1 (primer roster visible)

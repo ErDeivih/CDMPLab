@@ -14,10 +14,11 @@
 // Capturas en e2e/shots/p34-stroke-size/.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import type { CanvasDocument, CanvasElement } from '../src/app/core/models';
 import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO, materialBaseSize } from '../src/app/core/tactic-assets';
-import { fillBoardTitle } from './gesture-helpers';
+import { fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 import { MATERIAL_BOX } from '../src/app/core/render';
 
 const SHOTS = 'e2e/shots/p34-stroke-size';
@@ -61,7 +62,7 @@ async function openBoard(page: Page): Promise<void> {
 async function ensureFitMode(page: Page): Promise<void> {
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
 }
@@ -78,6 +79,7 @@ async function deselect(page: Page, box: Box): Promise<void> {
 }
 
 async function useDrawTool(page: Page, title: string): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
@@ -99,6 +101,7 @@ async function draw(page: Page, title: string, from: [number, number], to: [numb
 }
 
 async function placePlayer(page: Page, nx: number, ny: number): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
   const box = await hostBox(page);
@@ -108,6 +111,7 @@ async function placePlayer(page: Page, nx: number, ny: number): Promise<void> {
 }
 
 async function placeCone(page: Page, nx: number, ny: number): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
   const box = await hostBox(page);

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 // =============================================================
 // Accesibilidad de los botones de color (`.swatch` / `.variant-swatch`).
@@ -136,6 +137,7 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
 
   test('Propiedades con jugador: los swatches del Color del elemento están nombrados', async ({ page }) => {
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -159,6 +161,7 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
 
   test('Propiedades con material (peto): el Color del elemento está nombrado', async ({ page }) => {
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Peto"]').click();
     await clickFieldCenter(page);
@@ -177,6 +180,7 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
 
   test('Propiedades con texto: el Color del elemento está nombrado', async ({ page }) => {
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Texto"]').click();
     await clickFieldCenter(page);
@@ -191,6 +195,7 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
 
   test('Propiedades con figura (rectángulo): el Color del elemento está nombrado', async ({ page }) => {
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Rectángulo"]').click();
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -220,6 +225,7 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
   test('Dibujo activo: los colores de dibujo en la barra están nombrados', async ({ page }) => {
     await openBoard(page);
     // Elegir una herramienta de dibujo (rect) deja la paleta visible en la barra.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Rectángulo"]').click();
 
@@ -235,6 +241,7 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
 
   test('Material: los swatches de variante están nombrados y todo botón tiene nombre', async ({ page }) => {
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
 

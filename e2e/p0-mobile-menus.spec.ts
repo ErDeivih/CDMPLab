@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -64,6 +65,7 @@ for (const [W, H] of [
       await viewportAndOpen(page, W, H);
       // La ayuda inicial fue retirada por el dueño (decisión Fase 1): no hay banner
       // que cerrar, así que abrimos directamente el panel de Material.
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
 

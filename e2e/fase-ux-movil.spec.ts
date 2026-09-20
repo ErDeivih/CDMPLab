@@ -1,4 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import { ptrItem, dragItemToField, ptrBoard, tapBoard } from './touch-helpers';
 
 // =============================================================
@@ -72,6 +73,7 @@ test.describe('FASE UX — comprobación móvil final (horizontal 844×390)', ()
   test('el panel no oculta su control X y la barra inferior sigue visible y operable', async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 });
     await seed(page); await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     await expect(page.locator('.tools-panel-side .panel-close'), 'control X del panel visible').toBeVisible();
@@ -84,6 +86,7 @@ test.describe('FASE UX — comprobación móvil final (horizontal 844×390)', ()
   test('arrastrar Cono desde Material coloca exactamente UNA y el toque posterior no añade', async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 });
     await seed(page); await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     const host = await hostBox(page); const fit = await fitMode(page);
@@ -100,6 +103,7 @@ test.describe('FASE UX — comprobación móvil final (horizontal 844×390)', ()
   test('arrastrar jugador genérico desde Jugadores coloca una y deja el panel abierto', async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 });
     await seed(page); await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     const host = await hostBox(page); const fit = await fitMode(page);
@@ -111,6 +115,7 @@ test.describe('FASE UX — comprobación móvil final (horizontal 844×390)', ()
   test('un toque corto táctil en Cono NO arma; tocar el campo deja 0', async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 });
     await seed(page); await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     const card = page.locator('.rail-btn[title="Cono"]');
@@ -128,6 +133,7 @@ test.describe('FASE UX — comprobación móvil final (horizontal 844×390)', ()
   test('un SEGUNDO dedo durante el arrastre de panel CANCELA (0 objetos, pizarra usable)', async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 });
     await seed(page); await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     const host = await hostBox(page); const fit = await fitMode(page);

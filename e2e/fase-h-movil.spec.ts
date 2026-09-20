@@ -9,7 +9,15 @@
 // =============================================================
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
-import { seedBoard, openBoard, hostBox, fitMode, fieldCount, normToScreen } from './board-helpers';
+import {
+  abrirHerramientas,
+  seedBoard,
+  openBoard,
+  hostBox,
+  fitMode,
+  fieldCount,
+  normToScreen,
+} from './board-helpers';
 import { begindragItem, dragItemToField, tapBoard } from './touch-helpers';
 
 const OUT = 'docs/screenshots/fase-h';
@@ -27,6 +35,7 @@ test.describe('FASE H — móvil horizontal 844×390 (arrastre real de panel)', 
     const fit = await fitMode(page);
     expect(fit, 'móvil arranca en "Llenar pantalla"').toBe('height');
 
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     const card = page.locator('.rail-btn[title="Cono"]');
@@ -68,6 +77,7 @@ test.describe('FASE H — móvil horizontal 844×390 (arrastre real de panel)', 
     const host = await hostBox(page);
     const fit = await fitMode(page);
 
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     const drop = normToScreen(0.65, 0.45, host, fit);
@@ -90,6 +100,7 @@ test.describe('FASE H — móvil horizontal 844×390 (arrastre real de panel)', 
     const host = await hostBox(page);
     const fit = await fitMode(page);
 
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     const drop = normToScreen(0.68, 0.5, host, fit);

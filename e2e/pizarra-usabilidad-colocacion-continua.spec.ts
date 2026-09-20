@@ -13,9 +13,10 @@
 // E (Seleccionar vs Mano), F (paneles y barra), G (zigzag) + táctil.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas, expectPanelLibreDelGrupo } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
-import { longPress, fillBoardTitle } from './gesture-helpers';
+import { longPress, fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/pizarra-usabilidad';
 const DOC_SHOTS = 'docs/screenshots/pizarra-usabilidad';
@@ -30,7 +31,15 @@ type Box = { x: number; y: number; width: number; height: number };
 type Fit = 'height' | 'contain';
 type Pt = { x: number; y: number };
 
-function normToScreen(nx: number, ny: number, host: Box, fit: Fit, panX = 0, panY = 0, zoom = 1): Pt {
+function normToScreen(
+  nx: number,
+  ny: number,
+  host: Box,
+  fit: Fit,
+  panX = 0,
+  panY = 0,
+  zoom = 1,
+): Pt {
   const s = fit === 'height' ? host.height / RECT.h : Math.min(host.width / VBW, host.height / VBH);
   const offX = (host.width - VBW * s) / 2;
   const offY = (host.height - VBH * s) / 2;
@@ -45,19 +54,28 @@ function normToScreen(nx: number, ny: number, host: Box, fit: Fit, panX = 0, pan
 
 async function seed(page: Page, opts: { players?: unknown[]; fill?: boolean } = {}): Promise<void> {
   const { players = [], fill = false } = opts;
-  await page.addInitScript(({ players, fill }) => {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
-    const now = new Date().toISOString();
-    localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:board-fill', fill ? '1' : '0');
-    localStorage.setItem('entrenolab:board-hints', '1');
-    localStorage.setItem('entrenolab:fill-hint', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify(players));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
-    localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
-  }, { players, fill });
+  await page.addInitScript(
+    ({ players, fill }) => {
+      for (const k of Object.keys(localStorage))
+        if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+      const now = new Date().toISOString();
+      localStorage.setItem('entrenolab:seeded', '1');
+      localStorage.setItem('entrenolab:board-fill', fill ? '1' : '0');
+      localStorage.setItem('entrenolab:board-hints', '1');
+      localStorage.setItem('entrenolab:fill-hint', '1');
+      localStorage.setItem(
+        'entrenolab:teams',
+        JSON.stringify([
+          { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now },
+        ]),
+      );
+      localStorage.setItem('entrenolab:players', JSON.stringify(players));
+      localStorage.setItem('entrenolab:folders', JSON.stringify([]));
+      localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
+      localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
+    },
+    { players, fill },
+  );
 }
 
 async function openBoard(page: Page): Promise<void> {
@@ -66,7 +84,13 @@ async function openBoard(page: Page): Promise<void> {
   // Espera observable: el lienzo del tablero se ha renderizado (SVG del campo presente).
   await expect(page.locator('.board-canvas svg')).toBeVisible();
   for (const sel of ['.help-close', '.fill-hint-close']) {
-    if (await page.locator(sel).isVisible().catch(() => false)) await page.locator(sel).click();
+    if (
+      await page
+        .locator(sel)
+        .isVisible()
+        .catch(() => false)
+    )
+      await page.locator(sel).click();
   }
 }
 
@@ -97,14 +121,27 @@ async function openJugadores(page: Page): Promise<void> {
   // FASE B (paneles persistentes): abrir Jugadores es IDEMPOTENTE. Si ya está
   // desplegado (porque ya no se cierra al elegir un jugador) no lo re-togglea
   // (lo cerraría).
-  if (await page.locator('.side-panel-left').isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator('.side-panel-left')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
 }
 async function openMaterial(page: Page, tool: string): Promise<void> {
   // FASE B (paneles persistentes): abrir Material es IDEMPOTENTE. Si el panel
   // Material/Dibujo ya está abierto, no lo re-togglea (lo cerraría).
-  if (!(await page.locator('.tools-panel-side').isVisible().catch(() => false))) {
+  if (
+    !(await page
+      .locator('.tools-panel-side')
+      .isVisible()
+      .catch(() => false))
+  ) {
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
   }
@@ -120,7 +157,9 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
   // =====================================================================
   // Escenario A — Formación SIN plantilla
   // =====================================================================
-  test('A: formación 4-3-3 propia con plantilla VACÍA coloca 11 genéricos sin nombres', async ({ page }) => {
+  test('A: formación 4-3-3 propia con plantilla VACÍA coloca 11 genéricos sin nombres', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page, { players: [] });
     await openBoard(page);
@@ -159,7 +198,9 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     expect(players.every((p: { c?: string }) => p.c === '#1a73e8')).toBe(true);
   });
 
-  test('A: aplicar 4-4-2 RIVAL coexiste con la propia (11 + 11) y un solo Undo deshace la última', async ({ page }) => {
+  test('A: aplicar 4-4-2 RIVAL coexiste con la propia (11 + 11) y un solo Undo deshace la última', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1400, height: 900 });
     await seed(page, { players: [] });
     await openBoard(page);
@@ -197,14 +238,19 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
   // =====================================================================
   // Escenario B — Colocación continua de material
   // =====================================================================
-  test('B: Maniquí individual — colocar 3 en continuo, Undo individual, Seleccionar detiene', async ({ page }) => {
+  test('B: Maniquí individual — colocar 3 en continuo, Undo individual, Seleccionar detiene', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
 
     await openMaterial(page, 'Maniquí individual');
     // FASE B (paneles persistentes): elegir material NO cierra el panel Material.
-    await expect(page.locator('.tools-panel-side'), 'el panel Material permanece abierto').toBeVisible();
+    await expect(
+      page.locator('.tools-panel-side'),
+      'el panel Material permanece abierto',
+    ).toBeVisible();
     await expect(page.locator('.placement-hint')).toBeVisible();
 
     // Preview junto al cursor (al mover el puntero sobre el host).
@@ -214,7 +260,11 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
 
     // Tres clics en posiciones separadas (alejadas de la pista superior).
     const fit = await fitMode(page);
-    for (const [nx, ny] of [[0.3, 0.5], [0.5, 0.65], [0.7, 0.5]] as Array<[number, number]>) {
+    for (const [nx, ny] of [
+      [0.3, 0.5],
+      [0.5, 0.65],
+      [0.7, 0.5],
+    ] as Array<[number, number]>) {
       const p = normToScreen(nx, ny, host, fit);
       await page.mouse.click(p.x, p.y);
     }
@@ -238,18 +288,28 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(2);
   });
 
-  test('B: Cono con variante + Balón + Miniportería — colocación continua y variante conservada', async ({ page }) => {
+  test('B: Cono con variante + Balón + Miniportería — colocación continua y variante conservada', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
 
     // Cono (rojo = variante 0) colocar 2 en continuo con la MISMA variante.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
-    await page.locator('.tools-material-card', { has: page.locator('.rail-btn[title="Cono"]') }).locator('.variant-swatch').nth(0).click();
+    await page
+      .locator('.tools-material-card', { has: page.locator('.rail-btn[title="Cono"]') })
+      .locator('.variant-swatch')
+      .nth(0)
+      .click();
     await page.locator('.rail-btn[title="Cono"]').click();
     const host = await hostBox(page);
     const fit = await fitMode(page);
-    for (const [nx, ny] of [[0.2, 0.2], [0.3, 0.3]] as Array<[number, number]>) {
+    for (const [nx, ny] of [
+      [0.2, 0.2],
+      [0.3, 0.3],
+    ] as Array<[number, number]>) {
       const p = normToScreen(nx, ny, host, fit);
       await page.mouse.click(p.x, p.y);
     }
@@ -275,7 +335,9 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
   // =====================================================================
   // Escenario C — Colocación continua de jugadores
   // =====================================================================
-  test('C: 3 propios genéricos + 3 rivales genéricos, sin nombres; Seleccionar detiene', async ({ page }) => {
+  test('C: 3 propios genéricos + 3 rivales genéricos, sin nombres; Seleccionar detiene', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
@@ -284,10 +346,17 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await openJugadores(page);
     await page.locator('.tray-player[title="Jugador Azul"]').click();
     // FASE B (paneles persistentes): elegir jugador NO cierra el panel Jugadores.
-    await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+    await expect(
+      page.locator('.side-panel-left'),
+      'el panel Jugadores permanece abierto',
+    ).toBeVisible();
     const host = await hostBox(page);
     const fit = await fitMode(page);
-    for (const [nx, ny] of [[0.3, 0.5], [0.4, 0.62], [0.5, 0.5]] as Array<[number, number]>) {
+    for (const [nx, ny] of [
+      [0.3, 0.5],
+      [0.4, 0.62],
+      [0.5, 0.5],
+    ] as Array<[number, number]>) {
       const p = normToScreen(nx, ny, host, fit);
       await page.mouse.click(p.x, p.y);
     }
@@ -300,7 +369,11 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     // Cambiar a Jugador rival → 3 rivales (ficha rápida Rojo; antes rail-btn "Jugador rival").
     await openJugadores(page);
     await page.locator('.tray-player[title="Jugador Rojo"]').click();
-    for (const [nx, ny] of [[0.6, 0.5], [0.7, 0.62], [0.8, 0.5]] as Array<[number, number]>) {
+    for (const [nx, ny] of [
+      [0.6, 0.5],
+      [0.7, 0.62],
+      [0.8, 0.5],
+    ] as Array<[number, number]>) {
       const p = normToScreen(nx, ny, await hostBox(page), await fitMode(page));
       await page.mouse.click(p.x, p.y);
     }
@@ -314,9 +387,24 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(6);
   });
 
-  test('C: un jugador REAL de plantilla NO se duplica (una instancia por playerId)', async ({ page }) => {
+  test('C: un jugador REAL de plantilla NO se duplica (una instancia por playerId)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
-    await seed(page, { players: [{ id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: '2026-01-01' }] });
+    await seed(page, {
+      players: [
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: '2026-01-01',
+        },
+      ],
+    });
     await openBoard(page);
     // Colocar el real → tras colocar vuelve a Seleccionar (no duplicable).
     await openJugadores(page);
@@ -328,20 +416,27 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
     // Tras colocarlo ya está en Seleccionar (no armado).
     await expect(page.locator('.placement-hint')).toHaveCount(0);
-    await expect(page.locator('.rail-btn[aria-label="Seleccionar y mover"]')).toHaveClass(/rail-active/);
+    await expect(page.locator('.rail-btn[aria-label="Seleccionar y mover"]')).toHaveClass(
+      /rail-active/,
+    );
     // Abrir Jugadores: la tarjeta está deshabilitada (una instancia).
     await openJugadores(page);
-    await expect(page.locator('.side-panel-left .roster-item').first()).toHaveClass(/tray-disabled/);
+    await expect(page.locator('.side-panel-left .roster-item').first()).toHaveClass(
+      /tray-disabled/,
+    );
   });
 
   // =====================================================================
   // Escenario D — Dibujo de un solo uso
   // =====================================================================
-  test('D: Línea se crea UNA, vuelve a Seleccionar y arrastrar vacío no crea otra', async ({ page }) => {
+  test('D: Línea se crea UNA, vuelve a Seleccionar y arrastrar vacío no crea otra', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
 
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Línea"]').click();
     const host = await hostBox(page);
@@ -355,7 +450,9 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await page.mouse.up();
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
     // Volvió a Seleccionar.
-    await expect(page.locator('.rail-btn[aria-label="Seleccionar y mover"]')).toHaveClass(/rail-active/);
+    await expect(page.locator('.rail-btn[aria-label="Seleccionar y mover"]')).toHaveClass(
+      /rail-active/,
+    );
     // Arrastrar en zona vacía no crea una segunda línea.
     const c = normToScreen(0.3, 0.6, await hostBox(page), await fitMode(page));
     const d = normToScreen(0.7, 0.7, await hostBox(page), await fitMode(page));
@@ -369,25 +466,33 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
   // =====================================================================
   // Escenario E — Seleccionar frente a Mano
   // =====================================================================
-  test('E: Seleccionar NO panea desde vacío; Mano sí (desde vacío y sobre objeto)', async ({ page }) => {
+  test('E: Seleccionar NO panea desde vacío; Mano sí (desde vacío y sobre objeto)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page, { fill: true });
     await openBoard(page);
 
     // Zoom >100% (contenido oculto para panear). Se abre Propiedades → Zoom slider.
     await page.locator('button[aria-label="Propiedades"]').click();
-    const zz = page.locator('.studio-panel .field', { hasText: 'Zoom' }).locator('input[type="range"]');
+    const zz = page
+      .locator('.studio-panel .field', { hasText: 'Zoom' })
+      .locator('input[type="range"]');
     await zz.evaluate((input: HTMLInputElement) => {
       input.value = '2';
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await page.locator('.studio-panel .panel-close').click();
 
-    const readView = () => page.locator('.board-canvas').evaluate((el) => {
-      const t = (el as HTMLElement).style.transform;
-      const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(t);
-      return m ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) } : { panX: 0, panY: 0, zoom: 1 };
-    });
+    const readView = () =>
+      page.locator('.board-canvas').evaluate((el) => {
+        const t = (el as HTMLElement).style.transform;
+        const m =
+          /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(t);
+        return m
+          ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) }
+          : { panX: 0, panY: 0, zoom: 1 };
+      });
 
     // En Seleccionar: arrastra 100px desde vacío → panX/panY NO cambian.
     await clickSelect(page);
@@ -412,12 +517,16 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await page.mouse.move(host.x + 200, host.y + host.height / 2, { steps: 6 });
     await page.mouse.up();
     // Observar la vista: Mano debe panear (poll, sin wait fijo).
-    await expect.poll(() => readView(page).then((v) => Math.abs(v.panX - v2.panX)), { timeout: 3000 }).toBeGreaterThan(20);
+    await expect
+      .poll(() => readView(page).then((v) => Math.abs(v.panX - v2.panX)), { timeout: 3000 })
+      .toBeGreaterThan(20);
     const v3 = await readView(page);
     expect(Math.abs(v3.panX - v2.panX), 'Mano PANEA desde vacío').toBeGreaterThan(20);
   });
 
-  test('E: Mano panea EMPEZANDO sobre un objeto sin moverlo; el objeto no cambia', async ({ page }) => {
+  test('E: Mano panea EMPEZANDO sobre un objeto sin moverlo; el objeto no cambia', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page, { fill: true }); // campo desborda → hay rango de paneo
     await openBoard(page);
@@ -429,11 +538,16 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     // ANTES de leer `before`/coordenadas y empezar el gesto. Así el pan nunca queda limitado
     // a cero por un tamaño de canvas aún no aplicado.
     await expect(page.locator('.board-host')).toHaveClass(/board-fill/);
-    await expect.poll(async () => {
-      const canvas = await page.locator('.board-canvas').boundingBox();
-      const host = (await page.locator('.board-host').boundingBox())!;
-      return host && canvas && canvas.width > host.width + 10;
-    }, { timeout: 5000 }).toBe(true);
+    await expect
+      .poll(
+        async () => {
+          const canvas = await page.locator('.board-canvas').boundingBox();
+          const host = (await page.locator('.board-host').boundingBox())!;
+          return host && canvas && canvas.width > host.width + 10;
+        },
+        { timeout: 5000 },
+      )
+      .toBe(true);
 
     // Colocar un jugador.
     await openJugadores(page);
@@ -446,15 +560,22 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await clickSelect(page);
 
     // Normal del objeto antes.
-    const objNorm = await page.locator('.entrenolab-board circle[r="2.5"]').first().evaluate((el) => {
-      const g = el.closest('g');
-      const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(g?.getAttribute('transform') ?? '');
-      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
-    });
+    const objNorm = await page
+      .locator('.entrenolab-board circle[r="2.5"]')
+      .first()
+      .evaluate((el) => {
+        const g = el.closest('g');
+        const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(
+          g?.getAttribute('transform') ?? '',
+        );
+        return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
+      });
 
     // Mano: arrastra EMPEZANDO sobre el objeto → panea, el objeto no se mueve.
     await clickHand(page);
-    const before = await page.locator('.board-canvas').evaluate((el) => (el as HTMLElement).style.transform);
+    const before = await page
+      .locator('.board-canvas')
+      .evaluate((el) => (el as HTMLElement).style.transform);
     const circleLoc = page.locator('.entrenolab-board circle[r="2.5"]').first();
     await circleLoc.waitFor({ state: 'attached', timeout: 5000 });
     const obj = await circleLoc.evaluate((el) => {
@@ -467,14 +588,26 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await page.mouse.move(oc.x + 100, oc.y - 40, { steps: 6 });
     await page.mouse.up();
     // Observar el pan: el transform del canvas cambia (poll, sin wait fijo).
-    await expect.poll(() => page.locator('.board-canvas').evaluate((el) => (el as HTMLElement).style.transform), { timeout: 3000 }).not.toBe(before);
-    const afterT = await page.locator('.board-canvas').evaluate((el) => (el as HTMLElement).style.transform);
+    await expect
+      .poll(
+        () => page.locator('.board-canvas').evaluate((el) => (el as HTMLElement).style.transform),
+        { timeout: 3000 },
+      )
+      .not.toBe(before);
+    const afterT = await page
+      .locator('.board-canvas')
+      .evaluate((el) => (el as HTMLElement).style.transform);
     expect(afterT, 'Mano panea la vista').not.toBe(before);
-    const objNorm2 = await page.locator('.entrenolab-board circle[r="2.5"]').first().evaluate((el) => {
-      const g = el.closest('g');
-      const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(g?.getAttribute('transform') ?? '');
-      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
-    });
+    const objNorm2 = await page
+      .locator('.entrenolab-board circle[r="2.5"]')
+      .first()
+      .evaluate((el) => {
+        const g = el.closest('g');
+        const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(
+          g?.getAttribute('transform') ?? '',
+        );
+        return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
+      });
     expect(objNorm2!.x, 'objeto no se mueve en x').toBeCloseTo(objNorm!.x, 3);
     expect(objNorm2!.y, 'objeto no se mueve en y').toBeCloseTo(objNorm!.y, 3);
     // No se abre Propiedades ni se selecciona.
@@ -485,22 +618,27 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
   // Escenario F — Paneles y barra (medidas reales + botones operables)
   // =====================================================================
   const VIEWPORTS: Array<[number, number]> = [
-    [360, 800], [390, 844], [844, 390], [932, 430], [768, 1024], [1024, 768], [1366, 768], [1440, 900],
+    [360, 800],
+    [390, 844],
+    [844, 390],
+    [932, 430],
+    [768, 1024],
+    [1024, 768],
+    [1366, 768],
+    [1440, 900],
   ];
 
   for (const [w, h] of VIEWPORTS) {
-    test(`F: panel no invade la barra y barra operable a ${w}x${h}`, async ({ page }) => {
+    test(`F: panel usable con el grupo flotante y grupo operable a ${w}x${h}`, async ({ page }) => {
       test.setTimeout(60_000);
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
       await openBoard(page);
 
+      // FASE 3: la barra inferior ya no existe (el grupo flota y el campo llega al borde inferior).
+      // El contrato pasa a ser «el panel es usable y el grupo no lo bloquea», con huella acotada.
       const assertPanelAboveBar = async (panelSel: string): Promise<void> => {
-        const panel = await page.locator(panelSel).boundingBox();
-        const bar = await page.locator('.studio-tools').boundingBox();
-        expect(panel, `panel ${panelSel} visible`).not.toBeNull();
-        expect(bar, 'barra inferior visible').not.toBeNull();
-        expect(panel!.y + panel!.height, `${panelSel} bottom <= barra top`).toBeLessThanOrEqual(bar!.y + 1);
+        await expectPanelLibreDelGrupo(page, panelSel);
       };
 
       // Jugadores.
@@ -509,15 +647,19 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
       await assertPanelAboveBar('.side-panel-left');
       // Botón de barra operable (Seleccionar) con el panel abierto.
       await clickSelect(page);
-      await expect(page.locator('.rail-btn[aria-label="Seleccionar y mover"]')).toHaveClass(/rail-active/);
+      await expect(page.locator('.rail-btn[aria-label="Seleccionar y mover"]')).toHaveClass(
+        /rail-active/,
+      );
 
       // Material.
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       await assertPanelAboveBar('.tools-panel-side');
       await clickSelect(page);
 
       // Dibujo.
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
       await expect(page.locator('.tools-panel-side')).toBeVisible();
       await assertPanelAboveBar('.tools-panel-side');
@@ -526,7 +668,9 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
       // Sin scroll horizontal en página.
       const studioScroll = await page.evaluate(() => {
         const el = document.querySelector('.studio');
-        return el ? { scroll: (el as HTMLElement).scrollWidth, client: (el as HTMLElement).clientWidth } : null;
+        return el
+          ? { scroll: (el as HTMLElement).scrollWidth, client: (el as HTMLElement).clientWidth }
+          : null;
       });
       expect(studioScroll!.scroll).toBeLessThanOrEqual(studioScroll!.client + 1);
     });
@@ -535,7 +679,9 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
   // =====================================================================
   // Escenario G — Zigzag compacto
   // =====================================================================
-  test('G: zigzag horizontal, vertical y diagonal — preview, guardar/reabrir y PNG', async ({ page }) => {
+  test('G: zigzag horizontal, vertical y diagonal — preview, guardar/reabrir y PNG', async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
@@ -543,7 +689,13 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
 
     const drawZigzag = async (from: [number, number], to: [number, number]): Promise<void> => {
       // FASE B (paneles persistentes): no re-togglear Dibujo si ya está abierto (lo cerraría).
-      if (!(await page.locator('.tools-panel-side').isVisible().catch(() => false))) {
+      if (
+        !(await page
+          .locator('.tools-panel-side')
+          .isVisible()
+          .catch(() => false))
+      ) {
+        await abrirHerramientas(page);
         await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
         await expect(page.locator('.tools-panel-side')).toBeVisible();
       }
@@ -556,7 +708,9 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
       await page.mouse.down();
       await page.mouse.move(b.x, b.y, { steps: 5 });
       // Antes de soltar: la preview existe.
-      await expect(page.locator('.drag-preview, .preview, .zigzag-preview')).toBeVisible().catch(() => void 0);
+      await expect(page.locator('.drag-preview, .preview, .zigzag-preview'))
+        .toBeVisible()
+        .catch(() => void 0);
       await page.mouse.up();
     };
 
@@ -589,13 +743,18 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     expect(p).toBeTruthy();
 
     // Captura ampliada del zigzag.
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/zigzag-compacto-horizontal-vertical-diagonal.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/zigzag-compacto-horizontal-vertical-diagonal.png` });
   });
 
   // =====================================================================
   // Táctil (390×844 y 844×390)
   // =====================================================================
-  for (const [w, h] of [[390, 844], [844, 390]] as Array<[number, number]>) {
+  for (const [w, h] of [
+    [390, 844],
+    [844, 390],
+  ] as Array<[number, number]>) {
     test.describe(`Táctil ${w}x${h}`, () => {
       test.use({ hasTouch: true });
 
@@ -607,10 +766,15 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
         // FASE B: el panel Material queda desplegado y cubre el campo en portrait
         // móvil; se minimiza con su X (sin desarmar) para poder tocar el campo.
         const matPanel = page.locator('.side-panel-left.tools-panel-side');
-        if (await matPanel.isVisible().catch(() => false)) await matPanel.locator('.panel-close').click();
+        if (await matPanel.isVisible().catch(() => false))
+          await matPanel.locator('.panel-close').click();
         const host = await hostBox(page);
         const fit = await fitMode(page);
-        for (const [nx, ny] of [[0.3, 0.3], [0.5, 0.5], [0.7, 0.7]] as Array<[number, number]>) {
+        for (const [nx, ny] of [
+          [0.3, 0.3],
+          [0.5, 0.5],
+          [0.7, 0.7],
+        ] as Array<[number, number]>) {
           const p = normToScreen(nx, ny, host, fit);
           await page.touchscreen.tap(p.x, p.y);
         }
@@ -630,37 +794,82 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
         await page.locator('.tray-player[title="Jugador Azul"]').click();
         // FASE B: minimizar el panel Jugadores (X) para liberar el campo en portrait.
         const jugPanel = page.locator('.side-panel-left');
-        if (await jugPanel.isVisible().catch(() => false)) await jugPanel.first().locator('.panel-close').click();
+        if (await jugPanel.isVisible().catch(() => false))
+          await jugPanel.first().locator('.panel-close').click();
         const host = await hostBox(page);
         const fit = await fitMode(page);
-        for (const [nx, ny] of [[0.3, 0.5], [0.4, 0.65], [0.5, 0.5]] as Array<[number, number]>) {
+        for (const [nx, ny] of [
+          [0.3, 0.5],
+          [0.4, 0.65],
+          [0.5, 0.5],
+        ] as Array<[number, number]>) {
           const p = normToScreen(nx, ny, host, fit);
           await page.touchscreen.tap(p.x, p.y);
         }
         await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(3);
         await clickSelect(page);
         // Seleccionar no panea: un toque (tap) sobre vacío NO cambia la vista.
-        const readView = () => page.locator('.board-canvas').evaluate((el) => (el as HTMLElement).style.transform);
+        const readView = () =>
+          page.locator('.board-canvas').evaluate((el) => (el as HTMLElement).style.transform);
         const v0 = await readView();
         const t0 = normToScreen(0.5, 0.5, host, fit);
         await page.touchscreen.tap(t0.x, t0.y);
         expect(await readView()).toBe(v0);
         // Mano panea con arrastre real (baja, mueve, sube) empezando sobre vacío.
         // Primero activo "Llenar pantalla" (espera observable: clase board-fill).
-        await page.locator('.field-fit-toggle').click();
+        await toggleFillScreen(page);
         await expect(page.locator('.board-host')).toHaveClass(/board-fill/);
         const fit2 = await fitMode(page);
         const host2 = await hostBox(page);
         const t1 = normToScreen(0.5, 0.5, host2, fit2);
         await clickHand(page);
         const v1 = await readView();
-        await page.evaluate(({ x, y }) => {
-          const host = document.querySelector('.board-host') as HTMLElement | null;
-          if (!host) return;
-          host.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 99, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: 1 }));
-          host.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 99, pointerType: 'touch', isPrimary: true, clientX: x + 150, clientY: y, button: 0, buttons: 1 }));
-          host.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 99, pointerType: 'touch', isPrimary: true, clientX: x + 150, clientY: y, button: 0, buttons: 0 }));
-        }, { x: t1.x, y: t1.y });
+        await page.evaluate(
+          ({ x, y }) => {
+            const host = document.querySelector('.board-host') as HTMLElement | null;
+            if (!host) return;
+            host.dispatchEvent(
+              new PointerEvent('pointerdown', {
+                bubbles: true,
+                cancelable: true,
+                pointerId: 99,
+                pointerType: 'touch',
+                isPrimary: true,
+                clientX: x,
+                clientY: y,
+                button: 0,
+                buttons: 1,
+              }),
+            );
+            host.dispatchEvent(
+              new PointerEvent('pointermove', {
+                bubbles: true,
+                cancelable: true,
+                pointerId: 99,
+                pointerType: 'touch',
+                isPrimary: true,
+                clientX: x + 150,
+                clientY: y,
+                button: 0,
+                buttons: 1,
+              }),
+            );
+            host.dispatchEvent(
+              new PointerEvent('pointerup', {
+                bubbles: true,
+                cancelable: true,
+                pointerId: 99,
+                pointerType: 'touch',
+                isPrimary: true,
+                clientX: x + 150,
+                clientY: y,
+                button: 0,
+                buttons: 0,
+              }),
+            );
+          },
+          { x: t1.x, y: t1.y },
+        );
         // Observar el pan: el transform cambia (poll, sin wait fijo).
         await expect.poll(() => readView(), { timeout: 3000 }).not.toBe(v1);
         const v2 = await readView();
@@ -672,7 +881,9 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
   // =====================================================================
   // Capturas obligatorias
   // =====================================================================
-  test('capturas: formación sin plantilla, paneles con barra, material continuo, preview, select/hand', async ({ page }) => {
+  test('capturas: formación sin plantilla, paneles con barra, material continuo, preview, select/hand', async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     // formación-sin-plantilla-433-propia
     await page.setViewportSize({ width: 1366, height: 900 });
@@ -681,7 +892,9 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await openJugadores(page);
     await page.locator('.formation-btn', { hasText: '4-3-3' }).click();
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(11);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/formacion-sin-plantilla-433-propia.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/formacion-sin-plantilla-433-propia.png` });
     // formaciones-genericas-propio-rival
     await page.locator('.tray-player[title="Jugador Rojo"]').click();
     // FASE B (paneles persistentes): el panel Jugadores ya está abierto; no se re-togglea (lo cerraría).
@@ -689,36 +902,53 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await page.locator('.formation-mirror input').check();
     await page.locator('.formation-btn', { hasText: '4-4-2' }).click();
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(22);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/formaciones-genericas-propio-rival.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/formaciones-genericas-propio-rival.png` });
     // jugadores-genericos-colocacion-continua
     await page.locator('.formation-mirror input').uncheck();
     await page.locator('.tray-player[title="Jugador Azul"]').click();
     const host = await hostBox(page);
     const fit = await fitMode(page);
-    for (const [nx, ny] of [[0.3, 0.3], [0.5, 0.3], [0.7, 0.3]] as Array<[number, number]>) {
+    for (const [nx, ny] of [
+      [0.3, 0.3],
+      [0.5, 0.3],
+      [0.7, 0.3],
+    ] as Array<[number, number]>) {
       const p = normToScreen(nx, ny, host, fit);
       await page.mouse.click(p.x, p.y);
     }
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/jugadores-genericos-colocacion-continua.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/jugadores-genericos-colocacion-continua.png` });
 
     // material-maniqui-colocacion-continua
     await clickSelect(page);
     await openMaterial(page, 'Maniquí individual');
-    for (const [nx, ny] of [[0.3, 0.5], [0.5, 0.5], [0.7, 0.5]] as Array<[number, number]>) {
+    for (const [nx, ny] of [
+      [0.3, 0.5],
+      [0.5, 0.5],
+      [0.7, 0.5],
+    ] as Array<[number, number]>) {
       const p = normToScreen(nx, ny, host, fit);
       await page.mouse.click(p.x, p.y);
     }
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/material-maniqui-colocacion-continua.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/material-maniqui-colocacion-continua.png` });
     // preview-material-en-cursor
     const hp = await hostBox(page);
     await page.mouse.move(hp.x + hp.width * 0.45, hp.y + hp.height * 0.55);
     await expect(page.locator('.placement-preview')).toBeVisible();
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/preview-material-en-cursor.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/preview-material-en-cursor.png` });
 
     // panel-material-barra-visible-390x844
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     await page.screenshot({ path: `${SHOTS}/panel-material-barra-visible-390x844.png` });
@@ -726,6 +956,7 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     // panel-dibujo-barra-visible-844x390
     await page.setViewportSize({ width: 844, height: 390 });
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     await page.screenshot({ path: `${SHOTS}/panel-dibujo-barra-visible-844x390.png` });

@@ -1,21 +1,43 @@
-<div class="shell">
+<div class="shell" #appShell [class.en-pizarra]="enPizarra()">
   <aside class="sidebar">
     <div class="brand">
-      <img class="brand-shield" src="assets/brand/cdm-pizarrales-original.jpg" alt="CDM Pizarrales">
+      <img
+        class="brand-shield"
+        src="assets/brand/cdm-pizarrales-escudo.png"
+        alt="CDM Pizarrales"
+      />
       <span class="brand-name">CDMPLab</span>
     </div>
     @if (showNav()) {
-      <nav class="nav">
+      <!-- Navegación de ESCRITORIO/TABLET: incluye Miembros cuando corresponde. -->
+      <nav class="nav nav-escritorio" aria-label="Navegación principal">
         @for (item of navItems(); track item.href) {
-          <a
-            [routerLink]="item.href"
-            routerLinkActive="nav-active"
-            class="nav-item"
-          >
+          <a [routerLink]="item.href" routerLinkActive="nav-active" class="nav-item">
             <span class="msi">{{ item.icon }}</span>
             <span class="nav-label">{{ item.label }}</span>
           </a>
         }
+      </nav>
+      <!-- Navegación INFERIOR de móvil: cuatro destinos + «Más» (Miembros y la cuenta viven ahí). -->
+      <nav class="nav nav-movil" aria-label="Navegación principal">
+        @for (item of destinosPrincipales(); track item.href) {
+          <a [routerLink]="item.href" routerLinkActive="nav-active" class="nav-item">
+            <span class="msi" aria-hidden="true">{{ item.icon }}</span>
+            <span class="nav-label">{{ item.label }}</span>
+          </a>
+        }
+        <button
+          type="button"
+          class="nav-item nav-mas"
+          [attr.aria-expanded]="cuentaAbierta()"
+          aria-controls="cuenta-menu"
+          aria-haspopup="dialog"
+          aria-label="Más: equipo, cuenta y ajustes"
+          (click)="toggleCuenta($event)"
+        >
+          <span class="msi" aria-hidden="true">more_horiz</span>
+          <span class="nav-label">Más</span>
+        </button>
       </nav>
     } @else {
       <div class="sidebar-auth">
@@ -26,40 +48,29 @@
         </a>
       </div>
     }
+    @if (showNav()) {
+      <!-- Cuenta en ESCRITORIO: botón compacto al pie de la barra lateral. Antes vivía en la
+           barra superior, que ocupaba 56 px de alto en todas las pantallas. -->
+      <div class="cuenta-pie">
+        <button
+          type="button"
+          class="cuenta-btn"
+          [attr.aria-expanded]="cuentaAbierta()"
+          aria-controls="cuenta-menu"
+          aria-haspopup="dialog"
+          aria-label="Cuenta y equipo"
+          (click)="toggleCuenta($event)"
+        >
+          <span class="msi" aria-hidden="true">account_circle</span>
+          <span class="cuenta-btn-texto">{{ equipoCorto() }}</span>
+          <span class="msi cuenta-chevron" aria-hidden="true">expand_less</span>
+        </button>
+      </div>
+    }
     <div class="sidebar-foot">v0.1</div>
   </aside>
 
   <div class="main">
-    <header class="topbar">
-      <div class="topbar-left">
-        <img class="topbar-shield" src="assets/brand/cdm-pizarrales-original.jpg" alt="CDM Pizarrales">
-        @if (teams().length > 1) {
-          <!-- Con más de un equipo, la cabecera permite cambiar (y recuerda la elección). -->
-          <label class="team-switch">
-            <span class="msi" aria-hidden="true">swap_horiz</span>
-            <!-- `[value]` en el <select> se aplica ANTES de que existan los <option>
-                 (los pinta el @for en el mismo ciclo) y el navegador se queda con el
-                 primero. Se marca `selected` en la opción que corresponde. -->
-            <select (change)="switchTeam($event)" aria-label="Cambiar de equipo">
-              @for (t of teams(); track t.id) {
-                <option [value]="t.id" [selected]="t.id === activeTeamId()">{{ t.name }}</option>
-              }
-            </select>
-          </label>
-        } @else {
-          <span class="topbar-title">{{ activeTeam()?.name ?? 'Sin equipo' }}</span>
-        }
-      </div>
-      <div class="topbar-right">
-        @if (isAuthenticated()) {
-          <span class="topbar-user" [title]="userEmail()">{{ userEmail() }}</span>
-          <button class="btn btn-ghost" (click)="logout()" aria-label="Cerrar sesión">Cerrar sesión</button>
-        }
-        <button class="btn btn-ghost btn-icon" title="Ajustes" aria-label="Ajustes" (click)="openSettings()">
-          <span class="msi">settings</span>
-        </button>
-      </div>
-    </header>
     <main class="content">
       @if (storageError()) {
         <div class="storage-error" role="alert">
@@ -84,9 +95,14 @@
       @if (lastConflict()) {
         <div class="conflict-bar" role="alert">
           <span class="msi">merge_type</span>
-          <span>Otro usuario modificó «{{ conflictTitle() }}» mientras lo editabas. Tu copia NO se ha guardado.</span>
+          <span
+            >Otro usuario modificó «{{ conflictTitle() }}» mientras lo editabas. Tu copia NO se ha
+            guardado.</span
+          >
           <div class="conflict-actions">
-            <button class="btn btn-ghost btn-sm" (click)="discardMyCopy()">Descartar mi copia</button>
+            <button class="btn btn-ghost btn-sm" (click)="discardMyCopy()">
+              Descartar mi copia
+            </button>
             <button class="btn btn-primary btn-sm" (click)="keepMyCopy()">Guardar mi copia</button>
           </div>
         </div>
@@ -96,25 +112,122 @@
   </div>
 </div>
 
+<!-- Cuenta y equipo: menú flotante en escritorio y hoja inferior (por encima de la barra de
+     navegación) en móvil. El mismo contenido en los dos sitios para no duplicar funciones. -->
+@if (cuentaAbierta()) {
+  <div class="cuenta-capa" (click)="cerrarCuenta()" (document:keydown.escape)="cerrarCuenta()">
+    <div
+      #cuentaPanel
+      id="cuenta-menu"
+      class="cuenta-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Cuenta y equipo"
+      (click)="$event.stopPropagation()"
+      (keydown)="onCuentaKeydown($event)"
+    >
+      <div class="cuenta-cabecera">
+        <img
+          class="cuenta-escudo"
+          src="assets/brand/cdm-pizarrales-escudo.png"
+          alt="CDM Pizarrales"
+        />
+        <span class="cuenta-marca">CDMPLab</span>
+        <button
+          type="button"
+          class="btn btn-ghost btn-icon"
+          title="Cerrar"
+          aria-label="Cerrar el menú de cuenta"
+          (click)="cerrarCuenta()"
+        >
+          <span class="msi">close</span>
+        </button>
+      </div>
+
+      <div class="cuenta-bloque">
+        <div class="cuenta-etiqueta">Equipo activo</div>
+        @if (teams().length > 1) {
+          <label class="team-switch">
+            <span class="msi" aria-hidden="true">swap_horiz</span>
+            <select (change)="switchTeamDesdeCuenta($event)" aria-label="Cambiar de equipo">
+              @for (t of teams(); track t.id) {
+                <option [value]="t.id" [selected]="t.id === activeTeamId()">{{ t.name }}</option>
+              }
+            </select>
+          </label>
+        } @else {
+          <div class="cuenta-valor">{{ activeTeam()?.name ?? 'Sin equipo' }}</div>
+        }
+      </div>
+
+      @if (isAuthenticated()) {
+        <div class="cuenta-bloque">
+          <div class="cuenta-etiqueta">Cuenta</div>
+          <div class="cuenta-valor cuenta-correo" [title]="userEmail()">{{ userEmail() }}</div>
+        </div>
+      }
+
+      <div class="cuenta-acciones" id="cuenta-mas">
+        @if (miembrosItem(); as miembros) {
+          <a class="cuenta-accion" [routerLink]="miembros.href" (click)="cerrarCuenta()">
+            <span class="msi" aria-hidden="true">{{ miembros.icon }}</span>
+            <span>{{ miembros.label }}</span>
+          </a>
+        }
+        <button type="button" class="cuenta-accion" (click)="ajustesDesdeCuenta()">
+          <span class="msi" aria-hidden="true">settings</span>
+          <span>Ajustes</span>
+        </button>
+        @if (isAuthenticated()) {
+          <button type="button" class="cuenta-accion cuenta-salir" (click)="logoutDesdeCuenta()">
+            <span class="msi" aria-hidden="true">logout</span>
+            <span>Cerrar sesión</span>
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+}
+
 <!-- Ajustes -->
 @if (settingsOpen()) {
   <div class="modal-backdrop" (click)="closeSettings()" (document:keydown.escape)="closeSettings()">
-    <div class="settings" (click)="$event.stopPropagation()">
+    <div
+      #settingsPanel
+      class="settings"
+      (click)="$event.stopPropagation()"
+      (keydown)="onAjustesKeydown($event)"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ajustes"
+    >
       <div class="settings-head">
         <h3>Ajustes</h3>
-        <button class="btn btn-ghost btn-icon" (click)="closeSettings()" title="Cerrar" aria-label="Cerrar">
+        <button
+          class="btn btn-ghost btn-icon"
+          (click)="closeSettings()"
+          title="Cerrar"
+          aria-label="Cerrar"
+        >
           <span class="msi">close</span>
         </button>
       </div>
       <div class="settings-body">
         <p class="settings-note">
-          @if (isAuthenticated()) { Tus datos se guardan en tu cuenta (Supabase). El respaldo de abajo es un archivo LOCAL de este navegador. }
-          @else { Los datos se guardan localmente en este navegador. }
+          @if (isAuthenticated()) {
+            Tus datos se guardan en tu cuenta (Supabase). El respaldo de abajo es un archivo LOCAL
+            de este navegador.
+          } @else {
+            Los datos se guardan localmente en este navegador.
+          }
         </p>
         <div class="settings-row">
           <div>
             <div class="settings-title">Exportar respaldo</div>
-            <div class="settings-sub">Descarga un JSON con equipos, jugadores, carpetas, ejercicios (con su pizarra y miniaturas) y sesiones.</div>
+            <div class="settings-sub">
+              Descarga un JSON con equipos, jugadores, carpetas, ejercicios (con su pizarra y
+              miniaturas) y sesiones.
+            </div>
           </div>
           <button class="btn" (click)="exportBackup()">Exportar</button>
         </div>
@@ -122,8 +235,14 @@
           <div>
             <div class="settings-title">Importar respaldo</div>
             <div class="settings-sub">
-              @if (isAuthenticated()) { No disponible con tu cuenta: restaurar un JSON todavía no está implementado contra Supabase, y escribir solo en este navegador se perdería al recargar. Tus datos de la cuenta no se tocan. }
-              @else { Restaura desde un archivo JSON exportado antes. Se valida y nunca se pierden los datos actuales (copia automática). }
+              @if (isAuthenticated()) {
+                No disponible con tu cuenta: restaurar un JSON todavía no está implementado contra
+                Supabase, y escribir solo en este navegador se perdería al recargar. Tus datos de la
+                cuenta no se tocan.
+              } @else {
+                Restaura desde un archivo JSON exportado antes. Se valida y nunca se pierden los
+                datos actuales (copia automática).
+              }
             </div>
           </div>
           @if (isAuthenticated()) {
@@ -137,7 +256,12 @@
           } @else {
             <label class="btn">
               Importar
-              <input type="file" accept=".json,application/json" (change)="onImportFile($event)" style="display:none" />
+              <input
+                type="file"
+                accept=".json,application/json"
+                (change)="onImportFile($event)"
+                style="display: none"
+              />
             </label>
           }
         </div>
@@ -160,8 +284,12 @@
           <div>
             <div class="settings-title">Restablecer datos</div>
             <div class="settings-sub">
-              @if (isAuthenticated()) { Borra la caché local de este navegador. Los datos de tu cuenta NO se tocan (volverán a cargarse al recargar). }
-              @else { Borra equipos, jugadores, ejercicios y sesiones guardados en este navegador. }
+              @if (isAuthenticated()) {
+                Borra la caché local de este navegador. Los datos de tu cuenta NO se tocan (volverán
+                a cargarse al recargar).
+              } @else {
+                Borra equipos, jugadores, ejercicios y sesiones guardados en este navegador.
+              }
             </div>
           </div>
           <button class="btn btn-danger" (click)="resetData()">Borrar</button>
@@ -171,13 +299,16 @@
             <div>
               <div class="settings-title">Restaurar copia automática</div>
               <div class="settings-sub">
-                Se guardó sola justo antes de la última importación de un respaldo. Restaurarla deja lo actual como la nueva copia automática.
+                Se guardó sola justo antes de la última importación de un respaldo. Restaurarla deja
+                lo actual como la nueva copia automática.
               </div>
             </div>
             <button class="btn" (click)="restoreAutoBackup()">Restaurar</button>
           </div>
         }
-        <p class="settings-note">Gestión de equipo, invitaciones y colaboradores desde “Miembros”.</p>
+        <p class="settings-note">
+          Gestión de equipo, invitaciones y colaboradores desde “Miembros”.
+        </p>
       </div>
     </div>
   </div>

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 
 const SHOTS = 'e2e/shots/fase4';
@@ -46,6 +47,7 @@ async function boardWithContent(page: Page): Promise<void> {
   const box = (await page.locator('.board-host').boundingBox())!;
 
   // Jugador de la plantilla desde el panel Jugadores (izquierda).
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await page.locator('.side-panel-left .roster-item').first().click();
   await page.waitForTimeout(200);
@@ -56,6 +58,7 @@ async function boardWithContent(page: Page): Promise<void> {
   await page.waitForTimeout(150);
 
   // Texto desde el panel Dibujo.
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Texto"]').click();
   // FASE B: cerrar el panel Dibujo con la X (no desarma) antes de tocar el campo.
@@ -65,6 +68,7 @@ async function boardWithContent(page: Page): Promise<void> {
   await expect(page.locator('.field-count')).toHaveText('2');
 
   // Abrir el panel Material (flyout escritorio / bottom-sheet móvil).
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
 }
 

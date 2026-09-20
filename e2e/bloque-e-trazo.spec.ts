@@ -8,7 +8,9 @@
 // modelo persistido en localStorage bajo la clave versionada.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import type { CanvasDocument } from '../src/app/core/models';
+import { toggleFillScreen } from './gesture-helpers';
 
 const VBW = 100;
 const VBH = 80;
@@ -64,7 +66,7 @@ async function openBoard(page: Page): Promise<void> {
     .locator('.board-host')
     .evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
 }
@@ -93,6 +95,7 @@ async function useDrawTool(page: Page, title: string): Promise<void> {
       .isVisible()
       .catch(() => false))
   ) {
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   }
   await page.locator(`.rail-btn[title="${title}"]`).click();
@@ -253,6 +256,7 @@ test.describe('BLOQUE E — trazo por herramienta, clave versionada y migración
 
     // FASE 7: el Aro ya NO tiene variantes (se eliminó ring_flat). Se verifica la
     // persistencia de variante con un material que SÍ las conserva (Cono, 6 colores).
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-material-card')).toHaveCount(19);
     const coneCard = page.locator('.tools-material-card', { hasText: 'Cono' }).first();

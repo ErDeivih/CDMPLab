@@ -13,8 +13,9 @@
 // comparten las mismas constantes.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { longPress, fillBoardTitle } from './gesture-helpers';
+import { longPress, fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/fase5';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -82,7 +83,7 @@ async function openBoardDesktop(page: Page): Promise<void> {
   await dismissHelp(page);
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
 }
@@ -102,6 +103,7 @@ async function openProps(page: Page): Promise<void> {
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
+  await abrirHerramientas(page);
   if (category) await page.locator('.tools-cat', { hasText: category }).click();
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
@@ -195,6 +197,7 @@ async function deselect(page: Page): Promise<void> {
 }
 
 async function placePlayer(page: Page, title: string, nx: number, ny: number, fit: 'contain' | 'height' = 'contain', tray = false): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   const isPlayerTool = title === 'Jugador propio' || title === 'Jugador rival';
   if (tray) {
@@ -218,6 +221,7 @@ async function placeTrayPlayer(page: Page, title: string, nx: number, ny: number
 }
 
 async function placeMaterial(page: Page, tool: string, nx: number, ny: number, fit: 'contain' | 'height' = 'contain', variantIndex?: number): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${tool}"]`) });
   const variantCount = await card.locator('.variant-swatch').count();
@@ -244,6 +248,7 @@ async function dragDraw(page: Page, from: [number, number], to: [number, number]
 }
 
 async function drawShape(page: Page, tool: string, from: [number, number], to: [number, number], colorIndex?: number, fill?: boolean, fit: 'contain' | 'height' = 'contain'): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator(`.rail-btn[title="${tool}"]`).click();
   if (colorIndex != null) await page.locator('.tools-caption .swatch').nth(colorIndex).click();
@@ -400,7 +405,7 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
     await page.locator('.studio-panel [aria-label="Cerrar panel"]').click();
     await expect(page.locator('.studio-panel')).toHaveCount(0);
     // Forzar campo completo para que el F7 se vea entero.
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
     await page.waitForTimeout(150);
     await page.screenshot({ path: `${SHOTS}/f7-movil.png` });
@@ -522,6 +527,7 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
       await openBoardMobile(page);
       await expect(page.locator('.board-host')).toHaveClass(/board-fill/);
       // Un Portero para que la pizarra no esté vacía, sin abrir inspector.
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -552,6 +558,7 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
       await placeMaterial(page, 'Balón', 0.55, 0.55, 'height');
       await page.keyboard.press('Escape');
       await page.waitForTimeout(120);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       await page.waitForTimeout(250);
@@ -566,6 +573,7 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
       await placeMaterial(page, 'Balón', 0.55, 0.55, 'height');
       await page.keyboard.press('Escape');
       await page.waitForTimeout(120);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       await page.waitForTimeout(250);
@@ -582,6 +590,7 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
       await drawShape(page, 'Rectángulo', [0.3, 0.2], [0.55, 0.36], 0, false, 'height');
       await page.keyboard.press('Escape');
       await page.waitForTimeout(120);
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       await page.waitForTimeout(250);
@@ -611,7 +620,7 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
     const ys = [0.13, 0.36, 0.59, 0.82];
     const recipe: Array<[string, number]> = [
       ['Balón', 0], ['Fitball', 0], ['Cono', 0], ['BOSU', 0], ['Banderín', 0],
-      ['Chino', 0], ['Pica coloreable', 0], ['Pértiga / poste', 0], ['Maniquí individual', 0], ['Barrera de maniquíes', 0],
+      ['Chino', 0], ['Pica', 0], ['Pértiga / poste', 0], ['Maniquí individual', 0], ['Barrera de maniquíes', 0],
       ['Miniportería', 0], ['Portería grande', 0], ['Valla', 0], ['Aro', 0], ['Escalera', 0],
       ['Minitrampolín', 0], ['Peto', 0], ['Chaleco lastrado', 0], ['Mancuerna / pesa', 0],
     ];

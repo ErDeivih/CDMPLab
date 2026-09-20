@@ -3,6 +3,7 @@
 // Barrera de maniquíes) aparecen en el panel de Material y se colocan.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -45,6 +46,7 @@ test.describe('B1 — catálogo con tipos colocables', () => {
       // ya está desplegado (ya no se cierra al elegir un material) no lo re-togglea, porque
       // re-clickear el mismo .tools-cat lo cerraría y rompería la siguiente colocación.
       if (!(await page.locator('.side-panel-left.tools-panel-side').isVisible().catch(() => false))) {
+        await abrirHerramientas(page);
         await page.locator('.tools-cat', { hasText: 'Material' }).click();
       }
       const btn = page.locator(`.rail-btn[title="${title}"]`);

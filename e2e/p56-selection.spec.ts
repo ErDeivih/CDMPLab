@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import { longPress } from './gesture-helpers';
 
 // Rect canónico de contenido (largo→X, ancho→Y) de un campo 105×68 en el viewBox 100×80.
@@ -67,6 +68,7 @@ function fieldCount(page: Page): Promise<number> {
 
 /** Arma y usa una herramienta de dibujo desde el panel "Dibujo". */
 async function useDrawTool(page: Page, title: string): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator(`.rail-btn[title="${title}"]`).click();
 }
@@ -100,6 +102,7 @@ async function placeComodin(page: Page, nx: number, ny: number): Promise<void> {
   const host = await hostBox(page);
   const fit = await fitMode(page);
   const pos = normToScreen(nx, ny, host, fit);
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -116,6 +119,7 @@ async function placeCone(page: Page, nx: number, ny: number): Promise<void> {
   const host = await hostBox(page);
   const fit = await fitMode(page);
   const pos = normToScreen(nx, ny, host, fit);
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
   await page.mouse.click(pos.x, pos.y); // coloca
@@ -302,6 +306,7 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
     await seed(page);
     await openClosed(page);
     // Un cono (material puntual, caja de hit robusta) en un punto conocido.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     const host = await hostBox(page);

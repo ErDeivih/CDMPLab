@@ -1,6 +1,16 @@
 import { CanvasElement, FieldType, F7Overlay } from './models';
 import { CANONICAL_MATERIALS } from './material-registry';
-import { FIELD_RECT, fieldSvg, FIELD_LINE_WIDTH, fieldGeometry, fieldObjectScale, STRIP_FRAC, STRIP_MARGIN_NORM, OFFICIAL_PITCH_COLOR, OFFICIAL_GRASS_MODE } from './field';
+import {
+  FIELD_RECT,
+  fieldSvg,
+  FIELD_LINE_WIDTH,
+  fieldGeometry,
+  fieldObjectScale,
+  STRIP_FRAC,
+  STRIP_MARGIN_NORM,
+  fieldSurface,
+  goalBoxUnits,
+} from './field';
 import { f7Geometry } from './f7';
 import { materialBaseSize, materialHitFrac } from './tactic-assets';
 
@@ -42,16 +52,22 @@ export function materialHitHalfExtents(
   pxTol?: { x: number; y: number },
   // `true` si el material se dibuja CONTRARROTADO (-90°) porque el tablero está en vertical:
   // su caja visible queda girada y los semiejes hay que intercambiarlos.
-  uprightVertical = false
+  uprightVertical = false,
+  // FASE 3 del encargo de materiales: la PORTERÍA no usa la escala genérica, se dibuja con la
+  // anchura reglamentaria del campo activo. Su caja táctil tiene que ser EXACTAMENTE la del dibujo
+  // (misma escala en render, hit-test y marco de selección), así que aquí se recibe el campo.
+  field?: FieldType,
 ): { hw: number; hh: number } {
   const s = materialSize(el) * objectScale;
   const frac = materialHitFrac(el.assetKind ?? el.t);
+  const esPorteria = (el.assetKind ?? el.t) === 'goal' && !!field;
+  const cajaPorteria = esPorteria ? goalBoxUnits(field) : null;
   // Semiejes en UNIDADES del viewBox (sin normalizar todavía). El intercambio del caso vertical
   // se hace AQUÍ, en unidades: norm X y norm Y escalan distinto (92 vs 59,6 unidades), así que
   // intercambiar los valores ya normalizados dejaría el dibujo a medio cubrir (medido: una
   // escalera grande en vertical quedaba con el eje largo en el sitio equivocado).
-  let hwU = (MATERIAL_BOX * s * frac.w) / 2;
-  let hhU = (MATERIAL_BOX * s * frac.h) / 2;
+  let hwU = cajaPorteria ? cajaPorteria.w / 2 : (MATERIAL_BOX * s * frac.w) / 2;
+  let hhU = cajaPorteria ? cajaPorteria.h / 2 : (MATERIAL_BOX * s * frac.h) / 2;
   // Hit-box = recuadro de contenido (bbox del material, con su proporción real via `frac`)
   // + margen EN PANTALLA por zoom. D1: la base es la caja REAL del objeto (así un poste
   // alto/estrecho conserva su caja vertical y un cono la suya), y el margen se convierte de
@@ -81,7 +97,12 @@ export interface Geometry {
 }
 
 // Proporción real de un campo 105×68 m. En horizontal, el largo va en X.
-const HORIZONTAL: Geometry = { vbW: VB_W, vbH: VB_H, rect: { x: 4, y: 10, w: 92, h: 92 / (105 / 68) }, vertical: false };
+const HORIZONTAL: Geometry = {
+  vbW: VB_W,
+  vbH: VB_H,
+  rect: { x: 4, y: 10, w: 92, h: 92 / (105 / 68) },
+  vertical: false,
+};
 
 /** Tipos de MATERIAL: su dibujo tiene un «arriba» propio (un cono con la base hacia abajo, una
  *  portería, una miniportería, una escalera, una pica…). Fuente única: el registro canónico de
@@ -155,9 +176,24 @@ export const DEFAULT_ELEMENT_COLOR = '#ffffff';
  */
 export const COLORABLE_ELEMENT_TYPES: ReadonlySet<string> = new Set([
   // Dibujo (el `t` de la herramienta correspondiente).
-  'rect', 'ellipse', 'line', 'arrow', 'doubleArrow', 'curve', 'dribble', 'freehand', 'text',
+  'rect',
+  'ellipse',
+  'line',
+  'arrow',
+  'doubleArrow',
+  'curve',
+  'dribble',
+  'freehand',
+  'text',
   // Materiales de render vectorial que usan `el.c`.
-  'peto', 'pica', 'target', 'ring', 'ring_flat', 'marker', 'ladder', 'pole',
+  'peto',
+  'pica',
+  'target',
+  'ring',
+  'ring_flat',
+  'marker',
+  'ladder',
+  'pole',
 ]);
 
 /** Relación punta-de-flecha ↔ grosor de trazo: con el default (0.4) la punta
@@ -173,9 +209,9 @@ export function arrowHeadSize(strokeWidth: number): number {
 // Fase 2 — los trazos AUXILIARES de selección se afinan al 25% del grosor que
 // tenían (0.8→0.2, 0.7→0.175, 0.4→0.1). No afecta al grosor real del elemento ni
 // al área táctil: la selección se ve fina y discreta pero sigue siendo manipulable.
-export const SEL_STROKE = 0.2;         // contornos punteados de líneas/figuras/curvas/mano alzada
+export const SEL_STROKE = 0.2; // contornos punteados de líneas/figuras/curvas/mano alzada
 export const SEL_STROKE_POINT = 0.175; // círculo de selección de jugadores/materiales
-export const SEL_HANDLE_STROKE = 0.1;  // borde de las asas cuadradas de redimensionado
+export const SEL_HANDLE_STROKE = 0.1; // borde de las asas cuadradas de redimensionado
 
 /** Ancho estimado de un carácter como fracción del tamaño de fuente (proporcional). */
 const TEXT_CHAR_W = 0.58;
@@ -299,7 +335,9 @@ export function pctToNormalized(pct: number): number {
 
 /** Acepta coma o punto decimal ("28,9" / "28.9") y devuelve el número; NaN si no es válido. */
 export function parseLocalizedNumber(raw: string): number {
-  const s = String(raw ?? '').trim().replace(',', '.');
+  const s = String(raw ?? '')
+    .trim()
+    .replace(',', '.');
   if (s === '') return NaN; // campo vacío → no editar (no un 0 destructivo)
   const n = Number(s);
   return Number.isFinite(n) ? n : NaN;
@@ -328,7 +366,12 @@ function naturalTextWidthUnits(v: string, size: number): number {
  * `maxWNorm` es el ancho normalizado máximo que puede ocupar (para no desbordar
  * el campo por la derecha). Devuelve `w`/`h` normalizados 0..1.
  */
-export function fitTextToContent(v: string, size: number, maxWNorm: number, r: Geometry['rect'] = BOARD_CANON_RECT): { w: number; h: number } {
+export function fitTextToContent(
+  v: string,
+  size: number,
+  maxWNorm: number,
+  r: Geometry['rect'] = BOARD_CANON_RECT,
+): { w: number; h: number } {
   const safeSize = size > 0 ? size : DEFAULT_TEXT_SIZE;
   const maxWUnits = Math.max(safeSize * 0.5, maxWNorm * r.w);
   const naturalWUnits = naturalTextWidthUnits(v, safeSize);
@@ -380,15 +423,25 @@ export type FitMode = 'contain' | 'height';
  *        más tamaño), por lo que puede desbordar y panearse. En hosts verticales coincide
  *        con contain-height; en panorámicos difiere y ANTES no cuadraba con el render.
  *  Así el round-trip norm→pantalla→norm es la identidad para cualquier zoom/pan. */
-export function screenToNorm(clientX: number, clientY: number, host: HostRect, g: Geometry, panX: number, panY: number, zoom: number, fit: FitMode = 'contain'): { x: number; y: number } {
+export function screenToNorm(
+  clientX: number,
+  clientY: number,
+  host: HostRect,
+  g: Geometry,
+  panX: number,
+  panY: number,
+  zoom: number,
+  fit: FitMode = 'contain',
+): { x: number; y: number } {
   const fillExtent = g.vertical ? g.rect.w : g.rect.h;
   // D1/fix: en `height` (llenar pantalla) la escala es COVER (igual que `fillScale` del
   // componente): se cubre el host usando la dimensión que más tamaño da. Antes era
   // `host.height/fillExtent` (contain-height) y NO coincidía con el render en hosts
   // panorámicos (error de ~36 px, que la tolerancia de selección estricta destapaba).
-  const s = fit === 'height'
-    ? Math.max(host.height / fillExtent, host.width / (g.vertical ? g.rect.h : g.rect.w))
-    : Math.min(host.width / g.vbW, host.height / g.vbH);
+  const s =
+    fit === 'height'
+      ? Math.max(host.height / fillExtent, host.width / (g.vertical ? g.rect.h : g.rect.w))
+      : Math.min(host.width / g.vbW, host.height / g.vbH);
   const offX = (host.width - g.vbW * s) / 2;
   const offY = (host.height - g.vbH * s) / 2;
   // Inverse del transform `translate(pan) scale(zoom)` con origen en el centro del host.
@@ -405,7 +458,7 @@ export function screenToNorm(clientX: number, clientY: number, host: HostRect, g
     const Tx = g.vbW / 2 + (r.y + r.h / 2);
     return {
       x: clamp01((vbY - r.x) / r.w),
-      y: clamp01(((Tx - vbX) - r.y) / r.h),
+      y: clamp01((Tx - vbX - r.y) / r.h),
     };
   }
   return {
@@ -439,7 +492,12 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-function grassBg(base: string, vbW: number, vbH: number, mode: 'stripes' | 'plain' | 'checker' = 'stripes'): string {
+function grassBg(
+  base: string,
+  vbW: number,
+  vbH: number,
+  mode: 'stripes' | 'plain' | 'checker' = 'stripes',
+): string {
   if (mode === 'plain') {
     return `<rect x="0" y="0" width="${vbW}" height="${vbH}" fill="${base}"/>`;
   }
@@ -472,7 +530,7 @@ function distToSegment(
   x1: number,
   y1: number,
   x2: number,
-  y2: number
+  y2: number,
 ): number {
   const dx = x2 - x1;
   const dy = y2 - y1;
@@ -482,7 +540,16 @@ function distToSegment(
   return Math.hypot(pxx - (x1 + t * dx), pyy - (y1 + t * dy));
 }
 
-function nearQuad(p: { x: number; y: number }, x1: number, y1: number, cx: number, cy: number, x2: number, y2: number, tol: number): boolean {
+function nearQuad(
+  p: { x: number; y: number },
+  x1: number,
+  y1: number,
+  cx: number,
+  cy: number,
+  x2: number,
+  y2: number,
+  tol: number,
+): boolean {
   let prev: [number, number] = [x1, y1];
   const N = 24;
   for (let i = 1; i <= N; i++) {
@@ -510,7 +577,10 @@ export interface ScreenPxTolerance {
 
 /** Tolerancia en NORM para `screenPx` px de pantalla, en el zoom actual. Inversa exacta
  *  de screenToNorm: d(norm) = d(client) / (zoom * scale * r.w|r.h). */
-export function screenPxToNormTolerance(opts: ScreenPxTolerance, screenPx: number): { x: number; y: number } {
+export function screenPxToNormTolerance(
+  opts: ScreenPxTolerance,
+  screenPx: number,
+): { x: number; y: number } {
   const denomX = opts.zoom * opts.scale * opts.rect.w;
   const denomY = opts.zoom * opts.scale * opts.rect.h;
   return { x: screenPx / denomX, y: screenPx / denomY };
@@ -525,11 +595,19 @@ export function hitTestElement(
   // `true` cuando el tablero se dibuja en VERTICAL: en esa orientación los materiales se
   // contrarrotan -90° para quedar derechos por pantalla (ver `renderBoardSvg`), así que su caja
   // visible en el espacio canónico va girada y hay que intercambiar los semiejes.
-  vertical = false
+  vertical = false,
+  // Tipo de campo activo: la portería de material se dibuja a la anchura reglamentaria del campo
+  // (FASE 3 del encargo de materiales) y su caja táctil debe ser la MISMA que la del dibujo.
+  field: FieldType = 'full',
 ): string | null {
   // D1: tolerancia en px de pantalla (ratón ~4, táctil ~8–10) convertida a norm según
   // el zoom, en vez de un 0.045 normalizado fijo. Si no se pasa, se usa el mínimo táctil legado.
-  const pxTol = pxScreen ? screenPxToNormTolerance({ zoom: pxScreen.zoom, scale: pxScreen.scale, rect: r }, pxScreen.screenPx) : undefined;
+  const pxTol = pxScreen
+    ? screenPxToNormTolerance(
+        { zoom: pxScreen.zoom, scale: pxScreen.scale, rect: r },
+        pxScreen.screenPx,
+      )
+    : undefined;
   // Fase 9: texto/línea/curva/mano alzada también usan tolerancia EN PANTALLA (por zoom),
   // no un 0.03/0.09 normalizado fijo. Valor por eje (el mayor) para que el radio táctil sea
   // constante en px de pantalla; sin pxScreen se conserva el legado.
@@ -559,7 +637,12 @@ export function hitTestElement(
       el.t === 'net' ||
       el.t === 'vball' ||
       el.t === 'dumbbell' ||
-      el.t === 'coachC' || el.t === 'peto' || el.t === 'chaleco' || el.t === 'bosu' || el.t === 'fitball' || el.t === 'pica'
+      el.t === 'coachC' ||
+      el.t === 'peto' ||
+      el.t === 'chaleco' ||
+      el.t === 'bosu' ||
+      el.t === 'fitball' ||
+      el.t === 'pica'
     ) {
       // Hit-box del material/objeto puntual: caja del contenido visible (bbox),
       // escalada por `size` y con un área táctil mínima. El punto ya está en el
@@ -570,23 +653,48 @@ export function hitTestElement(
       // ver `materialHitHalfExtents`). Sin esto, un material GRANDE (mayor que el mínimo táctil)
       // tenía la caja perpendicular al dibujo: tocar sus extremos visibles no lo seleccionaba y
       // sí seleccionaba césped vacío al lado.
-      const { hw, hh } = materialHitHalfExtents(el, r, objectScale, pxTol, vertical && (UPRIGHT_MATERIAL_TYPES.has(el.t) || !!el.asset));
+      const { hw, hh } = materialHitHalfExtents(
+        el,
+        r,
+        objectScale,
+        pxTol,
+        vertical && (UPRIGHT_MATERIAL_TYPES.has(el.t) || !!el.asset),
+        field,
+      );
       if (Math.abs(lp.x - (el.x ?? 0)) <= hw && Math.abs(lp.y - (el.y ?? 0)) <= hh) return el.id;
     } else if (el.t === 'text') {
       if (Math.hypot(lp.x - (el.x ?? 0), lp.y - (el.y ?? 0)) < textTol) return el.id;
-      if (el.w && el.h && lp.x >= (el.x ?? 0) && lp.x <= (el.x ?? 0) + el.w && lp.y >= (el.y ?? 0) && lp.y <= (el.y ?? 0) + el.h) return el.id;
-    } else if (el.t === 'arrow' || el.t === 'line' || el.t === 'dribble' || el.t === 'doubleArrow' || el.t === 'measure') {
-      if (distToSegment(lp.x, lp.y, el.x1 ?? 0, el.y1 ?? 0, el.x2 ?? 0, el.y2 ?? 0) < lineTol) return el.id;
+      if (
+        el.w &&
+        el.h &&
+        lp.x >= (el.x ?? 0) &&
+        lp.x <= (el.x ?? 0) + el.w &&
+        lp.y >= (el.y ?? 0) &&
+        lp.y <= (el.y ?? 0) + el.h
+      )
+        return el.id;
+    } else if (
+      el.t === 'arrow' ||
+      el.t === 'line' ||
+      el.t === 'dribble' ||
+      el.t === 'doubleArrow' ||
+      el.t === 'measure'
+    ) {
+      if (distToSegment(lp.x, lp.y, el.x1 ?? 0, el.y1 ?? 0, el.x2 ?? 0, el.y2 ?? 0) < lineTol)
+        return el.id;
     } else if (el.t === 'curve') {
       const cx = el.c1x ?? ((el.x1 ?? 0) + (el.x2 ?? 0)) / 2;
       const cy = el.c1y ?? ((el.y1 ?? 0) + (el.y2 ?? 0)) / 2;
-      if (nearQuad(lp, el.x1 ?? 0, el.y1 ?? 0, cx, cy, el.x2 ?? 0, el.y2 ?? 0, lineTol)) return el.id;
+      if (nearQuad(lp, el.x1 ?? 0, el.y1 ?? 0, cx, cy, el.x2 ?? 0, el.y2 ?? 0, lineTol))
+        return el.id;
     } else if (el.t === 'freehand') {
       const pts = el.points ?? [];
       for (let i = 1; i < pts.length; i++) {
-        if (distToSegment(lp.x, lp.y, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]) < lineTol) return el.id;
+        if (distToSegment(lp.x, lp.y, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]) < lineTol)
+          return el.id;
       }
-      if (pts.length === 1 && Math.hypot(lp.x - pts[0][0], lp.y - pts[0][1]) < lineTol) return el.id;
+      if (pts.length === 1 && Math.hypot(lp.x - pts[0][0], lp.y - pts[0][1]) < lineTol)
+        return el.id;
     } else if (el.t === 'ellipse') {
       const ex = (el.x ?? 0) + (el.w ?? 0) / 2;
       const ey = (el.y ?? 0) + (el.h ?? 0) / 2;
@@ -596,13 +704,23 @@ export function hitTestElement(
       const dy = (lp.y - ey) / h2;
       if (dx * dx + dy * dy <= 1) return el.id;
     } else if (el.t === 'zone' || el.t === 'rect') {
-      if (lp.x >= (el.x ?? 0) && lp.x <= (el.x ?? 0) + (el.w ?? 0) && lp.y >= (el.y ?? 0) && lp.y <= (el.y ?? 0) + (el.h ?? 0)) return el.id;
+      if (
+        lp.x >= (el.x ?? 0) &&
+        lp.x <= (el.x ?? 0) + (el.w ?? 0) &&
+        lp.y >= (el.y ?? 0) &&
+        lp.y <= (el.y ?? 0) + (el.h ?? 0)
+      )
+        return el.id;
     }
   }
   return null;
 }
 
-function rotatePoint(p: { x: number; y: number }, c: { x: number; y: number }, deg: number): { x: number; y: number } {
+function rotatePoint(
+  p: { x: number; y: number },
+  c: { x: number; y: number },
+  deg: number,
+): { x: number; y: number } {
   const a = (deg * Math.PI) / 180;
   const dx = p.x - c.x;
   const dy = p.y - c.y;
@@ -631,8 +749,8 @@ export function elementCenter(el: CanvasElement): { x: number; y: number } {
   }
   if (t === 'curve') {
     return {
-      x: ((el.x1 ?? 0) + (el.c1x ?? (el.x2 ?? 0)) + (el.x2 ?? 0)) / 3,
-      y: ((el.y1 ?? 0) + (el.c1y ?? (el.y2 ?? 0)) + (el.y2 ?? 0)) / 3,
+      x: ((el.x1 ?? 0) + (el.c1x ?? el.x2 ?? 0) + (el.x2 ?? 0)) / 3,
+      y: ((el.y1 ?? 0) + (el.c1y ?? el.y2 ?? 0) + (el.y2 ?? 0)) / 3,
     };
   }
   if (t === 'freehand') {
@@ -658,12 +776,33 @@ function rotWrap(inner: string, rot: number | undefined, cx: number, cy: number)
   return rot ? `<g transform="rotate(${rot} ${cx} ${cy})">${inner}</g>` : inner;
 }
 
-function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVertical = false, objectScale = 1): string {
+/**
+ * Materiales que se dibujan SIEMPRE en vector, aunque el documento traiga un PNG (FASE 4 del encargo
+ * de materiales). Motivo medido por el dueño: con el PNG el CHINO parecía una raya y la ESCALERA y
+ * la MINIPORTERÍA se confundían entre sí y con la portería grande. Sus datos NO se tocan (el `asset`
+ * sigue guardado por compatibilidad); simplemente no se usa para pintarlos.
+ * Se comprueba por TIPO de elemento y por `assetKind`, porque la variante amarilla de la escalera es
+ * el mismo `t` (`ladder`) con otro `assetKind`.
+ */
+const SIEMPRE_VECTOR = new Set(['ladder', 'ladder_yellow', 'minigoal', 'target', 'goal']);
+
+function elStr(
+  el: CanvasElement,
+  selected: boolean,
+  r: Geometry['rect'],
+  isVertical = false,
+  objectScale = 1,
+  // Tipo de campo activo: la portería de MATERIAL necesita la anchura reglamentaria del campo
+  // (FASE 3 del encargo de materiales) y aquí es donde se decide qué se dibuja.
+  field: FieldType = 'full',
+): string {
   const gx = (nx: number) => px(nx, r);
   const gy = (ny: number) => py(ny, r);
   // Material en PNG: se renderiza como imagen. El `size` escala la caja (5.2×size)
   // y, en documentos sin `size`, se usa el tamaño base normalizado del tipo.
-  if (el.asset) {
+  // EXCEPCIÓN (FASE 4 del encargo de materiales): los materiales de `SIEMPRE_VECTOR` ignoran su PNG
+  // y usan el dibujo vectorial, que es reconocible a cualquier tamaño.
+  if (el.asset && !SIEMPRE_VECTOR.has(el.t) && !SIEMPRE_VECTOR.has(el.assetKind ?? '')) {
     // FASE 6: escala visual por campo (tamaño aparente constante). Se aplica SOLO en el
     // render; el `size` del documento no se re-escribe. `objectScale` es 1 en campo completo.
     const s = materialSize(el) * objectScale;
@@ -683,23 +822,31 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
       const s = materialSize(el) * objectScale;
-      const ring = selected ? ' stroke="#fff" stroke-width="0.5" stroke-dasharray="0.8,0.6"' : ' stroke="#ffffff" stroke-width="0.6"';
+      const ring = selected
+        ? ' stroke="#fff" stroke-width="0.5" stroke-dasharray="0.8,0.6"'
+        : ' stroke="#ffffff" stroke-width="0.6"';
       // Fase 8: el nombre y el número se CONTRARROTAN para permanecer derechos y
       // legibles aunque el jugador esté girado (±90°). El círculo (invariante bajo
       // rotación) conserva la transformación del elemento; el texto se compensa con
       // -rot alrededor del centro para que la rotación de la marca no lo tumbe.
       const nText = `<text text-anchor="middle" dominant-baseline="central" font-size="2" font-weight="700" fill="${textColor(c)}">${el.n ?? ''}</text>`;
-      const gkText = el.type === 'goalkeeper' ? `<text y="4.2" text-anchor="middle" font-size="1.5" fill="#ffffff" font-weight="700" font-family="Inter, system-ui, sans-serif">POR</text>` : '';
+      const gkText =
+        el.type === 'goalkeeper'
+          ? `<text y="4.2" text-anchor="middle" font-size="1.5" fill="#ffffff" font-weight="700" font-family="Inter, system-ui, sans-serif">POR</text>`
+          : '';
       // Fase 1 (usabilidad): el NOMBRE va en BLANCO (alto contraste sobre el césped verde),
       // un poco más grande y en negrita para ser legible; SIN caja, fondo ni borde alrededor
       // del texto. Se contrarrota (textGroup) para quedar derecho POR PANTALLA: compensa
       // tanto la rotación del jugador (±90) como la rotación de la ORIENTACIÓN vertical del
       // campo (+90). Así en campo vertical el dorsal/nombre se leen de izquierda a derecha.
-      const labelText = el.label ? `<text y="-4" text-anchor="middle" font-size="1.8" fill="#ffffff" font-weight="700" font-family="Inter, system-ui, sans-serif">${esc(el.label)}</text>` : '';
+      const labelText = el.label
+        ? `<text y="-4" text-anchor="middle" font-size="1.8" fill="#ffffff" font-weight="700" font-family="Inter, system-ui, sans-serif">${esc(el.label)}</text>`
+        : '';
       const text = nText + gkText + labelText;
       const orientAngle = isVertical ? 90 : 0;
       const textAngle = orientAngle + (el.rot ?? 0);
-      const textGroup = textAngle !== 0 ? `<g transform="rotate(${-textAngle} 0 0)">${text}</g>` : text;
+      const textGroup =
+        textAngle !== 0 ? `<g transform="rotate(${-textAngle} 0 0)">${text}</g>` : text;
       const g =
         `<g transform="translate(${x} ${y}) scale(${s})">` +
         `<circle r="2.5" fill="${c}"${ring}/>` +
@@ -769,22 +916,79 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const y = gy(el.y ?? 0);
       const s = materialSize(el) * objectScale;
       const c = el.c ?? '#3056d3';
-      const g = `<g transform="translate(${x} ${y}) scale(${s})" stroke="#20242a" stroke-width="0.2">` +
+      const g =
+        `<g transform="translate(${x} ${y}) scale(${s})" stroke="#20242a" stroke-width="0.2">` +
         `<path d="M-1.6 0 A1.6 1.6 0 0 1 1.6 0 Z" fill="${c}"/>` +
         `<ellipse cx="0" cy="0" rx="1.6" ry="0.5" fill="#10151a" opacity="0.55"/>` +
         `</g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'target': {
-      // Chino: disco/conito plano pequeño, RECOLOREABLE (usa `el.c`). Vectorial (sin PNG).
+      // CHINO (FASE 4 del encargo de materiales). Antes eran dos elipses y un rectángulo: una
+      // «raya» plana de 4,4 × 1,8 unidades que no recordaba a un chino. Ahora es un platillo visto
+      // ligeramente desde arriba: disco con BORDE (aro), superficie interior más clara, ABERTURA
+      // central y sombra de apoyo (volumen ligero). Sigue siendo MÁS BAJO y más estrecho que el cono
+      // (2,58 × 3,30 unidades dibujadas frente a su caja de 5,2) y RECOLOREABLE con `el.c`.
+      // El dibujo se ha AGRANDADO (cierre del encargo de materiales): antes medía 2,3 unidades de
+      // ancho y en pantalla salía a ~30 % del cono (el dueño lo veía «como un punto»: 10×8 px frente
+      // a los 32×32 px del cono). Ahora mide 4,14 unidades con el trazo —2 × rx = 4,0 más el aro— y
+      // en pantalla queda en el 45-55 % pedido, conservando aro exterior, abertura central, volumen
+      // y color seleccionable.
+      // La medida se hace igual que la del dueño y que la de las pruebas: caja visible del chino
+      // frente a caja visible del cono (su PNG mide 5,2 × size; con size 0,6 son 3,12 unidades =
+      // 32 px, y el chino sale a 16 px = 50 %). No se toca `TACTICAL_SIZE.target` a propósito: los
+      // documentos ya guardan su `size`, así que el tamaño hay que subirlo en el DIBUJO para que los
+      // ejercicios existentes también mejoren.
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
       const s = materialSize(el) * objectScale;
       const c = el.c ?? '#2c7be5';
-      const g = `<g transform="translate(${x} ${y}) scale(${s})" fill="${c}" stroke="#20242a" stroke-width="0.18">` +
-        `<ellipse cx="0" cy="0.45" rx="2.2" ry="0.9"/>` +
-        `<ellipse cx="0" cy="-0.45" rx="2.2" ry="0.9"/>` +
-        `<rect x="-2.2" y="-0.45" width="4.4" height="0.9"/>` +
+      const claro = shade(c, 26);
+      const oscuro = shade(c, -22);
+      const g =
+        `<g transform="translate(${x} ${y}) scale(${s})">` +
+        // Sombra de apoyo: da volumen y separa el chino del césped. Más estrecha que el cuerpo para
+        // que la caja visible la mande el platillo y no la sombra (medido: 16 px de ancho total).
+        `<ellipse cx="0.10" cy="1.06" rx="1.95" ry="0.88" fill="#00000038"/>` +
+        // Cuerpo del platillo (disco aplastado) con su aro.
+        `<ellipse cx="0" cy="0" rx="2.0" ry="1.29" fill="${oscuro}" stroke="#20242a" stroke-width="0.14"/>` +
+        // Superficie interior (más clara) y abertura central.
+        `<ellipse cx="0" cy="-0.13" rx="1.70" ry="1.05" fill="${c}"/>` +
+        `<ellipse cx="0" cy="-0.13" rx="0.75" ry="0.44" fill="${claro}" stroke="${oscuro}" stroke-width="0.1"/>` +
+        `<ellipse cx="0" cy="-0.13" rx="0.36" ry="0.21" fill="${oscuro}"/>` +
+        // Brillo del borde superior (lectura de «platillo» y no de mancha).
+        `<path d="M-1.50 -0.70 A 2.0 1.29 0 0 1 1.50 -0.70" fill="none" stroke="#ffffffaa" stroke-width="0.14"/>` +
+        `</g>`;
+      return rotWrap(g, el.rot, x, y);
+    }
+    case 'minigoal': {
+      // MINIPORTERÍA (FASE 4): portería pequeña vista de frente, CLARAMENTE distinta de la portería
+      // grande: baja y compacta (2,3 × 1,1 unidades frente a las ~6,4 × 2,1 reglamentarias), marco
+      // grueso respecto a su tamaño, pocas líneas de red (para que no parezca una escalera) y una
+      // barra de base que la ancla al suelo.
+      const x = gx(el.x ?? 0);
+      const y = gy(el.y ?? 0);
+      const s = materialSize(el) * objectScale;
+      const c = el.c ?? '#e8edf2';
+      const W = 2.3;
+      // Más BAJA y compacta que antes (1,0 → 0,85) y con una profundidad DISTINTA de la portería
+      // grande (aquí la cara superior se ve desde arriba, dentro de la caja).
+      const H = 0.85;
+      const gs = 0.16;
+      const x0 = -W / 2;
+      const y0 = -H / 2;
+      const g =
+        `<g transform="translate(${x} ${y}) scale(${s})">` +
+        `<ellipse cx="0" cy="${(H / 2 + gs * 1.6).toFixed(2)}" rx="${(W * 0.5).toFixed(2)}" ry="0.18" fill="#00000033"/>` +
+        `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="#ffffff22"/>` +
+        // Cara superior (profundidad de caja vista desde arriba), DENTRO de la caja para no alterar
+        // la anchura medida.
+        `<path d="M${x0} ${y0} L${(x0 + 0.18).toFixed(2)} ${(y0 + 0.16).toFixed(2)} L${(x0 + W - 0.18).toFixed(2)} ${(y0 + 0.16).toFixed(2)} L${(x0 + W).toFixed(2)} ${y0} Z" fill="${c}" opacity="0.45"/>` +
+        `<path d="M${(x0 + W / 3).toFixed(2)} ${y0} L${(x0 + W / 3).toFixed(2)} ${(y0 + H).toFixed(2)} M${(x0 + (2 * W) / 3).toFixed(2)} ${y0} L${(x0 + (2 * W) / 3).toFixed(2)} ${(y0 + H).toFixed(2)} M${x0} ${(y0 + H / 2).toFixed(2)} L${(x0 + W).toFixed(2)} ${(y0 + H / 2).toFixed(2)}" stroke="#ffffff66" stroke-width="0.07"/>` +
+        `<rect x="${x0 - gs}" y="${y0 - gs}" width="${(W + gs * 2).toFixed(2)}" height="${gs}" fill="${c}" stroke="#20242a" stroke-width="0.08"/>` +
+        `<rect x="${x0 - gs}" y="${y0}" width="${gs}" height="${(H + gs).toFixed(2)}" fill="${c}" stroke="#20242a" stroke-width="0.08"/>` +
+        `<rect x="${(x0 + W).toFixed(2)}" y="${y0}" width="${gs}" height="${(H + gs).toFixed(2)}" fill="${c}" stroke="#20242a" stroke-width="0.08"/>` +
+        `<rect x="${(x0 - gs * 1.6).toFixed(2)}" y="${(y0 + H).toFixed(2)}" width="${(W + gs * 3.2).toFixed(2)}" height="${(gs * 0.7).toFixed(2)}" rx="${(gs * 0.35).toFixed(2)}" fill="${c}" stroke="#20242a" stroke-width="0.08"/>` +
         `</g>`;
       return rotWrap(g, el.rot, x, y);
     }
@@ -794,7 +998,8 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const y = gy(el.y ?? 0);
       const s = materialSize(el) * objectScale;
       const c = el.c ?? '#20242a';
-      const g = `<g transform="translate(${x} ${y}) scale(${s})" fill="${c}">` +
+      const g =
+        `<g transform="translate(${x} ${y}) scale(${s})" fill="${c}">` +
         `<rect x="-2.6" y="-0.5" width="3" height="1" rx="0.5"/>` +
         `<rect x="-0.4" y="-0.2" width="0.8" height="0.4" rx="0.2" transform="rotate(-45)"/>` +
         `<rect x="5.2" y="-0.5" width="3" height="1" rx="0.5"/>` +
@@ -809,7 +1014,8 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
     case 'hurdle': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2">` +
+      const g =
+        `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2">` +
         `<rect x="-2.4" y="-1.9" width="4.8" height="0.55"/>` +
         `<rect x="-2.2" y="-1.4" width="0.5" height="2.6"/>` +
         `<rect x="1.7" y="-1.4" width="0.5" height="2.6"/>` +
@@ -819,21 +1025,43 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
     case 'ring': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})" fill="none" stroke="${el.c ?? '#ffffff'}" stroke-width="0.5">` +
+      const g =
+        `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})" fill="none" stroke="${el.c ?? '#ffffff'}" stroke-width="0.5">` +
         `<ellipse cx="0" cy="0" rx="1.8" ry="0.9"/>` +
         `<ellipse cx="0" cy="0.6" rx="1.1" ry="0.45"/>` +
         `</g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'ladder': {
+      // ESCALERA (FASE 4 del encargo de materiales): vista DESDE ARRIBA, con DOS RAÍLES
+      // longitudinales y SIETE PELDAÑOS, y una forma claramente ALARGADA (6,2 × 2,0 unidades ≈ 3:1)
+      // para que no se confunda con una portería (ancha y baja) ni con una valla (más alta y con
+      // huecos grandes). Antes tenía 5 peldaños y el PNG no ayudaba: con la escalera pequeña no se
+      // distinguía. RECOLOREABLE con `el.c` (existe la variante amarilla).
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      let rungs = '';
-      for (let i = -2; i <= 2; i++) rungs += `<rect x="-2" y="${i * 1.1}" width="4" height="0.35"/>`;
-      const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.15">` +
-        `<rect x="-2.1" y="-3" width="0.5" height="6"/>` +
-        `<rect x="1.6" y="-3" width="0.5" height="6"/>` +
-        rungs +
+      const s = materialSize(el) * objectScale;
+      const c = el.c ?? '#e8edf2';
+      const L = 3.1; // media longitud (eje largo, HORIZONTAL en pantalla: como el PNG anterior)
+      const aw = 1.0; // media anchura
+      const rail = 0.24; // grosor del raíl
+      const peldaño = 0.2; // grosor del peldaño
+      let peldaños = '';
+      const n = 7;
+      for (let i = 0; i < n; i++) {
+        const xx = (-L + ((2 * L) / (n + 1)) * (i + 1)).toFixed(2);
+        peldaños += `<rect x="${xx}" y="${(-aw).toFixed(2)}" width="${peldaño}" height="${(2 * aw).toFixed(2)}" rx="${(peldaño / 2).toFixed(2)}"/>`;
+      }
+      const g =
+        `<g transform="translate(${x} ${y}) scale(${s})">` +
+        `<ellipse cx="0" cy="${(aw + 0.25).toFixed(2)}" rx="${(L * 0.6).toFixed(2)}" ry="0.16" fill="#00000038"/>` +
+        `<g fill="${c}" stroke="#20242a" stroke-width="0.1">` +
+        `<rect x="${(-L).toFixed(2)}" y="${(-aw - rail / 2).toFixed(2)}" width="${(2 * L).toFixed(2)}" height="${rail}" rx="${(rail / 2).toFixed(2)}"/>` +
+        `<rect x="${(-L).toFixed(2)}" y="${(aw - rail / 2).toFixed(2)}" width="${(2 * L).toFixed(2)}" height="${rail}" rx="${(rail / 2).toFixed(2)}"/>` +
+        peldaños +
+        `</g>` +
+        // Tope del extremo: refuerza la lectura «escalera vista desde arriba».
+        `<rect x="${(-L - rail).toFixed(2)}" y="${(-aw - rail / 2).toFixed(2)}" width="${rail}" height="${(2 * aw + rail).toFixed(2)}" rx="${(rail / 2).toFixed(2)}" fill="${c}" stroke="#20242a" stroke-width="0.1"/>` +
         `</g>`;
       return rotWrap(g, el.rot, x, y);
     }
@@ -863,27 +1091,62 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const g = `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})">${m}</g>`;
       return rotWrap(g, el.rot, x, y);
     }
-    case 'minigoal': {
-      const x = gx(el.x ?? 0);
-      const y = gy(el.y ?? 0);
-      const g =
-        `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})">` +
-        `<rect x="-2.6" y="-1.5" width="5.2" height="3" fill="none" stroke="#ffffff" stroke-width="0.5"/>` +
-        `<path d="M-2.6 -1.5 L2.6 1.5 M-2.6 1.5 L2.6 -1.5" stroke="#ffffff66" stroke-width="0.2"/>` +
-        `<path d="M-2.6 -0.5 L2.6 -0.5 M-2.6 0.5 L2.6 0.5 M-1.3 -1.5 L-1.3 1.5 M0 -1.5 L0 1.5 M1.3 -1.5 L1.3 1.5" stroke="#ffffff55" stroke-width="0.2"/>` +
-        `</g>`;
-      return rotWrap(g, el.rot, x, y);
-    }
     case 'goal': {
-      // Portería grande: marco blanco ancho con red (una portería reglamentaria).
+      // FASE 8C: portería FRONTAL reconocible (larguero y postes gruesos, red, fondo tenue).
+      // FASE 3 del encargo de materiales: además, su anchura es la REGLAMENTARIA DEL CAMPO activo
+      // (F11 7,32 m · fútbol sala 3 m × `PX_PER_M` unidades), así que coincide con la
+      // portería dibujada en el campo: criterio medible anchura-material / anchura-campo = 0,90-1,10
+      // (comprobado en `e2e/fase-materiales-escala.spec.ts`). Antes la portería de material se
+      // reducía al cambiar de campo mientras la del campo mantenía su tamaño reglamentario, y por eso
+      // NO coincidían.
+      // OJO con F7: la plantilla F7 se dibuja SOBRE un medio campo F11 y la única portería DIBUJADA
+      // en ese campo es la del F11 (el diseño F7 dibuja zonas, no una portería propia), así que la de
+      // material usa la MISMA anchura que la visible (7,32 m), no una portería F7 de 6 m.
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
+      const s = materialSize(el) * objectScale;
+      const caja = goalBoxUnits(field); // unidades del viewBox, misma escala física que el campo
+      const W = caja.w / s;
+      const H = caja.h / s;
+      const grosor = Math.max(0.26, W * 0.055); // marco grueso en cualquier tamaño
+      const x0 = -W / 2;
+      const x1 = W / 2;
+      const y0 = -H / 2;
+      const y1 = H / 2;
+      // Red ADAPTATIVA: menos líneas (y algo más gruesas) cuando la portería es pequeña, para que no
+      // se convierta en una masa gris que parece una escalera.
+      const nV = W >= 5 ? 8 : 4;
+      const nH = W >= 5 ? 3 : 2;
+      const trazoRed = Math.max(0.09, W * 0.018);
+      const verticales: string[] = [];
+      for (let i = 1; i <= nV; i++) {
+        const xi = (x0 + (W * i) / (nV + 1)).toFixed(2);
+        verticales.push(`M${xi} ${y0.toFixed(2)} L${xi} ${y1.toFixed(2)}`);
+      }
+      const horizontales: string[] = [];
+      for (let i = 1; i <= nH; i++) {
+        const yi = (y0 + (H * i) / (nH + 1)).toFixed(2);
+        horizontales.push(`M${x0.toFixed(2)} ${yi} L${x1.toFixed(2)} ${yi}`);
+      }
       const g =
-        `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})">` +
-        `<rect x="-3.2" y="-2" width="6.4" height="4" fill="none" stroke="#ffffff" stroke-width="0.6"/>` +
-        `<rect x="2.8" y="-2" width="0.6" height="4" fill="#ffffff" stroke="#20242a" stroke-width="0.2"/>` +
-        `<rect x="-3.4" y="-2" width="0.6" height="4" fill="#ffffff" stroke="#20242a" stroke-width="0.2"/>` +
-        `<path d="M-3.2 -2 L3.2 2 M-3.2 2 L3.2 -2 M-3.2 -1.2 L3.2 -0.4 M-3.2 0 L3.2 0.8 M-3.2 1.2 L3.2 2" stroke="#ffffff77" stroke-width="0.2"/>` +
+        `<g transform="translate(${x} ${y}) scale(${s})">` +
+        `<ellipse cx="0" cy="${(y1 + grosor * 0.7).toFixed(2)}" rx="${(W * 0.46).toFixed(2)}" ry="${(grosor * 0.45).toFixed(2)}" fill="#00000033"/>` +
+        `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="#ffffff1f"/>` +
+        // PROFUNDIDAD LATERAL (cierre del encargo): dos cuñas oscuras hacia dentro en cada extremo
+        // sugieren la red lateral metida hacia atrás, para que no parezca una rejilla plana (o una
+        // escalera). Se dibujan DENTRO de la caja reglamentaria, así que la anchura medida no cambia.
+        `<path d="M${(x0 + grosor).toFixed(2)} ${(y0 + grosor).toFixed(2)} L${(x0 + W * 0.11).toFixed(2)} ${y1.toFixed(2)} L${(x0 + grosor).toFixed(2)} ${y1.toFixed(2)} Z" fill="#0000003d"/>` +
+        `<path d="M${(x1 - grosor).toFixed(2)} ${(y0 + grosor).toFixed(2)} L${(x1 - W * 0.11).toFixed(2)} ${y1.toFixed(2)} L${(x1 - grosor).toFixed(2)} ${y1.toFixed(2)} Z" fill="#0000003d"/>` +
+        `<path d="${verticales.join(' ')}" stroke="#ffffff77" stroke-width="${trazoRed.toFixed(3)}"/>` +
+        `<path d="${horizontales.join(' ')}" stroke="#ffffff77" stroke-width="${trazoRed.toFixed(3)}"/>` +
+        // El marco va DENTRO de la caja reglamentaria: así la anchura EXTERIOR de la portería de
+        // material es exactamente `goalWidthUnits(field)` (el larguero y los postes no sobresalen) y
+        // la comparación con la portería del campo sale 1,00 sin correcciones en la medición.
+        `<rect x="${x0}" y="${y0}" width="${W}" height="${grosor}" fill="#ffffff"/>` +
+        `<rect x="${x0}" y="${y0}" width="${grosor}" height="${H}" fill="#ffffff"/>` +
+        `<rect x="${(x1 - grosor).toFixed(2)}" y="${y0}" width="${grosor}" height="${H}" fill="#ffffff"/>` +
+        // Barra de base: ancla la portería al suelo y refuerza la lectura de profundidad.
+        `<path d="M${x0} ${(y1 - grosor * 0.5).toFixed(2)} L${x1} ${(y1 - grosor * 0.5).toFixed(2)}" stroke="#ffffff" stroke-width="${(grosor * 0.8).toFixed(3)}"/>` +
         `</g>`;
       return rotWrap(g, el.rot, x, y);
     }
@@ -902,10 +1165,16 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const allLines = hasBox ? wrapTextForBox(el.v ?? '', boxW, size) : (el.v ?? '').split('\n');
       const layout = hasBox
         ? textLayoutForBox(allLines, size, boxH)
-        : { lines: allLines, totalLines: allLines.length, visibleCount: allLines.length, overflow: false };
+        : {
+            lines: allLines,
+            totalLines: allLines.length,
+            visibleCount: allLines.length,
+            overflow: false,
+          };
       const ts = layout.lines
         .map((ln, i) => {
-          const yPos = i === 0 ? `y="${y + size * 0.8}"` : `dy="${(size * TEXT_LINE_H).toFixed(3)}"`;
+          const yPos =
+            i === 0 ? `y="${y + size * 0.8}"` : `dy="${(size * TEXT_LINE_H).toFixed(3)}"`;
           // x ligeramente dentro del cuadro para que la primera letra no roce el borde.
           return `<tspan x="${x + Math.min(1.2, size * 0.15)}" ${yPos}>${esc(ln)}</tspan>`;
         })
@@ -935,7 +1204,23 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const cx = gx((x1 + x2) / 2);
       const cy = gy((y1 + y2) / 2);
       const ls = el.lineStyle ?? el.style ?? 'solid';
-      return rotWrap(svgLine(x1, y1, x2, y2, 'end', el.c ?? DEFAULT_ELEMENT_COLOR, selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r), el.rot, cx, cy);
+      return rotWrap(
+        svgLine(
+          x1,
+          y1,
+          x2,
+          y2,
+          'end',
+          el.c ?? DEFAULT_ELEMENT_COLOR,
+          selected,
+          el.strokeWidth ?? DEFAULT_STROKE_WIDTH,
+          ls,
+          r,
+        ),
+        el.rot,
+        cx,
+        cy,
+      );
     }
     case 'line': {
       const x1 = el.x1 ?? 0;
@@ -945,7 +1230,23 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const cx = gx((x1 + x2) / 2);
       const cy = gy((y1 + y2) / 2);
       const ls = el.lineStyle ?? el.style ?? 'solid';
-      return rotWrap(svgLine(x1, y1, x2, y2, 'none', el.c ?? DEFAULT_ELEMENT_COLOR, selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r), el.rot, cx, cy);
+      return rotWrap(
+        svgLine(
+          x1,
+          y1,
+          x2,
+          y2,
+          'none',
+          el.c ?? DEFAULT_ELEMENT_COLOR,
+          selected,
+          el.strokeWidth ?? DEFAULT_STROKE_WIDTH,
+          ls,
+          r,
+        ),
+        el.rot,
+        cx,
+        cy,
+      );
     }
     case 'doubleArrow': {
       const x1 = el.x1 ?? 0;
@@ -971,7 +1272,18 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const cy = gy((y1 + y2) / 2);
       const ls = el.lineStyle ?? el.style ?? 'solid';
       const col = el.c ?? DEFAULT_ELEMENT_COLOR;
-      const s = svgLine(x1, y1, x2, y2, 'none', col, selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, ls, r);
+      const s = svgLine(
+        x1,
+        y1,
+        x2,
+        y2,
+        'none',
+        col,
+        selected,
+        el.strokeWidth ?? DEFAULT_STROKE_WIDTH,
+        ls,
+        r,
+      );
       const label = el.v ?? '15 m';
       const mx = gx((x1 + x2) / 2);
       const my = gy((y1 + y2) / 2);
@@ -985,7 +1297,22 @@ function elStr(el: CanvasElement, selected: boolean, r: Geometry['rect'], isVert
       const y2 = el.y2 ?? 0;
       const cx = gx((x1 + x2) / 2);
       const cy = gy((y1 + y2) / 2);
-      return rotWrap(svgZigzag(x1, y1, x2, y2, el.c ?? DEFAULT_ELEMENT_COLOR, selected, el.strokeWidth ?? DEFAULT_STROKE_WIDTH, el.lineStyle ?? 'solid', r), el.rot, cx, cy);
+      return rotWrap(
+        svgZigzag(
+          x1,
+          y1,
+          x2,
+          y2,
+          el.c ?? DEFAULT_ELEMENT_COLOR,
+          selected,
+          el.strokeWidth ?? DEFAULT_STROKE_WIDTH,
+          el.lineStyle ?? 'solid',
+          r,
+        ),
+        el.rot,
+        cx,
+        cy,
+      );
     }
     case 'zone':
     case 'rect':
@@ -1055,7 +1382,18 @@ function arrowHeadPoly(x: number, y: number, ang: number, size: number, c: strin
   return `<polygon points="${x},${y} ${p1} ${p2}" fill="${c}"/>`;
 }
 
-function svgLine(x1: number, y1: number, x2: number, y2: number, arrow: 'none' | 'end' | 'both', color: string, sel = false, width = DEFAULT_STROKE_WIDTH, lineStyle: string = 'solid', r: Geometry['rect']): string {
+function svgLine(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  arrow: 'none' | 'end' | 'both',
+  color: string,
+  sel = false,
+  width = DEFAULT_STROKE_WIDTH,
+  lineStyle: string = 'solid',
+  r: Geometry['rect'],
+): string {
   const ax1 = px(x1, r);
   const ay1 = py(y1, r);
   const ax2 = px(x2, r);
@@ -1078,7 +1416,17 @@ function svgLine(x1: number, y1: number, x2: number, y2: number, arrow: 'none' |
   return s;
 }
 
-export function svgZigzag(x1: number, y1: number, x2: number, y2: number, color: string, sel = false, width = DEFAULT_STROKE_WIDTH, lineStyle: string = 'solid', r: Geometry['rect']): string {
+export function svgZigzag(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  color: string,
+  sel = false,
+  width = DEFAULT_STROKE_WIDTH,
+  lineStyle: string = 'solid',
+  r: Geometry['rect'],
+): string {
   const ax1 = px(x1, r);
   const ay1 = py(y1, r);
   const ax2 = px(x2, r);
@@ -1094,7 +1442,12 @@ export function svgZigzag(x1: number, y1: number, x2: number, y2: number, color:
   // escalando con la longitud (trazos cortos reducen picos y amplitud).
   const amp = Math.min(1.5, len * 0.04);
   const n = Math.max(2, Math.min(16, Math.round(len / 3)));
-  const dash = lineStyle === 'dashed' ? ' stroke-dasharray="2,1.3"' : lineStyle === 'dotted' ? ' stroke-dasharray="0.6,1.4"' : '';
+  const dash =
+    lineStyle === 'dashed'
+      ? ' stroke-dasharray="2,1.3"'
+      : lineStyle === 'dotted'
+        ? ' stroke-dasharray="0.6,1.4"'
+        : '';
   // Picos intermedios (i = 1..n-1); el path termina EXACTAMENTE en (ax2,ay2).
   let d = `M ${ax1} ${ay1}`;
   let lx = ax1;
@@ -1146,18 +1499,27 @@ function f7Svg(f7: F7Overlay, r: Geometry['rect']): string {
   const stroke = `stroke="${f7.color}" stroke-width="${f7.thickness}" stroke-opacity="${f7.opacity}" fill="none"`;
   let s = '';
   s += `<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" ${stroke}/>`;
-  for (const x of g.offsideX) s += `<line x1="${x}" y1="${g.y}" x2="${x}" y2="${g.y + g.h}" ${stroke}/>`;
+  for (const x of g.offsideX)
+    s += `<line x1="${x}" y1="${g.y}" x2="${x}" y2="${g.y + g.h}" ${stroke}/>`;
   s += `<circle cx="${g.center.x}" cy="${g.center.y}" r="0.35" fill="${f7.color}" fill-opacity="${f7.opacity}" stroke="none"/>`;
-  for (const b of g.big) s += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" ${stroke}/>`;
-  for (const b of g.small) s += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" ${stroke}/>`;
+  for (const b of g.big)
+    s += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" ${stroke}/>`;
+  for (const b of g.small)
+    s += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" ${stroke}/>`;
   const clip = `<clipPath id="f7clip-${f7.color.replace('#', '')}"><rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}"/></clipPath>`;
   return `<defs>${clip}</defs><g clip-path="url(#f7clip-${f7.color.replace('#', '')})">${s}</g>`;
 }
 
-function guideSvg(guide: NonNullable<RenderOptions['guide']>, lc: string, r: Geometry['rect']): string {
+function guideSvg(
+  guide: NonNullable<RenderOptions['guide']>,
+  lc: string,
+  r: Geometry['rect'],
+): string {
   const lines: string[] = [];
   const push = (a: [number, number], b: [number, number]) =>
-    lines.push(`<line x1="${px(a[0], r)}" y1="${py(a[1], r)}" x2="${px(b[0], r)}" y2="${py(b[1], r)}"/>`);
+    lines.push(
+      `<line x1="${px(a[0], r)}" y1="${py(a[1], r)}" x2="${px(b[0], r)}" y2="${py(b[1], r)}"/>`,
+    );
   if (guide === '2x2') {
     push([0.5, 0], [0.5, 1]);
     push([0, 0.5], [1, 0.5]);
@@ -1175,15 +1537,23 @@ function guideSvg(guide: NonNullable<RenderOptions['guide']>, lc: string, r: Geo
 }
 
 /** SVG completo de un frame (función pura: la geometría viaja explícita). */
-export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts: RenderOptions = {}): string {
+export function renderBoardSvg(
+  field: FieldType,
+  elements: CanvasElement[],
+  opts: RenderOptions = {},
+): string {
   const orientation = opts.orientation ?? 'horizontal';
   const geo = fieldGeometry(field, orientation);
   const vbW = geo.vbW;
   const vbH = geo.vbH;
-  // A7: césped OFICIAL único. Se ignora el backgroundColor del documento: los
-  // documentos antiguos con otro color se ven con el césped oficial (no se rompe el
-  // dato, no se sobrescribe al abrir). La textura es siempre franjas.
-  const bg = OFFICIAL_PITCH_COLOR;
+  // A7: césped OFICIAL único para el fútbol. Se ignora el backgroundColor del documento: los
+  // documentos antiguos con otro color se ven con el césped oficial (no se rompe el dato, no se
+  // sobrescribe al abrir).
+  // CORRECCIÓN URGENTE (dueño): el FÚTBOL SALA no es césped. Su superficie es azul LISA y sus
+  // áreas van rellenas de un azul más claro; `fieldSurface` es la fuente única de ambos colores,
+  // compartida con la miniatura de la galería, la de biblioteca y el PNG exportado.
+  const surface = fieldSurface(field);
+  const bg = surface.color;
   // Fase 11: las marcas reglamentarias del campo son SIEMPRE blancas. Se ignora el
   // lineColor del documento (un antiguo con lineColor negro se ve en blanco, sin
   // romper el dato). El F7 transversal conserva su color de contraste (f7Svg).
@@ -1206,8 +1576,9 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
   const Tx = vbW / 2 + (contentRect.y + contentRect.h / 2);
   const wrap = isVertical ? `<g transform="translate(${Tx} 0) rotate(90)">` : '<g>';
 
-  // A7: un único césped, el de FRANJAS oficial. Se ignora la textura del documento.
-  const bgStr = `<g transform="translate(${contentRect.x} ${contentRect.y})">${grassBg(bg, contentW, contentH, OFFICIAL_GRASS_MODE)}</g>`;
+  // A7: un único césped, el de FRANJAS oficial, para el fútbol; el fútbol sala, liso y azul.
+  // Se ignora la textura del documento.
+  const bgStr = `<g transform="translate(${contentRect.x} ${contentRect.y})">${grassBg(bg, contentW, contentH, surface.grass)}</g>`;
   // A6/A7: franja exterior de césped LISO alrededor del campo. El grosor usa la fuente
   // ÚNICA `STRIP_FRAC` (mismo límite por eje que coord. permitidas y hit-test). Esta
   // franja se renderiza ANTES del césped (ver orden en el return), así que NO tapa el
@@ -1217,11 +1588,15 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
     `<g class="entrenolab-strip" transform="translate(${contentRect.x} ${contentRect.y})">` +
     `<rect x="${-stripPx}" y="${-stripPx}" width="${(contentW + 2 * parseFloat(stripPx)).toFixed(2)}" height="${(contentH + 2 * parseFloat(stripPx)).toFixed(2)}" fill="${bg}" stroke="none"/>` +
     `</g>`;
-  const fieldStr = fieldSvg(field, contentRect, 'horizontal').replace(/stroke="#ffffff"/g, `stroke="${lc}"`);
+  const fieldStr = fieldSvg(field, contentRect, 'horizontal').replace(
+    /stroke="#ffffff"/g,
+    `stroke="${lc}"`,
+  );
   const els = elements
     .map((el) => {
-      const s = elStr(el, el.id === opts.selectedId, contentRect, isVertical, objectScale);
-      const inner = el.opacity != null && el.opacity < 1 ? `<g opacity="${el.opacity}">${s}</g>` : s;
+      const s = elStr(el, el.id === opts.selectedId, contentRect, isVertical, objectScale, field);
+      const inner =
+        el.opacity != null && el.opacity < 1 ? `<g opacity="${el.opacity}">${s}</g>` : s;
       // Identificadores ESTABLES para las pruebas de cobertura E2E (no cambian la
       // representación): tipo de elemento (modelo real `el.t`), y para jugadores
       // lado/rol/plantilla; para materiales, el recurso PNG (`assetKind`).
@@ -1230,7 +1605,9 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
         ` data-color="${el.c ?? ''}"` +
         (el.fillColor ? ` data-fill-color="${el.fillColor}"` : '') +
         (el.fillOpacity != null ? ` data-fill-opacity="${el.fillOpacity}"` : '') +
-        (el.t === 'player' ? ` data-side="${el.side ?? ''}" data-kind="${el.type ?? ''}" data-player-id="${el.playerId ?? ''}"` : '') +
+        (el.t === 'player'
+          ? ` data-side="${el.side ?? ''}" data-kind="${el.type ?? ''}" data-player-id="${el.playerId ?? ''}"`
+          : '') +
         (el.assetKind ? ` data-asset-kind="${el.assetKind}"` : '');
       // Pedido del dueño: los MATERIALES se ven SIEMPRE derechos por pantalla, sea cual sea el
       // tipo y la orientación del campo (un cono siempre con la base hacia abajo; portería,
@@ -1281,7 +1658,31 @@ export function renderBoardSvg(field: FieldType, elements: CanvasElement[], opts
 function selectionStr(elements: CanvasElement[], id: string, r: Geometry['rect']): string {
   const el = elements.find((e) => e.id === id);
   if (!el) return '';
-  if (el.t === 'player' || el.t === 'ball' || el.t === 'cone' || el.t === 'marker' || el.t === 'hurdle' || el.t === 'ring' || el.t === 'ladder' || el.t === 'mannequin' || el.t === 'mannequin_row' || el.t === 'minigoal' || el.t === 'goal' || el.t === 'pole' || el.t === 'flag' || el.t === 'trampoline' || el.t === 'target' || el.t === 'net' || el.t === 'vball' || el.t === 'coachC' || el.t === 'peto' || el.t === 'chaleco' || el.t === 'bosu' || el.t === 'fitball' || el.t === 'pica') {
+  if (
+    el.t === 'player' ||
+    el.t === 'ball' ||
+    el.t === 'cone' ||
+    el.t === 'marker' ||
+    el.t === 'hurdle' ||
+    el.t === 'ring' ||
+    el.t === 'ladder' ||
+    el.t === 'mannequin' ||
+    el.t === 'mannequin_row' ||
+    el.t === 'minigoal' ||
+    el.t === 'goal' ||
+    el.t === 'pole' ||
+    el.t === 'flag' ||
+    el.t === 'trampoline' ||
+    el.t === 'target' ||
+    el.t === 'net' ||
+    el.t === 'vball' ||
+    el.t === 'coachC' ||
+    el.t === 'peto' ||
+    el.t === 'chaleco' ||
+    el.t === 'bosu' ||
+    el.t === 'fitball' ||
+    el.t === 'pica'
+  ) {
     const x = px(el.x ?? 0, r);
     const y = py(el.y ?? 0, r);
     return `<circle cx="${x}" cy="${y}" r="3.4" fill="none" stroke="#2563eb" stroke-width="${SEL_STROKE_POINT}" stroke-dasharray="1,0.7"/>`;
@@ -1292,8 +1693,25 @@ function selectionStr(elements: CanvasElement[], id: string, r: Geometry['rect']
     // en el origen taparía los primeros glifos, así que aquí no se pinta nada.
     return '';
   }
-  if (el.t === 'arrow' || el.t === 'line' || el.t === 'dribble' || el.t === 'doubleArrow' || el.t === 'measure') {
-    return svgLine(el.x1 ?? 0, el.y1 ?? 0, el.x2 ?? 0, el.y2 ?? 0, el.t === 'line' ? 'none' : el.t === 'doubleArrow' ? 'both' : 'end', '#2563eb', true, 0.8, 'solid', r);
+  if (
+    el.t === 'arrow' ||
+    el.t === 'line' ||
+    el.t === 'dribble' ||
+    el.t === 'doubleArrow' ||
+    el.t === 'measure'
+  ) {
+    return svgLine(
+      el.x1 ?? 0,
+      el.y1 ?? 0,
+      el.x2 ?? 0,
+      el.y2 ?? 0,
+      el.t === 'line' ? 'none' : el.t === 'doubleArrow' ? 'both' : 'end',
+      '#2563eb',
+      true,
+      0.8,
+      'solid',
+      r,
+    );
   }
   if (el.t === 'zone' || el.t === 'rect') {
     const x = px(el.x ?? 0, r);

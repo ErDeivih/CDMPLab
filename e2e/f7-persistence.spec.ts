@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { fillBoardTitle } from './gesture-helpers';
+import { fillBoardTitle, abrirAjustes, toggleFillScreen } from './gesture-helpers';
 
 // =============================================================
 // FASE 0 — persistencia del campo F7 (transversal sobre medio campo F11).
@@ -18,8 +19,25 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([{ id: 'pl1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now }]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'pl1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
@@ -36,11 +54,25 @@ async function openBoardClean(page: Page): Promise<void> {
   await page.waitForURL('**/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await expect(page.locator('.board-canvas svg')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
-  const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.fill-hint-close').click();
+  const fill = await page
+    .locator('.board-host')
+    .evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     // FASE G: el letterbox se espera con la ausencia de board-fill.
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
@@ -65,7 +97,9 @@ async function currentField(page: Page): Promise<string> {
 }
 
 test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y respaldo', () => {
-  test('crear → Diseñar → F7 → cono → guardar → reabrir conserva field f7 y el cono', async ({ page }) => {
+  test('crear → Diseñar → F7 → cono → guardar → reabrir conserva field f7 y el cono', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await page.goto('/library');
@@ -81,7 +115,10 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
 
     // Seleccionar F7 → el SVG renderiza las marcas azules F7.
     await page.locator('button[aria-label="Propiedades"]').click();
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('f7');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('f7');
     // FASE G: observable — las marcas F7 ya están en el SVG (no una espera fija).
     await expect.poll(() => hasF7(page), { timeout: 5000 }).toBe(true);
     expect(await hasF7(page), 'F7 visible al seleccionarlo').toBe(true);
@@ -90,6 +127,7 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await page.keyboard.press('Escape');
     // FASE G: observable — el panel de Propiedades se cierra.
     await expect(page.locator('.studio-panel')).toHaveCount(0);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     const host = await page.locator('.board-host').boundingBox();
@@ -117,17 +155,23 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     expect(reopenedDoc.canvas.frames[0].elements).toHaveLength(1);
   });
 
-  test('duplicar el ejercicio conserva F7 (documento + campo al reabrir la copia)', async ({ page }) => {
+  test('duplicar el ejercicio conserva F7 (documento + campo al reabrir la copia)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await page.goto('/board');
     await openBoardClean(page);
     await page.locator('button[aria-label="Propiedades"]').click();
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('f7');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('f7');
     await expect.poll(() => hasF7(page), { timeout: 5000 }).toBe(true);
     await page.keyboard.press('Escape');
     // FASE G: observable — el panel de Propiedades se cierra.
     await expect(page.locator('.studio-panel')).toHaveCount(0);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     const host = await page.locator('.board-host').boundingBox();
@@ -142,8 +186,20 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await page.locator('.ex-more-btn').first().click();
     await page.locator('.ex-more-item[title="Duplicar"]').first().click();
     // FASE G: observable — esperamos a que haya 2 ejercicios en localStorage.
-    await expect.poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]') as unknown[]).length), { timeout: 5000 }).toBe(2);
-    const copies = await page.evaluate(() => JSON.parse(localStorage.getItem('entrenolab:exercises')!));
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]') as unknown[])
+                .length,
+          ),
+        { timeout: 5000 },
+      )
+      .toBe(2);
+    const copies = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('entrenolab:exercises')!),
+    );
     expect(copies).toHaveLength(2);
     const copy = copies[1];
     expect(copy.canvas?.field, 'copia duplicada conserva field f7').toBe('f7');
@@ -164,11 +220,15 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await page.goto('/board');
     await openBoardClean(page);
     await page.locator('button[aria-label="Propiedades"]').click();
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('f7');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('f7');
     await expect.poll(() => hasF7(page), { timeout: 5000 }).toBe(true);
     await page.keyboard.press('Escape');
     // FASE G: observable — el panel de Propiedades se cierra.
     await expect(page.locator('.studio-panel')).toHaveCount(0);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     const host = await page.locator('.board-host').boundingBox();
@@ -179,21 +239,45 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await page.waitForURL('**/library');
 
     // Exportar respaldo.
-    await page.locator('button[aria-label="Ajustes"]').click();
+    await abrirAjustes(page);
     const dlPromise = page.waitForEvent('download');
-    await page.locator('.settings-row', { hasText: 'Exportar respaldo' }).locator('button', { hasText: 'Exportar' }).click();
+    await page
+      .locator('.settings-row', { hasText: 'Exportar respaldo' })
+      .locator('button', { hasText: 'Exportar' })
+      .click();
     const dl = await dlPromise;
     const path = await dl.path();
     const parsed = JSON.parse(fs.readFileSync(path!, 'utf8'));
     expect(parsed.exercises[0].canvas.field, 'respaldo exportado conserva field f7').toBe('f7');
 
     // Importar (Reemplazar) → se conserva.
-    await page.locator('.settings-row', { hasText: 'Importar respaldo' }).locator('input[type="file"]').setInputFiles(path!);
+    await page
+      .locator('.settings-row', { hasText: 'Importar respaldo' })
+      .locator('input[type="file"]')
+      .setInputFiles(path!);
     await expect(page.locator('.settings-row', { hasText: 'Respaldo válido' })).toBeVisible();
-    await page.locator('.settings-row', { hasText: 'Respaldo válido' }).locator('button', { hasText: 'Reemplazar' }).click();
+    await page
+      .locator('.settings-row', { hasText: 'Respaldo válido' })
+      .locator('button', { hasText: 'Reemplazar' })
+      .click();
     // FASE G: observable — esperamos a que el respaldo restaurado conserve el campo f7.
-    await expect.poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]') as Array<{ canvas?: { field?: string } }>)[0]?.canvas?.field), { timeout: 5000 }).toBe('f7');
-    const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('entrenolab:exercises')!));
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (
+                JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]') as Array<{
+                  canvas?: { field?: string };
+                }>
+              )[0]?.canvas?.field,
+          ),
+        { timeout: 5000 },
+      )
+      .toBe('f7');
+    const restored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('entrenolab:exercises')!),
+    );
     expect(restored[0].canvas.field, 'respaldo importado conserva field f7').toBe('f7');
     expect(restored[0].canvas.frames[0].elements).toHaveLength(1);
   });

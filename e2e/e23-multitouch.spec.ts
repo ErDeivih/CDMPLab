@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 // Rect canónico de contenido (largo→X, ancho→Y) de un campo 105×68 en el viewBox 100×80.
 const RECT = { x: 4, y: 10, w: 92, h: (92 * 68) / 105 };
@@ -136,6 +137,7 @@ async function tap(page: Page, x: number, y: number, id = 7): Promise<void> {
 
 /** Coloca un Portero en el CENTRO del host y devuelve su centro en pantalla. */
 async function placeComodinAtCenter(page: Page): Promise<{ x: number; y: number }> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -156,6 +158,7 @@ async function placeComodinAtCenter(page: Page): Promise<{ x: number; y: number 
 
 /** Arma un Cono (material) sin colocar nada. */
 async function armCone(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
 }

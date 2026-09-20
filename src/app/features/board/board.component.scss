@@ -286,6 +286,14 @@
   font-size: 13px;
   font-weight: 500;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  // DEFECTO MEDIDO al retirar la franja de estado: este aviso flota a 12 px del borde superior del
+  // campo y, sin `pointer-events: none`, se TRAGABA los toques de colocación en la banda superior
+  // (medido con `elementFromPoint`: el punto del borde superior caía en `DIV.placement-hint` y el
+  // objeto no se colocaba en 844×390, 390×844 y 360×800). Antes no se notaba porque el aviso caía
+  // sobre la franja retirada, no sobre el lienzo. Se aplica el MISMO patrón que ya usan `.fill-hint`
+  // y `.orient-hint` en styles.scss: el aviso es informativo y deja pasar los toques; solo su botón
+  // de cancelar vuelve a ser interactivo.
+  pointer-events: none;
 
   .msi {
     color: var(--accent);
@@ -308,6 +316,8 @@
     place-items: center;
     color: #aab6c2;
     flex-shrink: 0;
+    // Único elemento interactivo del aviso (el resto deja pasar los toques al campo).
+    pointer-events: auto;
 
     &:hover {
       background: #2b3947;
@@ -349,6 +359,23 @@
   }
 }
 
+// (Los estilos de `.orient-aviso` y `.adaptar-pantalla` viven en styles.scss, junto a los otros
+//  avisos flotantes de la pizarra —`.orient-hint` y `.fill-hint`—, que es donde el proyecto los
+//  tiene: así el presupuesto de estilos de ESTE componente no se dispara con avisos globales.)
+
+// FASE 3.3 — botón «Cursor» de la cabecera: aparece SOLO mientras hay una herramienta de colocación
+// continua activa y devuelve al Cursor. Reutiliza el estilo de los botones de cabecera (`.edge-btn`):
+// solo se le añade el texto, así que no cambia la altura de la cabecera (44 px compacta) ni el
+// layout. (Se aplica el estilo del texto en el propio botón, sin una regla anidada, para no engordar
+// el CSS compilado de este componente: el presupuesto de estilos estaba justo en el límite.)
+.chip-cursor {
+  width: auto;
+  padding: 0 10px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 // ---------- Zona principal ----------
 .studio-main {
   flex: 1;
@@ -370,62 +397,43 @@
   position: relative;
 }
 
-// Chips de estado del campo: contador y estado de guardado comparten la forma
-// (esquinas redondeadas a píldora + relleno vertical/horizontal + peso). Se emiten
-// UNA sola vez como selector agrupado.
-%field-chip {
-  border-radius: 999px;
-  padding: 2px 10px;
-  font-weight: 600;
+// Contador de elementos y región viva de guardado: nodos SOLO para lectores de pantalla y
+// para la suite e2e. No ocupan altura, margen ni hueco, así que el campo empieza
+// inmediatamente debajo de `.studio-top`: el dueño retiró la franja `.field-status`, que era
+// la banda negra que se comía la parte superior del campo en escritorio y en móvil.
+//
+// ALTURA RECUPERADA (medida, no calculada: se reinsertó la franja tal cual estaba en HEAD y se
+// midió el lienzo antes y después de eliminarla, en la misma página):
+//   · escritorio 1366×768 → +40 px (lienzo 563 → 603 px; hueco cabecera-campo 50 → 10 px)
+//   · móvil horizontal 844×390 → +50 px (lienzo 175 → 225 px, un 29 % más de campo)
+//   · móvil vertical 390×844 → +50 px (lienzo 629 → 679 px)
+%sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
-.field-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #8a97a3;
-  padding: 0 4px;
-  flex-wrap: wrap;
-
-  .msi {
-    font-size: 15px;
-  }
-
-  .field-count {
-    @extend %field-chip;
-    margin-left: auto;
-    background: #212930;
-    color: #e8edf2;
-  }
-
-  // Estado de guardado: chip compacto y no intrusivo junto al contador.
-  .save-state {
-    @extend %field-chip;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-
-    .msi {
-      font-size: 14px;
-    }
-
-    &.saving {
-      background: #2b3947;
-      color: #aab6c2;
-    }
-
-    &.saved {
-      background: #1f3d2b;
-      color: #7fd99a;
-    }
-  }
+.sr-only,
+.field-count {
+  @extend %sr-only;
 }
 
-// Disparador de "Llenar pantalla" / "Campo completo": un solo icono compacto y
-// discreto en la barra de estado del campo (no es una barra nueva de controles).
-.field-fit-toggle {
+// Único control que sigue flotando sobre el campo: «Volver al encuadre», y aparece SOLO cuando
+// hay zoom o paneo aplicados. El disparador de «Llenar pantalla / Ver campo completo» se movió
+// al menú «Más» (decisión del dueño) y allí usa el estilo de fila (`.rail-btn.rail-row`); por
+// eso la clase `.field-fit-toggle` ya no define tamaño propio: se conserva como gancho estable
+// para la suite, que sigue midiendo el MISMO control desde su nueva ubicación.
+.field-fit-toggle.vista-reset {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 12;
   height: 30px;
   width: 30px;
   min-width: 30px;
@@ -433,7 +441,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #8a97a3;
+  color: #cbd5dd;
+  background: rgb(17 22 26 / 78%);
   flex-shrink: 0;
   transition:
     background 0.12s ease,
@@ -446,10 +455,6 @@
   &:hover {
     background: #212930;
     color: #fff;
-  }
-
-  &.fit-on {
-    color: var(--accent);
   }
 }
 
@@ -538,7 +543,11 @@
 .side-panel {
   position: absolute;
   top: 0;
-  bottom: 0;
+  // FASE 3: los paneles terminan por ENCIMA del grupo flotante de herramientas. La franja inferior
+  // la reserva `--reserva-grupo-herramientas` (96 px en escritorio, 62 px en compacto; lo declara
+  // `styles.scss` sobre `.studio`). Sin reserva, el grupo —que va por encima del panel para seguir
+  // operable— interceptaba los clics de las últimas filas del catálogo y de la plantilla.
+  bottom: var(--reserva-grupo-herramientas, 96px);
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -695,41 +704,13 @@
 // Jerarquía de capas coherente: el raíl SIEMPRE por encima de paneles (40), panel de
 // Material/Dibujo (80) y su backdrop móvil (79), para que la barra sea visible y operable.
 // Por debajo de overlays que deben taparlo (diálogo, variante/color, menú contextual).
-.studio-tools {
-  flex-shrink: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: #171d23;
-  border-top: 1px solid #262e35;
-  position: relative;
-  z-index: 86;
-}
-
-.tools-persist {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.tools-caption {
-  // Ocupa SIEMPRE su propia fila completa del raíl (flex-basis 100%) con altura FIJA.
-  // Así el raíl inferior no cambia de tamaño según la herramienta: si la barra de color
-  // de Fase 1/2 (muestrarios + chips, ancha) compartiera fila con los botones, en las
-  // herramientas de dibujo coloreables envolvería a una segunda línea y empujaría el
-  // tablero, alterando las coordenadas pantalla→normalizado entre "dibujar" y
-  // "seleccionar" (rompía los e2e de creación + selección de figuras).
-  flex: 1 1 100%;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  height: 36px;
-  flex-shrink: 0;
-}
+// FASE 3 — grupo flotante «Herramientas»: la barra inferior ya NO ocupa layout (costaba 57 px:
+// `.studio-main` medía 289 px en 844×390) y el campo llega al borde inferior. Sus reglas
+// (`.studio-tools`, `.tools-persist`, `.tools-menu`, `.tools-toggle`, `.tools-caption`) viven en
+// `src/styles.scss`: con encapsulación emulada cada selector se duplica con `[_ngcontent]` y este
+// fichero está en el techo de su presupuesto por componente (12 kB, que NO se sube). El tablero ya
+// aloja ahí sus pistas flotantes (`.orient-aviso`, `.adaptar-pantalla`). Se conserva aquí lo que
+// sigue siendo del componente: tipografía de la leyenda, separador y categorías.
 
 .tools-caption-title {
   font-size: 13px;
@@ -738,16 +719,8 @@
   white-space: nowrap;
 }
 
-.tools-caption-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: #8a97a3;
-  align-self: center;
-  margin-right: 4px;
-}
-
+// (Retirada `.tools-caption-label`: la leyenda pasó a `.tools-caption-title`; la clase no existía
+// ya en la plantilla y el build avisaba de que el fichero se pasaba del presupuesto de estilos.)
 .tools-sep {
   width: 1px;
   height: 26px;
@@ -900,15 +873,89 @@
 // o en horizontal (teléfono girado: altura <=480 con ancho <=1000). Debe coincidir con
 // `isCompactViewport()` del componente (app y CSS usan el MISMO criterio).
 @media (max-width: 700px), (max-height: 480px) and (max-width: 1000px) {
+  // La pizarra NO tapa la barra de navegación inferior del shell: ocupa el espacio que queda por
+  // encima. Antes era `inset: 0` con `z-index: 70`, por encima de la navegación (60), así que en
+  // móvil no se podía salir de la pizarra y, con el panel de Material abierto, el panel y la
+  // navegación se SOLAPABAN (medido: solape real de cajas en 844×390). Ahora el alto útil del
+  // tablero es el que hay entre el borde superior y esa barra, que es lo que se puede usar de
+  // verdad, y los paneles (absolutos dentro de `.studio`) se limitan a esa misma altura.
+  .studio {
+    inset: 0 0 calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px)) 0;
+    height: auto;
+    min-height: 0;
+  }
+
+  // ---------- Paneles (Fase 3 / FASE 5 del encargo) ----------
+  // Los cuatro paneles se abren como panel LATERAL IZQUIERDO en móvil horizontal, con ancho
+  // acotado —el encargo pide min(340px, 45vw): el campo tiene que seguir viéndose y operándose—,
+  // alto limitado al espacio disponible (el panel vive DENTRO de `.studio-main`, que empieza justo
+  // debajo del encabezado compacto y termina en el borde inferior disponible, así que no queda
+  // ninguna franja de campo entre el borde izquierdo y el panel ni por debajo), y scroll SOLO
+  // dentro del panel.
+  .side-panel-left,
+  .studio-panel {
+    width: min(340px, 45vw);
+    top: 0;
+    // FASE 3: el panel termina por ENCIMA del grupo flotante (franja reservada), no en el borde.
+    bottom: var(--reserva-grupo-herramientas, 96px);
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  // Control de minimizar del panel (44×44 táctil) y pestaña estrecha para recuperarlo.
+  .panel-min {
+    height: 44px;
+    min-width: 44px;
+    width: 44px;
+  }
+
+  .panel-tab {
+    position: absolute;
+    left: 0;
+    top: 12px;
+    z-index: 81;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 10px 0 8px;
+    border: 1px solid #2b3947;
+    border-left: none;
+    border-radius: 0 10px 10px 0;
+    background: #171d23;
+    color: #e8edf2;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+
+    .msi {
+      font-size: 20px;
+      color: #7fd1a0;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #7fd1a0;
+      outline-offset: 1px;
+    }
+  }
+
+  .panel-tab-flecha {
+    font-size: 18px;
+    color: #8aa0b4;
+  }
+
   .studio-top {
     height: 44px;
   }
 
-  // Objetivos táctiles esenciales ≥ 44×44 px en móvil.
+  // Objetivos táctiles esenciales ≥ 44×44 px en móvil. «Volver al encuadre» flota sobre el
+  // campo: aunque sea pequeño, en táctil se agranda al mínimo exigido.
   .edge-btn,
   .chip-icon,
   .panel-close,
-  .field-fit-toggle {
+  .field-fit-toggle.vista-reset {
     height: 44px;
     min-width: 44px;
     width: 44px;
@@ -936,11 +983,7 @@
     }
   }
 
-  .tl-btn {
-    width: 44px;
-    height: 44px;
-  }
-
+  // (Retirada la regla `.tl-btn`: no existía en ninguna plantilla.)
   .tools-cat {
     height: 44px;
     min-width: 44px;
@@ -975,9 +1018,7 @@
   }
 
   .tools-caption-color {
-    flex: 1 0 100%;
-    margin-left: 0;
-    justify-content: center;
+    max-width: 100%;
     flex-wrap: wrap;
 
     .tools-caption-title {
@@ -986,11 +1027,17 @@
   }
 
   // Paneles laterales a ancho completo/parcial, nunca empujan el campo.
-  // Están DENTRO de `.studio-main`, que ya excluye la barra inferior: `bottom: 0`
-  // los hace terminar exactamente en el borde superior de la barra (no la tapan).
+  // Están DENTRO de `.studio-main`, que YA empieza debajo del encabezado compacto y termina en el
+  // borde inferior disponible. MEDIDO (FASE 5.3 del encargo): este `top` venía de cuando los paneles
+  // se posicionaban respecto a `.studio` completo y añadía 44 px de FRANJA MUERTA entre la cabecera y
+  // el panel (panel medido en y=88 con la cabecera terminando en y=44). Con `top: 0` el panel pega
+  // con la cabecera y llega al borde inferior del área disponible.
   .side-panel {
-    top: calc(44px + env(safe-area-inset-top));
-    bottom: 0;
+    top: 0;
+    // `bottom` NO se fija aquí: la base lo resuelve con `--reserva-grupo-herramientas`, que en
+    // compacto vale 62 px (grupo flotante). Así el panel pega con la cabecera y termina por encima
+    // del grupo, sin la franja muerta que había cuando los paneles se posicionaban respecto a
+    // `.studio` completo.
     max-width: 82vw;
   }
 
@@ -1003,36 +1050,47 @@
     top: calc(48px + env(safe-area-inset-top));
   }
 
-  .studio-tools {
-    padding: 6px 6px;
-  }
-
-  // Los controles persistentes (Deshacer/Rehacer/Seleccionar/Mano/Jugadores/
-  // Material/Dibujo) deben caber en UNA sola fila en 360/390/430 px. Separadores
-  // y huecos compactos aseguran que no haya wrapping ni overflow horizontal.
+  // Los tres controles persistentes caben en UNA fila en 360/390/430 px: sin wrapping.
+  // (El tamaño móvil del botón «Herramientas» vive en `src/styles.scss`, con el resto del grupo.)
   .tools-persist {
     gap: 2px;
+    flex-wrap: nowrap;
   }
 
-  .tool-hint {
-    display: none;
-  }
-
-  // Fase 1 — pizarra compacta: campo protagonista (relleno reducido + estado en una fila).
+  // (Retirada la regla `.tool-hint`: la pista de herramienta se llama ahora `.tools-caption` y
+  // `.tool-hint` no existía ya en ninguna plantilla.)
+  // Fase 1 — pizarra compacta: campo protagonista (relleno reducido). La franja de estado
+  // (`.field-status`) se retiró por completo, así que aquí ya no hay nada que compactar.
   .studio-field {
     padding: 4px;
     gap: 6px;
   }
+}
 
-  .field-status {
-    min-height: 0;
-    padding: 0 2px;
-
-    // El aviso de guardado NO se oculta en móvil (antes desaparecía: el usuario no tenía
-    // forma de saber si su dibujo se había guardado).
-    .save-state {
-      flex-shrink: 0;
-      font-size: 11px;
+// Móvil VERTICAL: el panel lateral dejaría el campo demasiado estrecho, así que los cuatro paneles
+// se convierten en HOJA INFERIOR (máximo ~58 % de la pantalla) anclada justo por encima de la
+// navegación inferior del shell. Va como media query de primer nivel a propósito: anidada dentro
+// del bloque compacto no llegaba a aplicarse (medido: el panel seguía a 320 px de ancho).
+@media (max-width: 700px) and (orientation: portrait) {
+  .studio {
+    .side-panel-left,
+    .studio-panel {
+      left: 0;
+      right: 0;
+      top: auto;
+      // FASE 3: la hoja se ancla ENCIMA del grupo flotante (franja reservada), no en el borde de la
+      // pantalla; sin esto el grupo tapaba la esquina inferior izquierda de la hoja.
+      bottom: var(--reserva-grupo-herramientas, 96px);
+      width: auto;
+      // Sin esto, un max-width de otro bloque dejaba la hoja a 320 px en vez de a todo el ancho.
+      max-width: none;
+      max-height: 58%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      border-left: none;
+      border-right: none;
+      border-top: 1px solid #262e35;
+      border-radius: 14px 14px 0 0;
     }
   }
 }

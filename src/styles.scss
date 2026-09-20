@@ -690,6 +690,17 @@ select {
   border-radius: 999px;
   border: 2px solid transparent;
   flex-shrink: 0;
+  // FASE 2: el color elegido se marca con un TICK visible y accesible (`role=menuitemradio`
+  // + `aria-checked`), no solo con el borde de acento: el borde se pierde de vista cuando el
+  // color elegido es oscuro o el usuario no distingue bien los tonos.
+  display: grid;
+  place-items: center;
+  color: #fff;
+
+  .msi {
+    font-size: 18px;
+    text-shadow: 0 1px 2px rgb(0 0 0 / 55%);
+  }
 
   // En táctil, un poco más grande (sigue sin llegar a los 44 px recomendados: eso
   // exigiría desacoplar el punto de color del botón, y el tamaño visual del punto
@@ -1352,6 +1363,176 @@ select {
 
     &:hover {
       background: var(--accent-hover, var(--accent));
+    }
+  }
+}
+
+// ---------- FASE 4: avisos flotantes de orientación y «Adaptar a la pantalla» ----------
+// Viven aquí, con los otros avisos flotantes de la pizarra (`.orient-hint`, `.fill-hint`).
+// El aviso de «no se puede girar» comparte aspecto con `.orient-hint` y se coloca DEBAJO de él
+// para que no se solapen cuando los dos están visibles a la vez.
+.orient-aviso {
+  top: calc(56px + env(safe-area-inset-top, 0px));
+}
+
+// Control explícito y pequeño: solo aparece cuando el campo no cuadra con la pantalla. No
+// participa en el layout (es absoluto, como el resto de controles flotantes de la pizarra).
+.adaptar-pantalla {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 14;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: rgb(17 22 26 / 88%);
+  color: #e8edf2;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  .msi {
+    font-size: 16px;
+  }
+
+  &:hover {
+    background: #212930;
+    color: #fff;
+  }
+}
+
+// ---------- FASE 3: grupo flotante «Herramientas» de la pizarra ----------
+// La barra inferior ocupaba 57 px de LAYOUT (medido: `.studio-main` medía 289 px en 844×390).
+// Ahora el grupo FLOTA anclado a la esquina inferior izquierda y el campo llega al borde inferior.
+// La esquina es la IZQUIERDA por medida, no por gusto: la prueba «objeto en borde inferior» (FASE I)
+// coloca en x = centro del campo e y = borde inferior − 24 px. El grupo mide ~152 px de ancho en
+// 360 px y el contenedor NO intercepta clics: solo sus controles reciben el puntero, de modo que la
+// banda inferior del campo sigue siendo colocable.
+// Viven aquí y no en `board.component.scss` porque la encapsulación emulada duplica cada selector
+// con `[_ngcontent]` y ese fichero está en el techo de su presupuesto por componente (12 kB, que no
+// se sube); es el mismo criterio que ya usan `.orient-aviso` y `.adaptar-pantalla`.
+.studio-tools {
+  position: absolute;
+  left: calc(8px + env(safe-area-inset-left, 0px));
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  z-index: 86;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: min(360px, calc(100vw - 16px));
+  pointer-events: none;
+}
+
+// Franja inferior que reserva el grupo flotante: los paneles de la pizarra terminan POR ENCIMA de
+// ella. Si no se reserva, el grupo —que va por encima del panel a propósito, para seguir operable
+// con el panel abierto— intercepta los clics de las últimas filas del catálogo y de la plantilla
+// (medido: «Mancuerna / pesa» no se podía pulsar). 96 px = grupo de escritorio (88) + margen (8);
+// en compacto 62 px = grupo móvil (54) + margen (8). Lo declara el propio tablero (`.studio`).
+.studio {
+  --reserva-grupo-herramientas: 96px;
+}
+
+// Orden visual (arriba → abajo): leyenda, menú de categorías y fila de botones persistentes. El
+// menú abre HACIA ARRIBA: abajo solo quedan los tres botones, fuera de la banda de colocación.
+.tools-persist,
+.tools-menu {
+  order: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgb(23 29 35 / 94%);
+  border: 1px solid #262e35;
+  pointer-events: auto;
+}
+
+.tools-menu {
+  order: 1;
+}
+
+// Botón que abre el menú de categorías: sustituye al tramo de categorías que la barra mostraba
+// siempre a cambio de 57 px de alto.
+.tools-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8a97a3;
+  background: transparent;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+  cursor: pointer;
+
+  &.cat-active {
+    color: #fff;
+    background: rgb(200 16 46 / 28%);
+    border-color: var(--accent);
+  }
+
+  // En escritorio el botón se identifica por su TEXTO (igual que las categorías).
+  .tools-cat-icon {
+    display: none;
+  }
+}
+
+.tools-caption {
+  order: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  // Una sola fila con scroll interno: el alto del grupo tiene que ser PREVISIBLE, porque los
+  // paneles reservan su franja inferior (`--reserva-grupo-herramientas`) y un alto variable dejaría
+  // los últimos ítems del panel otra vez debajo del grupo.
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  flex: 0 0 auto;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: rgb(23 29 35 / 94%);
+  border: 1px solid #262e35;
+  // No roba clics al campo (mismo criterio que las pistas `.orient-hint`/`.fill-hint`): solo sus
+  // controles (chips y muestrarios) son interactivos.
+  pointer-events: none;
+
+  > .chips,
+  > .swatches {
+    pointer-events: auto;
+  }
+}
+
+@media (max-width: 700px), (max-height: 480px) and (max-width: 1000px) {
+  // En compacto el grupo mide 54 px (sin leyenda) + 8 de margen: la reserva de los paneles baja.
+  .studio {
+    --reserva-grupo-herramientas: 62px;
+  }
+
+  // En móvil «Herramientas» es cuadrado 44×44 y solo icono (como las categorías): así el grupo mide
+  // ≤ 152 px en 360 px y no invade la banda inferior central, donde se coloca.
+  .tools-toggle {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0 6px;
+
+    .tools-cat-icon {
+      display: inline-flex;
+      font-size: 22px;
+    }
+
+    .tools-cat-label {
+      display: none;
     }
   }
 }

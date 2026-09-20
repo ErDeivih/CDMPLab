@@ -81,6 +81,23 @@ import { ConfirmService } from '../../core/confirm.service';
 import { HistoryService, HistorySnapshot } from '../../core/history.service';
 import { normalizeCanvas, CANVAS_SCHEMA_VERSION } from '../../core/canvas';
 import {
+  AVISO_SIN_BLOQUEO,
+  debeAdaptarAutomaticamente,
+  orientacionDeseada,
+  puedeIntentarBloqueo,
+  type CapacidadesPantalla,
+  type OrientacionCampo,
+} from '../../core/screen-orientation';
+import {
+  PALETA_JUGADOR,
+  colorDeJugador,
+  conColorDeJugador,
+  fichasDeJugador,
+  normalizarMapaColores,
+  pintarFichasDeJugador,
+  type MapaColoresJugador,
+} from '../../core/player-colors';
+import {
   addElementToFrames,
   removeElementFromFrames,
   moveElementsInFrame,
@@ -88,11 +105,10 @@ import {
   layerShiftFrames,
   translateElement,
 } from './board-doc';
-import {
-  transformFramesHalfToFull,
-  transformFramesFullToHalf,
-  mapFramesToTwoHalves,
-} from '../../core/field-transform';
+// (CORRECCIÓN URGENTE: se retiran los imports de `field-transform` —
+// `transformFramesHalfToFull`, `transformFramesFullToHalf`, `mapFramesToTwoHalves`— porque el
+// cambio de campo ya NO transforma coordenadas: conserva las de cada elemento tal cual. Las
+// funciones siguen en `core/field-transform.ts`, con sus unitarias, para documentos antiguos.)
 import { pngFileName } from '../../core/sanitize-file-name';
 import {
   selCenter,
@@ -531,10 +547,15 @@ export class BoardComponent {
     this.jugadoresOpen.set(false);
     this.exportMenuOpen.set(false);
     this.masOpen.set(false);
+    // FASE 3: elegir categoría cierra el menú «Herramientas». El menú flota sobre la
+    // banda inferior del campo; si siguiera abierto, taparía la colocación de objetos
+    // cerca del borde inferior (lo midió la prueba «objeto en borde inferior»).
+    this.herramientasOpen.set(false);
     this.panelCat.set(c);
   }
   protected closeToolPanel(): void {
     this.panelCat.set(null);
+    this.olvidarMinimizado();
     // El panel es un overlay que tapa el campo: al elegir una herramienta hay que
     // retirarlo ANTES del siguiente clic (que coloca el elemento). Forzamos la
     // detección de cambios para que Angular no lo deje en el DOM un tick más.
@@ -659,55 +680,15 @@ export class BoardComponent {
     this.grass.set(g);
     this.markDirty();
   }
-  /** FASE 5: plan de cambio de campo pendiente de confirmación (diálogo completo→medio). */
-  protected readonly fieldChangePlan = signal<FieldType | null>(null);
-  /** Abre el diálogo de conversión al cambiar de campo completo a un medio campo. */
-  protected readonly fieldDialogOpen = signal(false);
-  /** Aplica la opción elegida en el diálogo de conversión de campo. */
-  protected decideFieldChange(mode: 'two-halves' | 'fit-half' | 'keep' | 'cancel'): void {
-    const target = this.fieldChangePlan();
-    if (mode === 'cancel' || !target) {
-      this.fieldDialogOpen.set(false);
-      this.fieldChangePlan.set(null);
-      return;
-    }
-    // Aplicar la conversión según la opción: "Dos medios campos" encaja el ejercicio
-    // en la primera mitad (manteniendo todo); "Encajar todo" conserva todos los elementos
-    // y escala la composición a un medio; "Conservar objetos" cambia al campo PEDIDO sin
-    // tocar ninguna coordenada. Ninguna opción recorta ni borra nada.
-    this.applyFieldChange(target, mode);
-    this.fieldDialogOpen.set(false);
-    this.fieldChangePlan.set(null);
-  }
-  private applyFieldChange(f: FieldType, mode: 'two-halves' | 'fit-half' | 'keep'): void {
-    this.beginHistory();
-    // A2: "Dos medios campos" y "Encajar todo" son REALMENTE distintas.
-    //  - 'two-halves' → campo `two_halves`: conserva las coordenadas normalizadas (la
-    //    geometría de fondo cambia a dos medios campos, sin perder ni recortar nada).
-    //  - 'fit-half'   → campo `half`: conserva TODOS los elementos y ESCALA la
-    //    composición para que quepa en el rectángulo del medio campo (×0,5 del largo),
-    //    sin mandar ninguna coordenada fuera de [0,1].
-    //  - 'keep'       → el campo PEDIDO (F7 incluido) conservando las coordenadas tal cual.
-    //    Faltaba: con las dos opciones anteriores era IMPOSIBLE llegar a F7 teniendo objetos,
-    //    porque ninguna de las dos deja el campo en `f7` (una va a `two_halves` y la otra a
-    //    `half`). Verificado en `e2e/fase-j-campos-vista` (matriz de los 8 campos).
-    const vertical = this.orientation() === 'vertical';
-    if (mode === 'two-halves') {
-      // Siempre conserva coordenadas: campo `two_halves` (o el destino de media extensión).
-      this.frames.set(mapFramesToTwoHalves(this.frames(), vertical));
-      this.field.set('two_halves');
-    } else if (mode === 'keep') {
-      // El campo pedido, sin tocar las coordenadas de ningún elemento.
-      this.field.set(f);
-    } else {
-      // "Encajar todo en un medio campo": conserva TODOS los elementos y ESCALA la
-      // composición para que quepa en el rectángulo del campo de media extensión destino.
-      this.frames.set(transformFramesFullToHalf(this.frames(), vertical));
-      this.field.set(this.isHalfGeometry(f) ? f : 'half');
-    }
-    this.endHistory();
-    this.markDirty();
-  }
+  // CORRECCIÓN URGENTE (dueño): el cambio de campo es DIRECTO y no deja estado pendiente.
+  //
+  // Antes aquí vivían `fieldChangePlan`, `fieldDialogOpen`, `decideFieldChange()` y
+  // `applyFieldChange()`: al pasar de un campo completo a uno de media extensión CON objetos,
+  // `setField` guardaba un plan, abría el diálogo «Cambiar a medio campo» y TERMINABA con
+  // `return` SIN cambiar el campo. Ese diálogo pendiente era el que dejaba la pizarra bloqueada:
+  // el primer cambio podía funcionar y los siguientes parecían no hacer nada hasta insistir.
+  // Se retiran el plan, el diálogo, sus tres opciones («Dos medios campos», «Encajar todo»,
+  // «Mantener los objetos») y las transformaciones de coordenadas asociadas.
   /** Id de texto recién insertado para enfocar su edición. */
   protected readonly textFocusId = signal<string | null>(null);
   protected readonly orientation = signal<'horizontal' | 'vertical'>('horizontal');
@@ -907,6 +888,14 @@ export class BoardComponent {
   protected readonly current = signal(0);
   protected readonly saving = signal(false);
   protected readonly saved = signal(false);
+  /**
+   * Etiqueta única del botón Guardar (icono + `aria-label` + región viva). El dueño pidió
+   * retirar la franja `.field-status` que comía altura del campo, así que el estado de guardado
+   * se comunica desde el botón que ya existía en vez de en una fila propia.
+   */
+  protected readonly estadoGuardado = computed(() =>
+    this.saving() ? 'Guardando…' : this.saved() ? 'Guardado' : 'Guardar',
+  );
   // Fase 1: el campo es el protagonista. El panel de Propiedades (derecha) empieza
   // CERRADO (incluso en escritorio); se abre desde su disparador o al seleccionar.
   protected readonly panelOpen = signal(false);
@@ -916,6 +905,16 @@ export class BoardComponent {
   protected readonly exportMenuOpen = signal(false);
   /** Menú "Más" (arriba): Limpiar pizarra. La opción "Ayuda" fue retirada por el dueño. */
   protected readonly masOpen = signal(false);
+  /** FASE 3 — menú «Herramientas» del grupo flotante.
+   *
+   *  La barra inferior ocupaba 57 px de LAYOUT (medido: `.studio-main` 289 px en 844×390).
+   *  Se sustituye por un grupo flotante anclado a la esquina inferior izquierda que NO
+   *  ocupa layout, de modo que el campo llega al borde inferior. Las tres categorías
+   *  (Jugadores/Material/Dibujo) viven en este menú, cerrado por defecto para no tapar el
+   *  campo: al elegir categoría se cierra solo, así que la banda inferior queda libre para
+   *  colocar objetos (la prueba «objeto en borde inferior» de FASE I coloca en x=centro,
+   *  y=borde inferior − 24 px). */
+  protected readonly herramientasOpen = signal(false);
 
   /** Cierra TODOS los paneles laterales/popovers (invariante: un solo panel principal abierto). */
   protected closeAllPanels(): void {
@@ -924,6 +923,7 @@ export class BoardComponent {
     this.panelCat.set(null);
     this.exportMenuOpen.set(false);
     this.masOpen.set(false);
+    this.herramientasOpen.set(false);
     this.cdr.detectChanges();
   }
   /** El panel de Propiedades se muestra SOLO cuando está abierto explícitamente
@@ -966,11 +966,13 @@ export class BoardComponent {
    *  de `togglePanel()`, no depende de `selectedElement()` ni se reabre. */
   protected closePropsPanel(): void {
     this.panelOpen.set(false);
+    this.olvidarMinimizado();
     this.cdr.detectChanges();
   }
   protected toggleJugadores(): void {
     if (this.jugadoresOpen()) {
       this.jugadoresOpen.set(false);
+      this.olvidarMinimizado();
       this.cdr.detectChanges();
       return;
     }
@@ -997,15 +999,102 @@ export class BoardComponent {
     this.masOpen.set(false);
   }
 
+  // ---------- FASE 3: botón flotante «Herramientas» ----------
+  /** Abre/cierra el menú de categorías del grupo flotante. Es el sustituto del tramo de
+   *  categorías de la barra inferior: en vez de estar siempre ocupando 57 px de alto, las
+   *  categorías aparecen a demanda y el campo se queda con ese alto. */
+  protected toggleHerramientas(): void {
+    this.herramientasOpen.update((abierto) => !abierto);
+  }
+  /** Cierra el menú de herramientas. Se llama al elegir categoría (para que no tape la
+   *  banda inferior del campo mientras se coloca) y al abrir otros menús/popovers. */
+  protected closeHerramientas(): void {
+    this.herramientasOpen.set(false);
+  }
+
   // ---------- Pista única de "Llenar pantalla" (Fase 3) ----------
   // Toast breve y descartable que indica cómo recorrer el campo oculto. Solo aparece
   // la primera vez que se muestra la pizarra en "Llenar pantalla", se auto-oculta a
   // los pocos segundos y se persiste en localStorage para no reaparecer nunca más.
   private readonly fillHintKey = 'entrenolab:fill-hint';
   protected readonly fillHint = signal(false);
+  /**
+   * ¿Hay algún panel del tablero abierto? Sirve para no dejar avisos flotantes a medias detrás de
+   * un panel: el aviso «Desliza para recorrer el campo · pellizca para acercar» vive en el centro
+   * del lienzo y, con el panel de Material abierto en móvil horizontal, quedaba parcialmente
+   * oculto detrás (el panel tiene `z-index` mayor y menos ancho útil).
+   */
+  protected readonly panelAbierto = computed(
+    () => this.panelCat() !== null || this.jugadoresOpen() || this.panelOpen(),
+  );
+
+  // ---------- Paneles: minimizar/restaurar (Fase 3) ----------
+  //
+  // El dueño ya decidió que los paneles NO se cierran al tocar fuera (solo con un control
+  // explícito). En móvil eso dejaba el campo muy justo, así que ahora se pueden MINIMIZAR a una
+  // pestaña estrecha (icono + nombre) sin perder el estado del panel: el campo vuelve a verse y
+  // operarse, y la pestaña lo devuelve tal cual estaba.
+  protected readonly panelMinimizado = signal(false);
+
+  /** Panel visible en este momento (solo puede haber uno de los cuatro en vista compacta). */
+  protected readonly panelActivo = computed<
+    'jugadores' | 'material' | 'dibujo' | 'propiedades' | null
+  >(() => {
+    if (this.jugadoresOpen()) return 'jugadores';
+    const cat = this.panelCat();
+    if (cat === 'material') return 'material';
+    if (cat === 'dibujo') return 'dibujo';
+    if (this.showPropsPanel()) return 'propiedades';
+    return null;
+  });
+
+  /** Etiqueta e icono de la pestaña minimizada de cada panel. */
+  protected readonly PANELES: Record<string, { label: string; icon: string }> = {
+    jugadores: { label: 'Jugadores', icon: 'groups' },
+    material: { label: 'Material', icon: 'sports_soccer' },
+    dibujo: { label: 'Dibujo', icon: 'draw' },
+    propiedades: { label: 'Propiedades', icon: 'tune' },
+  };
+
+  /** Metadatos del panel minimizado (null si no hay ninguno abierto). */
+  protected readonly panelTab = computed(() => {
+    const id = this.panelActivo();
+    return id ? this.PANELES[id] : null;
+  });
+
+  /** Qué panel se minimizó: hay que recordarlo para poder reabrirlo tal cual. */
+  private panelMinimizadoId: 'jugadores' | 'material' | 'dibujo' | 'propiedades' | null = null;
+
+  protected minimizarPanel(): void {
+    this.panelMinimizadoId = this.panelActivo();
+    this.panelMinimizado.set(true);
+  }
+
+  /**
+   * Reabre el panel minimizado. No basta con quitar la bandera: el clic en la pestaña cae FUERA
+   * del panel y los manejadores del lienzo cierran el panel de Propiedades al tocar fuera, así que
+   * se vuelve a abrir explícitamente el que estaba minimizado.
+   */
+  protected restaurarPanel(evt?: Event): void {
+    // El manejador de «clic fuera» del lienzo corre DESPUÉS de este (mismo clic, el ancestro va
+    // después del objetivo) y volvía a cerrar el panel de Propiedades: se corta la propagación.
+    evt?.stopPropagation();
+    const id = this.panelMinimizadoId ?? this.panelActivo();
+    this.panelMinimizado.set(false);
+    if (id === 'jugadores') this.jugadoresOpen.set(true);
+    else if (id === 'material' || id === 'dibujo') this.panelCat.set(id);
+    else if (id === 'propiedades') this.panelOpen.set(true);
+  }
+
+  /** Al cerrar un panel se olvida el estado minimizado: el siguiente se abre entero. */
+  private olvidarMinimizado(): void {
+    this.panelMinimizado.set(false);
+  }
   /** La pista de "Llenar pantalla" se muestra un único hint flotante: ya no depende
    *  de la ayuda inicial (retirada por el dueño), así que solo mira su propia señal. */
-  protected readonly fillHintVisible = computed(() => this.fillHint() && !this.orientHintVisible());
+  protected readonly fillHintVisible = computed(
+    () => this.fillHint() && !this.orientHintVisible() && !this.panelAbierto(),
+  );
   private fillHintTimer: ReturnType<typeof setTimeout> | null = null;
   /** Marca la pista como "primera vez" (persistida) pero NO arma el auto-ocultado: ese
    *  temporizador se programa en cuanto la pista se hace VISIBLE (ver el effect del
@@ -1068,6 +1157,9 @@ export class BoardComponent {
     } else {
       this.orientHint.set(false);
     }
+    // FASE 4.8: al cambiar de verdad la orientación, un ejercicio NUEVO se adapta solo; uno
+    // guardado solo OFRECE adaptarse (nunca se reescribe en silencio).
+    this.ajustarOrientacion();
   }
 
   protected readonly notice = signal<string | null>(null);
@@ -1543,6 +1635,8 @@ export class BoardComponent {
         this.guide.set(doc.guide ?? 'none');
         if (doc.grass) this.grass.set(doc.grass);
         this.f7.set(doc.f7 ?? null);
+        // FASE 2: cada ejercicio recupera SUS colores de jugador (vacío = colores por defecto).
+        this.playerColors.set(normalizarMapaColores(doc.playerColors));
       }
     }
     const ex = this.editExerciseId
@@ -1602,6 +1696,168 @@ export class BoardComponent {
       }
     });
     this.sessionSvc.setDirty(false); // al abrir un ejercicio no hay cambios pendientes
+    // FASE 4: en móvil se intenta pantalla completa + bloqueo horizontal y, si el navegador no lo
+    // permite, se degrada con un aviso descartable. Al CARGAR solo se OFRECE adaptar el campo (no se
+    // cambia solo: 32 ficheros de pruebas asumen la orientación del documento al abrir, y cambiar el
+    // campo bajo los pies del usuario al entrar tampoco es deseable). La adaptación AUTOMÁTICA se
+    // reserva para un giro real de la pantalla (FASE 4.8) y solo en ejercicios nuevos.
+    this.avisarSiNoSePuedeBloquear();
+    this.ofrecerAdaptacion();
+  }
+
+  // =============================================================
+  // FASE 4 — pantalla completa, bloqueo de orientación y «Adaptar a la pantalla».
+  //
+  // Politica: TODO es progresivo. `requestFullscreen()` y `screen.orientation.lock()` pueden no
+  // existir, requerir un gesto del usuario o ser rechazados; en ese caso NO se bloquea la app: se
+  // muestra un aviso corto y descartable y el campo se adapta a la orientación real de la pantalla
+  // (móvil vertical → campo vertical; móvil horizontal → campo horizontal).
+  //
+  // Un ejercicio NUEVO se adapta solo al girar. Uno YA GUARDADO no se reescribe nunca en silencio:
+  // su orientación forma parte del contenido y se ofrece «Adaptar a la pantalla».
+  // =============================================================
+
+  /** Aviso descartable: el navegador no permite girar/bloquear la pantalla. */
+  protected readonly avisoOrientacion = signal(false);
+  /** Texto del aviso (constante del módulo puro, para no duplicar el mensaje en la plantilla). */
+  protected readonly avisoSinBloqueo = AVISO_SIN_BLOQUEO;
+  /** El ejercicio guardado no cuadra con la pantalla: se ofrece adaptarlo a mano. */
+  protected readonly puedeAdaptarPantalla = signal(false);
+  /** ¿La pantalla completa la inició CDMLab? Solo entonces se sale de ella al salir. */
+  /**
+   * «Pantalla completa» del menú «Más»: acción EXPLÍCITA del usuario.
+   *
+   * DECISIÓN MEDIDA (sustituye a abrirlo automáticamente al entrar o al primer toque): intentarlo
+   * sin una acción explícita dejaba la ventana en un modo pantalla completa del que el navegador no
+   * dejaba salir al cambiar el tamaño («To resize minimized/maximized/fullscreen window…»), rompía
+   * la app en ese escenario y además secuestraba la pantalla sin permiso. Aquí el usuario lo pide y
+   * los navegadores lo conceden porque hay gesto. Si el bloqueo de orientación falla, se avisa y se
+   * deshace la pantalla completa.
+   */
+  protected pantallaCompleta(): void {
+    this.intentarPantallaCompleta();
+    this.closeMas();
+  }
+
+  private pantallaCompletaIniciada = false;
+  private oyenteOrientacion: (() => void) | null = null;
+
+  /**
+   * Avisa (una vez) si el navegador no puede bloquear la orientación y deja el intento de pantalla
+   * completa + bloqueo para el PRIMER TOQUE del usuario.
+   *
+   * MEDIDO Y CORREGIDO: pedir pantalla completa al ENTRAR (sin gesto) dejaba la ventana en un modo
+   * del que el navegador ya no dejaba salir al redimensionar —«To resize minimized/maximized/
+   * fullscreen window, restore it to normal state first»—, rompiendo la propia app y las pruebas que
+   * cambian el tamaño de la ventana. Los navegadores exigen además un gesto del usuario para
+   * `requestFullscreen()`, así que el momento correcto es el primer toque sobre el campo, que es
+   * justo cuando el usuario empieza a trabajar. Si el bloqueo no está disponible, se avisa ya y no
+   * se intenta nada.
+   */
+  private avisarSiNoSePuedeBloquear(): void {
+    if (!this.isCompactViewport()) return;
+    if (!puedeIntentarBloqueo(this.capacidadesPantalla())) this.avisoOrientacion.set(true);
+  }
+
+  private capacidadesPantalla(): CapacidadesPantalla {
+    const doc = document as Document & { fullscreenEnabled?: boolean };
+    const orientation = (
+      screen as Screen & { orientation?: { lock?: (o: string) => Promise<void> } }
+    ).orientation;
+    return {
+      pantallaCompletaSoportada: !!doc.fullscreenEnabled,
+      bloqueoOrientacion: typeof orientation?.lock === 'function',
+    };
+  }
+
+  private intentarPantallaCompleta(): void {
+    if (!this.isCompactViewport()) return;
+    const orientation = (
+      screen as Screen & {
+        orientation?: { lock?: (o: string) => Promise<void>; unlock?: () => void };
+      }
+    ).orientation;
+    const cap = this.capacidadesPantalla();
+    if (!puedeIntentarBloqueo(cap)) {
+      // Degradación limpia: no se intenta nada y se explica qué hacer.
+      this.avisoOrientacion.set(true);
+    } else {
+      void (async () => {
+        try {
+          if (!document.fullscreenElement) {
+            await document.documentElement.requestFullscreen();
+            this.pantallaCompletaIniciada = true;
+          }
+          await orientation!.lock!('landscape');
+        } catch {
+          // Rechazado (permiso, navegador sin soporte real): NO se bloquea la app, se avisa… y se
+          // DESHACE la pantalla completa que hayamos iniciado, para no dejar la ventana en un modo
+          // que no aporta nada sin el bloqueo.
+          this.avisoOrientacion.set(true);
+          if (this.pantallaCompletaIniciada && document.fullscreenElement) {
+            void document.exitFullscreen().catch(() => undefined);
+            this.pantallaCompletaIniciada = false;
+          }
+        }
+      })();
+    }
+    // Se escuchan los cambios REALES de orientación (además del resize).
+    const mq =
+      typeof window.matchMedia === 'function' ? window.matchMedia('(orientation: portrait)') : null;
+    if (mq) {
+      this.oyenteOrientacion = () => this.ajustarOrientacion();
+      mq.addEventListener('change', this.oyenteOrientacion);
+    }
+  }
+
+  /**
+   * Orientación REAL de la pantalla.
+   *
+   * MEDIDO (prueba intermitente): leer solo `window.innerWidth/innerHeight` dentro del manejador de
+   * `resize` no es fiable — el evento puede llegar con el tamaño ANTERIOR, así que a veces la
+   * adaptación no se aplicaba y el campo se quedaba como estaba. `matchMedia('(orientation: …)')`
+   * es autoritativo y no depende del instante del evento; el tamaño se usa solo como último recurso.
+   */
+  private orientacionDePantalla(): OrientacionCampo {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      if (window.matchMedia('(orientation: landscape)').matches) return 'horizontal';
+      if (window.matchMedia('(orientation: portrait)').matches) return 'vertical';
+    }
+    return orientacionDeseada(window.innerWidth, window.innerHeight);
+  }
+
+  /** Al CARGAR: si el campo no cuadra con la pantalla, se ofrece adaptarlo (no se cambia solo). */
+  private ofrecerAdaptacion(): void {
+    if (typeof window === 'undefined') return;
+    this.puedeAdaptarPantalla.set(this.orientacionDePantalla() !== this.orientation());
+  }
+
+  /** Ajusta el campo a la orientación de la pantalla (o pide permiso si el ejercicio está guardado). */
+  private ajustarOrientacion(): void {
+    if (typeof window === 'undefined') return;
+    const deseada = this.orientacionDePantalla();
+    if (deseada === this.orientation()) {
+      this.puedeAdaptarPantalla.set(false);
+      return;
+    }
+    if (debeAdaptarAutomaticamente(!!this.editExerciseId)) {
+      this.orientation.set(deseada);
+      this.puedeAdaptarPantalla.set(false);
+    } else {
+      this.puedeAdaptarPantalla.set(true);
+    }
+  }
+
+  /** «Adaptar a la pantalla»: aplica la orientación de la pantalla al ejercicio abierto. */
+  protected adaptarAlaPantalla(): void {
+    this.orientation.set(this.orientacionDePantalla());
+    this.puedeAdaptarPantalla.set(false);
+    this.markDirty();
+    this.notify('Ejercicio adaptado a la pantalla.');
+  }
+
+  protected descartarAvisoOrientacion(): void {
+    this.avisoOrientacion.set(false);
   }
 
   @HostListener('window:beforeunload', ['$event'])
@@ -1626,6 +1882,10 @@ export class BoardComponent {
     // Clic sobre un disparador → lo gestiona su toggle.
     if (t.closest('.tools-cat')) return;
     if (t.closest('.edge-btn')) return;
+    // La PESTAÑA del panel minimizado es un control explícito (no un «clic fuera»): si se tratara
+    // como tal, el manejador cerraría el panel de Propiedades en el mismo gesto y al restaurarlo
+    // no volvía a aparecer (medido: desaparecían panel y pestaña).
+    if (t.closest('.panel-tab')) return;
     // Clic sobre el campo → lo gestiona onPointerDown (selección/inspector, o cierre al crear).
     // NO usamos `t.closest('.board-host')` aquí: al colocar/seleccionar un elemento,
     // onPointerDown re-renderiza el SVG ([innerHTML]) y el nodo objetivo queda
@@ -1685,6 +1945,19 @@ export class BoardComponent {
     this.fillHintTimer = null;
     this.resizeObs?.disconnect();
     this.resizeObs = null;
+    // FASE 4: al salir de la pizarra se libera el bloqueo de orientación y se sale de pantalla
+    // completa SOLO si la inició CDMLab (nunca se cierra algo que abrió el usuario por su cuenta).
+    const orientation = (screen as Screen & { orientation?: { unlock?: () => void } }).orientation;
+    try {
+      orientation?.unlock?.();
+    } catch {
+      /* el navegador no lo permite: no es un error para la app */
+    }
+    if (this.pantallaCompletaIniciada && document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+      this.pantallaCompletaIniciada = false;
+    }
+    this.oyenteOrientacion = null;
   }
 
   // ---------- Coordenadas ----------
@@ -1812,6 +2085,10 @@ export class BoardComponent {
         scale: s,
       },
       g.vertical,
+      // FASE 3 del encargo de materiales: la portería se dibuja con la anchura reglamentaria del
+      // campo, así que su caja táctil se calcula con el MISMO campo que el dibujo (si no, tocar los
+      // extremos visibles de la portería no la seleccionaría).
+      this.field(),
     );
   }
 
@@ -2107,46 +2384,54 @@ export class BoardComponent {
     return this.orientation();
   }
 
+  /** Cancela la interacción en curso (FASE 1.6 del encargo: drag, resize, dibujo, arrastre de
+   *  panel) ANTES de aplicar un cambio de campo, para que no quede un gesto a medias apuntando a
+   *  coordenadas del campo anterior. Se reutiliza el mismo camino que Escape: el gesto de puntero
+   *  se revierte a su estado EXACTO previo y no confirma entrada de historial. */
+  private cancelarInteraccionEnCurso(): void {
+    if (!this.cancelActiveGesture() && this.drag()) this.cancelDraft();
+    // Solo si hay un ARRASTRE DE PANEL en curso: `cancelPanelGesture` devuelve la herramienta a
+    // Cursor (comportamiento correcto al abortar un arrastre de material), pero al cancelar un trazo
+    // de dibujo eso desarmaba la herramienta que el usuario había elegido. Medido en
+    // `fase-cambio-campos` (FASE 1.6): tras el cambio de campo la herramienta quedaba en «Seleccionar
+    // y mover» y el siguiente trazo no dibujaba nada.
+    if (this.panelDrag()) this.cancelPanelGesture();
+    // Y se deja LIMPIO el registro de punteros: si el cambio de campo llega con el dedo/ratón
+    // todavía abajo, ese puntero ya no pertenece a ningún gesto y, si siguiera registrado, el
+    // siguiente `pointerdown` (mismo pointerId) se interpretaría como un SEGUNDO dedo.
+    this.activePointers.clear();
+    this.panelPointers.clear();
+  }
+
+  /** Cambio de campo DIRECTO: un clic cambia el campo, siempre, con o sin objetos.
+   *
+   *  Garantías que exige el encargo (y que se comprueban en `e2e/fase-cambio-campos`):
+   *   · no hay diálogo, ni plan pendiente, ni ningún overlay: no puede quedar la pizarra bloqueada;
+   *   · los elementos se CONSERVAN tal cual: mismos ids, mismas coordenadas normalizadas, sin
+   *     transformar, duplicar, recortar ni eliminar nada;
+   *   · `aria-pressed` y `data-field` se actualizan en el mismo clic (son señales);
+   *   · el panel de Propiedades NO se cierra, para poder probar varios campos seguidos;
+   *   · el encuadre vuelve a ser neutro en «ver campo completo» (el campo nuevo puede ser más alto
+   *     o más ancho) y en «Llenar pantalla» no se toca, porque ahí el recorte es intencionado;
+   *   · pulsar el campo YA activo es un no-op seguro. */
   protected setField(f: FieldType): void {
-    const prev = this.field();
-    const wasHalf = this.isHalfGeometry(prev);
-    const isHalfTarget = this.isHalfGeometry(f);
-    // FASE 5/A4: al cambiar de un campo COMPLETO a un campo de media extensión (medio
-    // campo o F7) se muestra el diálogo de conversión (no se recorta ni borra nada
-    // silenciosamente) SOLO si hay elementos que conservar; si el campo está vacío, se
-    // cambia directamente.
-    const hasElements = this.view().length > 0;
-    if (!wasHalf && isHalfTarget && hasElements) {
-      this.fieldChangePlan.set(f);
-      this.fieldDialogOpen.set(true);
-      return;
-    }
+    if (this.field() === f) return;
+    this.cancelarInteraccionEnCurso();
+    this.beginHistory();
     this.field.set(f);
-    // Pedido del dueño: al CAMBIAR de campo la vista vuelve a su encuadre neutro en el modo
-    // «ver campo completo» (zoom 100 %, sin paneo), para que el campo nuevo —que puede ser más
-    // alto o más ancho— se vea ENTERO y no heredado del encuadre del campo anterior. En modo
-    // «Llenar pantalla» no se toca: ahí el recorte es intencionado.
-    if (!this.fillScreen()) this.resetView();
-    // El medio campo por defecto se muestra en VERTICAL (portería arriba, línea de
-    // medio campo abajo) en escritorio/tablet. Decisión del dueño (usabilidad móvil):
-    // en un ejercicio NUEVO desde móvil se mantiene HORIZONTAL/paisaje por defecto
-    // (no se fuerza vertical). Al editar un documento existente se respeta su
-    // orientación guardada (el constructor la lee de `doc.orientation`).
-    // (A4: `f7` es una plantilla compuesta y NO fuerza vertical automáticamente.)
+    // El medio campo por defecto se muestra VERTICAL (portería arriba) en escritorio/tablet. En
+    // móvil un ejercicio NUEVO conserva la orientación actual (decisión de usabilidad del dueño) y
+    // al editar un documento existente se respeta la que traía. `f7` es plantilla compuesta y no la
+    // fuerza.
     if (this.isHalfGeometry(f) && f !== 'f7') {
       const o = this.orientationForField(f);
       if (o !== this.orientation()) this.orientation.set(o);
     }
-    // FASE 5/A4: al pasar de un campo de media extensión a un campo COMPLETO, el
-    // ejercicio se coloca en la mitad equivalente (superior en vertical, primera mitad
-    // en horizontal), como UNA SOLA operación de Deshacer. `f7` y `half` comparten la
-    // extensión de medio campo, así que ambos se transforman igual.
-    if (wasHalf && f === 'full') {
-      this.beginHistory();
-      const vertical = this.orientation() === 'vertical';
-      this.frames.set(transformFramesHalfToFull(this.frames(), vertical));
-      this.endHistory();
-    }
+    // NADA de transformaciones de coordenadas: cambiar de campo es cambiar el FONDO.
+    this.endHistory();
+    if (!this.fillScreen()) this.resetView();
+    // El historial ya marca sucio cuando el documento cambia; se marca también aquí para que el
+    // cambio de campo cuente como modificación aunque solo cambiara el tipo de campo.
     this.markDirty();
   }
 
@@ -2373,8 +2658,41 @@ export class BoardComponent {
         break;
       // B2: Chino (disco plano recoloreable) y Valla con SVG vectorial ORIGINAL y
       // transparente (mismo trazo que el render del campo), en vez de una foto.
+      // FASE 4 del encargo de materiales: la miniatura del CHINO se actualiza a la forma nueva del
+      // tablero (platillo con aro, superficie y abertura central) para que la lista y el objeto
+      // colocado representen LO MISMO.
       case 'target':
-        inner = `<ellipse cx="0" cy="0.4" rx="1.9" ry="0.8" fill="${c}"/><ellipse cx="0" cy="-0.4" rx="1.9" ry="0.8" fill="${c}" opacity="0.92"/><rect x="-1.9" y="-0.4" width="3.8" height="0.8" fill="${c}"/>`;
+        inner =
+          `<ellipse cx="0.06" cy="0.42" rx="1.05" ry="0.45" fill="#00000055"/>` +
+          `<ellipse cx="0" cy="0" rx="1.0" ry="0.68" fill="${c}" stroke="#20242a" stroke-width="0.14"/>` +
+          `<ellipse cx="0" cy="-0.06" rx="0.66" ry="0.42" fill="#ffffff" opacity="0.3"/>` +
+          `<ellipse cx="0" cy="-0.06" rx="0.22" ry="0.14" fill="#20242a" opacity="0.55"/>` +
+          `<path d="M-0.72 -0.36 A 1.0 0.68 0 0 1 0.72 -0.36" fill="none" stroke="#ffffff" stroke-width="0.12" opacity="0.6"/>`;
+        break;
+      // FASE 4: la ESCALERA y la MINIPORTERÍA ahora se dibujan en vector, así que la lista de
+      // materiales necesita su miniatura vectorial (antes caían al icono de fuente, y una fuente no
+      // representa el objeto).
+      case 'ladder': {
+        let peldaños = '';
+        for (let i = 0; i < 7; i++) {
+          peldaños += `<rect x="${(-1.8 + i * 0.6).toFixed(2)}" y="-0.9" width="0.26" height="1.8" rx="0.13"/>`;
+        }
+        inner =
+          `<g fill="${c}" stroke="#20242a" stroke-width="0.1">` +
+          `<rect x="-2.4" y="-1.05" width="4.8" height="0.42" rx="0.21"/>` +
+          `<rect x="-2.4" y="0.63" width="4.8" height="0.42" rx="0.21"/>` +
+          peldaños +
+          `<rect x="-2.62" y="-1.05" width="0.32" height="2.1" rx="0.16"/>` +
+          `</g>`;
+        break;
+      }
+      case 'minigoal':
+        inner =
+          `<rect x="-1.15" y="-0.62" width="2.3" height="1.15" fill="#ffffff22"/>` +
+          `<rect x="-1.15" y="-0.62" width="2.3" height="0.2" fill="${c}" stroke="#20242a" stroke-width="0.08"/>` +
+          `<rect x="-1.15" y="-0.62" width="0.2" height="1.15" fill="${c}" stroke="#20242a" stroke-width="0.08"/>` +
+          `<rect x="0.95" y="-0.62" width="0.2" height="1.15" fill="${c}" stroke="#20242a" stroke-width="0.08"/>` +
+          `<rect x="-1.4" y="0.53" width="2.8" height="0.18" rx="0.09" fill="${c}"/>`;
         break;
       case 'hurdle':
         inner = `<g stroke="${c}" stroke-width="0.28" fill="none"><rect x="-1.7" y="-0.35" width="3.4" height="0.68" rx="0.34"/><line x1="-1.6" y1="0.33" x2="-1.6" y2="2.0"/><line x1="1.6" y1="0.33" x2="1.6" y2="2.0"/></g><rect x="-2.0" y="1.95" width="4.0" height="0.3" fill="${c}"/>`;
@@ -2408,10 +2726,23 @@ export class BoardComponent {
    *  orientación de ese momento y, al pulsarlo, el campo se ponía en vertical, así que en
    *  escritorio la tarjeta prometía algo distinto de lo que hacía. */
   protected fieldPreviewSafe(field: FieldType): SafeHtml {
-    return this.sanitizer.bypassSecurityTrustHtml(
+    // CORRECCIÓN URGENTE (robustez): la miniatura se calcula UNA vez por combinación
+    // campo + orientación que se aplicaría. Antes se recalculaba en CADA ciclo de detección de
+    // cambios y, como el valor enlazado con `[innerHTML]` era un objeto nuevo cada vez, Angular
+    // REEMPLAZABA los nodos internos de la tarjeta continuamente: coste innecesario y, en un equipo
+    // lento, la causa de que un clic se pudiera perder (el nodo pulsado desaparecía entre
+    // `pointerdown` y `pointerup`). La clave incluye la orientación, así que un cambio de viewport
+    // (que cambia `orientationForField`) sigue refrescando la miniatura.
+    const clave = `${field}|${this.orientationForField(field)}`;
+    const enCache = this.fieldPreviewCache.get(clave);
+    if (enCache) return enCache;
+    const html = this.sanitizer.bypassSecurityTrustHtml(
       fieldPreviewSvg(field, this.orientationForField(field)),
     );
+    this.fieldPreviewCache.set(clave, html);
+    return html;
   }
+  private readonly fieldPreviewCache = new Map<string, SafeHtml>();
 
   /** Estado seleccionado de una tarjeta de la galería de campos. */
   protected fieldSelected(f: FieldType): boolean {
@@ -2955,7 +3286,8 @@ export class BoardComponent {
       label: p.name,
       player: {
         n: p.number ?? 0,
-        c: p.color,
+        // FASE 2: el color de la ficha sale del mapa del EJERCICIO, no de la plantilla.
+        c: this.colorDeJugadorDe(p),
         side: 'own',
         type: p.position === 'GK' ? 'goalkeeper' : undefined,
         playerId: p.id,
@@ -2971,23 +3303,46 @@ export class BoardComponent {
 
   /** Fase 12 — color rápido por jugador. Id del jugador cuya mini-paleta está abierta. */
   protected readonly rosterColorOpen = signal<string | null>(null);
+  /**
+   * FASE 2 del encargo — color de cada jugador de plantilla DENTRO de este ejercicio.
+   *
+   * El color elegido en la pizarra ya NO se escribe en la plantilla (`store.updatePlayer`): vive
+   * en el documento del ejercicio. Cada ejercicio nuevo arranca con el mapa vacío, así que todos
+   * los jugadores empiezan con su color por defecto y no heredan nada del ejercicio anterior.
+   */
+  protected readonly playerColors = signal<MapaColoresJugador>({});
+
+  /** Paleta de la fila de un jugador de plantilla (azul, rojo, amarillo, naranja, morado). */
+  protected readonly paletaJugador = PALETA_JUGADOR;
+
+  /** Color con el que se pinta/coloca un jugador de plantilla en ESTE ejercicio. */
+  protected colorDeJugadorDe(p: Pick<Player, 'id' | 'color'>): string {
+    return colorDeJugador(this.playerColors(), p);
+  }
+
   /** Abre/cierra la mini-paleta de color de un jugador de plantilla. */
   protected toggleRosterColor(id: string, evt: Event): void {
     evt.stopPropagation();
     this.rosterColorOpen.set(this.rosterColorOpen() === id ? null : id);
   }
-  /** Aplica un color a la ficha del jugador y a las fichas YA colocadas con ese playerId. */
+
+  /**
+   * Aplica un color a la ficha del jugador DENTRO DE ESTE EJERCICIO y a las fichas ya colocadas
+   * con ese `playerId`.
+   *
+   * CONTRATO CORREGIDO (defecto del encargo): antes llamaba a `store.updatePlayer(id, { color })`,
+   * de modo que elegir un color en la pizarra modificaba PERMANENTEMENTE al jugador de la
+   * plantilla y, con él, todos los ejercicios. Ahora la plantilla no se toca nunca: el color se
+   * guarda en el documento (`playerColors`) y se marca el documento como modificado para que se
+   * persista al guardar.
+   */
   protected setRosterColor(id: string, c: string, evt: Event): void {
     evt.stopPropagation();
-    const p = this.players().find((x) => x.id === id);
-    if (p) this.store.updatePlayer(id, { color: c });
+    this.playerColors.set(conColorDeJugador(this.playerColors(), id, c));
     // Un jugador de plantilla colocado debe actualizar su color visible en el ejercicio.
-    this.frames.set(
-      this.frames().map((f) => ({
-        ...f,
-        elements: f.elements.map((e) => (e.t === 'player' && e.playerId === id ? { ...e, c } : e)),
-      })),
-    );
+    const repintadas = fichasDeJugador(this.frames(), id);
+    if (repintadas > 0) this.frames.set(pintarFichasDeJugador(this.frames(), id, c));
+    this.markDirty();
     this.rosterColorOpen.set(null);
   }
 
@@ -3007,7 +3362,8 @@ export class BoardComponent {
       label: p.name,
       player: {
         n: p.number ?? 0,
-        c: p.color,
+        // FASE 2: el arrastre al campo también usa el color del EJERCICIO.
+        c: this.colorDeJugadorDe(p),
         side: 'own',
         type: p.position === 'GK' ? 'goalkeeper' : undefined,
         playerId: p.id,
@@ -3449,6 +3805,8 @@ export class BoardComponent {
       grid: this.fieldGrid(),
       guide: this.guide(),
       f7: this.f7(),
+      // FASE 2: los colores de jugador de ESTE ejercicio viajan dentro del documento.
+      playerColors: this.playerColors(),
     };
   }
 

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 // Rect canónico de contenido (largo→X, ancho→Y) de un campo 105×68 en el viewBox 100×80.
 const RECT = { x: 4, y: 10, w: 92, h: (92 * 68) / 105 };
@@ -160,6 +161,7 @@ async function placeComodinAtCenter(page: Page): Promise<{ cx: number; cy: numbe
   const host = await hostBox(page);
   const cx = host.x + host.width / 2;
   const cy = host.y + host.height / 2;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();

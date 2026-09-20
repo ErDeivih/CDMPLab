@@ -9,6 +9,10 @@ import {
   orientationLabel,
   FIELD_BASE_SPECS,
   fieldObjectScale,
+  fieldSurface,
+  FUTSAL_SURFACE_COLOR,
+  FUTSAL_AREA_COLOR,
+  OFFICIAL_PITCH_COLOR,
 } from './field';
 import { FieldType } from './models';
 
@@ -319,13 +323,23 @@ describe('fieldGeometry — proporciones reales por tipo y orientación', () => 
     expect(fieldDimensions('third')).toEqual({ len: 35, wid: 68 });
   });
 
-  it('FASE 6: escala visual por campo (1 en completo; ~0,5 en medio/F7; igual en ambas orientaciones)', () => {
+  it('FASE 2 (materiales): escala por campo con la NUEVA política (compensación × factor aparente)', () => {
+    // CAMBIO DE CONTRATO INTENCIONADO (encargo de materiales, FASE 2): antes estos números eran la
+    // compensación geométrica pura (`len/105`), que hacía que los objetos se vieran PRÁCTICAMENTE
+    // IGUALES en todos los campos. El dueño pidió lo contrario: en los campos más cortos deben verse
+    // ALGO MAYORES. El factor aparente se calibró MIDIENDO píxeles en
+    // `e2e/fase-materiales-escala.spec.ts`; la política final es: campo completo 100 %, medio 120 %,
+    // tercio 128 %, fútbol sala 118 %, F7 118 % y lienzo 100 % (documentado).
     expect(fieldObjectScale('full', 'horizontal')).toBe(1);
     expect(fieldObjectScale('full', 'vertical')).toBe(1);
-    expect(fieldObjectScale('half', 'horizontal')).toBeCloseTo(0.5, 5);
-    expect(fieldObjectScale('vertical_half', 'vertical')).toBeCloseTo(0.5, 5);
-    expect(fieldObjectScale('f7', 'horizontal')).toBeCloseTo(0.5, 5);
-    expect(fieldObjectScale('third', 'horizontal')).toBeCloseTo(35 / 105, 5);
+    // La compensación geométrica sigue ahí (0,5 en medio campo) MULTIPLICADA por el factor aparente.
+    expect(fieldObjectScale('half', 'horizontal')).toBeCloseTo(0.5 * 1.62, 5);
+    expect(fieldObjectScale('vertical_half', 'vertical')).toBeCloseTo(0.5 * 1.62, 5);
+    expect(fieldObjectScale('f7', 'horizontal')).toBeCloseTo(0.5 * 1.99, 5);
+    expect(fieldObjectScale('third', 'horizontal')).toBeCloseTo((35 / 105) * 1.99, 5);
+    // Los campos RETIRADOS de la oferta conservan la apariencia de los documentos históricos.
+    expect(fieldObjectScale('two_halves', 'horizontal')).toBeCloseTo(1, 5);
+    expect(fieldObjectScale('box', 'horizontal')).toBeCloseTo(22 / 105, 5);
   });
 });
 
@@ -337,9 +351,11 @@ describe('fútbol sala (40×20) — geometría propia y marcas reglamentarias', 
     expect(fieldDimensions('futsal')).toEqual({ len: 40, wid: 20 });
   });
 
-  it('futsal: escala visual 40/105 (campo reducido), igual en ambas orientaciones', () => {
-    expect(fieldObjectScale('futsal', 'horizontal')).toBeCloseTo(40 / 105, 5);
-    expect(fieldObjectScale('futsal', 'vertical')).toBeCloseTo(40 / 105, 5);
+  it('futsal: escala con la política nueva (compensación 40/105 × 1,66), igual en ambas orientaciones', () => {
+    // CAMBIO DE CONTRATO INTENCIONADO (encargo de materiales, FASE 2): el fútbol sala debe verse un
+    // 10-25 % MAYOR que el campo completo, no igual (factor aparente medido: 1,18).
+    expect(fieldObjectScale('futsal', 'horizontal')).toBeCloseTo((40 / 105) * 1.66, 5);
+    expect(fieldObjectScale('futsal', 'vertical')).toBeCloseTo((40 / 105) * 1.66, 5);
   });
 
   it('futsal: el círculo central es de 3 m (no los 9,15 m del fútbol once)', () => {
@@ -467,9 +483,11 @@ describe('tercio de campo (35×68) — recorte medido del F11', () => {
     expect(fieldDimensions('third')).toEqual({ len: 35, wid: 68 });
   });
 
-  it('tercio: escala visual 35/105 (recorte 1/3), igual en ambas orientaciones', () => {
-    expect(fieldObjectScale('third', 'horizontal')).toBeCloseTo(35 / 105, 5);
-    expect(fieldObjectScale('third', 'vertical')).toBeCloseTo(35 / 105, 5);
+  it('tercio: escala con la política nueva (compensación 35/105 × 1,99), igual en ambas orientaciones', () => {
+    // CAMBIO DE CONTRATO INTENCIONADO (encargo de materiales, FASE 2): en el tercio los objetos
+    // deben verse un 20-35 % mayores que en campo completo (factor aparente medido: 1,28).
+    expect(fieldObjectScale('third', 'horizontal')).toBeCloseTo((35 / 105) * 1.99, 5);
+    expect(fieldObjectScale('third', 'vertical')).toBeCloseTo((35 / 105) * 1.99, 5);
   });
 
   it('tercio: dibuja portería, área pequeña, área penal y arco (marcas del extremo del F11)', () => {
@@ -840,26 +858,44 @@ describe('field — arcos de esquina (FASE 7)', () => {
     ).toBeCloseTo(68 * (92 / 105), 4);
   });
 
-  it('AUDITORÍA: la galería ofrece los campos base sin duplicar el medio campo', () => {
-    const required = ['full', 'half', 'third', 'box', 'futsal', 'f7', 'blank'];
+  it('AUDITORÍA: la galería ofrece los SEIS campos base sin duplicar el medio campo', () => {
+    // CORRECCIÓN URGENTE (dueño): la galería se queda con seis tarjetas. «Área y portería» (`box`)
+    // y «Dos medios campos» (`two_halves`) DEJAN DE OFRECERSE (el dueño no los usa), pero siguen
+    // admitidos y renderizándose para los ejercicios antiguos: eso se comprueba más abajo y en
+    // `store.spec.ts` (respaldos) y en las pruebas de carga de documentos históricos.
+    const required = ['full', 'half', 'third', 'futsal', 'f7', 'blank'];
     const types = FIELD_BASE_SPECS.map((s) => s.type);
     for (const r of required) expect(types, `falta ${r} en la galería`).toContain(r);
+    expect(types, 'la galería tiene exactamente los seis campos pedidos').toEqual(required);
     // DECISIÓN DE PRODUCTO (auditoría final): `vertical_half` NO se ofrece como tarjeta
     // propia porque su SVG es EXACTAMENTE el de `half` con orientación vertical: eran dos
     // tarjetas para el mismo campo. Sigue ADMITIDO para documentos antiguos
     // (`models.FIELD_TYPES`) y el normalizador lo migra a `half` + orientación vertical.
     expect(types, 'la galería no duplica el medio campo').not.toContain('vertical_half');
+    // Los campos retirados de la OFERTA tampoco aparecen como tarjeta.
+    expect(types, 'ni «Área y portería»').not.toContain('box');
+    expect(types, 'ni «Dos medios campos»').not.toContain('two_halves');
     // Y sigue pintándose igual que un medio campo (compatibilidad de render).
     expect(
       fieldSvg('vertical_half' as FieldType, H, 'vertical'),
       'el alias conserva su render',
     ).toBe(fieldSvg('half' as FieldType, H, 'vertical'));
     // Los campos VISUALMENTE distintos deben renderizarse cada uno con su propio dibujo real.
+    // Se incluyen los RETIRADOS DE LA OFERTA: un ejercicio antiguo con `box` o `two_halves` tiene
+    // que seguir dibujándose distinto (no en blanco, no como otro campo).
     const svg = (t: string) => fieldSvg(t as FieldType, H, 'horizontal');
     expect(
-      new Set([svg('full'), svg('half'), svg('third'), svg('box'), svg('futsal'), svg('f7')]).size,
+      new Set([
+        svg('full'),
+        svg('half'),
+        svg('third'),
+        svg('futsal'),
+        svg('f7'),
+        svg('box'),
+        svg('two_halves'),
+      ]).size,
       'los campos visualmente distintos se renderizan cada uno distinto',
-    ).toBe(6);
+    ).toBe(7);
     // 'blank' (lienzo) no dibuja ninguna marca.
     expect(svg('blank')).toBe('');
   });
@@ -1243,5 +1279,67 @@ describe('field — la miniatura de la galería aplica la orientación UNA sola 
       expect(svg, `${f}: sin rotación`).not.toContain('rotate(90)');
       expect(svg, `${f}: contenido canónico`).toContain(fieldSvg(f, geo.rect, 'horizontal'));
     }
+  });
+});
+
+// =============================================================
+// CORRECCIÓN URGENTE (dueño) — FÚTBOL SALA AZUL
+//
+// El campo de fútbol sala dejó de usar césped verde con franjas: ahora es una superficie azul
+// LISA con las áreas de penalti rellenas de un azul más claro y las líneas blancas por encima.
+// Estas pruebas son ESTRUCTURALES (qué se dibuja y en qué orden), no una búsqueda de un color
+// hexadecimal suelto: comprueban la superficie, la ausencia de franjas, el número de rellenos de
+// área, que el relleno va DETRÁS de las líneas y que la miniatura de la galería usa el mismo
+// diseño que el tablero.
+// =============================================================
+describe('field — fútbol sala azul (superficie lisa y áreas claras)', () => {
+  const ORDENACIONES: Array<'horizontal' | 'vertical'> = ['horizontal', 'vertical'];
+
+  it('la superficie de fútbol sala es azul LISA; el resto sigue con el césped oficial', () => {
+    expect(fieldSurface('futsal')).toEqual({ color: FUTSAL_SURFACE_COLOR, grass: 'plain' });
+    for (const f of ['full', 'half', 'third', 'f7', 'blank'] as FieldType[]) {
+      expect(fieldSurface(f), `${f} conserva el césped oficial`).toEqual({
+        color: OFFICIAL_PITCH_COLOR,
+        grass: 'stripes',
+      });
+    }
+    // El azul de la superficie y el de las áreas son DISTINTOS (el área se ve más clara).
+    expect(FUTSAL_SURFACE_COLOR).not.toBe(FUTSAL_AREA_COLOR);
+  });
+
+  for (const o of ORDENACIONES) {
+    it(`${o}: el área de penalti va rellena de azul claro y DEBAJO de las líneas blancas`, () => {
+      const g = fieldGeometry('futsal', o);
+      const svg = fieldSvg('futsal', g.rect, 'horizontal');
+      const rellenos = svg.split(`fill="${FUTSAL_AREA_COLOR}"`).length - 1;
+      expect(rellenos, 'dos áreas (una por portería)').toBe(2);
+      // El relleno pertenece a la capa de áreas y no lleva trazo propio: las líneas se dibujan aparte.
+      expect(svg.split('class="entrenolab-area-fill"').length - 1, 'dos figuras de relleno').toBe(
+        2,
+      );
+      // ORDEN: cada relleno aparece ANTES de las líneas DE SU ÁREA (los arcos de 6 m), que es lo que
+      // significa «el área clara va detrás de sus líneas blancas». No se compara con la primera
+      // línea blanca del SVG porque esa es el PERÍMETRO del campo, que se dibuja antes que todo.
+      const primerRelleno = svg.indexOf(FUTSAL_AREA_COLOR);
+      const primerArco = svg.indexOf('class="entrenolab-area-arc"');
+      expect(primerRelleno, 'hay relleno').toBeGreaterThan(-1);
+      expect(primerArco, 'hay arcos de área').toBeGreaterThan(-1);
+      expect(primerRelleno, 'el relleno va DETRÁS de las líneas del área').toBeLessThan(primerArco);
+      // Y el relleno cubre las dos porterías (una a cada extremo): sus dos figuras están separadas.
+      const posiciones = [...svg.matchAll(new RegExp(FUTSAL_AREA_COLOR, 'g'))].map((m) => m.index!);
+      expect(posiciones.length).toBe(2);
+      expect(Math.abs(posiciones[1] - posiciones[0]), 'una por extremo').toBeGreaterThan(200);
+    });
+  }
+
+  it('la miniatura de la galería usa el MISMO diseño: azul de superficie, sin césped verde', () => {
+    for (const o of ORDENACIONES) {
+      const svg = fieldPreviewSvg('futsal', o);
+      expect(svg, `${o}: superficie azul`).toContain(FUTSAL_SURFACE_COLOR);
+      expect(svg, `${o}: áreas claras`).toContain(FUTSAL_AREA_COLOR);
+      expect(svg, `${o}: sin verde de césped`).not.toContain(OFFICIAL_PITCH_COLOR);
+    }
+    // Y la miniatura de un campo de césped SÍ lleva el verde (control: no se ha pintado todo igual).
+    expect(fieldPreviewSvg('full', 'horizontal')).toContain(OFFICIAL_PITCH_COLOR);
   });
 });

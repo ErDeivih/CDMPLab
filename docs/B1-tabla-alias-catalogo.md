@@ -12,7 +12,7 @@ Fuente: `src/app/core/material-registry.ts` (`CANONICAL_MATERIALS`, `MATERIAL_AL
 | `cone` | Cono | Cono | ✅ |
 | `target` | Diana | **Chino** (disco plano, recoloreable) | ✅ |
 | `flag` | Banderín | Banderín | ✅ |
-| `pica` | Pica coloreable | Pica coloreable | ✅ |
+| `pica` | Pica coloreable | Pica | ✅ |
 | `pole` | Pértiga | Pértiga / poste | ✅ |
 | `mannequin` | Maniquí | Maniquí individual | ✅ |
 | `mannequin_row` | — | Barrera de maniquíes | ✅ |

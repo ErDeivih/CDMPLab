@@ -25,7 +25,7 @@ import {
   normToScreen,
   showCategory,
 } from './board-helpers';
-import { longPress } from './gesture-helpers';
+import { longPress, toggleFillScreen } from './gesture-helpers';
 
 /** Botones que debe ofrecer el menú contextual del elemento. */
 const CTX_BUTTONS = [
@@ -161,7 +161,7 @@ const ESCENARIOS: Escenario[] = [
       const host = page.locator('.board-host');
       const cls = (await host.getAttribute('class')) ?? '';
       if (!cls.includes('board-fill')) {
-        await page.locator('.field-fit-toggle').click();
+        await toggleFillScreen(page);
         await expect(host).toHaveClass(/board-fill/);
       }
     },

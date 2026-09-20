@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -53,7 +54,7 @@ function recordPlaced(kind: keyof Manifest, title: string): void {
 // ---------- Tipo de elemento (modelo real) por título de herramienta ----------
 const MATERIAL_TYPE: Record<string, string> = {
   'Balón': 'ball', 'Fitball': 'vball', 'Cono': 'cone', 'BOSU': 'marker',
-  'Banderín': 'flag', 'Chino': 'target', 'Pica coloreable': 'pica',
+  'Banderín': 'flag', 'Chino': 'target', 'Pica': 'pica',
   'Pértiga / poste': 'pole', 'Maniquí individual': 'mannequin',
   'Barrera de maniquíes': 'mannequin_row', 'Miniportería': 'minigoal',
   'Portería grande': 'goal', 'Valla': 'hurdle', 'Aro': 'ring',
@@ -122,6 +123,7 @@ async function useTool(page: Page, title: string, category?: string): Promise<vo
     // FASE B: el catálogo persiste abierto; solo se abre si su herramienta no está
     // visible (un re-toggle la cerraría).
     if (!(await page.locator(`.rail-btn[title="${title}"]`).isVisible().catch(() => false))) {
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: category }).click();
     }
   }
@@ -141,6 +143,7 @@ async function useTool(page: Page, title: string, category?: string): Promise<vo
 async function openCatalog(page: Page, category: string): Promise<void> {
   const probe = category === 'Jugadores' ? '.side-panel-left[aria-label="Jugadores"]' : '.side-panel-left.tools-panel-side';
   if (await page.locator(probe).isVisible().catch(() => false)) return;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: category }).click();
 }
 
@@ -238,6 +241,7 @@ async function placeMaterial(page: Page, host: Box, fit: Fit, title: string, nx:
   const input = page.locator('.tools-search-input');
   // FASE B: abrir Material solo si no está ya abierto (evitar re-toggle).
   if (!(await input.isVisible().catch(() => false))) {
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
   }
   await input.fill('');
@@ -320,7 +324,7 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     const fit = await fitMode(page);
     const items = [
       'Balón', 'Fitball', 'Cono', 'BOSU', 'Banderín',
-      'Chino', 'Pica coloreable', 'Pértiga / poste', 'Maniquí individual', 'Barrera de maniquíes',
+      'Chino', 'Pica', 'Pértiga / poste', 'Maniquí individual', 'Barrera de maniquíes',
     ];
     const cols = [0.2, 0.5, 0.8];
     const rows = [0.15, 0.33, 0.51, 0.69];
@@ -457,6 +461,7 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     await seed(page);
     await openBoard(page);
 
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     const materialTitles = await page.locator('.side-panel-left .rail-btn').evaluateAll((els) =>
@@ -464,6 +469,7 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     );
     await page.keyboard.press('Escape');
 
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     // El panel de Dibujo ofrece también BORRAR, que NO crea ningún elemento (es un modo de

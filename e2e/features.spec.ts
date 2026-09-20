@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas, fitMode, normToScreen } from './board-helpers';
 import fs from 'node:fs';
-import { longPress, fillBoardTitle } from './gesture-helpers';
+import { abrirAjustes, longPress, fillBoardTitle } from './gesture-helpers';
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -60,6 +61,7 @@ async function openCat(page: Page, category: string): Promise<void> {
       .catch(() => false)
   )
     return;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: category }).click();
   await expect(page.locator(probe[category])).toBeVisible();
 }
@@ -243,6 +245,7 @@ test.describe('EntrenoLab funcionalidades', () => {
       .locator('.chip[data-orient="vertical"]')
       .click();
     // Un jugador (genérico): tocar el genérico ARMA la colocación. FASE B: el panel no se cierra.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .tray-player[title="Jugador Azul"]').click();
     await expect(page.locator('.field-count')).toHaveText('0');
@@ -254,7 +257,11 @@ test.describe('EntrenoLab funcionalidades', () => {
 
     // Guardar → biblioteca.
     await fillBoardTitle(page, 'OrientacionVertical');
-    await page.locator('[title="Guardar ejercicio"]').click();
+    // CONTRATO ACTUALIZADO (defecto 2): el botón de guardar ya no usa el `title` fijo «Guardar
+    // ejercicio»; su `title` y su `aria-label` dicen el ESTADO («Guardar»/«Guardando…»/«Guardado»)
+    // porque el estado de guardado se integró en el propio botón al retirar la franja del campo.
+    // El observable estable es su clase.
+    await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
 
     // Reabrir desde la tarjeta.
@@ -340,6 +347,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     const cy = box.y + box.height * 0.5;
 
     // Colocar un cono en el centro (material con PNG).
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(cx, cy);
@@ -642,6 +650,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
     // El Material vive ahora en el panel inferior desplegable (no en Propiedades).
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.4);
@@ -665,6 +674,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
     // Activar una herramienta de dibujo (muestra la paleta) y elegir rojo.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Rectángulo"]').click();
     await page.locator('.tools-caption .swatch').nth(1).click(); // rojo
@@ -1025,6 +1035,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     expect(await page.locator('.board-canvas svg').innerHTML()).not.toContain('#f6c945');
 
     // Editar el documento (colocar un jugador) mantiene los fotogramas.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .tray-player[title="Jugador Azul"]').click();
     await expect(page.locator('.field-count')).toHaveText('1'); // aún no coloca: está armado
@@ -1111,6 +1122,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
     // Colocar un cono en el centro.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
@@ -1149,6 +1161,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   test('coloca jugadores desde el panel Jugadores', async ({ page }) => {
     await seed(page);
     await page.goto('/board');
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     // La plantilla tiene los 2 jugadores del seed (los genéricos están aparte).
@@ -1182,6 +1195,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await vert.click();
     await expect(vert).toHaveClass(/chip-active/);
 
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .roster-item').first().click();
     await expect(page.locator('.field-count')).toHaveText('0'); // armado, aún no coloca
@@ -1196,6 +1210,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     const box = (await page.locator('.board-host').boundingBox())!;
     const pt = (fx: number, fy: number) =>
       [box.x + box.width * fx, box.y + box.height * fy] as const;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.tray-player[title="Jugador Azul"]').click();
     await expect(page.locator('.field-count')).toHaveText('0'); // armado, aún no coloca
@@ -1264,6 +1279,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   test('un jugador de plantilla no se duplica en la pizarra', async ({ page }) => {
     await seed(page);
     await page.goto('/board');
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     const first = page.locator('.side-panel-left .roster-item').first();
     await first.click();
@@ -1505,16 +1521,21 @@ test.describe('EntrenoLab funcionalidades', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
-    // Colocar un jugador de plantilla (primer slot: normalizado 0.1, 0.38).
+    // Colocar un jugador de plantilla (zona izquierda del campo, fuera del panel abierto).
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .roster-item').first().click();
     await expect(page.locator('.field-count')).toHaveText('0'); // armado, aún no coloca
-    // Mapear normalizado → pantalla (inversa de screenToNorm, con letterboxing; zoom=1, pan=0).
-    const s = Math.min(box.width / 100, box.height / 80);
-    const offX = (box.width - 100 * s) / 2;
-    const offY = (box.height - 80 * s) / 2;
-    const sx = box.x + offX + (0.1 * 92 + 4) * s;
-    const sy = box.y + offY + (0.38 * 59.58 + 10) * s;
+    // MEDICIÓN QUE CORRIGE LA PRUEBA (no la app): antes se calculaba a mano la inversa de
+    // screenToNorm con una fórmula aproximada (sin los márgenes del campo). Al retirar la barra
+    // inferior (FASE 3) el campo GANA 57 px de alto, su escala crece y aquel punto aproximado caía
+    // por debajo del panel de Jugadores abierto (medido: el clic lo recibía `ASIDE.side-panel-left` y
+    // no se colocaba nada). Se usa el mapeo canónico (`normToScreen`) y un punto algo más al centro,
+    // libre del panel que cubre el borde izquierdo del campo.
+    const fit = await fitMode(page);
+    const punto = normToScreen(0.16, 0.38, box, fit);
+    const sx = punto.x;
+    const sy = punto.y;
     await page.mouse.click(sx, sy); // el clic en el campo coloca al jugador ahí
     await expect(page.locator('.field-count')).toHaveText('1');
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
@@ -1533,6 +1554,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     const y = box.y + box.height * 0.5;
 
     // Un cono.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(x, y);
@@ -1598,6 +1620,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     const offY = (box.height - 80 * s) / 2;
     const placeX = box.x + offX + (0.5 * 92 + 4) * s;
     const placeY = box.y + offY + (0.5 * (92 / (105 / 68)) + 10) * s;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(placeX, placeY);
@@ -1674,6 +1697,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     // `innerHTML`) y `boundingBox()` devuelve `null`—, y eso hizo rojo este test en CI tres veces
     // (`d6dc9b2`, `5ec0656`, `4211e3a`) con un `TypeError` que no decía nada del producto.
     const centro = { x: box.x + box.width * 0.5, y: box.y + box.height * 0.5 };
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(centro.x, centro.y);
@@ -1723,6 +1747,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     const x = box.x + box.width * 0.45;
     const y = box.y + box.height * 0.5;
     // Cono.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(x, y);
@@ -1858,6 +1883,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await seed(page);
     await page.goto('/board');
     // El Material (con variantes) vive en el panel inferior desplegable.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     const card = page.locator('.tools-material-card', { hasText: 'Cono' });
     const variants = card.locator('.tools-material-variants');
@@ -1877,6 +1903,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
     // Categoría Material en la barra inferior.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.5);
@@ -1928,6 +1955,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   test('long-press en la barra abre el selector de variantes y no coloca', async ({ page }) => {
     await seed(page);
     await page.goto('/board');
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     const cone = page.locator('.rail-btn[title="Cono"]');
     const b = (await cone.boundingBox())!;
@@ -1948,6 +1976,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   }) => {
     await seed(page);
     await page.goto('/board');
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     const cone = page.locator('.rail-btn[title="Cono"]');
     const b = (await cone.boundingBox())!;
@@ -2010,6 +2039,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   }) => {
     await seed(page);
     await page.goto('/board');
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     const cone = page.locator('.rail-btn[title="Cono"]');
     const b = (await cone.boundingBox())!;
@@ -2066,6 +2096,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   }) => {
     await seed(page);
     await page.goto('/board');
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     const cone = page.locator('.rail-btn[title="Cono"]');
     const b = (await cone.boundingBox())!;
@@ -2149,6 +2180,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   }) => {
     await seed(page);
     await page.goto('/board');
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     const cone = page.locator('.rail-btn[title="Cono"]');
     const b = (await cone.boundingBox())!;
@@ -2199,6 +2231,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await ti.dispatchEvent('change');
     await expect(page.locator('.field-count')).toHaveText('3');
     // Material PNG desde la barra.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     [x, y] = pt(0.6, 0.6);
@@ -2295,7 +2328,7 @@ test.describe('EntrenoLab funcionalidades', () => {
   }) => {
     await seed(page);
     await page.goto('/team');
-    await page.locator('[title="Ajustes"]').click();
+    await abrirAjustes(page);
     await expect(page.locator('.settings')).toBeVisible();
 
     // Exportar → descarga con contenido versionado y los datos actuales.

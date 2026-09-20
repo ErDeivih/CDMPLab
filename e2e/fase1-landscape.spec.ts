@@ -1,7 +1,12 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 
-const LANDSCAPE: Array<[number, number]> = [[800, 360], [844, 390], [932, 430]];
+const LANDSCAPE: Array<[number, number]> = [
+  [800, 360],
+  [844, 390],
+  [932, 430],
+];
 const SHOTS = 'e2e/shots/fase1-landscape';
 fs.mkdirSync(SHOTS, { recursive: true });
 
@@ -30,12 +35,20 @@ test.describe('Fase 1 — móvil en horizontal: la pizarra compacta es realmente
   test.use({ hasTouch: true });
 
   for (const [W, H] of LANDSCAPE) {
-    test(`[${W}x${H}] el campo es el protagonista: campo que llena, barra de una fila, sin overflow`, async ({ page }) => {
+    test(`[${W}x${H}] el campo es el protagonista: campo que llena, barra de una fila, sin overflow`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: W, height: H });
       await page.addInitScript(seed());
       await page.goto('/board');
       await expect(page.locator('.board-host')).toBeVisible();
-      if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+      if (
+        await page
+          .locator('.help-close')
+          .isVisible()
+          .catch(() => false)
+      )
+        await page.locator('.help-close').click();
       await page.waitForTimeout(300);
 
       // Sin preferencia guardada → "Llenar pantalla" por defecto.
@@ -52,21 +65,38 @@ test.describe('Fase 1 — móvil en horizontal: la pizarra compacta es realmente
       const toolsTop = tools.y + tools.height;
       expect(toolsBottomWithin(tools, H), 'la barra inferior no se sale de la pantalla').toBe(true);
 
-      // El host aprovecha prácticamente toda la altura entre el final de la barra de
-      // estado del campo (.field-status) y la barra inferior (la pista de herramienta
-      // se oculta en compactos; queda el 44px del toggle de pantalla).
+      // El campo aprovecha prácticamente toda la altura entre el FINAL DE LA CABECERA y la barra
+      // inferior. CONTRATO ACTUALIZADO (defecto corregido): el dueño retiró la franja de estado
+      // (`.field-status`), que era la banda negra que se comía la parte superior del campo; esta
+      // prueba medía esa franja, así que ahora mide contra `.studio-top` y comprueba además que
+      // la franja ya NO existe y que no queda hueco entre cabecera y campo.
       const host = await box(page, '.board-host');
-      const fs = await box(page, '.field-status');
-      const usable = tools.y - (fs.y + fs.height);
+      await expect(page.locator('.field-status'), 'la franja de estado está retirada').toHaveCount(
+        0,
+      );
+      const hueco = host.y - (header.y + header.height);
+      expect(
+        hueco,
+        'el campo arranca pegado a la cabecera (sin hueco residual)',
+      ).toBeLessThanOrEqual(8);
+      const usable = tools.y - (header.y + header.height);
       expect(usable, 'hay espacio utilizable para el campo').toBeGreaterThan(80);
-      expect(host.height, 'host alto respecto al espacio usable').toBeGreaterThanOrEqual(usable * 0.9);
+      expect(host.height, 'host alto respecto al espacio usable').toBeGreaterThanOrEqual(
+        usable * 0.9,
+      );
       // FASE 1 (móvil horizontal): en "Llenar pantalla" (cover) el campo CUBRE el host:
       // en landscape aprovecha el ANCHO (>=85%) y sobresale en altura (se panea).
       const grass = await box(page, '.entrenolab-grass');
-      expect(grass.width, 'el césped es más ancho que alto (campo horizontal)').toBeGreaterThan(grass.height);
-      expect(grass.width, 'el campo aprovecha el ancho disponible').toBeGreaterThanOrEqual(host.width * 0.85);
+      expect(grass.width, 'el césped es más ancho que alto (campo horizontal)').toBeGreaterThan(
+        grass.height,
+      );
+      expect(grass.width, 'el campo aprovecha el ancho disponible').toBeGreaterThanOrEqual(
+        host.width * 0.85,
+      );
       // Cover: el campo CUBRE el host (al menos una dimensión llena; puede sobresalir en la otra).
-      expect(grass.height, 'el campo cubre la altura (no queda contenido)').toBeGreaterThanOrEqual(host.height - 2);
+      expect(grass.height, 'el campo cubre la altura (no queda contenido)').toBeGreaterThanOrEqual(
+        host.height - 2,
+      );
       // Proporción del campo 105:68 → ancho/alto ≈ 1.54 en modo fill (no una columna vertical).
       const ratio = grass.width / grass.height;
       expect(ratio, 'relación ancho/alto del campo (≈1.5, no vertical)').toBeGreaterThan(1.3);
@@ -76,36 +106,56 @@ test.describe('Fase 1 — móvil en horizontal: la pizarra compacta es realmente
       const ov = await page.evaluate(() => {
         const d = document.documentElement;
         const studio = document.querySelector('.studio') as HTMLElement | null;
-        return { doc: d.scrollWidth - d.clientWidth, studio: studio ? studio.scrollWidth - studio.clientWidth : 0, body: document.body.scrollWidth - document.body.clientWidth };
+        return {
+          doc: d.scrollWidth - d.clientWidth,
+          studio: studio ? studio.scrollWidth - studio.clientWidth : 0,
+          body: document.body.scrollWidth - document.body.clientWidth,
+        };
       });
       expect(ov.doc, 'sin overflow de documento').toBeLessThanOrEqual(1);
       expect(ov.studio, 'sin overflow de .studio').toBeLessThanOrEqual(1);
       expect(ov.body, 'sin overflow de body').toBeLessThanOrEqual(1);
 
       // Controles de la barra en UNA sola fila (la leyenda de la herramienta se oculta).
-      const captionDisplay = await page.locator('.tools-caption').first().evaluate((el) => getComputedStyle(el).display);
-      expect(captionDisplay, 'la leyenda de herramienta ocupa su fila solo si es de color').toBe('none');
+      const captionDisplay = await page
+        .locator('.tools-caption')
+        .first()
+        .evaluate((el) => getComputedStyle(el).display);
+      expect(captionDisplay, 'la leyenda de herramienta ocupa su fila solo si es de color').toBe(
+        'none',
+      );
 
       // Abrir/cerrar cada panel no altera el tamaño del host (son overlays).
       const hostBefore = (await box(page, '.board-host')).height;
       for (const cat of ['Jugadores', 'Material', 'Dibujo']) {
+        await abrirHerramientas(page);
         await page.locator('.tools-cat', { hasText: cat }).click();
         await expect(page.locator('.side-panel-left')).toBeVisible();
         await page.locator('.side-panel-left .panel-close').first().click();
         await expect(page.locator('.side-panel-left')).toHaveCount(0);
       }
       const hostAfter = (await box(page, '.board-host')).height;
-      expect(Math.abs(hostAfter - hostBefore), 'abrir/cerrar paneles no cambia la altura del host').toBeLessThanOrEqual(2);
+      expect(
+        Math.abs(hostAfter - hostBefore),
+        'abrir/cerrar paneles no cambia la altura del host',
+      ).toBeLessThanOrEqual(2);
 
       // FASE 1 (capturas): pista de llenado visible, y luego tras cerrarla.
       await page.locator('.board-host').screenshot({ path: `${SHOTS}/pizarra-${W}x${H}.png` });
       // La pista de "Llenar pantalla" se cierra y no permanece tapando el campo.
-      if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) {
+      if (
+        await page
+          .locator('.fill-hint-close')
+          .isVisible()
+          .catch(() => false)
+      ) {
         await page.locator('.fill-hint-close').click();
       }
       // FASE G: la pista se espera con el `toHaveCount(0)` siguiente (observable).
       await expect(page.locator('.fill-hint'), 'la pista de llenado se cierra').toHaveCount(0);
-      await page.locator('.board-host').screenshot({ path: `${SHOTS}/pizarra-${W}x${H}-sin-pista.png` });
+      await page
+        .locator('.board-host')
+        .screenshot({ path: `${SHOTS}/pizarra-${W}x${H}-sin-pista.png` });
     });
   }
 });

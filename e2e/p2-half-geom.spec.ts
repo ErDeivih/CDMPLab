@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import { fieldGeometry, FIELD_LINE_WIDTH, F7_LINE_COLOR } from '../src/app/core/field';
 import { fillBoardTitle } from './gesture-helpers';
@@ -109,6 +110,7 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     // el wait fijo post-campo era redundante.
     const box = (await page.locator('.board-host').boundingBox())!;
     // Colocar un jugador Portero en el punto norm (0.25, 0.35).
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .tray-player[title="Jugador Azul"]').click();
     const [sx, sy] = normToScreen(0.25, 0.35, box, g);

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 
@@ -208,6 +209,7 @@ async function twoFinger(page: Page, cx: number, cy: number, spreads: number[]):
 
 /** Coloca un Portero en un norm (horizontal) y devuelve su centro en pantalla. */
 async function placeComodinAt(page: Page, nx: number, ny: number, expectCount = 1): Promise<Pt> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -231,6 +233,7 @@ async function placeComodinAt(page: Page, nx: number, ny: number, expectCount = 
 
 /** Coloca un Portero en el CENTRO del host (funciona en horizontal y vertical). */
 async function placeComodinAtCenter(page: Page, expectCount = 1): Promise<Pt> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
@@ -252,6 +255,7 @@ async function placeComodinAtCenter(page: Page, expectCount = 1): Promise<Pt> {
 
 /** Coloca un Cono (material) en un norm (horizontal) y devuelve su centro. */
 async function placeConeAt(page: Page, nx: number, ny: number, expectCount = 1): Promise<Pt> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
   // FASE B (paneles persistentes): el panel Material sigue abierto y en móvil tapa el centro
@@ -272,6 +276,7 @@ async function placeConeAt(page: Page, nx: number, ny: number, expectCount = 1):
 
 /** Arma una colocación (Cono) sin colocar nada. */
 async function armCone(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
   await page.locator('.rail-btn[title="Cono"]').click();
 }

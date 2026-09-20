@@ -1,5 +1,17 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  Injector,
+  signal,
+  viewChild,
+  type Signal,
+} from '@angular/core';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { StoreService } from './core/store.service';
 import { ConfirmService } from './core/confirm.service';
 import { SupabaseService } from './core/supabase.service';
@@ -24,6 +36,30 @@ export class App {
   private readonly supabase = inject(SupabaseService);
   private readonly access = inject(AccessService);
   private readonly router = inject(Router);
+
+  constructor() {
+    // `enAuth` tiene que seguir al router: sin esto, entrar en /auth/login desde la app dejaba la
+    // navegación del shell pintada encima del formulario. `enPizarra` (FASE 4) sigue al router por
+    // el mismo motivo: dentro de /board la navegación global NO se muestra en móvil, y al salir
+    // tiene que volver.
+    this.router.events
+      .pipe(
+        filter((e) => e instanceof NavigationEnd),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => {
+        this.enAuth.set(this.router.url.startsWith('/auth'));
+        this.enPizarra.set(this.router.url.startsWith('/board'));
+      });
+    this.enPizarra.set(this.router.url.startsWith('/board'));
+  }
+
+  /**
+   * FASE 4.1: dentro de la pizarra la navegación global inferior se oculta por completo en móvil
+   * (Plantilla, Pizarra, Biblioteca, Sesiones y Más) para que el campo use toda la pantalla. Las
+   * demás pantallas la conservan. La salida de la pizarra es el botón «Volver» del encabezado.
+   */
+  protected readonly enPizarra = signal(false);
 
   protected readonly activeTeam = this.store.activeTeam;
   /** Equipos del usuario: con más de uno, la cabecera ofrece cambiar de equipo. */
@@ -57,11 +93,21 @@ export class App {
   protected readonly isAuthenticated = computed(() => this.supabase.status() === 'authenticated');
 
   /**
+   * ¿Estamos en una ruta de autenticación? Se mantiene al día con los eventos del router.
+   * Hace falta porque en modo local `status` NO es 'unauthenticated', así que sin esta comprobación
+   * la navegación del shell (barra inferior en móvil y botón de cuenta) aparecía también en las
+   * pantallas de acceso, donde no pinta nada.
+   */
+  protected readonly enAuth = signal(this.router.url.startsWith('/auth'));
+
+  /**
    * Muestra la navegación protegida salvo que ya esté claro que NO hay sesión.
    * (Durante `resolving` se muestra igualmente: el app initializer resuelve la
    * sesión antes del primer render; los guards se encargan de la protección real.)
    */
-  protected readonly showNav = computed(() => this.supabase.status() !== 'unauthenticated');
+  protected readonly showNav = computed(
+    () => this.supabase.status() !== 'unauthenticated' && !this.enAuth(),
+  );
 
   protected async logout(): Promise<void> {
     await this.supabase.signOut();
@@ -72,9 +118,17 @@ export class App {
   protected readonly settingsOpen = signal(false);
   protected openSettings(): void {
     this.settingsOpen.set(true);
+    // Ajustes también es una capa modal: el fondo sigue inerte y el foco entra en el diálogo.
+    this.marcarInerte(true);
+    this.enfocarEnDialogo(this.settingsPanel, 'button[aria-label="Cerrar"]');
   }
   protected closeSettings(): void {
     this.settingsOpen.set(false);
+    // El foco vuelve al disparador de Cuenta/Más que abrió la cadena (se conserva en `openSettings`).
+    const trigger = this.cuentaTrigger;
+    this.cuentaTrigger = null;
+    this.marcarInerte(false);
+    queueMicrotask(() => trigger?.focus());
   }
   protected resetData(): void {
     // En modo remoto esto SOLO limpia la caché local (`entrenolab:*`): la sesión de
@@ -210,4 +264,163 @@ export class App {
     const members: NavItem = { label: 'Miembros', href: '/settings/team/members', icon: 'people' };
     return this.access.target().role === 'editor' ? base : [...base, members];
   });
+
+  /** Destinos PRINCIPALES. En móvil la barra inferior muestra estos cuatro + «Más». */
+  protected readonly destinosPrincipales = computed<NavItem[]>(() =>
+    this.navItems().filter((i) => i.href !== '/settings/team/members'),
+  );
+
+  /** «Miembros» solo cuando corresponde por permisos (ver `navItems`). Vive en «Más»/cuenta. */
+  protected readonly miembrosItem = computed<NavItem | null>(
+    () => this.navItems().find((i) => i.href === '/settings/team/members') ?? null,
+  );
+
+  // ---------- Menú de cuenta (escritorio: bajo la barra lateral; móvil: «Más») ----------
+
+  /** Control que abrió el menú: al cerrarlo el foco vuelve ahí (requisito de accesibilidad). */
+  private cuentaTrigger: HTMLElement | null = null;
+  protected readonly cuentaAbierta = signal(false);
+
+  /**
+   * Contenedor de la app entera (`.shell`). Mientras hay una capa abierta —el menú de cuenta o
+   * Ajustes— se marca `inert`: así NINGÚN control que queda detrás de la capa puede recibir foco
+   * con Tab (defecto reportado: el foco se colaba a los controles tapados por el menú).
+   *
+   * Se marca y se desmarca a mano, no con `[attr.inert]`, porque al cerrar hay que RETIRARLO ANTES
+   * de devolver el foco al disparador: dentro de un subárbol inerte `focus()` no hace nada y el
+   * foco se perdería en silencio.
+   */
+  private readonly appShell = viewChild<ElementRef<HTMLElement>>('appShell');
+  private readonly cuentaPanel = viewChild<ElementRef<HTMLElement>>('cuentaPanel');
+  private readonly settingsPanel = viewChild<ElementRef<HTMLElement>>('settingsPanel');
+  /** Necesario para poder usar `afterNextRender` fuera del constructor (gestión del foco). */
+  private readonly injector = inject(Injector);
+
+  private marcarInerte(inerte: boolean): void {
+    const el = this.appShell()?.nativeElement;
+    if (!el) return;
+    if (inerte) el.setAttribute('inert', '');
+    else el.removeAttribute('inert');
+  }
+
+  /**
+   * Lleva el foco al primer control del diálogo (en los dos diálogos es el botón Cerrar).
+   *
+   * Se usa `afterNextRender` y no `queueMicrotask`: cuando se abre la capa (`@if`) el elemento
+   * todavía NO existe en el DOM, y un microtask se ejecuta ANTES de que Angular pinte el diálogo
+   * (medido: el foco no entraba y la prueba lo detectó). Además el `viewChild` se lee DENTRO del
+   * callback, cuando ya está resuelto.
+   */
+  private enfocarEnDialogo(
+    panel: Signal<ElementRef<HTMLElement> | undefined>,
+    selector: string,
+  ): void {
+    afterNextRender(() => panel()?.nativeElement.querySelector<HTMLElement>(selector)?.focus(), {
+      injector: this.injector,
+    });
+  }
+
+  /** Nombre del equipo activo, recortado para el botón compacto. */
+  protected readonly equipoCorto = computed(() => {
+    const nombre = this.activeTeam()?.name ?? 'Sin equipo';
+    return nombre.length > 18 ? `${nombre.slice(0, 17)}…` : nombre;
+  });
+
+  protected toggleCuenta(event: Event): void {
+    if (this.cuentaAbierta()) {
+      this.cerrarCuenta();
+      return;
+    }
+    this.cuentaTrigger = (event.currentTarget as HTMLElement) ?? null;
+    this.cuentaAbierta.set(true);
+    // El fondo queda inerte y el foco entra en el diálogo (primer control: Cerrar).
+    this.marcarInerte(true);
+    this.enfocarEnDialogo(this.cuentaPanel, 'button[aria-label="Cerrar el menú de cuenta"]');
+  }
+
+  /** Cierra el menú y DEVUELVE EL FOCO al control que lo abrió. */
+  protected cerrarCuenta(): void {
+    if (!this.cuentaAbierta()) return;
+    this.cuentaAbierta.set(false);
+    const trigger = this.cuentaTrigger;
+    this.cuentaTrigger = null;
+    // Quitar `inert` ANTES de enfocar: si no, el disparador sigue inerte y no recibe el foco.
+    this.marcarInerte(false);
+    queueMicrotask(() => trigger?.focus());
+  }
+
+  /**
+   * Abre Ajustes desde el menú de cuenta (cerrándolo antes, para no dejar dos capas). El disparador
+   * de Cuenta/Más SE CONSERVA: cuando se cierre Ajustes el foco vuelve ahí, que es el control desde
+   * el que el usuario empezó la secuencia (antes se descartaba y el foco se quedaba en el vacío).
+   */
+  protected ajustesDesdeCuenta(): void {
+    this.cuentaAbierta.set(false);
+    this.openSettings();
+  }
+
+  /** Cambiar de equipo desde el menú: se cierra para no dejarlo descolgado del equipo nuevo. */
+  protected switchTeamDesdeCuenta(evt: Event): void {
+    this.switchTeam(evt);
+    this.cerrarCuenta();
+  }
+
+  protected async logoutDesdeCuenta(): Promise<void> {
+    this.cuentaAbierta.set(false);
+    this.cuentaTrigger = null;
+    // CRÍTICO: hay que retirar el `inert` del fondo aunque no se devuelva el foco. Si no, la
+    // pantalla de login (dentro de `.shell`) quedaría INERTE y sin poder pulsar nada.
+    this.marcarInerte(false);
+    await this.logout();
+  }
+
+  /** Escape cierra el menú (el foco vuelve al botón) sin tocar el resto de atajos. */
+  protected onCuentaKeydown(evt: KeyboardEvent): void {
+    if (evt.key === 'Escape' && this.cuentaAbierta()) {
+      evt.stopPropagation();
+      this.cerrarCuenta();
+      return;
+    }
+    if (evt.key === 'Tab') this.atraparTab(evt, this.cuentaPanel);
+  }
+
+  /** Lo mismo para el diálogo de Ajustes (también es modal). */
+  protected onAjustesKeydown(evt: KeyboardEvent): void {
+    if (evt.key === 'Tab') this.atraparTab(evt, this.settingsPanel);
+  }
+
+  /**
+   * Mantiene el TECLADO dentro del diálogo: al llegar al último control, Tab vuelve al primero y
+   * Shift+Tab al revés.
+   *
+   * Medido: con solo el fondo `inert`, Tab desde el último control del menú se iba a `body` (fuera
+   * de la capa), así que el requisito «Tab/Shift+Tab no salen del diálogo» NO se cumplía. El fondo
+   * inerte evita alcanzar los controles tapados; esta función cierra el ciclo.
+   */
+  private atraparTab(evt: KeyboardEvent, panel: Signal<ElementRef<HTMLElement> | undefined>): void {
+    const contenedor = panel()?.nativeElement;
+    if (!contenedor) return;
+    const focusables = [
+      ...contenedor.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), select, input, textarea, [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter((el) => el.getClientRects().length > 0);
+    if (focusables.length === 0) {
+      evt.preventDefault();
+      return;
+    }
+    const primero = focusables[0];
+    const ultimo = focusables[focusables.length - 1];
+    const activo = document.activeElement as HTMLElement | null;
+    const dentro = !!activo && contenedor.contains(activo);
+    if (evt.shiftKey) {
+      if (!dentro || activo === primero) {
+        evt.preventDefault();
+        ultimo.focus();
+      }
+    } else if (!dentro || activo === ultimo) {
+      evt.preventDefault();
+      primero.focus();
+    }
+  }
 }

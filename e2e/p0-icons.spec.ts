@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 // Todos los nombres de ligadura que usa la app (a partir del audit de fuentes).
 // Si un nombre no existe en la fuente autoalojada, el navegador lo pinta como
@@ -92,12 +93,14 @@ test.describe('Iconos: la fuente Material Symbols autoalojada pinta cada ligadur
     await page.locator('.board-host').waitFor();
 
     // Abrir los paneles que contienen iconos para inspeccionarlos.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.side-panel-left').waitFor();
     // Cerrar el panel antes de cambiar de categoría: en escritorio el panel izquierdo
     // (Fase 15) solapa los botones de categoría del raíl (Jugadores/Material/Dibujo).
     await page.keyboard.press('Escape');
     await page.locator('.side-panel-left').waitFor({ state: 'detached' });
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.side-panel-left').waitFor();
     await page.locator('button[aria-label="Exportar"]').click();

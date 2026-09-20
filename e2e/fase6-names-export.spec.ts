@@ -9,6 +9,7 @@
 // edición ni caja/borde blanco.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import { longPress, fillBoardTitle } from './gesture-helpers';
 
@@ -88,6 +89,7 @@ test.describe('Fase 6 — nombre/número del jugador: ±90° upright, persistenc
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.addInitScript(seed({ orientation: 'horizontal' }));
     await openClosed(page);      // Colocar el jugador de plantilla (nombre + dorsal).
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await page.locator('.side-panel-left').first().waitFor();
       await page.locator('.roster-item', { hasText: 'Sergio' }).click();

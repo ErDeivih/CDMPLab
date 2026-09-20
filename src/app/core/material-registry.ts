@@ -59,31 +59,215 @@ export interface CanonicalMaterial {
 /** Catálogo canónico (B1). Los `hidden` se ocultan de la UI pero sus
  *  documentos/gestos antiguos siguen siendo válidos. */
 export const CANONICAL_MATERIALS: readonly CanonicalMaterial[] = [
-  { id: 'ball', title: 'Balón', group: 'Balones', icon: 'sports_soccer', help: 'Balón de fútbol', point: true },
-  { id: 'vball', title: 'Fitball', group: 'Balones', icon: 'sports_volleyball', help: 'Fitball', point: true },
-  { id: 'cone', title: 'Cono', group: 'Señalización', icon: 'change_history', help: 'Cono de señalización', point: true, scale: 1 },
-  { id: 'target', title: 'Chino', group: 'Señalización', icon: 'radio_button_checked', help: 'Chino recoloreable', point: true, colorable: true, colorDefault: '#2c7be5', scale: 0.8 },
-  { id: 'flag', title: 'Banderín', group: 'Señalización', icon: 'flag', help: 'Banderín', point: true },
-  { id: 'pica', title: 'Pica coloreable', group: 'Señalización', icon: 'straighten', help: 'Pica coloreable', point: true, colorable: true, colorDefault: '#ffffff' },
-  { id: 'pole', title: 'Pértiga / poste', group: 'Porterías y redes', icon: 'straighten', help: 'Pértiga o poste', point: true },
-  { id: 'mannequin', title: 'Maniquí individual', group: 'Porterías y redes', icon: 'accessibility_new', help: 'Maniquí individual', point: true },
-  { id: 'mannequin_row', title: 'Barrera de maniquíes', group: 'Porterías y redes', icon: 'accessibility_new', help: 'Barrera de maniquíes', point: true },
-  { id: 'minigoal', title: 'Miniportería', group: 'Porterías y redes', icon: 'sports', help: 'Miniportería', point: true },
-  { id: 'goal', title: 'Portería grande', group: 'Porterías y redes', icon: 'sports', help: 'Portería grande', point: true },
-  { id: 'ladder', title: 'Escalera', group: 'Coordinación', icon: 'format_list_numbered', help: 'Escalera de coordinación', point: true },
-  { id: 'hurdle', title: 'Valla', group: 'Coordinación', icon: 'looks_one', help: 'Valla de entrenamiento', point: true },
-  { id: 'ring', title: 'Aro', group: 'Coordinación', icon: 'radio_button_unchecked', help: 'Aro recoloreable', point: true, colorable: true, colorDefault: '#e8c3c9' },
-  { id: 'trampoline', title: 'Minitrampolín', group: 'Coordinación', icon: 'airline_seat_flat', help: 'Minitrampolín', point: true },
-  { id: 'peto', title: 'Peto', group: 'Preparación física', icon: 'checkroom', help: 'Peto', point: true },
-  { id: 'chaleco', title: 'Chaleco lastrado', group: 'Preparación física', icon: 'checkroom', help: 'Chaleco lastrado', point: true },
-  { id: 'marker', title: 'BOSU', group: 'Preparación física', icon: 'label', help: 'BOSU', point: true },
-  { id: 'dumbbell', title: 'Mancuerna / pesa', group: 'Preparación física', icon: 'fitness_center', help: 'Mancuerna o pesa', point: true },
+  {
+    id: 'ball',
+    title: 'Balón',
+    group: 'Balones',
+    icon: 'sports_soccer',
+    help: 'Balón de fútbol',
+    point: true,
+  },
+  {
+    id: 'vball',
+    title: 'Fitball',
+    group: 'Balones',
+    icon: 'sports_volleyball',
+    help: 'Fitball',
+    point: true,
+  },
+  {
+    id: 'cone',
+    title: 'Cono',
+    group: 'Señalización',
+    icon: 'change_history',
+    help: 'Cono de señalización',
+    point: true,
+    scale: 1,
+  },
+  {
+    id: 'target',
+    title: 'Chino',
+    group: 'Señalización',
+    icon: 'radio_button_checked',
+    help: 'Chino recoloreable',
+    point: true,
+    colorable: true,
+    colorDefault: '#2c7be5',
+    scale: 0.8,
+  },
+  {
+    id: 'flag',
+    title: 'Banderín',
+    group: 'Señalización',
+    icon: 'flag',
+    help: 'Banderín',
+    point: true,
+  },
+  // FASE 8D del encargo: el nombre visible es «Pica» (antes «Pica coloreable»). El ID interno
+  // sigue siendo `pica` y el `t` de los elementos guardados NO cambia: los documentos antiguos
+  // y las copias de seguridad siguen siendo válidos.
+  {
+    id: 'pica',
+    title: 'Pica',
+    group: 'Señalización',
+    icon: 'straighten',
+    help: 'Pica',
+    point: true,
+    colorable: true,
+    colorDefault: '#ffffff',
+  },
+  {
+    id: 'pole',
+    title: 'Pértiga / poste',
+    group: 'Porterías y redes',
+    icon: 'straighten',
+    help: 'Pértiga o poste',
+    point: true,
+  },
+  {
+    id: 'mannequin',
+    title: 'Maniquí individual',
+    group: 'Porterías y redes',
+    icon: 'accessibility_new',
+    help: 'Maniquí individual',
+    point: true,
+  },
+  {
+    id: 'mannequin_row',
+    title: 'Barrera de maniquíes',
+    group: 'Porterías y redes',
+    icon: 'accessibility_new',
+    help: 'Barrera de maniquíes',
+    point: true,
+  },
+  {
+    id: 'minigoal',
+    title: 'Miniportería',
+    group: 'Porterías y redes',
+    icon: 'sports',
+    help: 'Miniportería',
+    point: true,
+  },
+  {
+    id: 'goal',
+    title: 'Portería grande',
+    group: 'Porterías y redes',
+    icon: 'sports',
+    help: 'Portería grande',
+    point: true,
+  },
+  {
+    id: 'ladder',
+    title: 'Escalera',
+    group: 'Coordinación',
+    icon: 'format_list_numbered',
+    help: 'Escalera de coordinación',
+    point: true,
+  },
+  {
+    id: 'hurdle',
+    title: 'Valla',
+    group: 'Coordinación',
+    icon: 'looks_one',
+    help: 'Valla de entrenamiento',
+    point: true,
+  },
+  {
+    id: 'ring',
+    title: 'Aro',
+    group: 'Coordinación',
+    icon: 'radio_button_unchecked',
+    help: 'Aro recoloreable',
+    point: true,
+    colorable: true,
+    colorDefault: '#e8c3c9',
+  },
+  {
+    id: 'trampoline',
+    title: 'Minitrampolín',
+    group: 'Coordinación',
+    icon: 'airline_seat_flat',
+    help: 'Minitrampolín',
+    point: true,
+  },
+  {
+    id: 'peto',
+    title: 'Peto',
+    group: 'Preparación física',
+    icon: 'checkroom',
+    help: 'Peto',
+    point: true,
+  },
+  {
+    id: 'chaleco',
+    title: 'Chaleco lastrado',
+    group: 'Preparación física',
+    icon: 'checkroom',
+    help: 'Chaleco lastrado',
+    point: true,
+  },
+  {
+    id: 'marker',
+    title: 'BOSU',
+    group: 'Preparación física',
+    icon: 'label',
+    help: 'BOSU',
+    point: true,
+  },
+  {
+    id: 'dumbbell',
+    title: 'Mancuerna / pesa',
+    group: 'Preparación física',
+    icon: 'fitness_center',
+    help: 'Mancuerna o pesa',
+    point: true,
+  },
   // Retirados (compatibilidad): se ocultan, pero sus documentos siguen abriendo.
-  { id: 'fitball', title: 'Fitball', group: 'Otros', icon: 'sports_soccer', help: 'Fitball', point: true, hidden: true },
-  { id: 'coachC', title: 'Marcador C', group: 'Otros', icon: 'pin', help: 'Marcador C', point: true, hidden: true },
-  { id: 'net', title: 'Red', group: 'Otros', icon: 'grid_on', help: 'Red', point: true, hidden: true },
-  { id: 'ring_flat', title: 'Aro plano', group: 'Otros', icon: 'radio_button_unchecked', help: 'Aro plano', point: true, hidden: true },
-  { id: 'bosu', title: 'BOSU', group: 'Otros', icon: 'landscape', help: 'BOSU', point: true, hidden: true },
+  {
+    id: 'fitball',
+    title: 'Fitball',
+    group: 'Otros',
+    icon: 'sports_soccer',
+    help: 'Fitball',
+    point: true,
+    hidden: true,
+  },
+  {
+    id: 'coachC',
+    title: 'Marcador C',
+    group: 'Otros',
+    icon: 'pin',
+    help: 'Marcador C',
+    point: true,
+    hidden: true,
+  },
+  {
+    id: 'net',
+    title: 'Red',
+    group: 'Otros',
+    icon: 'grid_on',
+    help: 'Red',
+    point: true,
+    hidden: true,
+  },
+  {
+    id: 'ring_flat',
+    title: 'Aro plano',
+    group: 'Otros',
+    icon: 'radio_button_unchecked',
+    help: 'Aro plano',
+    point: true,
+    hidden: true,
+  },
+  {
+    id: 'bosu',
+    title: 'BOSU',
+    group: 'Otros',
+    icon: 'landscape',
+    help: 'BOSU',
+    point: true,
+    hidden: true,
+  },
 ];
 
 /** Título canónico de un id de material (o el id si no se conoce). */
@@ -114,11 +298,24 @@ export function isRetiredMaterial(id: string): boolean {
  *  SVG vectorial con 5+ colores; no se crean imágenes rasterizadas. */
 export const CHINO_COLORS = ['#2c7be5', '#f6c945', '#e74c3c', '#e8edf2', '#a855f7', '#22c55e'];
 
-/** SVG vectorial ORIGINAL del Chino (disco plano), transparente y recoloreable.
- *  Se renderiza con el color activo en `fill`. No usa ninguna fotografía entregada. */
+/** SVG vectorial ORIGINAL del Chino (FASE 8B), transparente y recoloreable.
+ *
+ *  Antes eran dos elipses apiladas con un rectángulo: se leía como un disco plano sin volumen.
+ *  Ahora es un platillo deportivo visto LIGERAMENTE DESDE ARRIBA: sombra de apoyo en el suelo,
+ *  pared del plato (más oscura abajo, que es lo que da la perspectiva), aro exterior y superficie
+ *  interior con un reflejo tenue. Todo deriva del color activo (`c` o `c` con opacidad), así que
+ *  sigue siendo recoloreable; sin fotografía y con el fondo transparente. */
 export function chinoSvg(color = '#2c7be5'): string {
   const c = color || '#2c7be5';
-  return `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(-15 16 16)"><ellipse cx="16" cy="18" rx="12" ry="5" fill="${c}"/><ellipse cx="16" cy="13" rx="12" ry="5" fill="${c}" opacity="0.92"/><rect x="4" y="13" width="24" height="5" fill="${c}"/></g></svg>`;
+  return (
+    `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(-10 16 16)">` +
+    `<ellipse cx="16" cy="22.4" rx="12.2" ry="3.4" fill="#000000" opacity="0.18"/>` +
+    `<path d="M3.8 16.6 A12.2 5.6 0 0 0 28.2 16.6 L25.4 20.3 A9.2 4 0 0 1 6.6 20.3 Z" fill="${c}" opacity="0.62"/>` +
+    `<ellipse cx="16" cy="16.8" rx="12.2" ry="5.6" fill="${c}"/>` +
+    `<ellipse cx="16" cy="16.3" rx="8.6" ry="3.6" fill="#ffffff" opacity="0.22"/>` +
+    `<ellipse cx="16" cy="16.3" rx="2.2" ry="0.9" fill="${c}" opacity="0.85"/>` +
+    `</g></svg>`
+  );
 }
 
 /** SVG vectorial ORIGINAL de la Mancuerna (pesa), transparente. */

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 
 // =============================================================
@@ -95,6 +96,7 @@ test.describe('Capturas del contrato táctil de FASE B (móvil horizontal)', () 
   test('jugador genérico: antes / durante / después del arrastre', async ({ page }) => {
     await seed(page);
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     const host = await hostBox(page);
@@ -120,6 +122,7 @@ test.describe('Capturas del contrato táctil de FASE B (móvil horizontal)', () 
   test('material (Cono): antes / durante / después del arrastre + panel/barra', async ({ page }) => {
     await seed(page);
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     const host = await hostBox(page);

@@ -224,8 +224,17 @@
       @for (ex of exercises(); track ex.id) {
         <div class="card ex-card">
           <div class="ex-thumb">
-            @if (ex.thumbnail) {
-              <img class="thumb-img" [src]="ex.thumbnail" alt="" />
+            <!-- Miniatura del ejercicio. Si la guardada NO se puede cargar (dato histórico roto,
+                 data URL truncada, formato antiguo), se cae al diagrama SVG en vivo del propio
+                 ejercicio y, si no hay objetos, al marcador limpio del campo: NUNCA al icono de
+                 imagen rota del navegador. -->
+            @if (ex.thumbnail && !miniaturaRota(ex.id)) {
+              <img
+                class="thumb-img"
+                [src]="ex.thumbnail"
+                alt=""
+                (error)="marcarMiniaturaRota(ex.id)"
+              />
             } @else if (previewOf(ex)) {
               <div class="diagram" [innerHTML]="previewOf(ex)"></div>
             } @else {

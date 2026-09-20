@@ -13,18 +13,19 @@
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
 import { seedBoard, openBoard, hostBox, fieldCount, showCategory } from './board-helpers';
+import { abrirMasPizarra } from './gesture-helpers';
 
 type Box = { x: number; y: number; width: number; height: number };
 
-/** Los 8 campos base de la galería, con la orientación que se probará. */
+/** Los SEIS campos que ofrece la galería hoy (CORRECCIÓN URGENTE del dueño: `box` y
+ *  `two_halves` dejan de ofrecerse; siguen admitidos para documentos antiguos, y eso se cubre en
+ *  `fase-cambio-campos.spec.ts` con documentos históricos). */
 const CAMPOS: Array<{ nombre: string; id: string }> = [
   { nombre: 'Campo completo', id: 'full' },
   { nombre: 'Medio campo', id: 'half' },
   { nombre: 'Tercio de campo', id: 'third' },
-  { nombre: 'Área y portería', id: 'box' },
   { nombre: 'Fútbol sala', id: 'futsal' },
   { nombre: 'F7 transversal', id: 'f7' },
-  { nombre: 'Dos medios campos', id: 'two_halves' },
   { nombre: 'Lienzo', id: 'blank' },
 ];
 
@@ -40,26 +41,14 @@ async function abrePanel(page: Page): Promise<void> {
   await expect(page.locator('.studio-panel')).toBeVisible();
 }
 
-/** Elige una tarjeta de la galería. Si el campo nuevo es de media extensión y hay objetos, el
- *  producto pregunta CÓMO conservarlos; aquí se responde «Mantener los objetos donde están»,
- *  que cambia al campo PEDIDO sin tocar ninguna coordenada. Es la opción que permite llegar a
- *  F7 con objetos colocados (antes era imposible: solo se ofrecían «dos medios campos» —que deja
- *  el campo en `two_halves`— y «encajar todo» —que lo deja en `half`). Devuelve el campo en el
- *  que queda el documento. */
-async function elegirCampo(
-  page: Page,
-  nombre: string,
-  opcionDialogo:
-    'Mantener los objetos' | 'Dos medios campos' | 'Encajar todo' = 'Mantener los objetos',
-): Promise<string> {
+/** Elige una tarjeta de la galería. CAMBIO DE CONTRATO (corrección urgente del dueño): el cambio de
+ *  campo es DIRECTO — un clic cambia el campo y los objetos conservan sus coordenadas — así que ya NO
+ *  existe el diálogo «Cambiar a medio campo» ni sus opciones («Mantener los objetos», «Dos medios
+ *  campos», «Encajar todo»). Devuelve el campo en el que queda el documento. */
+async function elegirCampo(page: Page, nombre: string): Promise<string> {
   await abrePanel(page);
   await page.locator('.field-card', { hasText: nombre }).first().click();
   await page.waitForTimeout(220);
-  const dialogo = page.locator('.field-change-dialog');
-  if (await dialogo.isVisible().catch(() => false)) {
-    await dialogo.locator('button', { hasText: opcionDialogo }).click();
-    await page.waitForTimeout(220);
-  }
   return (await page.locator('.board-host').getAttribute('data-field')) ?? '';
 }
 
@@ -151,10 +140,16 @@ test.describe('FASE J — el campo se ve ENTERO en todas sus formas', () => {
         await page.waitForTimeout(200);
 
         // 2) Si el lienzo está en «Llenar pantalla», se pasa a «Ver campo completo» (que además
-        //    restablece el encuadre). Después se pulsa «Volver al encuadre», el botón que aparece
-        //    cuando hay zoom o paneo: el campo vuelve a verse ENTERO.
-        const verCompleto = page.locator('.field-fit-toggle[aria-label="Ver campo completo"]');
+        //    restablece el encuadre). CONTRATO ACTUALIZADO: al retirarse la franja de estado, ese
+        //    control se movió al menú «Más» de la pizarra, así que hay que abrirlo antes.
+        //    Después se pulsa «Volver al encuadre», el botón que aparece cuando hay zoom o paneo
+        //    (ese sigue flotando sobre el campo).
+        await abrirMasPizarra(page);
+        const verCompleto = page.locator(
+          '.top-pop-mas .field-fit-toggle[aria-label="Ver campo completo"]',
+        );
         if (await verCompleto.isVisible().catch(() => false)) await verCompleto.click();
+        else await page.locator('.top-pop-mas .panel-close').click();
         const volver = page.locator('button[aria-label="Volver al encuadre"]');
         await expect(volver, 'con zoom aplicado aparece «Volver al encuadre»').toBeVisible();
         await volver.click();

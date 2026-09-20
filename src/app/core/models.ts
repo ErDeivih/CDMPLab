@@ -43,8 +43,19 @@ export type ExerciseCategory =
 /** Lista ÚNICA de categorías (FASE 7). Se usa en el selector para evitar listas
  *  duplicadas. Los ejercicios antiguos conservan su categoría aunque no esté en la lista. */
 export const EXERCISE_CATEGORIES: readonly ExerciseCategory[] = [
-  'Técnica', 'Táctica', 'Físico', 'Portero', 'Calentamiento', 'Rondo', 'Posesión',
-  'Finalización', 'Defensa', 'Ataque', 'Transiciones', 'Estrategia / ABP', 'Partido',
+  'Técnica',
+  'Táctica',
+  'Físico',
+  'Portero',
+  'Calentamiento',
+  'Rondo',
+  'Posesión',
+  'Finalización',
+  'Defensa',
+  'Ataque',
+  'Transiciones',
+  'Estrategia / ABP',
+  'Partido',
   'Recuperación',
 ];
 
@@ -52,9 +63,22 @@ export const EXERCISE_CATEGORIES: readonly ExerciseCategory[] = [
  *  que el dueño pedía, más "Otro" para elementos personalizados. Los valores se guardan
  *  como lista de strings y se conservan al guardar/reabrir/duplicar/exportar/importar. */
 export const MATERIAL_OPTIONS: readonly string[] = [
-  'Balones', 'Conos', 'Chinos', 'Picas', 'Petos', 'Maniquíes', 'Vallas', 'Escalera',
-  'Miniporterías', 'Portería grande', 'Aros', 'BOSU', 'Fitball', 'Pesas / mancuernas',
-  'Cronómetro', 'Otro',
+  'Balones',
+  'Conos',
+  'Chinos',
+  'Picas',
+  'Petos',
+  'Maniquíes',
+  'Vallas',
+  'Escalera',
+  'Miniporterías',
+  'Portería grande',
+  'Aros',
+  'BOSU',
+  'Fitball',
+  'Pesas / mancuernas',
+  'Cronómetro',
+  'Otro',
 ];
 
 export type LoadMode = 'fixed' | 'interval';
@@ -95,15 +119,7 @@ export interface ExerciseFolder {
 // ---------- Canvas (pizarra táctica v2) ----------
 
 export type FieldType =
-  | 'full'
-  | 'half'
-  | 'vertical_half'
-  | 'third'
-  | 'box'
-  | 'futsal'
-  | 'f7'
-  | 'blank'
-  | 'two_halves'; // A2: dos medios campos (izquierda/derecha o arriba/abajo)
+  'full' | 'half' | 'vertical_half' | 'third' | 'box' | 'futsal' | 'f7' | 'blank' | 'two_halves'; // A2: dos medios campos (izquierda/derecha o arriba/abajo)
 
 /**
  * Fuente ÚNICA y comprobable de los tipos de CAMPO ADMITIDOS. La usa la validación de
@@ -118,7 +134,15 @@ export type FieldType =
  * lo migra a `half` + orientación vertical.
  */
 export const FIELD_TYPES: ReadonlySet<string> = new Set([
-  'full', 'half', 'vertical_half', 'third', 'box', 'futsal', 'f7', 'two_halves', 'blank',
+  'full',
+  'half',
+  'vertical_half',
+  'third',
+  'box',
+  'futsal',
+  'f7',
+  'two_halves',
+  'blank',
 ]);
 
 export type ElementType =
@@ -166,8 +190,18 @@ export type ElementType =
  * sus documentos antiguos deben seguir siendo válidos (p. ej. `ring_flat`).
  */
 export const ELEMENT_TYPES: ReadonlySet<string> = new Set([
-  'player', 'text', 'zone', 'rect', 'ellipse', 'arrow', 'doubleArrow', 'measure',
-  'curve', 'line', 'dribble', 'freehand',
+  'player',
+  'text',
+  'zone',
+  'rect',
+  'ellipse',
+  'arrow',
+  'doubleArrow',
+  'measure',
+  'curve',
+  'line',
+  'dribble',
+  'freehand',
   ...CANONICAL_MATERIALS.map((c) => c.id),
 ]);
 
@@ -243,6 +277,13 @@ export interface CanvasDocument {
   grid?: boolean;
   guide?: 'none' | '2x2' | '3x3' | 'thirds' | 'lanes';
   f7?: F7Overlay | null;
+  /**
+   * FASE 2: color de cada jugador de plantilla DENTRO de este ejercicio (`playerId → color`).
+   * El color elegido en la pizarra NO modifica al jugador de la plantilla: vive aquí. Si falta
+   * (documentos antiguos), cada ficha usa el color guardado en el propio elemento y los jugadores
+   * sin entrada usan su color de plantilla.
+   */
+  playerColors?: Record<string, string>;
 }
 
 // ---------- Sesiones ----------

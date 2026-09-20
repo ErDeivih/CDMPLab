@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { fillBoardTitle } from './gesture-helpers';
+import { fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 
 // FASE 0 — los objetos colocados NO muestran su nombre automáticamente.
 // El modelo (SVG) debe tener exactamente los objetos colocados, sin elementos
@@ -40,7 +41,7 @@ async function openBoard(page: Page): Promise<void> {
   if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
   const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     // FASE G: el letterbox se espera con la ausencia de board-fill.
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
@@ -50,6 +51,7 @@ async function placeMaterial(page: Page, host: Box, title: string, nx: number, n
   // ya está desplegado (ya no se cierra al elegir un material) no lo re-togglea, porque
   // re-clickear el mismo .tools-cat lo cerraría y rompería la siguiente colocación.
   if (!(await page.locator('.side-panel-left.tools-panel-side').isVisible().catch(() => false))) {
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
   }
   const input = page.locator('.tools-search-input');
@@ -81,6 +83,7 @@ test('colocar materiales y una línea: modelo 1:1, sin textos, sin nombres en el
   // FASE G: observable — el panel de Propiedades se cierra.
   await expect(page.locator('.studio-panel')).toHaveCount(0);
   // Una línea.
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Línea"]').click();
   const a = normToScreen(0.3, 0.6, host); const b = normToScreen(0.7, 0.6, host);

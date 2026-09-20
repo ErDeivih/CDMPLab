@@ -25,17 +25,19 @@ const OUT = 'docs/screenshots/fase-h';
 const CARDS = `${OUT}/_fieldcards`;
 fs.mkdirSync(CARDS, { recursive: true });
 
-/** Lista EXPLÍCITA de los campos base esperados (id → etiqueta de la tarjeta).
- *  «Medio campo» es UNA sola tarjeta (auditoría final): `vertical_half` ya no se ofrece
- *  porque su SVG es idéntico al de `half` con orientación vertical. */
+/** Lista EXPLÍCITA de los campos base OFRECIDOS (id → etiqueta de la tarjeta).
+ *  «Medio campo» es UNA sola tarjeta (auditoría final): `vertical_half` ya no se ofrece porque su
+ *  SVG es idéntico al de `half` con orientación vertical.
+ *  CORRECCIÓN URGENTE (dueño): `box` («Área y portería») y `two_halves` («Dos medios campos») dejan
+ *  de ofrecerse —el dueño no los usa— pero siguen ADMITIDOS: un documento antiguo con esos campos se
+ *  abre, se dibuja y se puede cambiar a otro campo. Esa compatibilidad se cubre en
+ *  `e2e/fase-cambio-campos.spec.ts` (documentos históricos) y en `store.spec.ts` (respaldos). */
 const FIELDS: Array<[string, string]> = [
   ['full', 'Campo completo'],
   ['half', 'Medio campo'],
   ['third', 'Tercio de campo'],
-  ['box', 'Área y portería'],
   ['futsal', 'Fútbol sala'],
   ['f7', 'F7 transversal'],
-  ['two_halves', 'Dos medios campos'],
   ['blank', 'Lienzo'],
 ];
 
@@ -296,10 +298,8 @@ test.describe('FASE H — galería de campos completa', () => {
   });
 });
 
-test.describe('FASE H — conversiones de campo con elementos', () => {
-  test('full↔half y two_halves conservan los elementos; undo/redo y guardar/reabrir', async ({
-    page,
-  }) => {
+test.describe('FASE H — cambios de campo con elementos (directos)', () => {
+  test('half↔full conservan los elementos; undo/redo y guardar/reabrir', async ({ page }) => {
     test.setTimeout(180_000);
     await page.setViewportSize({ width: 1366, height: 768 });
     await seedBoard(page);
@@ -353,33 +353,32 @@ test.describe('FASE H — conversiones de campo con elementos', () => {
     // helper: el campo activo y el nº de elementos.
     const fieldOf = () => page.locator('.board-host').getAttribute('data-field');
 
-    // full → half (con elementos abre el diálogo → "Dos medios campos").
+    // CAMBIO DE CONTRATO (corrección urgente del dueño): cambiar de campo es DIRECTO. Ya no hay
+    // diálogo «Cambiar a medio campo» ni opciones («Dos medios campos», «Encajar todo», «Mantener
+    // los objetos»): el campo cambia con un clic y los elementos conservan sus coordenadas.
     await openProps(page);
     await page
       .locator('.studio-panel .field', { hasText: 'Campo base' })
       .locator('select')
       .selectOption('half');
-    const dlg = page.locator('.field-change-dialog');
-    await expect(dlg).toBeVisible();
-    await dlg.getByText('Dos medios campos — recomendado').click();
-    await expect.poll(() => fieldOf(), { timeout: 4000 }).toBe('two_halves');
+    await expect(page.locator('.field-change-dialog'), 'sin diálogo').toHaveCount(0);
+    await expect.poll(() => fieldOf(), { timeout: 4000 }).toBe('half');
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(total);
 
-    // Undo/redo de la conversión: restaura el campo COMPLETO previo y los elementos.
+    // Undo/redo del cambio de campo: restaura el campo COMPLETO previo y los elementos.
     await page.keyboard.press('Control+z');
     await expect.poll(() => fieldOf(), { timeout: 4000 }).toBe('full');
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(total);
     await page.keyboard.press('Control+y');
-    await expect.poll(() => fieldOf(), { timeout: 4000 }).toBe('two_halves');
+    await expect.poll(() => fieldOf(), { timeout: 4000 }).toBe('half');
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(total);
 
-    // Volver a "Campo completo" conserva los elementos.
+    // Volver a "Campo completo" conserva los elementos (y tampoco abre diálogo).
     await page
       .locator('.studio-panel .field', { hasText: 'Campo base' })
       .locator('select')
       .selectOption('full');
-    if (await dlg.isVisible().catch(() => false))
-      await dlg.getByText('Encajar todo').first().click();
+    await expect(page.locator('.field-change-dialog'), 'sin diálogo al volver').toHaveCount(0);
     await expect.poll(() => fieldOf(), { timeout: 4000 }).toBe('full');
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(total);
 

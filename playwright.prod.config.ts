@@ -18,7 +18,12 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /prod-auth\.spec\.ts/,
+  // `prod-auth`: la prueba honesta de la build real. `prod-campos`: comprueba que el ARTEFACTO
+  // contiene la corrección del cambio de campo y del fútbol sala azul (el bundle publicado no puede
+  // ser una versión antigua). Abrir `/board` en producción exigiría una sesión real de Supabase, que
+  // el encargo prohíbe tocar, así que la comprobación interactiva del cambio de campo se hace contra
+  // el servidor de desarrollo y contra la build de desarrollo servida estática.
+  testMatch: /prod-(auth|campos)\.spec\.ts/,
   timeout: 90_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,

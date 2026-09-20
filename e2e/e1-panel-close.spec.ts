@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 const SHOTS = 'e2e/shots';
 
@@ -30,6 +31,7 @@ const SELECTION_MARKER = '.board-canvas svg [stroke="#2563eb"]';
 /** Coloca un texto en el CENTRO del campo. Re-captura el host justo antes del clic:
  *  en móvil el host se redimensiona/mueve al abrir el panel de herramientas. */
 async function placeTextAtCenter(page: Page): Promise<void> {
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator('.rail-btn[title="Texto"]').click();
   // FASE B: el panel Dibujo persiste y cubre el centro en móvil; se minimiza (X) para

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import { longPress, fillBoardTitle } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots';
@@ -34,6 +35,7 @@ test.describe('Fase 3 — texto usable', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Texto"]').click();
     await page.mouse.click(...normToScreen(0.3, 0.3, box), { button: 'right' });
@@ -48,6 +50,7 @@ test.describe('Fase 3 — texto usable', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Texto"]').click();
     await page.mouse.click(...normToScreen(0.3, 0.3, box), { button: 'right' });
@@ -70,6 +73,7 @@ test.describe('Fase 3 — texto usable', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Texto"]').click();
     await page.mouse.click(...normToScreen(0.3, 0.3, box));
@@ -83,6 +87,7 @@ test.describe('Fase 3 — texto usable', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Texto"]').click();
     await page.mouse.click(...normToScreen(0.3, 0.3, box));
@@ -102,6 +107,7 @@ test.describe('Fase 3 — texto usable', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Texto"]').click();
     await page.mouse.click(...normToScreen(0.4, 0.4, box));
@@ -153,6 +159,7 @@ test.describe('Fase 3 — texto usable', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Texto"]').click();
     await page.mouse.click(...normToScreen(0.5, 0.5, box), { button: 'right' });
@@ -179,6 +186,7 @@ test.describe('Fase 3 — texto usable', () => {
     const place = async (v: string, fx: number, fy: number) => {
       // FASE B: el catálogo Dibujo persiste abierto; solo se abre si no lo está.
       if (!(await page.locator('.rail-btn[title="Texto"]').isVisible().catch(() => false))) {
+        await abrirHerramientas(page);
         await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
       }
       await page.locator('.rail-btn[title="Texto"]').click();
@@ -247,6 +255,7 @@ test.describe('Fase 3 — texto usable', () => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await page.locator('.rail-btn[title="Texto"]').click();
     await page.mouse.click(...normToScreen(0.3, 0.3, box));

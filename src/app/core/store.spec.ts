@@ -542,12 +542,15 @@ describe('StoreService', () => {
     expect(store.validateBackup(j).ok, 'respaldo con campo F7 debe ser válido').toBe(true);
   });
 
-  it('respaldo: ACEPTA los 9 campos del catálogo real (candado contra la lista del validador)', () => {
+  it('respaldo: ACEPTA los 9 campos ADMITIDOS, ofrecidos o no (candado contra la lista del validador)', () => {
     // El bug real: el validador tenía su PROPIA lista de campos y se dejó fuera
     // 'two_halves'. Guardar un ejercicio en "Dos medios campos" y exportar el respaldo
-    // hacía que el fichero ENTERO se rechazara como "canvas inválido". Este test recorre
-    // la galería real (FIELD_BASE_SPECS), no una lista escrita a mano aquí.
-    for (const spec of FIELD_BASE_SPECS) {
+    // hacía que el fichero ENTERO se rechazara como "canvas inválido". Este test recorre la
+    // lista de ADMITIDOS del modelo, no una lista escrita a mano aquí.
+    // CORRECCIÓN URGENTE (dueño): la galería se queda con seis campos y `box`/`two_halves` dejan
+    // de ofrecerse; la cobertura de compatibilidad NO se pierde: se comprueba sobre `FIELD_TYPES`,
+    // que es la lista que valida los RESPALDOS y los documentos antiguos.
+    for (const spec of [...FIELD_TYPES].map((type) => ({ type }))) {
       const j = JSON.stringify({
         version: 1,
         teams: [{ id: 't1', name: 'A', accentColor: '#111', createdAt: '2026-01-01' }],
@@ -574,7 +577,7 @@ describe('StoreService', () => {
       });
       expect(
         store.validateBackup(j).ok,
-        `el campo ${spec.type} ("${spec.label}") debe ser válido`,
+        `el campo admitido ${spec.type} debe ser válido en un respaldo`,
       ).toBe(true);
     }
   });
@@ -587,12 +590,18 @@ describe('StoreService', () => {
     for (const t of gallery) {
       expect([...FIELD_TYPES], `falta ${t} en FIELD_TYPES`).toContain(t);
     }
-    // 2) Lo admitido que NO se ofrece son ALIAS DE COMPATIBILIDAD, y hoy es exactamente
-    //    `vertical_half`: su render es el de `half` con orientación vertical, así que no
-    //    se ofrece como tarjeta propia pero debe seguir validando documentos antiguos.
+    // 2) Lo admitido que NO se ofrece son ALIAS y CAMPOS RETIRADOS DE LA OFERTA, y hoy son
+    //    exactamente estos tres:
+    //     · `vertical_half`: su render es el de `half` con orientación vertical (nunca se ofreció
+    //       como tarjeta propia porque duplicaba el medio campo);
+    //     · `box` («Área y portería») y `two_halves` («Dos medios campos»): CORRECCIÓN URGENTE del
+    //       dueño — dejan de ofrecerse para ejercicios nuevos, pero siguen ADMITIDOS para que un
+    //       ejercicio antiguo con esos campos se abra, se renderice y se pueda exportar.
     const soloAdmitidos = [...FIELD_TYPES].filter((t) => !gallery.includes(t));
-    expect(soloAdmitidos, 'la diferencia son los alias de compatibilidad').toEqual([
+    expect(soloAdmitidos, 'la diferencia son alias y campos retirados de la oferta').toEqual([
       'vertical_half',
+      'box',
+      'two_halves',
     ]);
     // 3) Y un respaldo con ese alias sigue siendo válido (documento antiguo).
     const j = JSON.stringify({

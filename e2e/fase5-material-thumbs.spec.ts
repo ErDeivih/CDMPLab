@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 const seed = () => {
   return `(() => {
@@ -27,6 +28,7 @@ test.describe('Fase 5 — miniaturas REALES de todos los materiales (sin icono g
       await openClosed(page);
 
       // Abrir el panel Material.
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       const panel = page.locator('.side-panel-left.tools-panel-side');
       await expect(panel).toBeVisible();
@@ -63,6 +65,7 @@ test.describe('Fase 5 — miniaturas REALES de todos los materiales (sin icono g
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.addInitScript(seed());
     await openClosed(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     const panel = page.locator('.side-panel-left.tools-panel-side');
     await expect(panel).toBeVisible();

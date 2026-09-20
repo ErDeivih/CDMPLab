@@ -41,6 +41,14 @@
   gap: 2px;
 }
 
+// Defecto medido (informe del dueño): en escritorio se veían LAS DOS navegaciones a la vez
+// (la lateral de 5 destinos y la inferior de 4 + «Más»), porque `.nav-movil` no tenía regla
+// base y solo se ocultaba `.nav-escritorio` dentro del bloque móvil. Ahora la ocultación es
+// explícita en la base y el bloque móvil la vuelve a mostrar: nunca pueden coexistir.
+.nav-movil {
+  display: none;
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -50,7 +58,9 @@
   border-radius: var(--radius);
   color: var(--text-muted);
   font-weight: 500;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 
   .msi {
     font-size: 20px;
@@ -68,7 +78,6 @@
 }
 
 .sidebar-foot {
-  margin-top: auto;
   font-size: 11px;
   color: var(--text-faint);
   padding: 0 var(--space-2);
@@ -96,57 +105,220 @@
   }
 }
 
-.topbar-user {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 // ---------- Main ----------
 .main {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
-.topbar {
-  height: var(--topbar-h);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+// ---------- Cuenta y equipo (sustituye a la antigua barra superior) ----------
+.cuenta-pie {
+  margin-top: auto;
+}
+
+.cuenta-btn {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--space-5);
-  flex-shrink: 0;
+  gap: 8px;
+  width: 100%;
+  // Área táctil útil de 44 px de alto aunque el dibujo sea compacto.
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+
+  .msi {
+    font-size: 20px;
+    color: var(--text-muted);
+  }
+
+  &:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
 }
 
-.topbar-left {
+.cuenta-btn-texto {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cuenta-chevron {
+  font-size: 18px;
+}
+
+// Capa y panel: menú flotante en escritorio/tablet y hoja inferior en móvil.
+.cuenta-capa {
+  position: fixed;
+  inset: 0;
+  z-index: 70; // por encima de la barra de navegación inferior (60) y por debajo del confirm (80)
+  background: rgba(15, 23, 32, 0.35);
+
+  @media (min-width: 769px) {
+    background: transparent;
+  }
+}
+
+.cuenta-panel {
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+
+  // Escritorio/tablet: pegado al pie de la barra lateral, que ocupa `--sidebar-w`.
+  @media (min-width: 769px) {
+    left: 12px;
+    bottom: 12px;
+    width: calc(var(--sidebar-w) - 24px);
+    min-width: 240px;
+  }
+
+  // Móvil: DRAWER que entra desde la IZQUIERDA (FASE 6 del encargo). Antes era una hoja inferior
+  // que tapaba la lista de la Plantilla; ahora es un cajón lateral de ancho razonable (nunca toda
+  // la pantalla), a pantalla completa de alto y con scroll interno. Se abre y se cierra
+  // explícitamente (botón, Escape o pulsando fuera) y el fondo queda inerte mientras está abierto.
+  @media (max-width: 768px), (max-height: 480px) and (max-width: 1000px) {
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: min(320px, 86vw);
+    max-height: none;
+    height: 100dvh;
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    border-left: none;
+    padding-top: calc(var(--space-4) + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+    animation: cuenta-drawer-entra 0.18s ease-out;
+  }
+}
+
+@keyframes cuenta-drawer-entra {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+.cuenta-cabecera {
   display: flex;
   align-items: center;
   gap: 10px;
+
+  .btn-icon {
+    margin-left: auto;
+  }
 }
 
-.topbar-shield {
-  width: 22px;
-  height: 22px;
+.cuenta-escudo {
+  width: 26px;
+  height: 26px;
   object-fit: contain;
-  // En escritorio el escudo vive en el sidebar; aquí solo aparece en móvil.
-  display: none;
 }
 
-.topbar-title {
-  font-size: 15px;
+.cuenta-marca {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.cuenta-bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cuenta-etiqueta {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.cuenta-valor {
+  font-size: 14px;
   font-weight: 600;
 }
 
-.topbar-right {
+.cuenta-correo {
+  font-weight: 500;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cuenta-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-2);
+}
+
+.cuenta-accion {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+
+  .msi {
+    font-size: 20px;
+    color: var(--text-muted);
+  }
+
+  &:hover {
+    background: var(--surface-2);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+}
+
+.cuenta-salir {
+  color: var(--danger);
+
+  .msi {
+    color: var(--danger);
+  }
 }
 
 .content {
@@ -325,7 +497,18 @@
 // copias eran idénticas y solo servían para mantener dos listas en sync.
 
 // ---------- Móvil: barra de navegación inferior ----------
-@media (max-width: 768px) {
+// El criterio coincide con el de la pizarra (`isCompactViewport`): móvil vertical Y teléfono
+// girado (altura ≤ 480 con ancho ≤ 1000). Sin la segunda parte, un móvil en horizontal (844×390)
+// recibía la barra lateral de escritorio —232 px comidos— en vez de la navegación inferior.
+@media (max-width: 768px), (max-height: 480px) and (max-width: 1000px) {
+  // La barra inferior mide EXACTAMENTE `--bottom-nav-h`: antes eran 61 px reales (padding + 52 del
+  // item + borde) mientras el token decía 56, así que todo lo anclado al token (hoja de cuenta,
+  // paneles, biblioteca) se colaba 5 px dentro de la barra.
+  .sidebar {
+    height: var(--bottom-nav-h);
+    box-sizing: border-box;
+    padding: 0 var(--space-2);
+  }
   .shell {
     grid-template-columns: 1fr;
     height: 100dvh;
@@ -358,8 +541,19 @@
   }
 
   .brand,
-  .sidebar-foot {
+  .sidebar-foot,
+  .cuenta-pie {
     display: none;
+  }
+
+  // La barra lateral (ahora barra inferior) muestra la navegación de móvil (4 + «Más»).
+  .nav-escritorio {
+    display: none;
+  }
+
+  // Único sitio donde la navegación de móvil vuelve a existir (emparejado con la regla base).
+  .nav-movil {
+    display: flex;
   }
 
   .nav {
@@ -374,27 +568,48 @@
     flex-direction: column;
     justify-content: center;
     gap: 1px;
-    height: 52px;
+    height: 48px;
     padding: 0 var(--space-1);
     font-size: 11px;
+    background: none;
+    border: none;
+    font-family: inherit;
+    color: var(--text-muted);
+    cursor: pointer;
 
     .msi {
       font-size: 20px;
     }
+
+    &.nav-active {
+      color: var(--accent);
+    }
   }
 
   .main {
-    padding-bottom: 56px;
+    padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
   }
 
-  .topbar {
-    padding: 0 var(--space-3);
+  // ---------- FASE 4: la pizarra ocupa TODO en móvil ----------
+  // Dentro de /board no hay navegación global: se oculta la barra inferior entera (sus cinco
+  // entradas: Plantilla, Pizarra, Biblioteca, Sesiones y Más), se retira el hueco que reservaba y
+  // se anula el token de su altura para que todo lo que se ancla a él (paneles, hojas y el propio
+  // tablero) llegue hasta el borde inferior respetando solo la safe area. La salida de la pizarra
+  // es el botón «Volver» del encabezado compacto.
+  .shell.en-pizarra {
+    --bottom-nav-h: 0px;
+
+    .sidebar {
+      display: none;
+    }
+
+    .main {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
   }
 
-  .topbar-shield {
-    display: inline-block;
-  }
-
+  // (Retirado el `max-height: 70dvh` que venía de la hoja inferior: ahora el «Más» es un drawer de
+  //  alto completo y ese límite lo dejaba en 560 px de 800 — medido en el E2E.)
   .content {
     padding: var(--space-3) var(--space-3);
   }

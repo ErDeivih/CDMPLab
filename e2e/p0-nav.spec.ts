@@ -14,22 +14,50 @@ async function seed(page: Page): Promise<void> {
   });
 }
 
-const NAV_LABELS = ['Plantilla', 'Pizarra', 'Biblioteca', 'Sesiones', 'Miembros'];
+// CONTRATO ACTUALIZADO (fase shell+móvil): la barra inferior tiene CUATRO destinos + «Más», y
+// «Miembros» vive DENTRO de «Más» (requisito explícito del encargo). Antes eran cinco enlaces con
+// Miembros en la barra; el quinto label de la barra es ahora «Más» y Miembros se comprueba en la
+// hoja (ver el test siguiente). El contrato anterior dejó de ser válido porque la barra superior y
+// su reparto de destinos cambiaron a propósito.
+const NAV_LABELS = ['Plantilla', 'Pizarra', 'Biblioteca', 'Sesiones', 'Más'];
 
 for (const [W, H] of [
   [360, 800],
   [390, 844],
 ] as const) {
   test.describe(`Barra de navegación móvil ${W}×${H}`, () => {
-    test('cada etiqueta de navegación está completa (sin recorte) y la ruta activa está marcada', async ({ page }) => {
+    test('«Miembros» vive dentro de «Más», no en la barra inferior', async ({ page }) => {
       await page.setViewportSize({ width: W, height: H });
       await seed(page);
       await page.goto('/team');
-      await expect(page.locator('.nav')).toBeVisible();
+      // Ya no hay un enlace de Miembros en la barra…
+      await expect(page.locator('.nav-movil .nav-item', { hasText: 'Miembros' })).toHaveCount(0);
+      // …y sí una acción de Miembros dentro de la hoja «Más».
+      await page.locator('.nav-mas').click();
+      await expect(page.locator('.cuenta-panel')).toBeVisible();
+      await expect(
+        page.locator('.cuenta-panel .cuenta-accion', { hasText: 'Miembros' }),
+      ).toHaveCount(1);
+    });
+    test('cada etiqueta de navegación está completa (sin recorte) y la ruta activa está marcada', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: W, height: H });
+      await seed(page);
+      await page.goto('/team');
+      await expect(page.locator('.nav-movil')).toBeVisible();
 
       const items = await page.evaluate((labels: string[]) => {
-        const out: Array<{ label: string; width: number; clipLeft: number; clipRight: number; visible: boolean }> = [];
-        for (const item of Array.from(document.querySelectorAll<HTMLElement>('.nav .nav-item'))) {
+        const out: Array<{
+          label: string;
+          width: number;
+          clipLeft: number;
+          clipRight: number;
+          visible: boolean;
+        }> = [];
+        for (const item of Array.from(
+          document.querySelectorAll<HTMLElement>('.nav-movil .nav-item'),
+        )) {
           const label = item.querySelector<HTMLElement>('.nav-label');
           if (!label) continue;
           const lb = label.getBoundingClientRect();
@@ -57,9 +85,11 @@ for (const [W, H] of [
       }
 
       // La ruta activa (Plantilla → /team) está marcada de forma inequívoca.
-      const activeText = (await page.locator('.nav-item.nav-active .nav-label').textContent())?.trim();
+      const activeText = (
+        await page.locator('.nav-movil .nav-item.nav-active .nav-label').textContent()
+      )?.trim();
       expect(activeText).toBe('Plantilla');
-      const activeCount = await page.locator('.nav-item.nav-active').count();
+      const activeCount = await page.locator('.nav-movil .nav-item.nav-active').count();
       expect(activeCount).toBe(1);
     });
   });

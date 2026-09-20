@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -60,11 +61,35 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Pau',
+          number: 10,
+          position: 'MF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
@@ -77,30 +102,52 @@ async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await expect(page.locator('.board-canvas svg')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.fill-hint-close').click();
   await page.keyboard.press('Escape');
   await page.waitForTimeout(120);
 }
 
-// Los 7 controles persistentes que deben estar en una sola fila.
+// Controles SIEMPRE visibles del grupo flotante (FASE 3): Cursor, Mano y «Herramientas».
+// CAMBIO DE CONTRATO: antes eran 5 controles fijos en la barra inferior (Cursor, Mano, Jugadores,
+// Material, Dibujo) y esa barra ocupaba 57 px de layout. Ahora el grupo flota (el campo llega al
+// borde inferior) y las categorías viven en el menú de «Herramientas»: se comprueban por separado y
+// con el menú ABIERTO.
 const CONTROLS: Array<[string, string]> = [
-  // Fase 3: Deshacer/Rehacer ya no están en la barra; viven en el menú contextual.
   ['Seleccionar', '.rail-btn[aria-label="Seleccionar y mover"]'],
   ['Mano', '.rail-btn[aria-label="Desplazar campo"]'],
+  ['Herramientas', '.tools-toggle'],
+];
+
+// Categorías del menú «Herramientas» (mismo objetivo táctil y misma fila entre ellas).
+const CATEGORIAS: Array<[string, string]> = [
   ['Jugadores', '.tools-cat[aria-label="Jugadores"]'],
   ['Material', '.tools-cat[aria-label="Material"]'],
   ['Dibujo', '.tools-cat[aria-label="Dibujo"]'],
 ];
 
-test.describe('Defecto 1 — barra inferior móvil en una sola fila', () => {
+test.describe('Defecto 1 — grupo de herramientas móvil en una sola fila', () => {
   for (const [w, h] of SIZES) {
-    test(`[${w}×${h}] los 7 controles están en una sola fila, accesibles y sin overflow`, async ({ page }) => {
+    test(`[${w}×${h}] los 3 controles persistentes y las 3 categorías del menú caben sin overflow`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
       await openBoard(page);
 
-      // 1) Los 7 controles visibles y dentro del viewport.
+      // 1) Los 3 controles persistentes, visibles y dentro del viewport.
       const boxes: Record<string, Box> = {};
       for (const [name, sel] of CONTROLS) {
         const loc = page.locator(sel);
@@ -112,24 +159,51 @@ test.describe('Defecto 1 — barra inferior móvil en una sola fila', () => {
         boxes[name] = b!;
       }
 
-      // 2) Misma fila: los `top` deben coincidir dentro de una tolerancia pequeña.
+      // 2) Misma fila: los `top` de la fila persistente coinciden dentro de una tolerancia pequeña.
       const tops = Object.values(boxes).map((b) => b.y);
       const minTop = Math.min(...tops);
       const maxTop = Math.max(...tops);
-      expect(maxTop - minTop, 'los 7 controles comparten fila (tolerancia 6 px)').toBeLessThanOrEqual(6);
+      expect(
+        maxTop - minTop,
+        'los 3 controles comparten fila (tolerancia 6 px)',
+      ).toBeLessThanOrEqual(6);
 
-      // 3) Altura total de barra ≤ 60 px.
+      // 3) El grupo flotante NO tiene alto de barra: ≤ 60 px (medido 52 px con el menú cerrado).
       const bar = await page.locator('.studio-tools').boundingBox();
       expect(bar, '.studio-tools existe').not.toBeNull();
-      expect(bar!.height, 'barra inferior ≤ 60 px').toBeLessThanOrEqual(60);
+      expect(bar!.height, 'grupo flotante ≤ 60 px').toBeLessThanOrEqual(60);
+      // Y flota: no participa en el layout (el campo llega al borde inferior de la pantalla).
+      const flota = await page
+        .locator('.studio-tools')
+        .evaluate((el) => getComputedStyle(el).position);
+      expect(flota, 'el grupo está fuera del flujo').toBe('absolute');
 
-      // 4) Objetivos táctiles ≥ 44×44.
-      for (const [name, b] of Object.entries(boxes)) {
+      // 4) Las tres categorías del menú: visibles, dentro del viewport y en una sola fila.
+      await abrirHerramientas(page);
+      await expect(page.locator('.tools-menu')).toBeVisible();
+      const catBoxes: Record<string, Box> = {};
+      for (const [name, sel] of CATEGORIAS) {
+        const loc = page.locator(sel);
+        await expect(loc, `categoría ${name} visible`).toBeVisible();
+        const b = await loc.boundingBox();
+        expect(b, `categoría ${name} con boundingBox`).not.toBeNull();
+        expect(b!.x + b!.width, `${name} no desborda la derecha`).toBeLessThanOrEqual(w + 1);
+        expect(b!.y, `${name} dentro de la vista`).toBeGreaterThanOrEqual(0);
+        catBoxes[name] = b!;
+      }
+      const catTops = Object.values(catBoxes).map((b) => b.y);
+      expect(
+        Math.max(...catTops) - Math.min(...catTops),
+        'las 3 categorías comparten fila (tolerancia 6 px)',
+      ).toBeLessThanOrEqual(6);
+
+      // 5) Objetivos táctiles ≥ 44×44 en persistentes y categorías.
+      for (const [name, b] of Object.entries({ ...boxes, ...catBoxes })) {
         const dim = Math.min(b.width, b.height);
         expect(dim, `objetivo táctil de ${name} ≥ 44`).toBeGreaterThanOrEqual(44);
       }
 
-      // 5) Sin overflow horizontal y sin wrapping en la barra persistente.
+      // 6) Sin overflow horizontal y sin wrapping en la fila persistente.
       const noOverflow = await page.evaluate(() => {
         const tools = document.querySelector<HTMLElement>('.studio-tools');
         const persist = document.querySelector<HTMLElement>('.tools-persist');
@@ -145,12 +219,16 @@ test.describe('Defecto 1 — barra inferior móvil en una sola fila', () => {
       // La fila persistente mide una sola fila de altura (no envolvió).
       expect(noOverflow.persistH, '.tools-persist en una sola fila').toBeLessThanOrEqual(60);
 
-      // Captura con menús cerrados.
+      // Captura con menús cerrados (el estado normal de la pizarra).
+      await page.keyboard.press('Escape');
+      await page.locator('.tools-toggle').click();
       await page.screenshot({ path: `${SHOTS}/${w}x${h}-una-fila.png` });
     });
   }
 
-  test('[390×844] abrir Jugadores, Material y Dibujo desde la fila y colocar un elemento desde cada menú', async ({ page }) => {
+  test('[390×844] abrir Jugadores, Material y Dibujo desde la fila y colocar un elemento desde cada menú', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openBoard(page);
@@ -158,6 +236,7 @@ test.describe('Defecto 1 — barra inferior móvil en una sola fila', () => {
     const fit = await fitMode(page);
 
     // Jugadores → colocar un Portero.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat[aria-label="Jugadores"]').click();
     await page.locator('.tray-player[title="Jugador Azul"]').click();
     // FASE B (paneles persistentes): el panel Jugadores permanece abierto tras armar el
@@ -170,6 +249,7 @@ test.describe('Defecto 1 — barra inferior móvil en una sola fila', () => {
 
     // Material → colocar un Cono.
     await page.keyboard.press('Escape');
+    await abrirHerramientas(page);
     await page.locator('.tools-cat[aria-label="Material"]').click();
     await page.locator('.rail-btn[title="Cono"]').click();
     // FASE B (paneles persistentes): cerrar el panel con su X (sin desarmar) para poder
@@ -181,6 +261,7 @@ test.describe('Defecto 1 — barra inferior móvil en una sola fila', () => {
 
     // Dibujo → dibujar una línea (arrastre).
     await page.keyboard.press('Escape');
+    await abrirHerramientas(page);
     await page.locator('.tools-cat[aria-label="Dibujo"]').click();
     await page.locator('.rail-btn[title="Línea"]').click();
     // FASE B (paneles persistentes): el panel Dibujo permanece abierto y tapa el inicio del
@@ -207,6 +288,8 @@ test.describe('Defecto 1 — barra inferior móvil en una sola fila', () => {
     ] as Array<[string, string, string]>) {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(60);
+      // FASE 3: las categorías viven en el menú «Herramientas» (no están en el DOM si está cerrado).
+      await abrirHerramientas(page);
       await page.locator(sel).click();
       await expect(page.locator(panelSel)).toBeVisible();
       await page.waitForTimeout(150);

@@ -10,6 +10,7 @@
 // el render SVG del campo (`data-el-type` / `data-color` / `data-player-id`).
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -49,6 +50,7 @@ test.describe('C1 — fichas rápidas de jugador genérico por color', () => {
     await openBoard(page);
 
     // Abrir el panel de Jugadores.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.tray-quick')).toBeVisible();
 
@@ -100,6 +102,7 @@ test.describe('C1 — fichas rápidas de jugador genérico por color', () => {
     await seed(page);
     await openBoard(page);
 
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.formation-btn').first()).toBeVisible();
     // Sin plantilla (players() vacío en el seed) la formación sigue colocando jugadores.

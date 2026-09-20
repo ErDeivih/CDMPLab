@@ -3,9 +3,7 @@
     <div>
       <h1 class="page-title">Plantilla</h1>
       @if (team()) {
-        <p class="page-sub">
-          {{ players().length }} jugadores activos de {{ team()?.name }}
-        </p>
+        <p class="page-sub">{{ players().length }} jugadores activos de {{ team()?.name }}</p>
       }
     </div>
     @if (team()) {
@@ -22,7 +20,7 @@
         <div class="empty">
           <div class="empty-title">Empieza creando un equipo</div>
           <div class="empty-sub">Añade tu equipo y, después, sus jugadores.</div>
-          <button class="btn btn-primary" (click)="openCreateTeam()" style="margin-top:16px">
+          <button class="btn btn-primary" (click)="openCreateTeam()" style="margin-top: 16px">
             <span class="msi">add</span> Crear equipo
           </button>
         </div>
@@ -30,35 +28,39 @@
 
       @if (showCreateTeam()) {
         <form (ngSubmit)="createTeam()">
-        <label class="page-sub" style="margin-bottom:8px;display:block;font-weight:600">Nombre del equipo</label>
-        <input
-          class="input-lg"
-          [(ngModel)]="newTeamName"
-          name="teamName"
-          placeholder="Primer Equipo"
-          autofocus
-        />
-        <div class="color-picker">
-          <span class="page-sub">Color</span>
-          <div class="swatches">
-            @for (c of palette; track c) {
-              <button
-                type="button"
-                class="swatch"
-                [style.background]="c"
-                [class.swatch-active]="newTeamColor() === c"
-                (click)="newTeamColor.set(c)"
-                [attr.aria-label]="'Color ' + colorName(c)"
-                [title]="'Color ' + colorName(c)"
-              ></button>
-            }
+          <label class="page-sub" style="margin-bottom: 8px; display: block; font-weight: 600"
+            >Nombre del equipo</label
+          >
+          <input
+            class="input-lg"
+            [(ngModel)]="newTeamName"
+            name="teamName"
+            placeholder="Primer Equipo"
+            autofocus
+          />
+          <div class="color-picker">
+            <span class="page-sub">Color</span>
+            <div class="swatches">
+              @for (c of palette; track c) {
+                <button
+                  type="button"
+                  class="swatch"
+                  [style.background]="c"
+                  [class.swatch-active]="newTeamColor() === c"
+                  (click)="newTeamColor.set(c)"
+                  [attr.aria-label]="'Color ' + colorName(c)"
+                  [title]="'Color ' + colorName(c)"
+                ></button>
+              }
+            </div>
           </div>
-        </div>
-        <div class="create-actions">
-          <button type="button" class="btn" (click)="showCreateTeam.set(false)">Cancelar</button>
-          <button type="submit" class="btn btn-primary" [disabled]="!newTeamName().trim()">Crear</button>
-        </div>
-      </form>
+          <div class="create-actions">
+            <button type="button" class="btn" (click)="showCreateTeam.set(false)">Cancelar</button>
+            <button type="submit" class="btn btn-primary" [disabled]="!newTeamName().trim()">
+              Crear
+            </button>
+          </div>
+        </form>
       }
     </div>
   }
@@ -75,14 +77,24 @@
           aria-label="Buscar jugador por nombre o dorsal"
         />
         @if (filterText()) {
-          <button class="search-clear" type="button" aria-label="Limpiar búsqueda" title="Limpiar búsqueda" (click)="clearPlayerFilters()">
+          <button
+            class="search-clear"
+            type="button"
+            aria-label="Limpiar búsqueda"
+            title="Limpiar búsqueda"
+            (click)="clearPlayerFilters()"
+          >
             <span class="msi">close</span>
           </button>
         }
       </div>
       <label class="pos-filter">
         <span>Posición</span>
-        <select [value]="filterPos()" (change)="setPositionFilter($event)" aria-label="Filtrar por posición">
+        <select
+          [value]="filterPos()"
+          (change)="setPositionFilter($event)"
+          aria-label="Filtrar por posición"
+        >
           <option value="all">Todas</option>
           @for (pos of positions; track pos) {
             <option [value]="pos">{{ positionLabel(pos) }}</option>
@@ -91,10 +103,14 @@
       </label>
       <span class="result-count" role="status">
         {{ visiblePlayers().length }} {{ visiblePlayers().length === 1 ? 'jugador' : 'jugadores' }}
-        @if (hasPlayerFilters()) { <span class="result-total">de {{ players().length }}</span> }
+        @if (hasPlayerFilters()) {
+          <span class="result-total">de {{ players().length }}</span>
+        }
       </span>
       @if (hasPlayerFilters()) {
-        <button class="btn btn-ghost btn-sm" type="button" (click)="clearPlayerFilters()">Limpiar filtros</button>
+        <button class="btn btn-ghost btn-sm" type="button" (click)="clearPlayerFilters()">
+          Limpiar filtros
+        </button>
       }
     </div>
   }
@@ -105,11 +121,11 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th style="width:56px"></th>
+            <th style="width: 56px"></th>
             <th>Jugador</th>
-            <th style="width:90px">Dorsal</th>
-            <th style="width:120px">Posición</th>
-            <th style="width:120px;text-align:right">Acciones</th>
+            <th class="cell-dorsal" style="width: 90px">Dorsal</th>
+            <th class="cell-pos" style="width: 120px">Posición</th>
+            <th style="width: 120px; text-align: right">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -120,16 +136,38 @@
                   class="player-avatar"
                   [style.background]="p.color"
                   [style.color]="isDark(p.color) ? '#fff' : '#111'"
-                >{{ p.number ?? '·' }}</span>
+                  >{{ p.number ?? '·' }}</span
+                >
               </td>
-              <td class="cell-name">{{ p.name }}</td>
-              <td class="tnum">{{ p.number ?? '—' }}</td>
-              <td><span class="tag">{{ positionLabel(p.position) }}</span></td>
-              <td style="text-align:right">
-                <button class="btn btn-ghost btn-icon" [attr.aria-label]="'Editar a ' + p.name" title="Editar" (click)="openEdit(p)">
+              <td class="cell-name">
+                {{ p.name }}
+                <!-- FASE 6: en móvil las columnas Dorsal y Posición se ocultan y su información
+                     viaja aquí, en una línea compacta, para que cada fila mida la mitad y se vean
+                     muchos más jugadores sin desplazarse. En escritorio esta línea no se muestra. -->
+                <span class="cell-meta">
+                  <span class="cell-meta-num tnum">{{ p.number ?? '—' }}</span>
+                  <span class="tag">{{ positionLabel(p.position) }}</span>
+                </span>
+              </td>
+              <td class="cell-dorsal tnum">{{ p.number ?? '—' }}</td>
+              <td class="cell-pos">
+                <span class="tag">{{ positionLabel(p.position) }}</span>
+              </td>
+              <td style="text-align: right">
+                <button
+                  class="btn btn-ghost btn-icon"
+                  [attr.aria-label]="'Editar a ' + p.name"
+                  title="Editar"
+                  (click)="openEdit(p)"
+                >
                   <span class="msi">edit</span>
                 </button>
-                <button class="btn btn-ghost btn-icon" [attr.aria-label]="'Desactivar a ' + p.name" title="Quitar" (click)="remove(p)">
+                <button
+                  class="btn btn-ghost btn-icon"
+                  [attr.aria-label]="'Desactivar a ' + p.name"
+                  title="Quitar"
+                  (click)="remove(p)"
+                >
                   <span class="msi">person_remove</span>
                 </button>
               </td>
@@ -139,9 +177,15 @@
       </table>
       @if (visiblePlayers().length === 0) {
         <div class="empty">
-          <div class="empty-title">{{ hasPlayerFilters() ? 'Ningún jugador con esos filtros' : 'Aún no hay jugadores' }}</div>
+          <div class="empty-title">
+            {{ hasPlayerFilters() ? 'Ningún jugador con esos filtros' : 'Aún no hay jugadores' }}
+          </div>
           <div class="empty-sub">
-            {{ hasPlayerFilters() ? 'Quita el filtro de posición o vacía la búsqueda.' : 'Añade el primer jugador de la plantilla.' }}
+            {{
+              hasPlayerFilters()
+                ? 'Quita el filtro de posición o vacía la búsqueda.'
+                : 'Añade el primer jugador de la plantilla.'
+            }}
           </div>
         </div>
       }
@@ -154,14 +198,24 @@
       <div class="modal" (click)="$event.stopPropagation()">
         <div class="modal-head">
           <h3>{{ draft().id ? 'Editar jugador' : 'Añadir jugador' }}</h3>
-          <button class="btn btn-ghost btn-icon" (click)="closeEditor()" aria-label="Cerrar editor" title="Cerrar">
+          <button
+            class="btn btn-ghost btn-icon"
+            (click)="closeEditor()"
+            aria-label="Cerrar editor"
+            title="Cerrar"
+          >
             <span class="msi">close</span>
           </button>
         </div>
         <div class="modal-body">
           <div class="field">
             <label>Nombre</label>
-            <input [(ngModel)]="draft().name" name="name" placeholder="Nombre del jugador" autofocus />
+            <input
+              [(ngModel)]="draft().name"
+              name="name"
+              placeholder="Nombre del jugador"
+              autofocus
+            />
           </div>
           <div class="field-row">
             <div class="field">

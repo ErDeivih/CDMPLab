@@ -1,7 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
-import { longPress } from './gesture-helpers';
+import { longPress, toggleFillScreen } from './gesture-helpers';
 
 // Capturas de esta versión (decidido por el dueño): los 8 resultados
 // campo/orientación, el selector abierto, propiedades de jugador y de
@@ -28,10 +29,25 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'pl1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'pl1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
@@ -44,24 +60,41 @@ async function openBoard(page: Page, opts?: { keepFill?: boolean }): Promise<voi
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await expect(page.locator('.board-canvas svg')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
-  const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.fill-hint-close').click();
+  const fill = await page
+    .locator('.board-host')
+    .evaluate((el) => el.classList.contains('board-fill'));
   if (opts?.keepFill) {
     // Forzar "Llenar pantalla" (aunque la preferencia persistida lo haya apagado).
     if (!fill) {
-      await page.locator('.field-fit-toggle').click();
+      await toggleFillScreen(page);
       await page.waitForTimeout(120);
     }
   } else if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await page.waitForTimeout(120);
   }
 }
 
 async function setField(page: Page, field: string): Promise<void> {
   await page.locator('button[aria-label="Propiedades"]').click();
-  await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption(field);
+  await page
+    .locator('.studio-panel .field', { hasText: 'Campo base' })
+    .locator('select')
+    .selectOption(field);
   await page.waitForTimeout(150);
 }
 
@@ -74,12 +107,22 @@ async function openCategory(page: Page, label: 'Jugadores' | 'Material' | 'Dibuj
     label === 'Jugadores'
       ? '.side-panel-left[aria-label="Jugadores"]'
       : `.side-panel-left.tools-panel-side[aria-label="${label === 'Material' ? 'Herramientas de Material' : 'Herramientas de Dibujo'}"]`;
-  if (await page.locator(panelSel).isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator(panelSel)
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: label }).click();
   await expect(page.locator(panelSel)).toBeVisible();
 }
 async function setOrient(page: Page, orient: 'horizontal' | 'vertical'): Promise<void> {
-  await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator(`.chip[data-orient="${orient}"]`).click();
+  await page
+    .locator('.studio-panel .field', { hasText: 'Orientación' })
+    .locator(`.chip[data-orient="${orient}"]`)
+    .click();
   await page.waitForTimeout(150);
 }
 async function shotBoard(page: Page, name: string): Promise<void> {
@@ -93,9 +136,18 @@ test.describe('Capturas finales de esta versión', () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
-    for (const [field, orient] of [['full','horizontal'],['full','vertical'],['half','horizontal'],['half','vertical'],['f7','horizontal'],['f7','vertical'],['blank','horizontal'],['blank','vertical']] as Array<[string,string]>) {
+    for (const [field, orient] of [
+      ['full', 'horizontal'],
+      ['full', 'vertical'],
+      ['half', 'horizontal'],
+      ['half', 'vertical'],
+      ['f7', 'horizontal'],
+      ['f7', 'vertical'],
+      ['blank', 'horizontal'],
+      ['blank', 'vertical'],
+    ] as Array<[string, string]>) {
       await setField(page, field);
-      await setOrient(page, orient as 'horizontal'|'vertical');
+      await setOrient(page, orient as 'horizontal' | 'vertical');
       await shotBoard(page, `campo-${field}-${orient}`);
     }
   });
@@ -113,6 +165,7 @@ test.describe('Capturas finales de esta versión', () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     await page.locator('.roster-item', { hasText: 'Marcos' }).click();
@@ -128,6 +181,7 @@ test.describe('Capturas finales de esta versión', () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     const b = await page.locator('.board-host').boundingBox();
@@ -143,7 +197,11 @@ test.describe('Capturas finales de esta versión', () => {
     await expect(page.locator('.context-bar')).toBeVisible();
     await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
     // Espera observable: el giro se refleja en la rotación del elemento (sin retardo fijo).
-    await expect.poll(async () => page.locator('.board-canvas svg [transform*="rotate("]').count(), { timeout: 4000 }).toBeGreaterThan(0);
+    await expect
+      .poll(async () => page.locator('.board-canvas svg [transform*="rotate("]').count(), {
+        timeout: 4000,
+      })
+      .toBeGreaterThan(0);
     await page.screenshot({ path: `${SHOTS}/propiedades-cono-girado.png` });
   });
 
@@ -159,6 +217,8 @@ test.describe('Capturas finales de esta versión', () => {
     for (const [name, sel, panel] of menus) {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(80);
+      // FASE 3: las categorías viven en el menú «Herramientas» y no están en el DOM si está cerrado.
+      await abrirHerramientas(page);
       await page.locator(sel).click();
       await expect(page.locator(panel)).toBeVisible();
       await page.waitForTimeout(150);
@@ -174,14 +234,64 @@ test.describe('Capturas finales de esta versión', () => {
     await page.waitForTimeout(400);
     await page.evaluate(() => {
       const now = new Date().toISOString();
-      localStorage.setItem('entrenolab:folders', JSON.stringify([
-        { id: 'f-pos', teamId: 't1', parentId: null, name: 'Posesión' },
-        { id: 'f-rondo', teamId: 't1', parentId: 'f-pos', name: 'Rondos' },
-      ]));
-      localStorage.setItem('entrenolab:exercises', JSON.stringify([
-        { id: 'ex1', teamId: 't1', folderId: null, title: 'Rondo F7', description: '', explanation: '', category: 'Técnica', objectives: [], materials: ['conos'], durationMinutes: 15, minPlayers: null, maxPlayers: null, loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false, canvas: null, thumbnail: null, savedAt: now },
-        { id: 'ex2', teamId: 't1', folderId: 'f-rondo', title: 'Rondo F7 (copia)', description: '', explanation: '', category: 'Técnica', objectives: [], materials: ['conos'], durationMinutes: 15, minPlayers: null, maxPlayers: null, loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false, canvas: null, thumbnail: null, savedAt: now },
-      ]));
+      localStorage.setItem(
+        'entrenolab:folders',
+        JSON.stringify([
+          { id: 'f-pos', teamId: 't1', parentId: null, name: 'Posesión' },
+          { id: 'f-rondo', teamId: 't1', parentId: 'f-pos', name: 'Rondos' },
+        ]),
+      );
+      localStorage.setItem(
+        'entrenolab:exercises',
+        JSON.stringify([
+          {
+            id: 'ex1',
+            teamId: 't1',
+            folderId: null,
+            title: 'Rondo F7',
+            description: '',
+            explanation: '',
+            category: 'Técnica',
+            objectives: [],
+            materials: ['conos'],
+            durationMinutes: 15,
+            minPlayers: null,
+            maxPlayers: null,
+            loadMode: 'fixed',
+            seriesCount: null,
+            repetitionsCount: null,
+            workSeconds: null,
+            restSeconds: null,
+            isTemplate: false,
+            canvas: null,
+            thumbnail: null,
+            savedAt: now,
+          },
+          {
+            id: 'ex2',
+            teamId: 't1',
+            folderId: 'f-rondo',
+            title: 'Rondo F7 (copia)',
+            description: '',
+            explanation: '',
+            category: 'Técnica',
+            objectives: [],
+            materials: ['conos'],
+            durationMinutes: 15,
+            minPlayers: null,
+            maxPlayers: null,
+            loadMode: 'fixed',
+            seriesCount: null,
+            repetitionsCount: null,
+            workSeconds: null,
+            restSeconds: null,
+            isTemplate: false,
+            canvas: null,
+            thumbnail: null,
+            savedAt: now,
+          },
+        ]),
+      );
     });
     await page.reload();
     await expect(page.locator('body')).toBeVisible();
@@ -189,7 +299,9 @@ test.describe('Capturas finales de esta versión', () => {
     await page.screenshot({ path: `${SHOTS}/biblioteca-carpetas-duplicados.png`, fullPage: true });
   });
 
-  test('móvil: campo-completo y llenar-pantalla en 360, 390 y 430 (ocupación real)', async ({ page }) => {
+  test('móvil: campo-completo y llenar-pantalla en 360, 390 y 430 (ocupación real)', async ({
+    page,
+  }) => {
     const occupancy = async (): Promise<number> => {
       const host = (await page.locator('.board-host').boundingBox())!;
       let grass: { height: number } | null = null;
@@ -202,7 +314,11 @@ test.describe('Capturas finales de esta versión', () => {
       return grass.height / host.height;
     };
 
-    for (const [w, h] of [[360, 800], [390, 844], [430, 932]] as Array<[number, number]>) {
+    for (const [w, h] of [
+      [360, 800],
+      [390, 844],
+      [430, 932],
+    ] as Array<[number, number]>) {
       // ---- Campo completo (letterbox: campo pequeño, NO llena) ----
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
@@ -210,21 +326,42 @@ test.describe('Capturas finales de esta versión', () => {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(120);
       const occFull = await occupancy();
-      expect(await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill')), 'campo-completo no debe tener board-fill').toBe(false);
+      expect(
+        await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill')),
+        'campo-completo no debe tener board-fill',
+      ).toBe(false);
       await page.screenshot({ path: `${SHOTS}/movil-${w}-campo-completo.png` });
 
       // ---- Llenar pantalla (campo grande) ----
       await page.goto('/board');
       await expect(page.locator('.board-host')).toBeVisible();
       await page.waitForTimeout(250);
-      if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
-      if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
+      if (
+        await page
+          .locator('.help-close')
+          .isVisible()
+          .catch(() => false)
+      )
+        await page.locator('.help-close').click();
+      if (
+        await page
+          .locator('.fill-hint-close')
+          .isVisible()
+          .catch(() => false)
+      )
+        await page.locator('.fill-hint-close').click();
       await openBoard(page, { keepFill: true });
       await expect(page.locator('.board-host')).toHaveClass(/board-fill/);
       const occFill = await occupancy();
       // Medición real (no solo la clase CSS) de la ocupación de la altura.
-      expect(occFill, `llenar-pantalla ${w}px llena la altura (${occFill.toFixed(2)})`).toBeGreaterThan(0.9);
-      expect(occFull, `llenar-pantalla ${w}px ocupa más que campo-completo (${occFull.toFixed(2)})`).toBeLessThan(occFill);
+      expect(
+        occFill,
+        `llenar-pantalla ${w}px llena la altura (${occFill.toFixed(2)})`,
+      ).toBeGreaterThan(0.9);
+      expect(
+        occFull,
+        `llenar-pantalla ${w}px ocupa más que campo-completo (${occFull.toFixed(2)})`,
+      ).toBeLessThan(occFill);
       await page.keyboard.press('Escape');
       await page.waitForTimeout(120);
       await page.screenshot({ path: `${SHOTS}/movil-${w}-llenar-pantalla.png` });
@@ -251,11 +388,16 @@ test.describe('Capturas finales de esta versión', () => {
     }
 
     // ---- Zoom + objeto seleccionado (en campo-completo para geometría estable) ----
-    for (const [w, h] of [[360, 800], [390, 844], [430, 932]] as Array<[number, number]>) {
+    for (const [w, h] of [
+      [360, 800],
+      [390, 844],
+      [430, 932],
+    ] as Array<[number, number]>) {
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
       await openBoard(page); // campo-completo, geometría contain estable
       // Colocar y seleccionar un cono.
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: 'Material' }).click();
       await page.locator('.rail-btn[title="Cono"]').click();
       // FASE B (paneles persistentes): el panel Material permanece abierto tras armar el cono
@@ -273,8 +415,13 @@ test.describe('Capturas finales de esta versión', () => {
       await expect(page.locator('.context-bar')).toBeVisible();
       // Zoom al 150 % (sin cambiar la orientación persistida).
       await page.locator('button[aria-label="Propiedades"]').click();
-      const zoom = page.locator('.studio-panel .field', { hasText: 'Zoom' }).locator('input[type="range"]');
-      await zoom.evaluate((input) => { (input as HTMLInputElement).value = '1.5'; (input as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true })); });
+      const zoom = page
+        .locator('.studio-panel .field', { hasText: 'Zoom' })
+        .locator('input[type="range"]');
+      await zoom.evaluate((input) => {
+        (input as HTMLInputElement).value = '1.5';
+        (input as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true }));
+      });
       await page.keyboard.press('Escape');
       await page.waitForTimeout(150);
       await page.screenshot({ path: `${SHOTS}/movil-${w}-zoom-objeto.png` });
@@ -289,7 +436,12 @@ test.describe('Capturas finales de esta versión', () => {
     // Rectángulo solo de perímetro. La herramienta "Zona" fue eliminada (Fase 8),
     // así que la composición usa las figuras existentes.
     const b = await page.locator('.board-host').boundingBox();
-    async function drawShape(title: string, fill: 'Relleno' | 'Perímetro', from: [number, number], to: [number, number]): Promise<void> {
+    async function drawShape(
+      title: string,
+      fill: 'Relleno' | 'Perímetro',
+      from: [number, number],
+      to: [number, number],
+    ): Promise<void> {
       await openCategory(page, 'Dibujo');
       await page.locator(`.rail-btn[title="${title}"]`).click();
       await page.locator('.tools-caption .chip', { hasText: fill }).click();
@@ -325,11 +477,18 @@ test.describe('Capturas finales de esta versión', () => {
       await page.mouse.click(p[0], p[1]);
     }
     // Línea y flecha.
-    for (const [tool, f, t] of [['Línea',[0.35,0.35],[0.6,0.4]],['Flecha (movimiento)',[0.5,0.55],[0.62,0.5]]] as Array<[string,[number,number],[number,number]]>) {
+    for (const [tool, f, t] of [
+      ['Línea', [0.35, 0.35], [0.6, 0.4]],
+      ['Flecha (movimiento)', [0.5, 0.55], [0.62, 0.5]],
+    ] as Array<[string, [number, number], [number, number]]>) {
       await openCategory(page, 'Dibujo');
       await page.locator(`.rail-btn[title="${tool}"]`).click();
-      const a2 = normToScreen(f[0], f[1], b!); const b2 = normToScreen(t[0], t[1], b!);
-      await page.mouse.move(a2[0], a2[1]); await page.mouse.down(); await page.mouse.move(b2[0], b2[1], { steps: 5 }); await page.mouse.up();
+      const a2 = normToScreen(f[0], f[1], b!);
+      const b2 = normToScreen(t[0], t[1], b!);
+      await page.mouse.move(a2[0], a2[1]);
+      await page.mouse.down();
+      await page.mouse.move(b2[0], b2[1], { steps: 5 });
+      await page.mouse.up();
     }
     // Texto explicativo.
     await openCategory(page, 'Dibujo');
@@ -338,7 +497,9 @@ test.describe('Capturas finales de esta versión', () => {
     await page.mouse.click(tp[0], tp[1]);
     await page.locator('.studio-panel .inspector textarea').fill('Rondo 5v2\nConservación');
     await page.locator('.studio-panel .inspector textarea').dispatchEvent('change');
-    await page.locator('.studio-panel .inspector textarea').evaluate((el) => (el as HTMLElement).blur());
+    await page
+      .locator('.studio-panel .inspector textarea')
+      .evaluate((el) => (el as HTMLElement).blur());
     await page.waitForTimeout(150);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(150);
@@ -348,13 +509,21 @@ test.describe('Capturas finales de esta versión', () => {
 
 test.describe('Contact sheet de capturas-finales', () => {
   test('genera contact-sheet-legible para capturas-finales', async ({ page }) => {
-    const files = fs.readdirSync(SHOTS).filter((f) => f.endsWith('.png')).sort();
-    const rows = files.map((f) => {
-      const p = path.resolve(SHOTS, f);
-      const b64 = fs.readFileSync(p).toString('base64');
-      return `<figure><img src="data:image/png;base64,${b64}" alt="${f}"><figcaption>${f}</figcaption></figure>`;
-    }).join('\n');
-    const html = '<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;margin:12px;background:#111;color:#eee}h1{font-size:16px}figure{display:inline-block;margin:10px;text-align:center;vertical-align:top}figure img{max-width:480px;border:1px solid #555}figcaption{font-size:12px;margin-top:4px;max-width:480px}</style></head><body><h1>CDMPLab · capturas-finales</h1>' + rows + '</body></html>';
+    const files = fs
+      .readdirSync(SHOTS)
+      .filter((f) => f.endsWith('.png'))
+      .sort();
+    const rows = files
+      .map((f) => {
+        const p = path.resolve(SHOTS, f);
+        const b64 = fs.readFileSync(p).toString('base64');
+        return `<figure><img src="data:image/png;base64,${b64}" alt="${f}"><figcaption>${f}</figcaption></figure>`;
+      })
+      .join('\n');
+    const html =
+      '<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;margin:12px;background:#111;color:#eee}h1{font-size:16px}figure{display:inline-block;margin:10px;text-align:center;vertical-align:top}figure img{max-width:480px;border:1px solid #555}figcaption{font-size:12px;margin-top:4px;max-width:480px}</style></head><body><h1>CDMPLab · capturas-finales</h1>' +
+      rows +
+      '</body></html>';
     const file = path.resolve(SHOTS, 'contact-sheet.html');
     fs.writeFileSync(file, html, 'utf8');
     await page.setViewportSize({ width: 1400, height: 900 });

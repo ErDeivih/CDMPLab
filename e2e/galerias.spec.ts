@@ -1,7 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
-import { longPress } from './gesture-helpers';
+import { longPress, toggleFillScreen } from './gesture-helpers';
 
 // FASE 3 — galerías SIN nombres automáticos dentro del campo.
 // El campo solo contiene objetos tácticos. La identificación se hace con el pie de
@@ -77,7 +78,7 @@ async function openBoard(page: Page): Promise<void> {
     .locator('.board-host')
     .evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await page.waitForTimeout(120);
   }
 }
@@ -92,6 +93,7 @@ async function useTool(page: Page, title: string, category?: string): Promise<vo
         .isVisible()
         .catch(() => false))
     ) {
+      await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: category }).click();
     }
   }
@@ -122,6 +124,7 @@ async function placeMaterial(
   const input = page.locator('.tools-search-input');
   // FASE B: el catálogo persiste abierto; solo se abre si no lo está (evitar re-toggle).
   if (!(await input.isVisible().catch(() => false))) {
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
   }
   await input.fill('');
@@ -153,7 +156,7 @@ const MATERIALS = [
   'BOSU',
   'Banderín',
   'Chino',
-  'Pica coloreable',
+  'Pica',
   'Pértiga / poste',
   'Maniquí individual',
   'Barrera de maniquíes',
@@ -231,24 +234,29 @@ test.describe('Galerías sin nombres en el campo', () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
+    // FASE 3 — MEDICIÓN QUE CORRIGE LA PRUEBA (no la app): la columna izquierda pasa de x=0,06 a
+    // x=0,17. Al retirar la barra inferior el campo gana 57 px de alto y su escala crece, así que con
+    // el panel de Dibujo abierto el borde izquierdo del campo queda POR DEBAJO del panel (medido: el
+    // pointerdown lo recibía el panel y las 3 figuras de esa columna no se creaban). El propósito
+    // —una figura por combinación de relleno/perímetro— no cambia.
     // Rect perímetro y relleno.
     await useTool(page, 'Rectángulo', 'Dibujo');
     await page.locator('.tools-caption .chip', { hasText: 'Perímetro' }).click();
-    await drawShape(page, [0.06, 0.08], [0.3, 0.28]);
+    await drawShape(page, [0.17, 0.08], [0.3, 0.28]);
     await useTool(page, 'Rectángulo', 'Dibujo');
     await page.locator('.tools-caption .chip', { hasText: 'Relleno' }).click();
     await drawShape(page, [0.58, 0.08], [0.88, 0.28]);
     // Elipse perímetro y relleno.
     await useTool(page, 'Círculo / elipse', 'Dibujo');
     await page.locator('.tools-caption .chip', { hasText: 'Perímetro' }).click();
-    await drawShape(page, [0.06, 0.4], [0.3, 0.62]);
+    await drawShape(page, [0.17, 0.4], [0.3, 0.62]);
     await useTool(page, 'Círculo / elipse', 'Dibujo');
     await page.locator('.tools-caption .chip', { hasText: 'Relleno' }).click();
     await drawShape(page, [0.58, 0.4], [0.88, 0.62]);
     // Zona relleno.
     await useTool(page, 'Rectángulo', 'Dibujo');
     await page.locator('.tools-caption .chip', { hasText: 'Relleno' }).click();
-    await drawShape(page, [0.06, 0.72], [0.3, 0.9]);
+    await drawShape(page, [0.17, 0.72], [0.3, 0.9]);
     await clean(page);
     // Comprobación real: las 5 figuras están colocadas antes de la captura (antes este test no
     // verificaba nada).
@@ -298,6 +306,7 @@ test.describe('Galerías sin nombres en el campo', () => {
     await seed(page);
     await openBoard(page);
     const host = (await page.locator('.board-host').boundingBox())!;
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.roster-item', { hasText: 'Marcos' }).click();
     const p = normToScreen(0.5, 0.5, host);
@@ -313,6 +322,7 @@ test.describe('Galerías sin nombres en el campo', () => {
     await openBoard(page);
     const host = (await page.locator('.board-host').boundingBox())!;
     // Cono seleccionado con asas y ±90°.
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     let p = normToScreen(0.3, 0.5, host);

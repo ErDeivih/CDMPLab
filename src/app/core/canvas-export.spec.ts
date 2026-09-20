@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateThumbnail } from './canvas-export';
+import { generateThumbnail, imageCargada } from './canvas-export';
 import { CanvasDocument } from './models';
 
 // La animación quedó DIFERIDA por decisión del dueño: la pizarra es solo estática.
@@ -22,5 +22,24 @@ describe('canvas-export (miniatura al guardar)', () => {
       frames: [{ duration: 1000, elements: [] }],
     };
     await expect(generateThumbnail(doc)).resolves.toBeNull();
+  });
+});
+
+/**
+ * FASE 1 del encargo — nunca una miniatura "de campo vacío".
+ *
+ * Antes, si el SVG no llegaba a cargarse como imagen, `exportPng` pintaba igualmente el canvas:
+ * el resultado era una miniatura con el campo y SIN los objetos, imposible de distinguir de una
+ * buena. Ahora se lanza un error (`generateThumbnail` → null → la tarjeta dibuja el SVG en vivo).
+ */
+describe('canvas-export — la imagen del SVG debe estar cargada de verdad', () => {
+  it('imagen completa y con tamaño cuenta como cargada', () => {
+    expect(imageCargada({ complete: true, naturalWidth: 480 })).toBe(true);
+  });
+
+  it('imagen no completa o sin tamaño NO cuenta como cargada', () => {
+    expect(imageCargada({ complete: false, naturalWidth: 480 })).toBe(false);
+    expect(imageCargada({ complete: true, naturalWidth: 0 })).toBe(false);
+    expect(imageCargada({ complete: false, naturalWidth: 0 })).toBe(false);
   });
 });

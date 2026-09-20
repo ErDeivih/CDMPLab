@@ -1,0 +1,238 @@
+{
+  "medidas": {
+    "full": {
+      "jugador": {
+        "w": 31.2,
+        "h": 31.2
+      },
+      "cono": {
+        "w": 43.3,
+        "h": 43.3
+      },
+      "chino": {
+        "w": 20.9,
+        "h": 16.7
+      },
+      "escalera": {
+        "w": 85.7,
+        "h": 33.7
+      },
+      "miniporteria": {
+        "w": 33.9,
+        "h": 17.4
+      },
+      "porteria": {
+        "w": 66.8,
+        "h": 26.5
+      },
+      "maniqui": {
+        "w": 58.4,
+        "h": 58.4
+      },
+      "balon": {
+        "w": 64.9,
+        "h": 64.9
+      },
+      "porteriaCampo": {
+        "w": 18.2,
+        "h": 66.7
+      }
+    },
+    "half": {
+      "jugador": {
+        "w": 37.4,
+        "h": 37.4
+      },
+      "cono": {
+        "w": 51.9,
+        "h": 51.9
+      },
+      "chino": {
+        "w": 25.1,
+        "h": 20
+      },
+      "escalera": {
+        "w": 102.9,
+        "h": 40.4
+      },
+      "miniporteria": {
+        "w": 40.7,
+        "h": 20.9
+      },
+      "porteria": {
+        "w": 98.8,
+        "h": 39.2
+      },
+      "maniqui": {
+        "w": 70.1,
+        "h": 70.1
+      },
+      "balon": {
+        "w": 77.9,
+        "h": 77.9
+      },
+      "porteriaCampo": {
+        "w": 98.8,
+        "h": 27
+      }
+    },
+    "third": {
+      "jugador": {
+        "w": 39.6,
+        "h": 39.6
+      },
+      "cono": {
+        "w": 55,
+        "h": 55
+      },
+      "chino": {
+        "w": 26.5,
+        "h": 21.2
+      },
+      "escalera": {
+        "w": 108.9,
+        "h": 42.8
+      },
+      "miniporteria": {
+        "w": 43.1,
+        "h": 22.1
+      },
+      "porteria": {
+        "w": 127.8,
+        "h": 50.7
+      },
+      "maniqui": {
+        "w": 74.2,
+        "h": 74.2
+      },
+      "balon": {
+        "w": 82.4,
+        "h": 82.4
+      },
+      "porteriaCampo": {
+        "w": 127.7,
+        "h": 34.9
+      }
+    },
+    "futsal": {
+      "jugador": {
+        "w": 36.7,
+        "h": 36.7
+      },
+      "cono": {
+        "w": 50.8,
+        "h": 50.8
+      },
+      "chino": {
+        "w": 24.6,
+        "h": 19.6
+      },
+      "escalera": {
+        "w": 100.8,
+        "h": 39.6
+      },
+      "miniporteria": {
+        "w": 39.8,
+        "h": 20.5
+      },
+      "porteria": {
+        "w": 50.8,
+        "h": 38.5
+      },
+      "maniqui": {
+        "w": 68.6,
+        "h": 68.6
+      },
+      "balon": {
+        "w": 76.3,
+        "h": 76.3
+      },
+      "porteriaCampo": {
+        "w": 50.8,
+        "h": 33.9
+      }
+    },
+    "f7": {
+      "jugador": {
+        "w": 36.7,
+        "h": 36.7
+      },
+      "cono": {
+        "w": 51,
+        "h": 51
+      },
+      "chino": {
+        "w": 24.6,
+        "h": 19.6
+      },
+      "escalera": {
+        "w": 101,
+        "h": 39.7
+      },
+      "miniporteria": {
+        "w": 39.9,
+        "h": 20.5
+      },
+      "porteria": {
+        "w": 79,
+        "h": 31.2
+      },
+      "maniqui": {
+        "w": 68.8,
+        "h": 68.8
+      },
+      "balon": {
+        "w": 76.4,
+        "h": 76.4
+      },
+      "porteriaCampo": {
+        "w": 21.6,
+        "h": 79
+      }
+    },
+    "blank": {
+      "jugador": {
+        "w": 31.2,
+        "h": 31.2
+      },
+      "cono": {
+        "w": 43.3,
+        "h": 43.3
+      },
+      "chino": {
+        "w": 20.9,
+        "h": 16.7
+      },
+      "escalera": {
+        "w": 85.7,
+        "h": 33.7
+      },
+      "miniporteria": {
+        "w": 33.9,
+        "h": 17.4
+      },
+      "porteria": {
+        "w": 53.4,
+        "h": 21.8
+      },
+      "maniqui": {
+        "w": 58.4,
+        "h": 58.4
+      },
+      "balon": {
+        "w": 64.9,
+        "h": 64.9
+      }
+    }
+  },
+  "ratios": [
+    "jugador: full=1.00 · half=1.20 · third=1.27 · futsal=1.18 · f7=1.18 · blank=1.00",
+    "cono: full=1.00 · half=1.20 · third=1.27 · futsal=1.17 · f7=1.18 · blank=1.00",
+    "chino: full=1.00 · half=1.20 · third=1.27 · futsal=1.18 · f7=1.18 · blank=1.00",
+    "escalera: full=1.00 · half=1.20 · third=1.27 · futsal=1.18 · f7=1.18 · blank=1.00",
+    "miniporteria: full=1.00 · half=1.20 · third=1.27 · futsal=1.17 · f7=1.18 · blank=1.00",
+    "porteria: full=1.00 · half=1.48 · third=1.91 · futsal=0.76 · f7=1.18 · blank=0.80",
+    "maniqui: full=1.00 · half=1.20 · third=1.27 · futsal=1.17 · f7=1.18 · blank=1.00",
+    "balon: full=1.00 · half=1.20 · third=1.27 · futsal=1.18 · f7=1.18 · blank=1.00"
+  ]
+}

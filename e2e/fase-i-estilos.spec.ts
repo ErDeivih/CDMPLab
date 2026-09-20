@@ -110,9 +110,17 @@ test.describe('Lote D — CSS consolidado', () => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
 
-    // Ajustes (app shell): botón normal del sistema.
+    // Ajustes (app shell): el botón normal del sistema. CONTRATO ACTUALIZADO (fase shell+móvil):
+    // antes se abría desde el icono de la barra superior; esa barra se ha eliminado del DOM, así
+    // que ahora se entra por el menú de cuenta. El botón y la regla global son los mismos.
     await page.goto('/library');
-    await page.locator('button[aria-label="Ajustes"]').click();
+    // Se filtra por VISIBILIDAD: en escritorio la navegación de móvil (`.nav-mas`) está oculta a
+    // propósito (defecto de la doble navegación corregido), así que `.first()` sin `:visible`
+    // elegía un botón invisible y el clic no terminaba nunca.
+    await page.locator('.cuenta-btn:visible, .nav-mas:visible').first().click();
+    await expect(page.locator('.cuenta-panel')).toBeVisible();
+    await page.locator('.cuenta-accion', { hasText: 'Ajustes' }).click();
+    await expect(page.locator('.settings')).toBeVisible();
     const row = page.locator('.settings-row', { hasText: 'Exportar respaldo' }).locator('button');
     const btn = await css(page, '.settings-row button', [
       'height',

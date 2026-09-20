@@ -14,10 +14,11 @@
 //      elementos colocados frente al campo vacío.
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import type { CanvasDocument, CanvasElement } from '../src/app/core/models';
 import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO } from '../src/app/core/tactic-assets';
-import { longPress, fillBoardTitle } from './gesture-helpers';
+import { longPress, fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/final-board-gallery';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -50,22 +51,46 @@ function elCenter(el: CanvasElement): [number, number] {
     return [((el.x1 ?? 0) + (el.x2 ?? 0)) / 2, ((el.y1 ?? 0) + (el.y2 ?? 0)) / 2];
   }
   if (t === 'curve') {
-    return [((el.x1 ?? 0) + (el.c1x ?? 0) + (el.x2 ?? 0)) / 3, ((el.y1 ?? 0) + (el.c1y ?? 0) + (el.y2 ?? 0)) / 3];
+    return [
+      ((el.x1 ?? 0) + (el.c1x ?? 0) + (el.x2 ?? 0)) / 3,
+      ((el.y1 ?? 0) + (el.c1y ?? 0) + (el.y2 ?? 0)) / 3,
+    ];
   }
   if (t === 'freehand') {
     const pts = el.points ?? [];
     if (!pts.length) return [el.x ?? 0, el.y ?? 0];
-    return [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length];
+    return [
+      pts.reduce((a, p) => a + p[0], 0) / pts.length,
+      pts.reduce((a, p) => a + p[1], 0) / pts.length,
+    ];
   }
   return [el.x ?? 0, el.y ?? 0];
 }
 
 function isPointLike(t: string): boolean {
   return (
-    t === 'player' || t === 'ball' || t === 'cone' || t === 'text' || t === 'mannequin' || t === 'minigoal' ||
-    t === 'pole' || t === 'marker' || t === 'hurdle' || t === 'ring' || t === 'ladder' || t === 'flag' ||
-    t === 'trampoline' || t === 'target' || t === 'net' || t === 'vball' || t === 'coachC' || t === 'peto' ||
-    t === 'chaleco' || t === 'bosu' || t === 'fitball' || t === 'pica'
+    t === 'player' ||
+    t === 'ball' ||
+    t === 'cone' ||
+    t === 'text' ||
+    t === 'mannequin' ||
+    t === 'minigoal' ||
+    t === 'pole' ||
+    t === 'marker' ||
+    t === 'hurdle' ||
+    t === 'ring' ||
+    t === 'ladder' ||
+    t === 'flag' ||
+    t === 'trampoline' ||
+    t === 'target' ||
+    t === 'net' ||
+    t === 'vball' ||
+    t === 'coachC' ||
+    t === 'peto' ||
+    t === 'chaleco' ||
+    t === 'bosu' ||
+    t === 'fitball' ||
+    t === 'pica'
   );
 }
 
@@ -76,15 +101,24 @@ function visualBBox(el: CanvasElement): { x: number; y: number; w: number; h: nu
     return { x: (el.x ?? 0) - hs, y: (el.y ?? 0) - hs, w: hs * 2, h: hs * 2 };
   }
   if (t === 'arrow' || t === 'line' || t === 'dribble' || t === 'doubleArrow' || t === 'measure') {
-    const x1 = el.x1 ?? 0, y1 = el.y1 ?? 0, x2 = el.x2 ?? 0, y2 = el.y2 ?? 0;
+    const x1 = el.x1 ?? 0,
+      y1 = el.y1 ?? 0,
+      x2 = el.x2 ?? 0,
+      y2 = el.y2 ?? 0;
     return { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
   }
   if (t === 'curve') {
-    const x1 = el.x1 ?? 0, y1 = el.y1 ?? 0, x2 = el.x2 ?? 0, y2 = el.y2 ?? 0;
-    const cx = el.c1x ?? (x1 + x2) / 2, cy = el.c1y ?? (y1 + y2) / 2;
+    const x1 = el.x1 ?? 0,
+      y1 = el.y1 ?? 0,
+      x2 = el.x2 ?? 0,
+      y2 = el.y2 ?? 0;
+    const cx = el.c1x ?? (x1 + x2) / 2,
+      cy = el.c1y ?? (y1 + y2) / 2;
     return {
-      x: Math.min(x1, x2, cx), y: Math.min(y1, y2, cy),
-      w: Math.max(x1, x2, cx) - Math.min(x1, x2, cx), h: Math.max(y1, y2, cy) - Math.min(y1, y2, cy),
+      x: Math.min(x1, x2, cx),
+      y: Math.min(y1, y2, cy),
+      w: Math.max(x1, x2, cx) - Math.min(x1, x2, cx),
+      h: Math.max(y1, y2, cy) - Math.min(y1, y2, cy),
     };
   }
   if (t === 'freehand') {
@@ -92,7 +126,12 @@ function visualBBox(el: CanvasElement): { x: number; y: number; w: number; h: nu
     if (!pts.length) return { x: el.x ?? 0, y: el.y ?? 0, w: 0, h: 0 };
     const xs = pts.map((p) => p[0]);
     const ys = pts.map((p) => p[1]);
-    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    return {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      w: Math.max(...xs) - Math.min(...xs),
+      h: Math.max(...ys) - Math.min(...ys),
+    };
   }
   return { x: el.x ?? 0, y: el.y ?? 0, w: el.w ?? 0, h: el.h ?? 0 };
 }
@@ -106,7 +145,10 @@ function rotHandle(el: CanvasElement): { x: number; y: number } {
 function boxHandles(el: CanvasElement): Array<{ x: number; y: number; key: string }> {
   const t = el.t;
   if (t !== 'rect' && t !== 'zone' && t !== 'ellipse' && t !== 'text') return [];
-  const x = el.x ?? 0, y = el.y ?? 0, w = el.w ?? 0, h = el.h ?? 0;
+  const x = el.x ?? 0,
+    y = el.y ?? 0,
+    w = el.w ?? 0,
+    h = el.h ?? 0;
   return [
     { x, y, key: 'tl' },
     { x: x + w, y, key: 'tr' },
@@ -117,7 +159,15 @@ function boxHandles(el: CanvasElement): Array<{ x: number; y: number; key: strin
 
 function segHandles(el: CanvasElement): Array<{ x: number; y: number; key: string }> {
   const t = el.t;
-  if (!(t === 'line' || t === 'arrow' || t === 'curve' || t === 'doubleArrow' || t === 'measure' || t === 'dribble')) return [];
+  if (!(
+    t === 'line' ||
+    t === 'arrow' ||
+    t === 'curve' ||
+    t === 'doubleArrow' ||
+    t === 'measure' ||
+    t === 'dribble'
+  ))
+    return [];
   const hs = [
     { x: el.x1 ?? 0, y: el.y1 ?? 0, key: 'x1' },
     { x: el.x2 ?? 0, y: el.y2 ?? 0, key: 'x2' },
@@ -137,12 +187,36 @@ async function seed(page: Page): Promise<void> {
     const team = { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now };
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem('entrenolab:teams', JSON.stringify([team]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Pau',
+          number: 10,
+          position: 'MF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]));
+    localStorage.setItem(
+      'entrenolab:folders',
+      JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]),
+    );
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
@@ -150,7 +224,13 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
   // Esta galería verifica colocación → persistencia → exportación PNG a partir del
   // mapeo norm→pantalla con letterbox "meet" (campo completo). El modo por defecto
   // en móvil pasó a ser "Llenar pantalla" (campo escalado a llenar la altura, que
@@ -163,19 +243,33 @@ async function openBoard(page: Page): Promise<void> {
 /** Deja la pizarra en "Campo completo" (letterbox a todo el host) si estaba en
  *  "Llenar pantalla", para que el helper norm→pantalla (fit) coincida con el render. */
 async function ensureFitMode(page: Page): Promise<void> {
-  const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
+  const fill = await page
+    .locator('.board-host')
+    .evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
-    await page.locator('.field-fit-toggle').click();
+    await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
   }
 }
 
 async function dismissHelp(page: Page): Promise<void> {
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
 }
 
 async function openProps(page: Page): Promise<void> {
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
   await page.locator('button[aria-label="Propiedades"]').click();
   await expect(page.locator('.studio-panel')).toBeVisible();
   await page.waitForTimeout(60);
@@ -200,7 +294,14 @@ async function openCat(page: Page, category: string): Promise<void> {
     Material: '.side-panel-left[aria-label="Herramientas de Material"]',
     Dibujo: '.side-panel-left[aria-label="Herramientas de Dibujo"]',
   };
-  if (await page.locator(probe[category]).isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator(probe[category])
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: category }).click();
   await expect(page.locator(probe[category])).toBeVisible();
 }
@@ -221,21 +322,25 @@ async function save(page: Page): Promise<void> {
   // cuando el modelado realmente lo necesita (campo vacío o ejercicio nuevo sin
   // metaTitle persistido); si ya hay un título — por la UI o del ejercicio que se
   // acaba de reabrir — no se sobrescribe ni se abre el panel en balde.
-  const hasTitle = await page.evaluate(() => {
-    const raw = localStorage.getItem('entrenolab:exercises');
-    let persisted = '';
-    if (raw) {
-      try {
-        const list = JSON.parse(raw) as Array<{ metaTitle?: string }>;
-        persisted = (list?.[0]?.metaTitle ?? '').trim();
-      } catch {
-        persisted = '';
+  const hasTitle = await page
+    .evaluate(() => {
+      const raw = localStorage.getItem('entrenolab:exercises');
+      let persisted = '';
+      if (raw) {
+        try {
+          const list = JSON.parse(raw) as Array<{ metaTitle?: string }>;
+          persisted = (list?.[0]?.metaTitle ?? '').trim();
+        } catch {
+          persisted = '';
+        }
       }
-    }
-    const input = document.querySelector<HTMLInputElement>('input[aria-label="Título del ejercicio"]');
-    const inputTitle = (input && input.value ? input.value : '').trim();
-    return persisted !== '' || inputTitle !== '';
-  }).catch(() => false);
+      const input = document.querySelector<HTMLInputElement>(
+        'input[aria-label="Título del ejercicio"]',
+      );
+      const inputTitle = (input && input.value ? input.value : '').trim();
+      return persisted !== '' || inputTitle !== '';
+    })
+    .catch(() => false);
   if (!hasTitle) await fillBoardTitle(page, 'Galería');
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');
@@ -274,7 +379,13 @@ async function hostBox(page: Page): Promise<Box> {
   return (await page.locator('.board-host').boundingBox())!;
 }
 
-async function placePlayer(page: Page, box: Box, title: string, nx: number, ny: number): Promise<void> {
+async function placePlayer(
+  page: Page,
+  box: Box,
+  title: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   await openCat(page, 'Jugadores');
   if (title === 'Jugador propio' || title === 'Jugador rival') {
     const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
@@ -288,7 +399,13 @@ async function placePlayer(page: Page, box: Box, title: string, nx: number, ny: 
   await page.mouse.click(x, y, { button: 'right' });
 }
 
-async function placeTrayPlayer(page: Page, box: Box, title: string, nx: number, ny: number): Promise<void> {
+async function placeTrayPlayer(
+  page: Page,
+  box: Box,
+  title: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   await openCat(page, 'Jugadores');
   await page.locator(`.tray-player[title="${title}"]`).click();
   box = await hostBox(page);
@@ -298,10 +415,19 @@ async function placeTrayPlayer(page: Page, box: Box, title: string, nx: number, 
 }
 
 /** Coloca un material (con variante opcional elegida antes de armar). */
-async function placeMaterial(page: Page, box: Box, tool: string, nx: number, ny: number, variantIndex?: number): Promise<void> {
+async function placeMaterial(
+  page: Page,
+  box: Box,
+  tool: string,
+  nx: number,
+  ny: number,
+  variantIndex?: number,
+): Promise<void> {
   await openCat(page, 'Material');
   if (variantIndex != null) {
-    const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${tool}"]`) });
+    const card = page.locator('.tools-material-card', {
+      has: page.locator(`.rail-btn[title="${tool}"]`),
+    });
     const variantCount = await card.locator('.variant-swatch').count();
     if (variantCount > 0) await card.locator('.variant-swatch').nth(variantIndex).click();
   }
@@ -316,7 +442,12 @@ async function placeMaterial(page: Page, box: Box, tool: string, nx: number, ny:
 }
 
 /** Arrastra para dibujar una forma/línea entre dos puntos normalizados. */
-async function dragDraw(page: Page, box: Box, from: [number, number], to: [number, number]): Promise<void> {
+async function dragDraw(
+  page: Page,
+  box: Box,
+  from: [number, number],
+  to: [number, number],
+): Promise<void> {
   box = await hostBox(page);
   const [x1, y1] = normToScreen(from[0], from[1], box);
   const [x2, y2] = normToScreen(to[0], to[1], box);
@@ -327,17 +458,32 @@ async function dragDraw(page: Page, box: Box, from: [number, number], to: [numbe
 }
 
 /** Dibuja una forma configurada con color y relleno desde el rail de herramientas. */
-async function drawShape(page: Page, box: Box, tool: string, from: [number, number], to: [number, number], colorIndex?: number, fill?: boolean): Promise<void> {
+async function drawShape(
+  page: Page,
+  box: Box,
+  tool: string,
+  from: [number, number],
+  to: [number, number],
+  colorIndex?: number,
+  fill?: boolean,
+): Promise<void> {
   await openCat(page, 'Dibujo');
   await page.locator(`.rail-btn[title="${tool}"]`).click();
   if (colorIndex != null) await page.locator('.tools-caption .swatch').nth(colorIndex).click();
-  if (fill != null) await page.locator('.tools-caption .chip', { hasText: fill ? 'Relleno' : 'Perímetro' }).click();
+  if (fill != null)
+    await page.locator('.tools-caption .chip', { hasText: fill ? 'Relleno' : 'Perímetro' }).click();
   await closePanelIfBlocking(page);
   await dragDraw(page, box, from, to);
 }
 
 /** Coloca un texto y rellena su contenido multilínea. */
-async function placeText(page: Page, box: Box, nx: number, ny: number, value: string): Promise<void> {
+async function placeText(
+  page: Page,
+  box: Box,
+  nx: number,
+  ny: number,
+  value: string,
+): Promise<void> {
   await useTool(page, 'Texto', 'Dibujo');
   box = await hostBox(page);
   await closePanelIfBlocking(page);
@@ -361,7 +507,12 @@ async function selectAt(page: Page, box: Box, nx: number, ny: number): Promise<v
   await expect(page.locator('.inspector')).toBeVisible();
 }
 
-async function dragHandle(page: Page, box: Box, from: [number, number], to: [number, number]): Promise<void> {
+async function dragHandle(
+  page: Page,
+  box: Box,
+  from: [number, number],
+  to: [number, number],
+): Promise<void> {
   box = await hostBox(page);
   const [fx, fy] = normToScreen(from[0], from[1], box);
   const [tx, ty] = normToScreen(to[0], to[1], box);
@@ -382,17 +533,26 @@ async function dragRotHandle(page: Page, el: CanvasElement, box: Box): Promise<v
 }
 
 async function setInspNum(page: Page, label: string, value: string): Promise<void> {
-  const input = page.locator('.studio-panel .inspector .field', { hasText: label }).locator('input');
+  const input = page
+    .locator('.studio-panel .inspector .field', { hasText: label })
+    .locator('input');
   await input.fill(value);
   await input.press('Tab');
 }
 
 async function setInspColor(page: Page, index: number): Promise<void> {
-  await page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch').nth(index).click();
+  await page
+    .locator('.studio-panel .inspector .field', { hasText: 'Color' })
+    .locator('.swatch')
+    .nth(index)
+    .click();
 }
 
 async function setInspChip(page: Page, label: string, chipText: string): Promise<void> {
-  await page.locator('.studio-panel .inspector .field', { hasText: label }).locator('.chip', { hasText: chipText }).click();
+  await page
+    .locator('.studio-panel .inspector .field', { hasText: label })
+    .locator('.chip', { hasText: chipText })
+    .click();
 }
 
 // -------------------------------------------------------------
@@ -412,36 +572,47 @@ async function exportPngBuf(page: Page): Promise<Buffer> {
   return buf;
 }
 
-async function pngRegionDiff(page: Page, a: Buffer, b: Buffer, nx: number, ny: number): Promise<number> {
-  return await page.evaluate(async ({ a, b, nx, ny }) => {
-    const load = (b64: string) =>
-      new Promise<HTMLCanvasElement>((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          const c = document.createElement('canvas');
-          c.width = img.width;
-          c.height = img.height;
-          c.getContext('2d')!.drawImage(img, 0, 0);
-          resolve(c);
-        };
-        img.src = 'data:image/png;base64,' + b64;
-      });
-    const [ca, cb] = await Promise.all([load(a), load(b)]);
-    const W = ca.width, H = ca.height;
-    const sx = Math.round(((nx * 92 + 4) / 100) * W);
-    const sy = Math.round(((ny * (92 / (105 / 68)) + 10) / 80) * H);
-    const ctxA = ca.getContext('2d')!;
-    const ctxB = cb.getContext('2d')!;
-    let changed = 0;
-    for (let dy = -80; dy <= 80; dy += 3) {
-      for (let dx = -80; dx <= 80; dx += 3) {
-        const pa = ctxA.getImageData(sx + dx, sy + dy, 1, 1).data;
-        const pb = ctxB.getImageData(sx + dx, sy + dy, 1, 1).data;
-        if (Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) + Math.abs(pa[2] - pb[2]) > 60) changed++;
+async function pngRegionDiff(
+  page: Page,
+  a: Buffer,
+  b: Buffer,
+  nx: number,
+  ny: number,
+): Promise<number> {
+  return await page.evaluate(
+    async ({ a, b, nx, ny }) => {
+      const load = (b64: string) =>
+        new Promise<HTMLCanvasElement>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = img.width;
+            c.height = img.height;
+            c.getContext('2d')!.drawImage(img, 0, 0);
+            resolve(c);
+          };
+          img.src = 'data:image/png;base64,' + b64;
+        });
+      const [ca, cb] = await Promise.all([load(a), load(b)]);
+      const W = ca.width,
+        H = ca.height;
+      const sx = Math.round(((nx * 92 + 4) / 100) * W);
+      const sy = Math.round(((ny * (92 / (105 / 68)) + 10) / 80) * H);
+      const ctxA = ca.getContext('2d')!;
+      const ctxB = cb.getContext('2d')!;
+      let changed = 0;
+      for (let dy = -80; dy <= 80; dy += 3) {
+        for (let dx = -80; dx <= 80; dx += 3) {
+          const pa = ctxA.getImageData(sx + dx, sy + dy, 1, 1).data;
+          const pb = ctxB.getImageData(sx + dx, sy + dy, 1, 1).data;
+          if (Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) + Math.abs(pa[2] - pb[2]) > 60)
+            changed++;
+        }
       }
-    }
-    return changed;
-  }, { a: a.toString('base64'), b: b.toString('base64'), nx, ny });
+      return changed;
+    },
+    { a: a.toString('base64'), b: b.toString('base64'), nx, ny },
+  );
 }
 
 /** Captura el campo vacío (línea base) exportando antes de colocar nada. */
@@ -465,7 +636,11 @@ async function verifyPersistence(page: Page): Promise<CanvasDocument> {
   return a;
 }
 
-async function verifyExport(page: Page, baseline: Buffer, checkPoints: Array<[number, number]>): Promise<void> {
+async function verifyExport(
+  page: Page,
+  baseline: Buffer,
+  checkPoints: Array<[number, number]>,
+): Promise<void> {
   await reopen(page);
   const withEl = await exportPngBuf(page);
   expect(withEl.length).toBeGreaterThan(1000);
@@ -507,7 +682,7 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     await placeMaterial(page, box, 'BOSU', 0.85, 0.45);
     await placeMaterial(page, box, 'Banderín', 0.11, 0.68);
     await placeMaterial(page, box, 'Chino', 0.29, 0.7);
-    await placeMaterial(page, box, 'Pica coloreable', 0.85, 0.7);
+    await placeMaterial(page, box, 'Pica', 0.85, 0.7);
 
     await expect(page.locator('.field-count')).toHaveText('15');
     await page.waitForTimeout(250);
@@ -515,7 +690,12 @@ test.describe('Galería final — escenas a través de la UI real', () => {
 
     const doc = await verifyPersistence(page);
     expect(doc.frames[0].elements).toHaveLength(15);
-    await verifyExport(page, baseline, [[0.14, 0.16], [0.47, 0.45], [0.85, 0.45], [0.29, 0.7]]);
+    await verifyExport(page, baseline, [
+      [0.14, 0.16],
+      [0.47, 0.45],
+      [0.85, 0.45],
+      [0.29, 0.7],
+    ]);
   });
 
   // =====================================================================
@@ -558,10 +738,17 @@ test.describe('Galería final — escenas a través de la UI real', () => {
       const key = (m.assetKind ?? m.t) as string;
       if (TACTICAL_SIZE[key] !== undefined && (m.assetKind || vectorMat.includes(m.t))) {
         // Fase 4: el tamaño inicial se reduce a 0.75 × la base antigua.
-        expect(m.size, `tamaño base normalizado de ${key}`).toBeCloseTo(TACTICAL_SIZE[key] * MATERIAL_SIZE_RATIO, 5);
+        expect(m.size, `tamaño base normalizado de ${key}`).toBeCloseTo(
+          TACTICAL_SIZE[key] * MATERIAL_SIZE_RATIO,
+          5,
+        );
       }
     }
-    await verifyExport(page, baseline, [[0.28, 0.18], [0.53, 0.45], [0.4, 0.72]]);
+    await verifyExport(page, baseline, [
+      [0.28, 0.18],
+      [0.53, 0.45],
+      [0.4, 0.72],
+    ]);
   });
 
   // =====================================================================
@@ -624,7 +811,9 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     const doc = await verifyPersistence(page);
     expect(doc.frames[0].elements).toHaveLength(15);
     // Regiones fiables para el dif: línea sólida (trazo en el centro) y texto.
-    const solidLine = doc.frames[0].elements.find((e) => e.t === 'line' && (e.lineStyle ?? 'solid') === 'solid')!;
+    const solidLine = doc.frames[0].elements.find(
+      (e) => e.t === 'line' && (e.lineStyle ?? 'solid') === 'solid',
+    )!;
     const textEl = doc.frames[0].elements.find((e) => e.t === 'text')!;
     await verifyExport(page, baseline, [elCenter(solidLine), elCenter(textEl)]);
   });
@@ -666,7 +855,9 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     // Rotar el material con la BARRA DE CONTEXTO (Fase 6); los materiales NO se
     // redimensionan (Fase 1: no hay control Tamaño ni asas).
     await selectAt(page, box2, ...elCenter(cone0));
-    await expect(page.locator('.studio-panel .inspector .field', { hasText: 'Tamaño' })).toHaveCount(0);
+    await expect(
+      page.locator('.studio-panel .inspector .field', { hasText: 'Tamaño' }),
+    ).toHaveCount(0);
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
     const [ccx, ccy] = normToScreen(...elCenter(cone0), box2);
     await page.mouse.click(ccx, ccy);
@@ -676,7 +867,12 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     // Seleccionar la CURVA por último → muestra extremos + C1 + manija de rotación.
     // Se pincha el MIDPOINT de la Bézier (t=0,5): la tolerancia de selección es en px,
     // y el baricentro de los 3 puntos de control queda FUERA del arco.
-    await selectAt(page, box2, (curve.x1 + 2 * (curve.c1x ?? curve.x1) + curve.x2) / 4, (curve.y1 + 2 * (curve.c1y ?? curve.y1) + curve.y2) / 4);
+    await selectAt(
+      page,
+      box2,
+      (curve.x1 + 2 * (curve.c1x ?? curve.x1) + curve.x2) / 4,
+      (curve.y1 + 2 * (curve.c1y ?? curve.y1) + curve.y2) / 4,
+    );
     await expect(page.locator('.inspector-actions')).toBeVisible();
     await page.waitForTimeout(250);
     await page.screenshot({ path: `${SHOTS}/04-interaccion-seleccionada.png` });
@@ -725,7 +921,11 @@ test.describe('Galería final — escenas a través de la UI real', () => {
 
     const doc = await verifyPersistence(page);
     expect(doc.frames[0].elements).toHaveLength(9);
-    await verifyExport(page, baseline, [[0.2, 0.2], [0.42, 0.33], [0.7, 0.475]]);
+    await verifyExport(page, baseline, [
+      [0.2, 0.2],
+      [0.42, 0.33],
+      [0.7, 0.475],
+    ]);
   });
 
   // =====================================================================
@@ -747,9 +947,13 @@ test.describe('Galería final — escenas a través de la UI real', () => {
 
     // Rellenar la metadata (Datos del ejercicio) POR LA UI.
     await openProps(page);
-    await page.locator('.studio-panel input[aria-label="Título del ejercicio"]').fill('Rondos de pase y recepción');
+    await page
+      .locator('.studio-panel input[aria-label="Título del ejercicio"]')
+      .fill('Rondos de pase y recepción');
     await page.locator('.studio-panel select[aria-label="Categoría"]').selectOption('Táctica');
-    await page.locator('.studio-panel textarea[aria-label="Descripción"]').fill('Conservación en superioridad con pase al apoyo');
+    await page
+      .locator('.studio-panel textarea[aria-label="Descripción"]')
+      .fill('Conservación en superioridad con pase al apoyo');
     // Decisión del dueño: el checklist «Material necesario» se retira del panel, así que el
     // material ya no se marca por la UI. La tarjeta de Biblioteca no depende de él (miniatura,
     // título, descripción, duración, jugadores, categoría y carpeta se comprueban abajo).
@@ -779,7 +983,10 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     await reopen(page);
     await save(page);
     expect(await canvasDoc(page)).toEqual(doc);
-    await verifyExport(page, baseline, [[0.25, 0.25], [0.5, 0.55]]);
+    await verifyExport(page, baseline, [
+      [0.25, 0.25],
+      [0.5, 0.55],
+    ]);
   });
 
   // =====================================================================
@@ -811,7 +1018,10 @@ test.describe('Galería final — escenas a través de la UI real', () => {
 
     const doc = await verifyPersistence(page);
     expect(doc.frames[0].elements).toHaveLength(4);
-    await verifyExport(page, baseline, [[0.25, 0.25], [0.35, 0.7]]);
+    await verifyExport(page, baseline, [
+      [0.25, 0.25],
+      [0.35, 0.7],
+    ]);
   });
 
   // =====================================================================
@@ -831,6 +1041,7 @@ test.describe('Galería final — escenas a través de la UI real', () => {
 
     await page.keyboard.press('Escape');
     await page.waitForTimeout(120);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     await page.waitForTimeout(300);
@@ -840,7 +1051,10 @@ test.describe('Galería final — escenas a través de la UI real', () => {
 
     const doc = await verifyPersistence(page);
     expect(doc.frames[0].elements).toHaveLength(3);
-    await verifyExport(page, baseline, [[0.3, 0.3], [0.7, 0.5]]);
+    await verifyExport(page, baseline, [
+      [0.3, 0.3],
+      [0.7, 0.5],
+    ]);
   });
 
   // =====================================================================
@@ -861,6 +1075,7 @@ test.describe('Galería final — escenas a través de la UI real', () => {
 
     await page.keyboard.press('Escape');
     await page.waitForTimeout(120);
+    await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     await page.waitForTimeout(300);
@@ -872,7 +1087,10 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     expect(doc.frames[0].elements).toHaveLength(2);
     // La figura con relleno translúcido apenas altera el centro: se muestrea el
     // borde sólido (0.3, 0.2) del rectángulo y el centro de la flecha.
-    await verifyExport(page, baseline, [[0.3, 0.2], [0.4, 0.56]]);
+    await verifyExport(page, baseline, [
+      [0.3, 0.2],
+      [0.4, 0.56],
+    ]);
   });
 
   // =====================================================================
@@ -900,7 +1118,10 @@ test.describe('Galería final — escenas a través de la UI real', () => {
 
     const doc = await verifyPersistence(page);
     expect(doc.frames[0].elements).toHaveLength(2);
-    await verifyExport(page, baseline, [[0.4, 0.4], [0.6, 0.6]]);
+    await verifyExport(page, baseline, [
+      [0.4, 0.4],
+      [0.6, 0.6],
+    ]);
   });
 });
 
@@ -939,16 +1160,33 @@ async function singleEl(page: Page): Promise<CanvasElement> {
 function shifted(el: CanvasElement, dx: number, dy: number): CanvasElement {
   const t = el.t;
   if (
-    t === 'arrow' || t === 'line' || t === 'dribble' || t === 'doubleArrow' ||
-    t === 'measure' || t === 'curve' || t === 'freehand'
+    t === 'arrow' ||
+    t === 'line' ||
+    t === 'dribble' ||
+    t === 'doubleArrow' ||
+    t === 'measure' ||
+    t === 'curve' ||
+    t === 'freehand'
   ) {
-    return { ...el, x1: (el.x1 ?? 0) + dx, y1: (el.y1 ?? 0) + dy, x2: (el.x2 ?? 0) + dx, y2: (el.y2 ?? 0) + dy };
+    return {
+      ...el,
+      x1: (el.x1 ?? 0) + dx,
+      y1: (el.y1 ?? 0) + dy,
+      x2: (el.x2 ?? 0) + dx,
+      y2: (el.y2 ?? 0) + dy,
+    };
   }
   return { ...el, x: (el.x ?? 0) + dx, y: (el.y ?? 0) + dy };
 }
 
 /** Arrastra (desde el centro del elemento) para desplaazarlo por un delta normalizado. */
-async function dragMove(page: Page, box: Box, nx: number, ny: number, delta: [number, number]): Promise<void> {
+async function dragMove(
+  page: Page,
+  box: Box,
+  nx: number,
+  ny: number,
+  delta: [number, number],
+): Promise<void> {
   const [x1, y1] = normToScreen(nx, ny, box);
   const [x2, y2] = normToScreen(nx + delta[0], ny + delta[1], box);
   await page.mouse.move(x1, y1);
@@ -973,14 +1211,19 @@ function enclosingRot(svg: string, pos: number): RotFrag | null {
     if (m[0] === '</g>') stack.pop();
     else {
       const t = m[0].match(/transform="rotate\(([-\d.]+) ([-\d.]+) ([-\d.]+)\)"/);
-      stack.push(t ? { angle: parseFloat(t[1]), cx: parseFloat(t[2]), cy: parseFloat(t[3]) } : null);
+      stack.push(
+        t ? { angle: parseFloat(t[1]), cx: parseFloat(t[2]), cy: parseFloat(t[3]) } : null,
+      );
     }
   }
   for (let i = stack.length - 1; i >= 0; i--) if (stack[i]) return stack[i];
   return null;
 }
 
-function imageAttrs(svg: string, href: string): { x: number; y: number; width: number; height: number } {
+function imageAttrs(
+  svg: string,
+  href: string,
+): { x: number; y: number; width: number; height: number } {
   const i = svg.indexOf(`<image href="${href}"`);
   expect(i, `<image href="${href}"`).toBeGreaterThan(-1);
   const tag = svg.slice(i, svg.indexOf('/>', i));
@@ -990,6 +1233,23 @@ function imageAttrs(svg: string, href: string): { x: number; y: number; width: n
 
 /** Material PNG: <image ... width=5.2·size> y su <g transform="rotate(...)">. */
 function assertMaterialSvg(svg: string, el: CanvasElement, created: CanvasElement): void {
+  // CAMBIO DE CONTRATO (encargo de materiales, FASE 4): la portería, la escalera, la miniportería y
+  // el chino se dibujan SIEMPRE en VECTOR, así que su PNG (que el documento sigue guardando) ya no
+  // se pinta como <image>. Se comprueba lo contrario: que el dibujo vectorial está y el PNG no.
+  const SIEMPRE_VECTOR = new Set(['ladder', 'ladder_yellow', 'minigoal', 'target', 'goal']);
+  if (SIEMPRE_VECTOR.has(el.t) || SIEMPRE_VECTOR.has(el.assetKind ?? '')) {
+    expect(
+      svg.includes(`data-el-type="${el.t}"`),
+      `el dibujo vectorial de "${el.t}" está en el SVG`,
+    ).toBe(true);
+    if (el.asset) {
+      expect(
+        svg.includes(`<image href="${el.asset}"`),
+        `"${el.t}" ya NO pinta su PNG (dibujo vectorial)`,
+      ).toBe(false);
+    }
+    return;
+  }
   const href = el.asset!;
   const i = svg.indexOf(`<image href="${href}"`);
   expect(i, `el <image> de "${el.assetKind ?? el.t}" está en el SVG`).toBeGreaterThan(-1);
@@ -1000,7 +1260,7 @@ function assertMaterialSvg(svg: string, el: CanvasElement, created: CanvasElemen
   expect(a.height).toBeCloseTo(MATERIAL_BOX * (el.size ?? 1), 2);
   // Fase 1: los materiales NO se redimensionan (resizable:false), así que el tamaño
   // renderizado coincide con el del estado creado (no puede superarlo).
-  expect(a.width).toBeGreaterThanOrEqual((MATERIAL_BOX * (created.size ?? 1)) - 0.01);
+  expect(a.width).toBeGreaterThanOrEqual(MATERIAL_BOX * (created.size ?? 1) - 0.01);
   // posición renderizada = centro del elemento.
   expect(a.x).toBeCloseTo(vbX(el.x!) - half, 2);
   expect(a.y).toBeCloseTo(vbY(el.y!) - half, 2);
@@ -1025,15 +1285,23 @@ function findRectAt(svg: string, ex: number, ey: number, ew: number, eh: number)
     const y = parseFloat(tag.match(/\by="([^"]+)"/)?.[1] ?? 'NaN');
     const w = parseFloat(tag.match(/\bwidth="([^"]+)"/)?.[1] ?? 'NaN');
     const h = parseFloat(tag.match(/\bheight="([^"]+)"/)?.[1] ?? 'NaN');
-    if (Math.abs(x - ex) < 0.08 && Math.abs(y - ey) < 0.08 && Math.abs(w - ew) < 0.12 && Math.abs(h - eh) < 0.12) return m.index;
+    if (
+      Math.abs(x - ex) < 0.08 &&
+      Math.abs(y - ey) < 0.08 &&
+      Math.abs(w - ew) < 0.12 &&
+      Math.abs(h - eh) < 0.12
+    )
+      return m.index;
   }
   return -1;
 }
 
 /** Rectángulo: <rect width/height> creció y su <g transform="rotate(...)">. */
 function assertRectSvg(svg: string, el: CanvasElement, created: CanvasElement): void {
-  const ex = vbX(el.x!), ey = vbY(el.y!);
-  const ew = (el.w ?? 0) * CBB_RECT.w, eh = (el.h ?? 0) * CBB_RECT.h;
+  const ex = vbX(el.x!),
+    ey = vbY(el.y!);
+  const ew = (el.w ?? 0) * CBB_RECT.w,
+    eh = (el.h ?? 0) * CBB_RECT.h;
   const pos = findRectAt(svg, ex, ey, ew, eh);
   expect(pos, `el <rect> de ${el.t} en su posición renderizada`).toBeGreaterThan(-1);
   const tag = svg.slice(pos, svg.indexOf('/>', pos));
@@ -1086,19 +1354,24 @@ function assertTextSvg(svg: string, el: CanvasElement, created: CanvasElement): 
 }
 
 function findArrowLine(svg: string, el: CanvasElement): number {
-  const x1 = vbX(el.x1!), y1 = vbY(el.y1!);
+  const x1 = vbX(el.x1!),
+    y1 = vbY(el.y1!);
   // Documento antiguo sin `c`: el render usa su color por defecto (blanco).
   const col = el.c ?? '#ffffff';
   const re = /<line\b[^>]*>/g;
   let m: RegExpExecArray | null;
-  let best = -1, bestD = Infinity;
+  let best = -1,
+    bestD = Infinity;
   while ((m = re.exec(svg))) {
     const tag = m[0];
     if (!tag.includes(`stroke="${col}"`)) continue;
     const sx = parseFloat(tag.match(/\bx1="([^"]+)"/)?.[1] ?? 'NaN');
     const sy = parseFloat(tag.match(/\by1="([^"]+)"/)?.[1] ?? 'NaN');
     const d = Math.hypot(sx - x1, sy - y1);
-    if (d < bestD) { bestD = d; best = m.index; }
+    if (d < bestD) {
+      bestD = d;
+      best = m.index;
+    }
   }
   return best;
 }
@@ -1114,7 +1387,10 @@ function assertArrowSvg(svg: string, el: CanvasElement, created: CanvasElement):
   const x2 = parseFloat(tag.match(/\bx2="([^"]+)"/)![1]);
   const y2 = parseFloat(tag.match(/\by2="([^"]+)"/)![1]);
   // el extremo x2 se movió (la flecha se alargó).
-  const createdLen = Math.hypot((created.x2 ?? 0) - (created.x1 ?? 0), (created.y2 ?? 0) - (created.y1 ?? 0));
+  const createdLen = Math.hypot(
+    (created.x2 ?? 0) - (created.x1 ?? 0),
+    (created.y2 ?? 0) - (created.y1 ?? 0),
+  );
   const len = Math.hypot(x2 - x1, y2 - y1);
   expect(len, `largo renderizado de la flecha`).toBeGreaterThan(createdLen * 92 - 0.5);
   expect(x2).toBeCloseTo(vbX(el.x2!), 2);
@@ -1137,40 +1413,58 @@ interface ChangedBBox {
 
 /** Caja envolvente (px) de los píxeles que cambian entre dos PNG dentro de una
  *  región centrada en (nx, ny) - para inferir la ORIENTACIÓN de un objeto largo. */
-async function pngChangedBBox(page: Page, a: Buffer, b: Buffer, nx: number, ny: number, half: number): Promise<ChangedBBox | null> {
-  return await page.evaluate(async ({ a, b, nx, ny, half }) => {
-    const load = (b64: string) =>
-      new Promise<HTMLCanvasElement>((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          const c = document.createElement('canvas');
-          c.width = img.width;
-          c.height = img.height;
-          c.getContext('2d')!.drawImage(img, 0, 0);
-          resolve(c);
-        };
-        img.src = 'data:image/png;base64,' + b64;
-      });
-    const [ca, cb] = await Promise.all([load(a), load(b)]);
-    const W = ca.width, H = ca.height;
-    const sx = Math.round(((nx * 92 + 4) / 100) * W);
-    const sy = Math.round(((ny * (92 / (105 / 68)) + 10) / 80) * H);
-    const ctxA = ca.getContext('2d')!, ctxB = cb.getContext('2d')!;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, count = 0;
-    for (let dy = -half; dy <= half; dy += 3) {
-      for (let dx = -half; dx <= half; dx += 3) {
-        const pa = ctxA.getImageData(sx + dx, sy + dy, 1, 1).data;
-        const pb = ctxB.getImageData(sx + dx, sy + dy, 1, 1).data;
-        if (Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) + Math.abs(pa[2] - pb[2]) > 60) {
-          count++;
-          minX = Math.min(minX, dx); maxX = Math.max(maxX, dx);
-          minY = Math.min(minY, dy); maxY = Math.max(maxY, dy);
+async function pngChangedBBox(
+  page: Page,
+  a: Buffer,
+  b: Buffer,
+  nx: number,
+  ny: number,
+  half: number,
+): Promise<ChangedBBox | null> {
+  return await page.evaluate(
+    async ({ a, b, nx, ny, half }) => {
+      const load = (b64: string) =>
+        new Promise<HTMLCanvasElement>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = img.width;
+            c.height = img.height;
+            c.getContext('2d')!.drawImage(img, 0, 0);
+            resolve(c);
+          };
+          img.src = 'data:image/png;base64,' + b64;
+        });
+      const [ca, cb] = await Promise.all([load(a), load(b)]);
+      const W = ca.width,
+        H = ca.height;
+      const sx = Math.round(((nx * 92 + 4) / 100) * W);
+      const sy = Math.round(((ny * (92 / (105 / 68)) + 10) / 80) * H);
+      const ctxA = ca.getContext('2d')!,
+        ctxB = cb.getContext('2d')!;
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity,
+        count = 0;
+      for (let dy = -half; dy <= half; dy += 3) {
+        for (let dx = -half; dx <= half; dx += 3) {
+          const pa = ctxA.getImageData(sx + dx, sy + dy, 1, 1).data;
+          const pb = ctxB.getImageData(sx + dx, sy + dy, 1, 1).data;
+          if (Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) + Math.abs(pa[2] - pb[2]) > 60) {
+            count++;
+            minX = Math.min(minX, dx);
+            maxX = Math.max(maxX, dx);
+            minY = Math.min(minY, dy);
+            maxY = Math.max(maxY, dy);
+          }
         }
       }
-    }
-    if (count === 0) return null;
-    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
-  }, { a: a.toString('base64'), b: b.toString('base64'), nx, ny, half });
+      if (count === 0) return null;
+      return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+    },
+    { a: a.toString('base64'), b: b.toString('base64'), nx, ny, half },
+  );
 }
 
 interface AsymSpec {
@@ -1218,12 +1512,17 @@ async function runAsym(page: Page, spec: AsymSpec, base: [number, number]): Prom
 
   // El modelo giró de verdad (manija) y se movió.
   expect(Math.abs(after.rot ?? 0)).toBeGreaterThan(5);
-  expect(Math.hypot((after.x ?? 0) + (after.w ?? 0) / 2 - ccx, (after.y ?? 0) + (after.h ?? 0) / 2 - ccy)).toBeGreaterThan(0.01);
+  expect(
+    Math.hypot(
+      (after.x ?? 0) + (after.w ?? 0) / 2 - ccx,
+      (after.y ?? 0) + (after.h ?? 0) / 2 - ccy,
+    ),
+  ).toBeGreaterThan(0.01);
 
   // SVG renderizado del estado final (deseleccionado).
   await reopen(page);
   await page.keyboard.press('Escape');
-  const svg = (await page.locator('.board-canvas svg').evaluate((el) => el.outerHTML as string));
+  const svg = await page.locator('.board-canvas svg').evaluate((el) => el.outerHTML as string);
   spec.sx(svg, after, created);
   if (spec.shot) await page.screenshot({ path: spec.shot });
 
@@ -1250,7 +1549,7 @@ async function runAsym(page: Page, spec: AsymSpec, base: [number, number]): Prom
   // Tras reabrir: el transform SIGUE en el SVG y el PNG aún muestra el objeto.
   await reopen(page);
   await page.keyboard.press('Escape');
-  const svg2 = (await page.locator('.board-canvas svg').evaluate((el) => el.outerHTML as string));
+  const svg2 = await page.locator('.board-canvas svg').evaluate((el) => el.outerHTML as string);
   spec.sx(svg2, after, created);
   const withEl2 = await exportPngBuf(page);
   const diff2 = await pngRegionDiff(page, baseline, withEl2, pnx, pny);
@@ -1262,94 +1561,155 @@ async function runAsym(page: Page, spec: AsymSpec, base: [number, number]): Prom
 }
 
 test.describe('Fase 4 — objetos asimétricos: SVG renderizado y PNG exportado', () => {
-  test('cono (rojo): rotate + Tamaño → SVG con <image> crecido y <g rotate>, PNG en su posición', async ({ page }) => {
-    await runAsym(page, {
-      label: 'Cono',
-      create: (pg, box) => placeMaterial(pg, box, 'Cono', 0.62, 0.6),
-      moveDelta: [0.06, 0.04],
-      resize: async () => undefined,
-      sx: assertMaterialSvg,
-      pngPoint: (el) => elCenter(el),
-      shot: `${FASE4_SHOTS}/cono-rojo-rotado-resize.png`,
-    }, [0.62, 0.6]);
-  });
-
-  test('miniportería: rotate + Tamaño → SVG con <image> crecido y <g rotate>, PNG en su posición', async ({ page }) => {
-    await runAsym(page, {
-      label: 'Miniportería',
-      create: (pg, box) => placeMaterial(pg, box, 'Miniportería', 0.62, 0.6),
-      moveDelta: [0.06, 0.04],
-      resize: async () => undefined,
-      sx: assertMaterialSvg,
-      pngPoint: (el) => elCenter(el),
-    }, [0.62, 0.6]);
-  });
-
-  test('pértiga: rotate ~90° + Tamaño → SVG con <g rotate> y el PNG ANCHO (orientación real)', async ({ page }) => {
-    await runAsym(page, {
-      label: 'Pértiga',
-      create: (pg, box) => placeMaterial(pg, box, 'Pértiga / poste', 0.6, 0.5),
-      moveDelta: [0.08, 0.05],
-      resize: async () => undefined,
-      sx: assertMaterialSvg,
-      pngPoint: (el) => elCenter(el),
-      orient: 'wide',
-    }, [0.6, 0.5]);
-  });
-
-  test('escalera: rotate ~90° + Tamaño → SVG con <g rotate> y el PNG ANCHO (orientación real)', async ({ page }) => {
-    await runAsym(page, {
-      label: 'Escalera',
-      create: (pg, box) => placeMaterial(pg, box, 'Escalera', 0.6, 0.5),
-      moveDelta: [0.08, 0.05],
-      resize: async () => undefined,
-      sx: assertMaterialSvg,
-      pngPoint: (el) => elCenter(el),
-      orient: 'tall',
-    }, [0.6, 0.5]);
-  });
-
-  test('texto: rotate (manija) + Tamaño → SVG con <text font-size> crecido y <g rotate>, PNG en su posición', async ({ page }) => {
-    await runAsym(page, {
-      label: 'Texto',
-      create: (pg, box) => placeText(pg, box, 0.34, 0.58, 'Conservación\nPase'),
-      moveDelta: [0.08, 0.05],
-      resize: (pg) => setInspNum(pg, 'Tamaño', '4.5'),
-      sx: assertTextSvg,
-      pngPoint: (el) => elCenter(el),
-      shot: `${FASE4_SHOTS}/texto-rotado-resize.png`,
-    }, [0.34, 0.58]);
-  });
-
-  test('flecha (movimiento): rotate (manija) + extremo x2 → SVG con <line> alargado y <g rotate>, PNG en su posición', async ({ page }) => {
-    await runAsym(page, {
-      label: 'Flecha',
-      create: (pg, box) => {
-        const tx = 0.62, ty = 0.6;
-        return drawShape(pg, box, 'Flecha (movimiento)', [tx - 0.08, ty - 0.05], [tx + 0.08, ty + 0.05], undefined, undefined).then(() => deselect(pg, box));
+  test('cono (rojo): rotate + Tamaño → SVG con <image> crecido y <g rotate>, PNG en su posición', async ({
+    page,
+  }) => {
+    await runAsym(
+      page,
+      {
+        label: 'Cono',
+        create: (pg, box) => placeMaterial(pg, box, 'Cono', 0.62, 0.6),
+        moveDelta: [0.06, 0.04],
+        resize: async () => undefined,
+        sx: assertMaterialSvg,
+        pngPoint: (el) => elCenter(el),
+        shot: `${FASE4_SHOTS}/cono-rojo-rotado-resize.png`,
       },
-      moveDelta: [0.06, 0.04],
-      resize: (pg, box, el) => dragHandle(pg, box, [el.x2!, el.y2!], [el.x2! + 0.13, el.y2! + 0.09]),
-      sx: assertArrowSvg,
-      pngPoint: (el) => elCenter(el),
-    }, [0.62, 0.6]);
+      [0.62, 0.6],
+    );
   });
 
-  test('rectángulo: rotate (manija) + Ancho/Alto → SVG con <rect> crecido y <g rotate>, PNG en el borde', async ({ page }) => {
-    await runAsym(page, {
-      label: 'Rectángulo',
-      create: (pg, box) => {
-        const tx = 0.62, ty = 0.6;
-        return drawShape(pg, box, 'Rectángulo', [tx - 0.08, ty - 0.05], [tx + 0.08, ty + 0.05], undefined, false).then(() => deselect(pg, box));
+  test('miniportería: rotate + Tamaño → SVG con <image> crecido y <g rotate>, PNG en su posición', async ({
+    page,
+  }) => {
+    await runAsym(
+      page,
+      {
+        label: 'Miniportería',
+        create: (pg, box) => placeMaterial(pg, box, 'Miniportería', 0.62, 0.6),
+        moveDelta: [0.06, 0.04],
+        resize: async () => undefined,
+        sx: assertMaterialSvg,
+        pngPoint: (el) => elCenter(el),
       },
-      moveDelta: [0.06, 0.04],
-      resize: async (pg) => {
-        await setInspNum(pg, 'Ancho', '26');
-        await setInspNum(pg, 'Alto', '17');
+      [0.62, 0.6],
+    );
+  });
+
+  test('pértiga: rotate ~90° + Tamaño → SVG con <g rotate> y el PNG ANCHO (orientación real)', async ({
+    page,
+  }) => {
+    await runAsym(
+      page,
+      {
+        label: 'Pértiga',
+        create: (pg, box) => placeMaterial(pg, box, 'Pértiga / poste', 0.6, 0.5),
+        moveDelta: [0.08, 0.05],
+        resize: async () => undefined,
+        sx: assertMaterialSvg,
+        pngPoint: (el) => elCenter(el),
+        orient: 'wide',
       },
-      sx: assertRectSvg,
-      // El rectángulo (perímetro) es hueco en el centro: se muestrea el borde superior.
-      pngPoint: (el) => [(el.x ?? 0) + (el.w ?? 0) / 2, el.y ?? 0],
-    }, [0.62, 0.6]);
+      [0.6, 0.5],
+    );
+  });
+
+  test('escalera: rotate ~90° + Tamaño → SVG con <g rotate> y el PNG ANCHO (orientación real)', async ({
+    page,
+  }) => {
+    await runAsym(
+      page,
+      {
+        label: 'Escalera',
+        create: (pg, box) => placeMaterial(pg, box, 'Escalera', 0.6, 0.5),
+        moveDelta: [0.08, 0.05],
+        resize: async () => undefined,
+        sx: assertMaterialSvg,
+        pngPoint: (el) => elCenter(el),
+        orient: 'tall',
+      },
+      [0.6, 0.5],
+    );
+  });
+
+  test('texto: rotate (manija) + Tamaño → SVG con <text font-size> crecido y <g rotate>, PNG en su posición', async ({
+    page,
+  }) => {
+    await runAsym(
+      page,
+      {
+        label: 'Texto',
+        create: (pg, box) => placeText(pg, box, 0.34, 0.58, 'Conservación\nPase'),
+        moveDelta: [0.08, 0.05],
+        resize: (pg) => setInspNum(pg, 'Tamaño', '4.5'),
+        sx: assertTextSvg,
+        pngPoint: (el) => elCenter(el),
+        shot: `${FASE4_SHOTS}/texto-rotado-resize.png`,
+      },
+      [0.34, 0.58],
+    );
+  });
+
+  test('flecha (movimiento): rotate (manija) + extremo x2 → SVG con <line> alargado y <g rotate>, PNG en su posición', async ({
+    page,
+  }) => {
+    await runAsym(
+      page,
+      {
+        label: 'Flecha',
+        create: (pg, box) => {
+          const tx = 0.62,
+            ty = 0.6;
+          return drawShape(
+            pg,
+            box,
+            'Flecha (movimiento)',
+            [tx - 0.08, ty - 0.05],
+            [tx + 0.08, ty + 0.05],
+            undefined,
+            undefined,
+          ).then(() => deselect(pg, box));
+        },
+        moveDelta: [0.06, 0.04],
+        resize: (pg, box, el) =>
+          dragHandle(pg, box, [el.x2!, el.y2!], [el.x2! + 0.13, el.y2! + 0.09]),
+        sx: assertArrowSvg,
+        pngPoint: (el) => elCenter(el),
+      },
+      [0.62, 0.6],
+    );
+  });
+
+  test('rectángulo: rotate (manija) + Ancho/Alto → SVG con <rect> crecido y <g rotate>, PNG en el borde', async ({
+    page,
+  }) => {
+    await runAsym(
+      page,
+      {
+        label: 'Rectángulo',
+        create: (pg, box) => {
+          const tx = 0.62,
+            ty = 0.6;
+          return drawShape(
+            pg,
+            box,
+            'Rectángulo',
+            [tx - 0.08, ty - 0.05],
+            [tx + 0.08, ty + 0.05],
+            undefined,
+            false,
+          ).then(() => deselect(pg, box));
+        },
+        moveDelta: [0.06, 0.04],
+        resize: async (pg) => {
+          await setInspNum(pg, 'Ancho', '26');
+          await setInspNum(pg, 'Alto', '17');
+        },
+        sx: assertRectSvg,
+        // El rectángulo (perímetro) es hueco en el centro: se muestrea el borde superior.
+        pngPoint: (el) => [(el.x ?? 0) + (el.w ?? 0) / 2, el.y ?? 0],
+      },
+      [0.62, 0.6],
+    );
   });
 });

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 
 const SHOTS = 'e2e/shots/d3-mobile-hints';
@@ -81,6 +82,7 @@ async function visibleHints(page: Page): Promise<number> {
 async function placeComodin(page: Page, nx: number, ny: number): Promise<{ x: number; y: number }> {
   const host = await hostBox(page);
   const S = normToScreen(nx, ny, host, 'height');
+  await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
