@@ -45,7 +45,7 @@ import {
   teamFromRow,
 } from './mappers';
 
-const COLLABORATOR_LIMIT = 4;
+const COLLABORATOR_LIMIT = 6;
 
 /**
  * Filas por página en las lecturas del dataset del equipo.
@@ -533,51 +533,15 @@ export class SupabaseRepository implements DataSource {
   }
 
   async deleteFolder(id: string): Promise<void> {
-    const teamId = this.teamId;
-    if (!teamId) throw new DataError('forbidden', 'No hay equipo de contexto.');
-    // Recupera el subárbol (hijos anidados) para borrarlo de forma recursiva.
-    const folders = await this.loadFolders(teamId);
-    const toDelete = this.subtreeIds(id, folders);
-    const order = [...toDelete].sort((a, b) => this.depth(b, folders) - this.depth(a, folders));
-    for (const fid of order) {
-      const { error } = await this.client.from('exercise_folders').delete().eq('id', fid);
-      if (error) throw errorToDataError(error, 'folder_delete');
-    }
+    if (!this.teamId) throw new DataError('forbidden', 'No hay equipo de contexto.');
+    const { error } = await this.client.rpc('delete_folder_tree', { p_folder_id: id });
+    if (error) throw errorToDataError(error, 'folder_delete');
   }
 
   async duplicateFolderTree(id: string): Promise<void> {
-    const teamId = this.teamId;
-    if (!teamId) throw new DataError('forbidden', 'No hay equipo de contexto.');
-    const folders = await this.loadFolders(teamId);
-    const root = folders.find((f) => f.id === id);
-    if (!root) return;
-    const exercises = await this.loadExercises(teamId);
-
-    const map = new Map<string, string>();
-    const createRec = async (
-      oldId: string,
-      newParentId: string | null,
-      rootName: string,
-    ): Promise<void> => {
-      const old = folders.find((f) => f.id === oldId);
-      if (!old) return;
-      const name = oldId === id ? `${rootName} (copia)` : old.name;
-      const created = await this.createFolder(teamId, name, newParentId);
-      map.set(oldId, created.id);
-      for (const ex of exercises.filter((e) => e.folderId === oldId)) {
-        await this.saveExercise({
-          ...ex,
-          id: this.newId(),
-          folderId: created.id,
-          title: `${ex.title} (copia)`,
-          savedAt: new Date().toISOString(),
-        });
-      }
-      for (const child of folders.filter((f) => f.parentId === oldId)) {
-        await createRec(child.id, created.id, rootName);
-      }
-    };
-    await createRec(id, null, root.name);
+    if (!this.teamId) throw new DataError('forbidden', 'No hay equipo de contexto.');
+    const { error } = await this.client.rpc('duplicate_folder_tree', { p_folder_id: id });
+    if (error) throw errorToDataError(error, 'folder_duplicate');
   }
 
   async moveExerciseToFolder(exerciseId: string, folderId: string | null): Promise<void> {
@@ -761,14 +725,15 @@ export class SupabaseRepository implements DataSource {
   }
 
   private async listInvitations(teamId: string): Promise<TeamInvitationInfo[]> {
-    // NO se pagina: las invitaciones PENDIENTES de un equipo están acotadas por
-    // `collaborator_limit_exceeded` (4 colaboradores entre activos y pendientes), muy por
-    // debajo de la página del servidor.
+    // El servidor solo cuenta pendientes NO caducadas para el límite. La pantalla debe
+    // aplicar el mismo criterio; así una invitación vencida no ocupa una plaza aparente.
+    // Tras filtrar en el servidor, como máximo quedan seis filas y no hace falta paginar.
     const { data, error } = await this.client
       .from('team_invitations')
       .select('*')
       .eq('team_id', teamId)
-      .eq('status', 'pending');
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString());
     if (error) throw errorToDataError(error, 'invitation_list');
     const team = await this.loadTeamRow(teamId);
     return (data ?? []).map((r) => ({
@@ -1026,27 +991,6 @@ export class SupabaseRepository implements DataSource {
   }
 
   // ---------------- Utilidades ----------------
-
-  private subtreeIds(id: string, folders: readonly ExerciseFolder[]): Set<string> {
-    const result = new Set<string>();
-    const stack = [id];
-    while (stack.length) {
-      const cur = stack.pop()!;
-      result.add(cur);
-      folders.filter((f) => f.parentId === cur).forEach((f) => stack.push(f.id));
-    }
-    return result;
-  }
-
-  private depth(id: string, folders: readonly ExerciseFolder[]): number {
-    let d = 0;
-    let cur = folders.find((f) => f.id === id);
-    while (cur) {
-      d++;
-      cur = folders.find((f) => f.id === cur!.parentId);
-    }
-    return d;
-  }
 
   /** Genera un UUID v4 (los ids de colaboradores/ejercicios deben ser uuid en Postgres). */
   private newId(): string {

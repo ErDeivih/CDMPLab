@@ -43,9 +43,12 @@ async function colocar(page: Page, titulo: string, nx: number, ny: number) {
   const btn = page.locator(`.rail-btn[title="${titulo}"]`).first();
   await expect(btn, `existe el material «${titulo}»`).toHaveCount(1);
   await btn.click();
+  const objetos = page.locator('.board-canvas svg [data-el-type]');
+  const antes = await objetos.count();
   const p = normToScreen(nx, ny, host, fit);
   await page.mouse.click(p.x, p.y);
-  await page.waitForTimeout(140);
+  await expect(objetos).toHaveCount(antes + 1);
+  await expect(objetos.last()).toBeVisible();
   const cerrar = page.locator('.side-panel-left .panel-close');
   if (await cerrar.isVisible().catch(() => false)) await cerrar.first().click();
   return p;
@@ -54,6 +57,7 @@ async function colocar(page: Page, titulo: string, nx: number, ny: number) {
 const cajaDe = async (page: Page, tipo: string) => {
   const el = page.locator(`.board-canvas svg [data-el-type="${tipo}"]`).first();
   await expect(el, `existe el objeto ${tipo} en el campo`).toHaveCount(1);
+  await expect(el, `el objeto ${tipo} está renderizado, no solo creado`).toBeVisible();
   const b = await el.boundingBox();
   expect(b, `el objeto ${tipo} tiene caja visible`).not.toBeNull();
   return b!;

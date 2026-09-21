@@ -428,6 +428,8 @@ export interface Database {
       cancel_team_invitation: { Args: { p_invitation_id: string }; Returns: undefined };
       create_my_team: { Args: { p_accent_color?: string; p_name: string }; Returns: string };
       decline_team_invitation: { Args: { p_invitation_id: string }; Returns: undefined };
+      delete_folder_tree: { Args: { p_folder_id: string }; Returns: undefined };
+      duplicate_folder_tree: { Args: { p_folder_id: string }; Returns: string };
       import_team_dataset: { Args: { p_payload: Json; p_team_id: string }; Returns: Json };
       invite_team_member: { Args: { p_email: string; p_team_id: string }; Returns: string };
       is_platform_admin: { Args: never; Returns: boolean };

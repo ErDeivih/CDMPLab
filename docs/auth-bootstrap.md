@@ -52,14 +52,14 @@ de secretos.
    públicas por diseño).
 8. **[NO EJECUTADO] Cerrar sesión y volver a entrar** (el perfil aprobado + la
    pertenencia a `private.platform_admins` habilitan el panel `/admin`).
-9. **[NO EJECUTADO] Crear el primer equipo** (propietario → hasta 4 colaboradores).
+9. **[NO EJECUTADO] Crear el primer equipo** (propietario → hasta 6 colaboradores).
 10. **[NO EJECUTADO] El colaborador registra y confirma `<COLLABORATOR_EMAIL>`** y el
     administrador lo aprueba.
 11. **[NO EJECUTADO] El propietario crea la invitación** para el segundo correo (se
     crea un registro; la persona debe registrarse con ese correo y luego aceptar).
 12. **[NO EJECUTADO] El segundo usuario acepta la invitación** y pasa a trabajar
     como editor del equipo.
-13. **[NO EJECUTADO] Probar lectura, escritura, revocación y límite de 4
+13. **[NO EJECUTADO] Probar lectura, escritura, revocación y límite de 6
     colaboradores.**
 14. **[NO EJECUTADO] Probar recuperación de contraseña** (Supabase Auth).
 
@@ -129,7 +129,7 @@ considerarse **comprometida**.
 
 - Un perfil `pending` **no** accede a datos.
 - El admin de plataforma puede aprobar/rechazar.
-- Cada propietario crea **un** equipo; como máximo **4 colaboradores**.
+- Cada propietario crea **un** equipo; como máximo **6 colaboradores**.
 - Un invitado aprobado acepta la invitación dirigida a su correo.
 - Un editor trabaja con jugadores/ejercicios del equipo pero **no** gestiona miembros ni invita.
 - Revocar elimina de inmediato lectura y escritura.

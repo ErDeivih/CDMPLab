@@ -29,8 +29,8 @@ omiten y **no** cuentan como cobertura completa.
 | `SUPABASE_E2E_ADMIN_EMAIL` / `_ADMIN_PASSWORD` | Administrador de plataforma. |
 | `SUPABASE_E2E_OWNER_EMAIL` / `_OWNER_PASSWORD` | Propietario de un equipo de prueba (sin equipo antes de ejecutar). |
 | `SUPABASE_E2E_COLLAB_EMAIL` / `_COLLAB_PASSWORD` | Colaborador sin equipo propio. |
-| `SUPABASE_E2E_LIMIT_EMAILS` | **4** correos separados por comas (cuentas para probar el límite). |
-| `SUPABASE_E2E_LIMIT_PASSWORD` | Contraseña común para esos 4 correos. |
+| `SUPABASE_E2E_LIMIT_EMAILS` | **6** correos separados por comas (cuentas para probar el límite). |
+| `SUPABASE_E2E_LIMIT_PASSWORD` | Contraseña común para esos 6 correos. |
 
 Opcionales (estados de acceso):
 
@@ -60,9 +60,9 @@ Opcionales (estados de acceso):
 4. El propietario **invita** al colaborador; el colaborador **acepta** y **ve** los datos compartidos.
 5. El colaborador **edita** lo permitido y **no** puede gestionar miembros (solo lectura).
 6. El propietario **revoca** al colaborador; después deja de acceder.
-7. **Límite real:** el propietario activa exactamente 4 colaboradores y una **quinta**
+7. **Límite real:** el propietario activa exactamente 6 colaboradores y una **séptima**
    invitación es **rechazada por el servidor** (`collaborator_limit_exceeded`), sin
-   crear una quinta invitación ni membresía. No basta un contador visual.
+   crear una séptima invitación ni membresía. No basta un contador visual.
 8. **Recuperación:** el flujo se inicia desde la UI, se comprueba la respuesta visible
    (mensaje genérico, sin revelar si el correo existe) y la petición real a Supabase.
    La **recepción del correo y el enlace final requieren verificación manual** (no hay
@@ -111,7 +111,7 @@ npm run test:e2e:supabase-real
 
 Si falta una variable **obligatoria**, el reporte mostrará `skip` con el motivo
 explícito (`Variables de entorno ausentes; se OMITE la suite Supabase-real: ...`).
-Si `SUPABASE_E2E_LIMIT_EMAILS` no trae exactamente 4 correos, el escenario de límite
+Si `SUPABASE_E2E_LIMIT_EMAILS` no trae exactamente 6 correos, el escenario de límite
 se omite con su propio motivo.
 
 > **Sin credenciales esta suite NO se ejecuta.** En el informe final debe figurar como

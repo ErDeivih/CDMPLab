@@ -47,6 +47,11 @@ pertenece a ninguno y no tiene invitaciones, `decideAccess` devuelve
 create-team»). Es decir: **cualquier cuenta aprobada puede crear un equipo por su cuenta**. Esto es
 justo lo que la propuesta final permitiría restringir con un modo configurable.
 
+> **Actualización 21/09/2026:** la sección 5 describe el contrato histórico de cuatro
+> colaboradores. La migración `20260921085803_increase_team_capacity_to_seven.sql` está
+> aplicada: ahora son **seis colaboradores más el propietario**. El resto de este informe
+> conserva la auditoría original.
+
 ## 5. El propietario puede invitar hasta cuatro colaboradores; el propietario no cuenta
 
 El límite vive en el servidor, en `private.enforce_collaborator_limit(uuid)`

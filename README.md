@@ -4,7 +4,7 @@ Pizarra táctica + biblioteca de ejercicios para entrenadores. Una app web (Angu
 con la que un técnico crea y organiza **ejercicios** sobre un **campo táctico a pantalla
 completa** (jugadores, materiales, formas, texto) y los guarda en una **biblioteca** por
 carpetas, con **duplicación**, **exportación** y acceso **multiusuario seguro** (propietario
-+ hasta 4 colaboradores).
++ hasta 6 colaboradores).
 
 Proyecto **independiente** (repositorio `CDMPLab`). No incluye ni depende de la app Flutter
 `ClubManager` (que vive en `../app` y es otro proyecto).
@@ -79,7 +79,7 @@ npm run test:e2e:supabase-real
 Suite **opt-in** que habla con Supabase real (cuentas de prueba separadas: admin,
 propietario, colaborador y 4 cuentas para el límite). Requiere variables de entorno:
 `SUPABASE_E2E_ADMIN_EMAIL/PASSWORD`, `SUPABASE_E2E_OWNER_EMAIL/PASSWORD`,
-`SUPABASE_E2E_COLLAB_EMAIL/PASSWORD`, `SUPABASE_E2E_LIMIT_EMAILS` (4 correos) y
+`SUPABASE_E2E_COLLAB_EMAIL/PASSWORD`, `SUPABASE_E2E_LIMIT_EMAILS` (6 correos) y
 `SUPABASE_E2E_LIMIT_PASSWORD`; más las opcionales de estado de acceso. Si faltan,
 **se omite** con mensaje explícito (nunca finge un pase). Ver `docs/supabase-real-e2e.md`.
 
@@ -161,16 +161,10 @@ versionarse. `.env`, `.env.local` y `*.env.*.local` están en `.gitignore`.
 ## Estado real de Supabase
 
 La **build de producción** apunta al proyecto Supabase real (autenticación obligatoria,
-RLS por equipo). El esquema versionado son **12 ficheros** en `supabase/migrations/` (cifra
-comprobable en local). **Cuántas están aplicadas en el proyecto remoto no se puede
-determinar desde el repositorio**, y los documentos de este repo no coinciden entre sí: este
-README afirmaba «las once migraciones están versionadas» y citaba el endurecimiento de grants
-como `20260902102208_harden_grants_and_defaults` (las dos frases se han retirado aquí),
-mientras el fichero local equivalente se llama `20260901000000_harden_grants.sql`;
-`docs/05-supabase-fase6.md` y `docs/06-supabase-autoritativo.md` hablan de cinco (el lote del
-27/08/2026). El recuento local,
-la contradicción documental, el mapeo de identidad y **lo que queda sin verificar contra la
-base** están en [`docs/supabase-estado.md`](docs/supabase-estado.md).
+RLS por equipo). Hay **14 ficheros** versionados en `supabase/migrations/`. El historial
+remoto se comprobó el 21/09/2026: incluye las 14 migraciones, aunque algunas versiones
+remotas tienen una marca temporal distinta a la del fichero local. El mapeo y las
+limitaciones de la verificación están en [`docs/supabase-estado.md`](docs/supabase-estado.md).
 
 Lo que este repositorio **documenta** (afirmación de sus propios documentos, no comprobada
 en esta auditoría): que el endurecimiento de grants se aplicó al proyecto remoto el
@@ -184,22 +178,13 @@ también quedaron endurecidos. Supabase no permite que `postgres` modifique los 
 del rol interno `supabase_admin`; esa limitación de la plataforma está documentada en la
 migración. El alta de cuentas, SMTP y la prueba multiusuario real siguen pendientes.
 
-### Migración pendiente de aplicar: rechazo de invitaciones
+### Rechazo de invitaciones
 
 `supabase/migrations/20260910000000_decline_team_invitation.sql` (rechazar una invitación
-de equipo) está **escrita y validada en estático, pero NO aplicada**. Antes de escribirla se
-consultó el catálogo del proyecto remoto y el resultado es este:
-
-- **catálogo remoto comprobado: la función de rechazo NO existe** (por eso la migración hace
-  falta y no es una duplicación);
-- las funciones de **aceptación** sí existen, y la columna `revoked` de `team_invitations`
-  admite el estado que usa el rechazo;
-- el diseño es coherente con lo que hay: función `SECURITY DEFINER` en un esquema privado
-  más envoltorio público, con los mismos endurecimientos de `search_path` y `grant` que las
-  funciones ya aplicadas.
-
-**La migración aún no está aplicada.** Aplicarla en el proyecto remoto es una decisión del
-propietario; `npm run validate:migration` solo hace análisis estático y no la ejecuta.
+de equipo) se aplicó el 21/09/2026 y figura remotamente como
+`20260921090333_decline_team_invitation`. El catálogo confirma la función privada y la
+envoltura pública: `authenticated` puede ejecutarlas; `anon` y `PUBLIC`, no. Las pruebas
+de abuso con sesiones reales siguen pendientes.
 
 ### Operaciones atómicas de carpetas
 
@@ -207,8 +192,15 @@ La migración `20260911000000_entrenolab_folders_atomic.sql` se aplicó al proye
 EntrenoLab el 21/09/2026; Supabase la registró como
 `20260921075702_entrenolab_folders_atomic`. Se verificaron la existencia de sus tres
 funciones y los permisos de ejecución: las dos RPC públicas admiten `authenticated`, pero
-no `anon` ni `PUBLIC`. El cliente todavía utiliza sus operaciones anteriores de carpetas;
-la migración por sí sola no activa el uso de las nuevas RPC.
+no `anon` ni `PUBLIC`. El cliente ya usa las dos RPC en vez de encadenar escrituras.
+
+### Capacidad del equipo
+
+`20260921085803_increase_team_capacity_to_seven.sql` se aplicó remotamente como
+`20260921090340_increase_team_capacity_to_seven`. Cada equipo admite un propietario
+y **seis colaboradores**; los activos y las invitaciones pendientes no caducadas consumen
+plaza. La función privada mantiene bloqueo de fila y no es ejecutable directamente por
+`anon`, `authenticated` ni `PUBLIC`.
 
 ## Plantillas de campo
 
@@ -237,7 +229,8 @@ completo (equipos, jugadores, carpetas, ejercicios con su `canvas`, sesiones) de
 ## Flujo multiusuario
 
 - **Un propietario** por equipo.
-- El propietario puede crear **hasta 4 colaboradores** (activos + invitaciones pendientes).
+- El propietario puede crear **hasta 6 colaboradores** (activos + invitaciones pendientes):
+  siete cuentas por equipo contando al propietario.
 - Las invitaciones se **crean** en base de datos (no se envía un correo personalizado); la
   persona invitada debe **registrarse** con ese correo, ser **aprobada** por el administrador
   y después **aceptar** la invitación.

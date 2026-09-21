@@ -85,7 +85,7 @@ function uuid(): string {
 type Rw = any;
 interface Filter {
   col: string;
-  op: 'eq' | 'in';
+  op: 'eq' | 'in' | 'gt';
   val: unknown;
   vals?: unknown[];
 }
@@ -444,7 +444,7 @@ export class RlsBackend {
           i.status === 'pending' &&
           new Date(i.expires_at as string).getTime() > Date.now(),
       ).length;
-    if (used >= 4) return err('P0001', 'collaborator_limit_exceeded');
+    if (used >= 6) return err('P0001', 'collaborator_limit_exceeded');
     const target = this.rows.profiles.find((p) => p.email_normalized === normalized);
     const invId = uuid();
     const now = nowIso();
@@ -644,7 +644,7 @@ export class RlsBackend {
     let selectReturn = false;
     let limitSingle: 'single' | 'maybeSingle' | null = null;
 
-    const recordFilter = (col: string, val: unknown, op: 'eq' | 'in', vals?: unknown[]) => {
+    const recordFilter = (col: string, val: unknown, op: 'eq' | 'in' | 'gt', vals?: unknown[]) => {
       filters.push({ col, op, val, vals });
       this.filters.push({ col, op, val, vals });
       if (op === 'eq') this.eqCalls.push({ table, col, val });
@@ -654,6 +654,7 @@ export class RlsBackend {
       let out = rows;
       for (const f of filters) {
         if (f.op === 'eq') out = out.filter((r) => String(r[f.col]) === String(f.val));
+        else if (f.op === 'gt') out = out.filter((r) => String(r[f.col]) > String(f.val));
         else out = out.filter((r) => (f.vals ?? []).includes(String(r[f.col])));
       }
       return out;
@@ -742,6 +743,10 @@ export class RlsBackend {
         recordFilter(col, val, 'eq');
         return builder;
       },
+      gt: (col: string, val: unknown) => {
+        recordFilter(col, val, 'gt');
+        return builder;
+      },
       in: (col: string, vals: unknown[]) => {
         recordFilter(col, vals, 'in', vals);
         return builder;
@@ -788,6 +793,7 @@ export class RlsBackend {
 export interface RwQuery {
   select: (cols?: string) => RwQuery;
   eq: (col: string, val: unknown) => RwQuery;
+  gt: (col: string, val: unknown) => RwQuery;
   in: (col: string, vals: unknown[]) => RwQuery;
   order: (col: string, opts?: { ascending?: boolean }) => RwQuery;
   range: (from: number, to: number) => RwQuery;
@@ -994,6 +1000,38 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
     expect(invitation.emailNormalized).toBe('editor@example.com'); // está normalizado (lower/trim)
     expect(invitation.teamId).toBe(team.id);
     expect(invitation.invitedUserId).toBe(EDITOR);
+  });
+
+  it('admite seis colaboradores pendientes además del propietario y rechaza el séptimo', async () => {
+    const { backend } = setupJourney();
+    const repo = makeRepo(backend, OWNER, null);
+    const team = await repo.createTeam('Primer', '#3056d3');
+
+    for (let i = 0; i < 6; i++) {
+      await expect(
+        repo.inviteMember(team.id, `colaborador${i}@example.com`),
+      ).resolves.toMatchObject({
+        status: 'pending',
+      });
+    }
+    expect(backend.rows.team_invitations.filter((i) => i.status === 'pending')).toHaveLength(6);
+    await expect(repo.inviteMember(team.id, 'septimo@example.com')).rejects.toMatchObject({
+      code: 'collaborator_limit_exceeded',
+    });
+  });
+
+  it('una invitación caducada no aparece como pendiente ni ocupa una plaza visual', async () => {
+    const { backend } = setupJourney();
+    const repo = makeRepo(backend, OWNER, null);
+    const team = await repo.createTeam('Primer', '#3056d3');
+    const invitation = await repo.inviteMember(team.id, 'caducado@example.com');
+    const row = backend.rows.team_invitations.find((i) => i.id === invitation.id)!;
+    row.expires_at = '2000-01-01T00:00:00.000Z';
+
+    expect(await repo.listTeamInvitations(team.id)).toEqual([]);
+    await expect(repo.inviteMember(team.id, 'vigente@example.com')).resolves.toMatchObject({
+      status: 'pending',
+    });
   });
 
   it('el invitado ve la invitación SIN pertenecer aún a un equipo (my_team_invitations)', async () => {

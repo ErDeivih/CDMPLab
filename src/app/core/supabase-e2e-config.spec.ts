@@ -71,12 +71,12 @@ describe('supabase-e2e-config (helpers puros de la suite Supabase real)', () => 
   });
 
   it('limitEmailsValid: exige exactamente el nº de correos requerido', () => {
-    const env = readEnv({ SUPABASE_E2E_LIMIT_EMAILS: 'a,b,c,d', SUPABASE_E2E_LIMIT_PASSWORD: 'p' });
-    expect(limitEmailsValid(env, 4).ok).toBe(true);
-    expect(limitEmailsValid(env, 3).ok).toBe(false);
+    const env = readEnv({ SUPABASE_E2E_LIMIT_EMAILS: 'a,b,c,d,e,f', SUPABASE_E2E_LIMIT_PASSWORD: 'p' });
+    expect(limitEmailsValid(env, 6).ok).toBe(true);
+    expect(limitEmailsValid(env, 5).ok).toBe(false);
     const env2 = readEnv({ SUPABASE_E2E_LIMIT_EMAILS: 'a,b', SUPABASE_E2E_LIMIT_PASSWORD: 'p' });
-    const r = limitEmailsValid(env2, 4);
+    const r = limitEmailsValid(env2, 6);
     expect(r.ok).toBe(false);
-    expect(r.message).toContain('exactamente 4');
+    expect(r.message).toContain('exactamente 6');
   });
 });

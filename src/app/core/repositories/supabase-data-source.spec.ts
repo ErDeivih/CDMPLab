@@ -779,38 +779,6 @@ function seededServer(): FakePostgrestServer {
   return server;
 }
 
-/** Árbol de carpetas cuya RAÍZ y cuya rama profunda caen más allá de la primera página:
- *  truncando la lectura, `deleteFolder` no encontraría ni la raíz. */
-function seedFolderTree(server: FakePostgrestServer): number {
-  const rows: FakeRow[] = [
-    {
-      id: 'f-root',
-      team_id: PAGINATED_TEAM_ID,
-      parent_id: null,
-      name: 'Raíz',
-      created_at: SEED_TIME,
-    },
-  ];
-  for (let i = 0; i < 1200; i++) {
-    rows.push({
-      id: `f-${pad(i)}`,
-      team_id: PAGINATED_TEAM_ID,
-      parent_id: 'f-root',
-      name: `Hija ${i}`,
-      created_at: SEED_TIME,
-    });
-  }
-  rows.push({
-    id: 'f-nieta',
-    team_id: PAGINATED_TEAM_ID,
-    parent_id: 'f-1199',
-    name: 'Nieta',
-    created_at: SEED_TIME,
-  });
-  server.seed('exercise_folders', rows);
-  return rows.length;
-}
-
 function makePagedRepo(server: FakePostgrestServer): SupabaseRepository {
   const client = {
     from: (table: string) => server.query(table),
@@ -1044,15 +1012,40 @@ describe('SupabaseRepository · paginación del dataset del equipo', () => {
     expect(new Set(ids).size, 'y ninguno repetido').toBe(DATASET.exercises);
   });
 
-  it('deleteFolder borra el subárbol COMPLETO aunque la raíz y la rama profunda caigan en la segunda página', async () => {
-    const server = new FakePostgrestServer();
-    const total = seedFolderTree(server);
-    const repo = makePagedRepo(server);
+  it('deleteFolder delega el subárbol completo en una sola RPC atómica', async () => {
+    // Contrato anterior incorrecto tras instalar la función remota: borrar fila por fila
+    // podía dejar media carpeta eliminada al fallar la red y requería paginar el árbol.
+    const { client, rpcMock, fromMock } = makeClient();
+    const repo = new SupabaseRepository(client, 'user-1', PAGINATED_TEAM_ID);
 
     await repo.deleteFolder('f-root');
 
-    expect(server.rowsOf('exercise_folders')).toHaveLength(0);
-    expect(server.calls.filter((c) => c.mode === 'delete')).toHaveLength(total);
+    expect(rpcMock).toHaveBeenCalledExactlyOnceWith('delete_folder_tree', {
+      p_folder_id: 'f-root',
+    });
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('duplicateFolderTree delega la copia íntegra en una sola RPC atómica', async () => {
+    const { client, rpcMock, fromMock } = makeClient();
+    const repo = new SupabaseRepository(client, 'user-1', PAGINATED_TEAM_ID);
+
+    await repo.duplicateFolderTree('f-root');
+
+    expect(rpcMock).toHaveBeenCalledExactlyOnceWith('duplicate_folder_tree', {
+      p_folder_id: 'f-root',
+    });
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('no convierte en éxito un fallo de la RPC de carpetas', async () => {
+    const { client } = makeClient({
+      rpc: async () => ({ data: null, error: { code: 'P0001', message: 'forbidden' } }),
+    });
+    const repo = new SupabaseRepository(client, 'user-1', PAGINATED_TEAM_ID);
+
+    await expect(repo.deleteFolder('f-root')).rejects.toBeInstanceOf(DataError);
+    await expect(repo.duplicateFolderTree('f-root')).rejects.toBeInstanceOf(DataError);
   });
 
   it('si el servidor ignorase el rango, la lectura falla con un error legible en vez de colgarse', async () => {

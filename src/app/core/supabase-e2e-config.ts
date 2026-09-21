@@ -24,7 +24,7 @@ export interface SupabaseE2EEnv {
   /** Cuenta colaboradora SIN equipo propio (perfil aprobado). */
   collaboratorEmail: string | null;
   collaboratorPassword: string | null;
-  /** Correos (separados por coma) de las cuentas que se invitan para probar el límite de 4. */
+  /** Correos (separados por coma) de las cuentas que se invitan para probar el límite de 6. */
   limitEmails: string[];
   limitPassword: string | null;
   /** Cuenta con perfil pendiente (opcional). */

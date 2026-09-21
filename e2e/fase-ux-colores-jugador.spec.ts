@@ -89,6 +89,11 @@ async function elegirColor(page: Page, color: string): Promise<void> {
   const swatch = page.locator(`.roster-color-menu .swatch[data-color="${color}"]`);
   await expect(swatch, 'el swatch del color pedido está en la paleta').toHaveCount(1);
   await swatch.click();
+  // El cierre de la paleta no garantiza que Angular haya repintado la ficha y el SVG.
+  await expect(page.locator('.roster-color').first()).toHaveAttribute(
+    'data-color-ejercicio',
+    color,
+  );
 }
 
 /** Coloca a Marcos en el campo (arma la colocación y pulsa el campo). */
@@ -179,9 +184,11 @@ test.describe('FASE 2 — el color del jugador pertenece al ejercicio', () => {
     ).toBe(AZUL_PLANTILLA);
 
     await elegirColor(page, MORADO);
-    expect(await colorFichaEnPantalla(page), 'la ficha ya colocada se repinta a MORADO').toBe(
-      MORADO,
-    );
+    await expect
+      .poll(() => colorFichaEnPantalla(page), {
+        message: 'la ficha ya colocada se repinta a MORADO',
+      })
+      .toBe(MORADO);
     await guardar(page, 'Ejercicio B');
 
     datos = await almacen(page);

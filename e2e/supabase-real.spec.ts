@@ -25,8 +25,8 @@ import {
 //   SUPABASE_E2E_ADMIN_EMAIL      / _ADMIN_PASSWORD       → admin de plataforma
 //   SUPABASE_E2E_OWNER_EMAIL      / _OWNER_PASSWORD       → propietario de equipo
 //   SUPABASE_E2E_COLLAB_EMAIL     / _COLLAB_PASSWORD      → colaborador SIN equipo propio
-//   SUPABASE_E2E_LIMIT_EMAILS                              → 4 correos (coma-separados)
-//   SUPABASE_E2E_LIMIT_PASSWORD                            → contraseña común para esos 4
+//   SUPABASE_E2E_LIMIT_EMAILS                              → 6 correos (coma-separados)
+//   SUPABASE_E2E_LIMIT_PASSWORD                            → contraseña común para esos 6
 //   (opcionales) SUPABASE_E2E_PENDING_EMAIL/_PASSWORD, SUPABASE_E2E_REJECTED_EMAIL/_PASSWORD
 //
 // NOTA sobre estados pendiente/rechazado: son OPCIONALES. Si no se configuran,
@@ -41,8 +41,8 @@ const missing = missingRequiredVars(process.env);
 // Si faltan variables REQUERIDAS → se omite TODA la suite (no falso pase).
 test.skip(missing.length > 0, skipReason(missing));
 
-// Precondición del escenario de límite: exactamente 4 correos.
-const limitCheck = limitEmailsValid(env, 4);
+// Precondición del escenario de límite: exactamente 6 correos.
+const limitCheck = limitEmailsValid(env, 6);
 test.skip(!limitCheck.ok, limitCheck.message ?? 'Límite no configurado');
 
 // Determinar etiquetado de estados opcionales.
@@ -180,8 +180,8 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
     await logout(page);
   });
 
-  test('LÍMITE real: con 4 colaboradores activos, un quinto es rechazado por el servidor', async ({ page }) => {
-    // El propietario activa exactamente 4 colaboradores usando los correos de prueba.
+  test('LÍMITE real: con 6 colaboradores activos, un séptimo es rechazado por el servidor', async ({ page }) => {
+    // El propietario activa exactamente 6 colaboradores usando los correos de prueba.
     await login(page, env.ownerEmail!, env.ownerPassword!);
     await page.goto('/settings/team/members');
 
@@ -192,7 +192,7 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
       await page.waitForTimeout(200);
     }
 
-    // Aceptar cada invitación con la contraseña común (los 4 se vuelven activos).
+    // Aceptar cada invitación con la contraseña común (los 6 se vuelven activos).
     for (const email of env.limitEmails) {
       await logout(page);
       await login(page, email, env.limitPassword!);
@@ -201,7 +201,7 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
       await page.waitForURL('**/team');
     }
 
-    // Volver al propietario e intentar una QUINTA invitación → error funcional del servidor.
+    // Volver al propietario e intentar una SÉPTIMA invitación → error funcional del servidor.
     await logout(page);
     await login(page, env.ownerEmail!, env.ownerPassword!);
     await page.goto('/settings/team/members');
@@ -209,8 +209,8 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
     await page.locator('button.btn.btn-primary', { hasText: 'Invitar' }).click();
     // El servidor responde "collaborator_limit_exceeded" → mensaje de error REAL.
     await expect(page.locator('.auth-msg.err')).toBeVisible();
-    await expect(page.locator('.auth-msg.err')).toContainText('máximo de 4 colaboradores');
-    // No se creó una quinta invitación visible.
+    await expect(page.locator('.auth-msg.err')).toContainText('máximo de 6 colaboradores');
+    // No se creó una séptima invitación visible.
     await expect(page.locator('.invite-row', { hasText: env.collaboratorEmail! })).toHaveCount(0);
     await logout(page);
   });
@@ -260,12 +260,12 @@ test.describe('CDMPLab — estados de acceso (opcional)', () => {
 // LIMPIEZA de datos creados por esta ejecución
 //
 // La suite crea un equipo (con jugador, carpeta y ejercicio) con el PREFIJO único
-// `PREFIX`, más 4 colaboradores activos (correos de `SUPABASE_E2E_LIMIT_EMAILS`).
+// `PREFIX`, más 6 colaboradores activos (correos de `SUPABASE_E2E_LIMIT_EMAILS`).
 //
 // La aplicación NO expone una operación de borrado de equipo desde la UI. Por
 // tanto NO se puede limpiar de forma segura y automática solo con la UI. La
 // limpieza se documenta como MANUAL (ver docs/supabase-real-e2e.md) y se limita
-// al equipo `[PREFIX] Equipo` y los 4 colaboradores del límite, para NO borrar
+// al equipo `[PREFIX] Equipo` y los 6 colaboradores del límite, para NO borrar
 // registros ajenos:
 //   · borrar el equipo `[PREFIX] Equipo` (y en cascada su jugador/carpeta/ejercicio)
 //     desde la consola/administración de Supabase (DELETE WHERE teams.name LIKE 'e2e-%');

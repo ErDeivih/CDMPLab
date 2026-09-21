@@ -8,7 +8,7 @@ import { ConfirmService } from '../../core/confirm.service';
 import { AuthCardComponent } from './auth-card.component';
 import type { TeamInvitationInfo, TeamMemberInfo } from '../../core/repositories/data-source';
 
-const SEAT_LIMIT = 4;
+const SEAT_LIMIT = 6;
 
 @Component({
   selector: 'app-members',
@@ -145,7 +145,7 @@ export class MembersComponent {
 
   private friendly(msg: string): string {
     if (msg.includes('collaborator_limit_exceeded'))
-      return 'Se alcanzó el máximo de 4 colaboradores (activos + invitaciones pendientes).';
+      return 'Se alcanzó el máximo de 6 colaboradores (activos + invitaciones pendientes).';
     if (msg.includes('invalid_invitation_email')) return 'El correo introducido no es válido.';
     if (msg.includes('collaborator_not_approved'))
       return 'Solo puedes invitar a personas con el perfil aprobado.';

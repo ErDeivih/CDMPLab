@@ -369,13 +369,10 @@ try {
   }
 
   // ---- FASE 9: contrato del LÍMITE DE COLABORADORES ----
-  // El encargo pide documentar y PROBAR el funcionamiento actual de equipos e invitaciones sin tocar
-  // la base remota. Lo verificable aquí es el contrato que vive en el SQL versionado: máximo cuatro
-  // colaboradores, el propietario NO cuenta, solo el propietario puede invocar la comprobación y la
-  // función no es una puerta trasera (EXECUTE revocado a authenticated por el endurecimiento).
+  // Se comprueba la última redefinición, sin alterar el esquema histórico: seis colaboradores
+  // más el propietario. La aplicación remota se verifica por separado contra pg_proc.
   {
-    const esquema = 'supabase/migrations/20260827000000_entrenolab_schema.sql';
-    const hardening = 'supabase/migrations/20260827000001_entrenolab_hardening.sql';
+    const esquema = 'supabase/migrations/20260921085803_increase_team_capacity_to_seven.sql';
     if (!fs.existsSync(esquema)) {
       fail('colaboradores: falta el esquema con el límite de colaboradores');
     } else {
@@ -386,10 +383,10 @@ try {
       has(sqlLimite, 'create or replace function private.enforce_collaborator_limit(t uuid)')
         ? ok('colaboradores: existe private.enforce_collaborator_limit')
         : fail('colaboradores: no se encuentra la función del límite');
-      // Máximo 4: la comprobación es `used >= 4`.
-      /\bused\s*>=\s*4\b/.test(sqlLimite)
-        ? ok('colaboradores: el límite son 4 (used >= 4)')
-        : fail('colaboradores: el límite de 4 no está declarado como used >= 4');
+      // Máximo 6 colaboradores: la séptima cuenta es el propietario.
+      /\bused\s*>=\s*6\b/.test(sqlLimite)
+        ? ok('colaboradores: el límite son 6 (used >= 6)')
+        : fail('colaboradores: el límite de 6 no está declarado como used >= 6');
       // El propietario NO cuenta: se cuentan los miembros activos con rol distinto de owner.
       /status\s*=\s*'active'\s+and\s+role\s*<>\s*'owner'/.test(sqlLimite)
         ? ok('colaboradores: el propietario no consume plaza (role <> owner)')
@@ -406,13 +403,10 @@ try {
       /status\s*=\s*'pending'\s+and\s+expires_at\s*>\s*now\(\)/.test(sqlLimite)
         ? ok('colaboradores: cuenta las invitaciones pendientes no caducadas')
         : fail('colaboradores: no cuenta las invitaciones pendientes');
-      // El endurecimiento la deja fuera del alcance de los clientes.
-      if (fs.existsSync(hardening)) {
-        const sqlEndurecido = fs.readFileSync(hardening, 'utf8').replace(/--[^\n]*/g, ' ');
-        has(sqlEndurecido, 'revoke execute on function private.enforce_collaborator_limit(uuid)')
-          ? ok('colaboradores: EXECUTE revocado a authenticated en el endurecimiento')
-          : fail('colaboradores: la función sigue siendo invocable por authenticated');
-      }
+      has(sqlLimite, 'revoke execute on function private.enforce_collaborator_limit(uuid)') &&
+      /from\s+public,\s*anon,\s*authenticated/i.test(sqlLimite)
+        ? ok('colaboradores: EXECUTE revocado a PUBLIC, anon y authenticated')
+        : fail('colaboradores: la función privada no revoca EXECUTE a los clientes');
     }
   }
   if (failed > 0) {
