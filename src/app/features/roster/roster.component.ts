@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { StoreService } from '../../core/store.service';
-import { AccessService } from '../../core/access.service';
 import { ConfirmService } from '../../core/confirm.service';
 import { Player, Position } from '../../core/models';
 import { colorName } from '../../core/color-name';
@@ -34,8 +34,8 @@ interface Draft {
 })
 export class RosterComponent {
   private readonly store = inject(StoreService);
-  private readonly access = inject(AccessService);
   private readonly confirmSvc = inject(ConfirmService);
+  private readonly router = inject(Router);
 
   protected readonly palette = PALETTE;
   protected readonly positions = POSITIONS;
@@ -108,21 +108,55 @@ export class RosterComponent {
     this.showCreateTeam.set(true);
   }
 
+  /**
+   * En modo LOCAL el equipo se crea aquí mismo (localStorage).
+   *
+   * CAMBIO DE CONTRATO (22/09/2026): en modo REMOTO la cuenta aprobada NO crea equipos.
+   * Antes esto llamaba a `AccessService.createTeam` (RPC `create_my_team`), que el
+   * servidor ya rechaza; ahora se lleva al usuario a la pantalla de SOLICITUD, que es la
+   * única vía real.
+   */
   createTeam(): void {
     const name = this.newTeamName().trim();
     if (!name) return;
-    // En modo REMOTO la creación del equipo va por `AccessService` (que crea la fila, conecta el
-    // repositorio y lo activa): `store.createTeam` es síncrono y solo escribe en localStorage, así
-    // que aquí habría creado un equipo fantasma que desaparece al recargar. Misma ruta que el alta.
     if (this.store.isRemote()) {
-      void this.access.createTeam(name, this.newTeamColor()).catch(() => {
-        this.formError.set('No se pudo crear el equipo. Inténtalo de nuevo.');
-      });
-    } else {
-      this.store.createTeam(name, this.newTeamColor());
+      this.showCreateTeam.set(false);
+      void this.router.navigate(['/onboarding/team']);
+      return;
     }
+    this.store.createTeam(name, this.newTeamColor());
     this.showCreateTeam.set(false);
     this.newTeamName.set('');
+  }
+
+  /**
+   * ¿Hay datos locales antiguos que importar y un equipo remoto de destino? Es un MÉTODO
+   * (no un `computed`) a propósito: `localStorage` no es reactivo y, tras importar, la
+   * aviso debe desaparecer sin recargar.
+   */
+  protected puedeImportarLocal(): boolean {
+    return this.store.isRemote() && !!this.team() && this.detectLocalLegacyData();
+  }
+
+  private detectLocalLegacyData(): boolean {
+    for (const k of [
+      'entrenolab:teams',
+      'entrenolab:players',
+      'entrenolab:exercises',
+      'entrenolab:sessions',
+    ]) {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw && JSON.parse(raw).length > 0) return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  protected irAMigracion(): void {
+    void this.router.navigate(['/onboarding/migrate']);
   }
 
   // ---------- Añadir / editar jugador ----------

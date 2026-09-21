@@ -1,7 +1,22 @@
 <app-auth-card [title]="'Invitaciones'" [subtitle]="'Te han invitado a estos equipos'">
   <p class="auth-note">
-    Puedes aceptar una invitación para unirte a ese equipo, o crearlo tú mismo.
+    Puedes aceptar una invitación para unirte a ese equipo, o solicitar uno propio (lo aprueba un
+    administrador).
   </p>
+
+  @if (senalada()) {
+    @if (senaladaNoDisponible()) {
+      <p class="auth-msg err" role="alert" data-invitacion-senalada="no-disponible">
+        El enlace apunta a una invitación que no está disponible para esta cuenta (puede ser de otro
+        correo, haber caducado o haberse aceptado ya). El enlace no da acceso por sí solo: la
+        invitación se comprueba contra el correo confirmado de tu cuenta.
+      </p>
+    } @else {
+      <p class="auth-msg ok" role="status" data-invitacion-senalada="disponible">
+        Esta es la invitación del enlace que has abierto.
+      </p>
+    }
+  }
 
   @if (loading()) {
     <p class="auth-note">Cargando invitaciones…</p>
@@ -9,21 +24,32 @@
     <p class="auth-note">No tienes invitaciones pendientes.</p>
   } @else {
     @for (inv of invitations(); track inv.id) {
-      <div class="card invite-row">
+      <div class="card invite-row" [attr.data-destacada]="esSenalada(inv) ? '1' : null">
         <div>
           <strong>{{ inv.teamName }}</strong>
           <div class="auth-note">
-            Invitación a <em>{{ inv.emailNormalized }}</em>@if (expired(inv)) {
+            Invitación a <em>{{ inv.emailNormalized }}</em>
+            @if (expired(inv)) {
               <span class="inline-off"> (caducada)</span>
             }
           </div>
         </div>
         <div class="invite-actions">
           @if (!expired(inv)) {
-            <button type="button" class="btn btn-primary" [disabled]="busy(inv)" (click)="accept(inv)">
+            <button
+              type="button"
+              class="btn btn-primary"
+              [disabled]="busy(inv)"
+              (click)="accept(inv)"
+            >
               {{ busy(inv) ? 'Aceptando…' : 'Aceptar' }}
             </button>
-            <button type="button" class="btn btn-ghost" [disabled]="busy(inv)" (click)="reject(inv)">
+            <button
+              type="button"
+              class="btn btn-ghost"
+              [disabled]="busy(inv)"
+              (click)="reject(inv)"
+            >
               Rechazar
             </button>
           }
@@ -37,7 +63,7 @@
   }
 
   <div class="auth-actions">
-    <a class="auth-link" [routerLink]="['/onboarding/team']">Crear mi propio equipo →</a>
+    <a class="auth-link" [routerLink]="['/onboarding/team']">Solicitar un equipo propio →</a>
     <button type="button" class="btn" (click)="load()">Actualizar</button>
   </div>
 </app-auth-card>

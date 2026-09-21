@@ -54,6 +54,9 @@ jobs:
       - name: Validate migrations
         run: npm run validate:migration
 
+      - name: Validate invitation email contract
+        run: npm run validate:invite-email
+
       - name: Build (base href /CDMPLab/)
         run: npm run build:pages
 

@@ -16,6 +16,12 @@
 import { Injectable, InjectionToken, computed, inject, signal } from '@angular/core';
 import type { AuthChangeEvent, Session, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
+import {
+  inviteEmailMessage,
+  parseInviteEmailResponse,
+  type InviteEmailOutcome,
+  type InviteEmailResult,
+} from './invite-email';
 import { environment } from '../../environments/environment';
 
 /**
@@ -26,19 +32,22 @@ import { environment } from '../../environments/environment';
  * El `createClient` se importa dinámicamente para no meter @supabase/supabase-js
  * en el bundle inicial mientras la app no use autenticación.
  */
-export const SUPABASE_CLIENT = new InjectionToken<Promise<SupabaseClient<Database> | null>>('SUPABASE_CLIENT', {
-  providedIn: 'root',
-  factory: async () => {
-    const url = environment.supabaseUrl;
-    const key = environment.supabasePublishableKey;
-    if (!url || !key) return null;
-    const { createClient } = await import('@supabase/supabase-js');
-    // Cliente TIPADO con el esquema (`database.types.ts`): así `from(...)` y `rpc(...)`
-    // se comprueban contra las tablas y funciones reales, y una RPC que aún no existe en
-    // los tipos no compila (pasó con `decline_team_invitation`).
-    return createClient<Database>(url, key);
+export const SUPABASE_CLIENT = new InjectionToken<Promise<SupabaseClient<Database> | null>>(
+  'SUPABASE_CLIENT',
+  {
+    providedIn: 'root',
+    factory: async () => {
+      const url = environment.supabaseUrl;
+      const key = environment.supabasePublishableKey;
+      if (!url || !key) return null;
+      const { createClient } = await import('@supabase/supabase-js');
+      // Cliente TIPADO con el esquema (`database.types.ts`): así `from(...)` y `rpc(...)`
+      // se comprueban contra las tablas y funciones reales, y una RPC que aún no existe en
+      // los tipos no compila (pasó con `decline_team_invitation`).
+      return createClient<Database>(url, key);
+    },
   },
-});
+);
 
 /** Estado de resolución de la sesión. */
 export type AuthStatus = 'resolving' | 'unauthenticated' | 'authenticated' | 'disabled';
@@ -147,10 +156,12 @@ export class SupabaseService {
   /** Se mantiene al día con los cambios de sesión (login/logout/refresh). */
   private listenToAuthChanges(): void {
     if (!this.client || this.authSub) return;
-    const { data } = this.client.auth.onAuthStateChange((_evt: AuthChangeEvent, newSession: Session | null) => {
-      this._session.set(newSession);
-      this._status.set(newSession ? 'authenticated' : 'unauthenticated');
-    });
+    const { data } = this.client.auth.onAuthStateChange(
+      (_evt: AuthChangeEvent, newSession: Session | null) => {
+        this._session.set(newSession);
+        this._status.set(newSession ? 'authenticated' : 'unauthenticated');
+      },
+    );
     this.authSub = data.subscription;
   }
 
@@ -176,7 +187,12 @@ export class SupabaseService {
       this._session.set(data.session);
       this._status.set(data.session ? 'authenticated' : 'unauthenticated');
       if (data.session) return { ok: true, message: 'Cuenta creada.', email };
-      return { ok: true, needsVerification: true, email, message: 'Revisa tu correo para confirmar el registro.' };
+      return {
+        ok: true,
+        needsVerification: true,
+        email,
+        message: 'Revisa tu correo para confirmar el registro.',
+      };
     } catch (err) {
       console.error('[SupabaseService] signUp', err);
       return { ok: false, message: 'No se pudo crear la cuenta. Inténtalo de nuevo.' };
@@ -230,7 +246,10 @@ export class SupabaseService {
     } catch (err) {
       console.error('[SupabaseService] resetPassword', err);
     }
-    return { ok: true, message: 'Si el correo existe, recibirás un enlace para restablecer tu contraseña.' };
+    return {
+      ok: true,
+      message: 'Si el correo existe, recibirás un enlace para restablecer tu contraseña.',
+    };
   }
 
   /** Actualiza la contraseña del usuario con sesión (flujo de recovery). */
@@ -272,6 +291,47 @@ export class SupabaseService {
     }
   }
 
+  // -------------------- Correo de invitación (función de servidor) --------------------
+
+  /**
+   * Pide a la FUNCIÓN DE SERVIDOR (`invite-team-member`) que envíe el correo de una
+   * invitación. La clave del proveedor de correo es un SECRETO DEL SERVIDOR: aquí no se
+   * maneja ninguna credencial, solo se invoca la función con el JWT del propietario; la
+   * autorización real (propietario del equipo, invitación viva, topes de envío) la aplica
+   * Postgres dentro de la función.
+   *
+   * Devuelve SIEMPRE un resultado tipado: ningún camino presenta un envío como hecho
+   * cuando no lo está.
+   */
+  async sendInvitationEmail(invitationId: string): Promise<InviteEmailResult> {
+    const client = await this.requireClient();
+    if (!client) {
+      const status: InviteEmailOutcome = 'not_configured';
+      return { ok: false, status, message: inviteEmailMessage({ ok: false, status, message: '' }) };
+    }
+    try {
+      const { data, error } = await client.functions.invoke('invite-team-member', {
+        body: { invitationId },
+      });
+      if (error) {
+        // 404 = la función no está desplegada todavía: es configuración, no un fallo del
+        // proveedor, y el mensaje al propietario debe decir eso mismo.
+        const httpStatus = (error as { context?: { status?: number } }).context?.status;
+        const status: InviteEmailOutcome = httpStatus === 404 ? 'not_configured' : 'send_error';
+        return {
+          ok: false,
+          status,
+          message: inviteEmailMessage({ ok: false, status, message: '' }),
+        };
+      }
+      return parseInviteEmailResponse(data);
+    } catch (err) {
+      console.error('[SupabaseService] sendInvitationEmail', err);
+      const status: InviteEmailOutcome = 'send_error';
+      return { ok: false, status, message: inviteEmailMessage({ ok: false, status, message: '' }) };
+    }
+  }
+
   // -------------------- Perfil / aprobación --------------------
 
   /**
@@ -285,7 +345,11 @@ export class SupabaseService {
     const uid = this.user()?.id;
     if (!uid) return null;
     try {
-      const { data, error } = await client.from('profiles').select('*').eq('user_id', uid).maybeSingle();
+      const { data, error } = await client
+        .from('profiles')
+        .select('*')
+        .eq('user_id', uid)
+        .maybeSingle();
       if (error) throw error;
       if (!data) return null;
       const info: ProfileInfo = {

@@ -136,6 +136,14 @@ export type TeamInvitationsRow = {
   invited_by: string | null;
   expires_at: string;
   created_at: string;
+  // Estado del CORREO de invitación (migración 20260922000000). Es distinto de
+  // `status`: `provider_accepted` significa que el proveedor ACEPTÓ el envío, no que
+  // se haya entregado; `status = 'accepted'` significa que la persona la aceptó.
+  email_status: 'created' | 'send_pending' | 'provider_accepted' | 'send_error';
+  email_attempts: number;
+  last_email_at: string | null;
+  last_email_error: string | null;
+  provider_message_id: string | null;
 };
 
 export type TeamInvitationsInsert = {
@@ -153,6 +161,46 @@ export type TeamInvitationsUpdate = {
   invited_user_id?: string | null;
   status?: 'pending' | 'accepted' | 'revoked' | 'expired';
   expires_at?: string;
+  email_status?: 'created' | 'send_pending' | 'provider_accepted' | 'send_error';
+  email_attempts?: number;
+  last_email_at?: string | null;
+  last_email_error?: string | null;
+  provider_message_id?: string | null;
+};
+
+// ---------- team_requests (solicitud de equipo) ----------
+
+export type TeamRequestsRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  accent_color: string;
+  status: 'pending' | 'approved' | 'rejected';
+  note: string | null;
+  created_team_id: string | null;
+  requested_at: string;
+  updated_at: string;
+  decided_at: string | null;
+  decided_by: string | null;
+  revision: number;
+};
+
+/** El cliente NUNCA escribe esta tabla directamente (no tiene GRANT ni política de
+ *  escritura): la inserta la RPC `request_team_creation`. El tipo existe para que el
+ *  contrato quede completo y para el día en que haya una ruta de servidor que la use. */
+export type TeamRequestsInsert = {
+  id?: string;
+  user_id: string;
+  name: string;
+  accent_color?: string;
+  note?: string | null;
+};
+
+export type TeamRequestsUpdate = {
+  name?: string;
+  accent_color?: string;
+  note?: string | null;
+  revision?: number;
 };
 
 // ---------- players ----------
@@ -386,6 +434,12 @@ export interface Database {
         Update: TeamInvitationsUpdate;
         Relationships: [];
       };
+      team_requests: {
+        Row: TeamRequestsRow;
+        Insert: TeamRequestsInsert;
+        Update: TeamRequestsUpdate;
+        Relationships: [];
+      };
       players: {
         Row: PlayersRow;
         Insert: PlayersInsert;
@@ -422,10 +476,59 @@ export interface Database {
       accept_team_invitation: { Args: { p_invitation_id: string }; Returns: string };
       admin_list_profiles: {
         Args: { p_search?: string };
-        Returns: Array<{ approved_at: string | null; display_name: string; email_normalized: string; status: string; user_id: string }>;
+        Returns: Array<{
+          approved_at: string | null;
+          display_name: string;
+          email_normalized: string;
+          status: string;
+          user_id: string;
+        }>;
       };
-      admin_set_profile_status: { Args: { p_status: string; p_user_id: string }; Returns: undefined };
+      admin_set_profile_status: {
+        Args: { p_status: string; p_user_id: string };
+        Returns: undefined;
+      };
+      admin_list_team_requests: {
+        Args: { p_search?: string };
+        Returns: Array<{
+          accent_color: string;
+          created_team_id: string | null;
+          decided_at: string | null;
+          decided_by: string | null;
+          display_name: string;
+          email_normalized: string;
+          id: string;
+          name: string;
+          note: string | null;
+          requested_at: string;
+          status: string;
+          user_id: string;
+        }>;
+      };
+      admin_decide_team_request: {
+        Args: { p_approve: boolean; p_note?: string | null; p_request_id: string };
+        Returns: string;
+      };
+      request_team_creation: {
+        Args: { p_accent_color?: string; p_name: string };
+        Returns: string;
+      };
+      prepare_invitation_email: {
+        Args: { p_invitation_id: string };
+        Returns: Json;
+      };
+      record_invitation_email_result: {
+        Args: {
+          p_error?: string | null;
+          p_invitation_id: string;
+          p_provider_message_id?: string | null;
+          p_status: string;
+        };
+        Returns: undefined;
+      };
       cancel_team_invitation: { Args: { p_invitation_id: string }; Returns: undefined };
+      // Se conserva el tipo aunque la aplicación YA NO la llame: existe en la base y
+      // ahora responde `team_creation_requires_approval` a quien no es administrador.
       create_my_team: { Args: { p_accent_color?: string; p_name: string }; Returns: string };
       decline_team_invitation: { Args: { p_invitation_id: string }; Returns: undefined };
       delete_folder_tree: { Args: { p_folder_id: string }; Returns: undefined };
@@ -435,11 +538,27 @@ export interface Database {
       is_platform_admin: { Args: never; Returns: boolean };
       list_team_members: {
         Args: { p_team_id: string };
-        Returns: Array<{ accepted_at: string | null; display_name: string; email_normalized: string; invited_by: string | null; role: string; status: string; user_id: string }>;
+        Returns: Array<{
+          accepted_at: string | null;
+          display_name: string;
+          email_normalized: string;
+          invited_by: string | null;
+          role: string;
+          status: string;
+          user_id: string;
+        }>;
       };
       my_team_invitations: {
         Args: never;
-        Returns: Array<{ created_at: string; email_normalized: string; expires_at: string; id: string; status: string; team_id: string; team_name: string }>;
+        Returns: Array<{
+          created_at: string;
+          email_normalized: string;
+          expires_at: string;
+          id: string;
+          status: string;
+          team_id: string;
+          team_name: string;
+        }>;
       };
       revoke_team_member: { Args: { p_team_id: string; p_user_id: string }; Returns: undefined };
       save_session_with_tasks: {

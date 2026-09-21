@@ -67,15 +67,48 @@ async function logout(page: Page): Promise<void> {
   await page.waitForURL('**/auth/login');
 }
 
-async function ensureOwnTeam(page: Page, name: string): Promise<void> {
-  // Tras login de un perfil aprobado sin equipo, /team muestra "crear equipo".
+/**
+ * Presenta la SOLICITUD de equipo (la cuenta aprobada ya NO crea el equipo: lo aprueba un
+ * administrador de plataforma y el servidor lo crea al aprobar).
+ * CAMBIO DE CONTRATO (22/09/2026): antes esta suite pulsaba «Crear equipo» en la plantilla.
+ */
+async function requestTeam(page: Page, name: string): Promise<void> {
+  await page.goto('/onboarding/team');
+  await page.locator('#team-name').fill(name);
+  await page
+    .locator('button.btn.btn-primary', { hasText: /Enviar solicitud|Actualizar solicitud|Volver a solicitar/ })
+    .click();
+  await expect(page.locator('[data-estado-solicitud="pendiente"]')).toBeVisible();
+}
+
+/** Aprueba (como ADMIN) la solicitud pendiente del nombre indicado. */
+async function approveTeamRequestAsAdmin(page: Page, teamName: string): Promise<void> {
+  await login(page, env.adminEmail!, env.adminPassword!);
+  await page.goto('/admin');
+  const fila = page.locator('[data-solicitud="pendiente"]', { hasText: teamName });
+  await expect(fila, 'la solicitud aparece en el apartado de EQUIPOS del panel').toHaveCount(1);
+  await fila.locator('button', { hasText: 'Aprobar y crear equipo' }).click();
+  // Diálogo de confirmación de la app.
+  await page.locator('.confirm-dialog button', { hasText: 'Aprobar y crear' }).click();
+  await expect(page.locator('[data-solicitud="pendiente"]', { hasText: teamName })).toHaveCount(0);
+  await logout(page);
+}
+
+/**
+ * Deja al propietario con su equipo: si no lo tiene, presenta la solicitud y la aprueba el
+ * administrador. Si ya lo tiene, no hace nada (idempotente; la suite es re-ejecutable).
+ */
+async function ensureTeamApproved(page: Page, name: string): Promise<void> {
+  await login(page, env.ownerEmail!, env.ownerPassword!);
   await page.goto('/team');
-  const createBtn = page.locator('button.btn.btn-primary', { hasText: 'Crear equipo' });
-  if (await createBtn.isVisible().catch(() => false)) {
-    await createBtn.click();
-    await page.locator('.input-lg[name="teamName"]').fill(name);
-    await page.locator('form button[type=submit]', { hasText: 'Crear' }).click();
-    await page.waitForURL('**/team');
+  await page.waitForLoadState('networkidle');
+  // Sin equipo, el guard lleva a la pantalla de SOLICITUD.
+  if (page.url().includes('/onboarding/team')) {
+    await requestTeam(page, name);
+    await logout(page);
+    await approveTeamRequestAsAdmin(page, name);
+    await login(page, env.ownerEmail!, env.ownerPassword!);
+    await page.goto('/team');
   }
   await expect(page.locator('.page-title')).toHaveText('Plantilla');
 }
@@ -91,9 +124,11 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
     await logout(page);
   });
 
-  test('OWNER: crea equipo de prueba inequívoco y crea jugador, carpeta y ejercicio', async ({ page }) => {
+  test('OWNER: solicita el equipo de prueba (lo aprueba ADMIN) y crea jugador, carpeta y ejercicio', async ({ page }) => {
     await login(page, env.ownerEmail!, env.ownerPassword!);
-    await ensureOwnTeam(page, `${PREFIX} Equipo`);
+    // CAMBIO DE CONTRATO (22/09/2026): la cuenta aprobada SOLICITA el equipo; el equipo lo
+    // crea el servidor al aprobarlo un administrador de plataforma.
+    await ensureTeamApproved(page, `${PREFIX} Equipo`);
 
     // Jugador.
     await page.locator('button.btn.btn-primary', { hasText: 'Añadir jugador' }).click();

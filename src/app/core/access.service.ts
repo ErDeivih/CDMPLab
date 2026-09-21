@@ -11,9 +11,17 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { StoreService } from './store.service';
 import { decideAccess, type AccessState, type AccessTarget } from './access';
-import type { AccessResolution, DataSource, TeamInvitationInfo, TeamMemberInfo, ProfileStatus, ProfileInfo } from './repositories/data-source';
+import type {
+  AccessResolution,
+  DataSource,
+  TeamInvitationInfo,
+  TeamMemberInfo,
+  TeamRequestInfo,
+  ProfileStatus,
+  ProfileInfo,
+} from './repositories/data-source';
+import type { InviteEmailResult } from './invite-email';
 import { SupabaseRepository } from './repositories/supabase-data-source';
-import type { Team } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class AccessService {
@@ -29,6 +37,8 @@ export class AccessService {
   readonly state = this._state.asReadonly();
   readonly target = this._target;
   readonly isResolving = computed(() => this._state() === 'resolving');
+  /** Solicitud de equipo del usuario (null si no ha solicitado nada). */
+  readonly teamRequest = computed(() => this._resolution()?.teamRequest ?? null);
 
   /** Devuelve el repositorio activo (o null en modo local). */
   get activeDataSource(): DataSource | null {
@@ -116,18 +126,63 @@ export class AccessService {
     return this._repo;
   }
 
-  // ---------- Acciones (equipo / colaboradores / admin) ----------
+  // ---------- Acciones (solicitud de equipo / colaboradores / admin) ----------
 
-  /** Crea el equipo propio y conecta el repositorio a él. */
-  async createTeam(name: string, accentColor: string): Promise<Team> {
+  /**
+   * Presenta (o ACTUALIZA) la SOLICITUD de equipo del usuario.
+   *
+   * CAMBIO DE CONTRATO (22/09/2026): aquí vivía `createTeam`, que creaba el equipo al
+   * instante llamando a `create_my_team`. El servidor ya no permite crear equipos a un
+   * usuario aprobado: la solicitud queda pendiente y la aprueba un administrador de
+   * plataforma, que es quien provoca la creación real dentro de la misma transacción.
+   */
+  async requestTeamCreation(name: string, accentColor: string): Promise<TeamRequestInfo> {
     const repo = await this.ensureRepo();
-    if (!repo) throw new Error('El equipo solo puede crearse con sesión iniciada.');
-    const team = await repo.createTeam(name, accentColor);
-    repo.setTeam(team.id);
-    this.store.activateRemoteTeam(repo, team);
-    this._resolution.update((r) => (r ? { ...r, ownedTeam: team } : r));
-    this._state.set('ready');
-    return team;
+    if (!repo) throw new Error('La solicitud de equipo necesita una sesión iniciada.');
+    const request = await repo.requestTeamCreation(name, accentColor);
+    this._resolution.update((r) => (r ? { ...r, teamRequest: request } : r));
+    this._state.set(request.status === 'pending' ? 'request-pending' : 'request-team');
+    return request;
+  }
+
+  /** Solicitud propia (o null). */
+  async myTeamRequest(): Promise<TeamRequestInfo | null> {
+    const repo = await this.ensureRepo();
+    if (!repo) return null;
+    return repo.myTeamRequest();
+  }
+
+  /** Cola de solicitudes de equipo. El servidor exige ser administrador de plataforma. */
+  async listTeamRequests(search = ''): Promise<TeamRequestInfo[]> {
+    const repo = await this.ensureRepo();
+    if (!repo) return [];
+    return repo.listTeamRequests(search);
+  }
+
+  /**
+   * Aprueba una solicitud. El SERVIDOR crea el equipo en la misma transacción y la
+   * operación es idempotente; devuelve el id del equipo (null si no lo hubo).
+   */
+  async approveTeamRequest(requestId: string): Promise<string | null> {
+    const repo = await this.ensureRepo();
+    if (!repo) throw new Error('No hay sesión.');
+    return repo.decideTeamRequest(requestId, true, null);
+  }
+
+  /** Rechaza una solicitud con un motivo (que el solicitante podrá leer). */
+  async rejectTeamRequest(requestId: string, note: string | null): Promise<void> {
+    const repo = await this.ensureRepo();
+    if (!repo) throw new Error('No hay sesión.');
+    await repo.decideTeamRequest(requestId, false, note);
+  }
+
+  /**
+   * Pide a la función de servidor que envíe el correo de una invitación. El envío real
+   * vive en el servidor (la clave del proveedor es un secreto) y devuelve un estado
+   * honesto: `provider_accepted` NO significa entregado.
+   */
+  async sendInvitationEmail(invitationId: string): Promise<InviteEmailResult> {
+    return this.supabase.sendInvitationEmail(invitationId);
   }
 
   /** Recarga los datos del equipo de contexto en el store. */

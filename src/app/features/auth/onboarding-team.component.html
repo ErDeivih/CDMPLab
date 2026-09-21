@@ -1,7 +1,36 @@
-<app-auth-card [title]="'Crea tu equipo'" [subtitle]="'El primer paso para entrenar'">
+<app-auth-card [title]="'Solicitar equipo'" [subtitle]="'Un administrador debe aprobarlo'">
+  <!-- CAMBIO DE CONTRATO (22/09/2026): esta pantalla YA NO crea el equipo. La cuenta
+       aprobada presenta una SOLICITUD y es un administrador de plataforma quien la aprueba;
+       al aprobarla, el servidor crea el equipo dentro de la misma transacción. El texto no
+       puede prometer una creación inmediata que el servidor no va a conceder. -->
   <p class="auth-note">
-    Crea el equipo que vas a entrenar. Después podrás invitar colaboradores y diseñar ejercicios.
+    Tu cuenta está aprobada. El equipo lo crea el servidor cuando un administrador aprueba tu
+    solicitud: escribe el nombre que quieres y el color, y podrás seguir el estado aquí mismo.
   </p>
+
+  @if (solicitud(); as req) {
+    @if (req.status === 'pending') {
+      <p class="auth-msg ok" role="status" data-estado-solicitud="pendiente">
+        Solicitud <strong>pendiente</strong> desde {{ fecha(req.requestedAt) }} para el equipo «{{
+          req.name
+        }}». Un administrador la revisará. Mientras esperas puedes corregir el nombre o el color y
+        volver a enviarla.
+      </p>
+    }
+    @if (req.status === 'rejected') {
+      <p class="auth-msg err" role="alert" data-estado-solicitud="rechazada">
+        Tu solicitud de «{{ req.name }}» fue <strong>rechazada</strong>
+        @if (req.decidedAt) {
+          el {{ fecha(req.decidedAt) }}
+        }
+        .
+        @if (req.note) {
+          Motivo: {{ req.note }}
+        }
+        Puedes corregir lo que haga falta y volver a solicitarlo.
+      </p>
+    }
+  }
 
   <label class="field-label" for="team-name">Nombre del equipo</label>
   <input
@@ -34,9 +63,21 @@
     <p class="auth-msg err" role="alert">{{ error() }}</p>
   }
 
+  @if (sent()) {
+    <p class="auth-msg ok" role="status" data-solicitud-enviada="1">{{ sent() }}</p>
+  }
+
   <div class="auth-actions">
-    <button type="button" class="btn btn-primary" [disabled]="submitting()" (click)="create()">
-      {{ submitting() ? 'Creando…' : 'Crear equipo' }}
+    <button
+      type="button"
+      class="btn btn-primary"
+      [disabled]="submitting()"
+      (click)="enviarSolicitud()"
+    >
+      {{ submitting() ? 'Enviando…' : etiquetaEnvio() }}
+    </button>
+    <button type="button" class="btn btn-ghost" [disabled]="submitting()" (click)="refresh()">
+      Actualizar estado
     </button>
   </div>
 </app-auth-card>

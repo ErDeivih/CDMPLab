@@ -38,7 +38,8 @@ export class LoginComponent {
     const res = await this.supabase.signIn(email, password);
     this.submitting.set(false);
     if (res.ok) {
-      // Decidir el destino por estado (pending / rejected / suspended / create-team / team).
+      // Decidir el destino por estado (pending / rejected / suspended / request-team /
+      // request-pending / invitations / team).
       const target = await this.access.refresh();
       await this.router.navigate([target.route]);
       return;

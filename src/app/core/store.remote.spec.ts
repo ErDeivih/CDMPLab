@@ -136,17 +136,15 @@ describe('StoreService en modo remoto', () => {
     const latest = EX('e1', { title: 'Versión servidor', revision: 2 });
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi
-        .fn<() => Promise<TeamDataset>>()
-        .mockResolvedValue({
-          team: null,
-          players: [],
-          folders: [],
-          exercises: [EX('e1')],
-          sessions: [],
-          members: [],
-          invitations: [],
-        }),
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
+        team: null,
+        players: [],
+        folders: [],
+        exercises: [EX('e1')],
+        sessions: [],
+        members: [],
+        invitations: [],
+      }),
       saveExercise: vi
         .fn<() => Promise<SaveExerciseResult>>()
         .mockResolvedValue({ conflict: true, revision: 2, exercise: latest }),
@@ -420,17 +418,15 @@ describe('StoreService en modo remoto', () => {
   it('hace ROLLBACK visible en la señal cuando el servidor falla', async () => {
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi
-        .fn<() => Promise<TeamDataset>>()
-        .mockResolvedValue({
-          team: null,
-          players: [],
-          folders: [],
-          exercises: [],
-          sessions: [],
-          members: [],
-          invitations: [],
-        }),
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
+        team: null,
+        players: [],
+        folders: [],
+        exercises: [],
+        sessions: [],
+        members: [],
+        invitations: [],
+      }),
       saveExercise: vi.fn<() => Promise<SaveExerciseResult>>().mockRejectedValue(new Error('boom')),
     });
     await store.connectDataSource(fake, 'team-1');

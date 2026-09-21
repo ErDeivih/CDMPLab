@@ -14,12 +14,90 @@
       placeholder="Buscar por correo o nombre…"
       [value]="query()"
       (input)="onSearch($event)"
-      (keyup.enter)="load()"
+      (keyup.enter)="refreshAll()"
       autocomplete="off"
     />
-    <button type="button" class="btn" (click)="load()">Buscar</button>
+    <button type="button" class="btn" (click)="refreshAll()">Buscar</button>
   </div>
 
+  <!-- ============================================================
+       SOLICITUDES DE EQUIPO
+       Apartado propio y SEPARADO de la aprobación de cuentas: aprobar una cuenta no
+       aprueba un equipo. Al aprobar, el equipo lo crea el servidor en la misma
+       transacción y queda como propietario quien lo solicitó.
+       ============================================================ -->
+  <h2 class="auth-note" style="font-weight: 700; margin-top: 18px" data-apartado="equipos">
+    Solicitudes de equipo
+  </h2>
+  @if (requestsLoading()) {
+    <p class="auth-note">Cargando solicitudes…</p>
+  } @else if (requests().length === 0) {
+    <p class="auth-note" data-sin-solicitudes="1">No hay solicitudes de equipo.</p>
+  } @else {
+    @if (pendingRequests().length === 0) {
+      <p class="auth-note">No hay solicitudes pendientes.</p>
+    }
+    @for (r of pendingRequests(); track r.id) {
+      <div class="card invite-row" data-solicitud="pendiente">
+        <div class="invite-main">
+          <strong>{{ r.name }}</strong>
+          <span class="auth-note">
+            Pide: {{ r.displayName || r.emailNormalized }} · {{ r.emailNormalized }} ·
+            {{ fecha(r.requestedAt) }} · {{ requestStatusLabel(r.status) }}
+          </span>
+          <input
+            type="text"
+            class="input"
+            placeholder="Motivo del rechazo (opcional, lo leerá quien lo pidió)"
+            [value]="noteFor(r.id)"
+            (input)="onRejectNote($event, r.id)"
+          />
+        </div>
+        <div class="admin-actions">
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="requestBusy(r.id)"
+            (click)="approveRequest(r)"
+          >
+            Aprobar y crear equipo
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-danger-text"
+            [disabled]="requestBusy(r.id)"
+            (click)="rejectRequest(r)"
+          >
+            Rechazar
+          </button>
+        </div>
+      </div>
+    }
+    @if (decidedRequests().length > 0) {
+      <p class="auth-note">Últimas decisiones</p>
+      @for (r of decidedRequests(); track r.id) {
+        <div class="card invite-row" data-solicitud="decidida">
+          <div class="invite-main">
+            <strong>{{ r.name }}</strong>
+            <span class="auth-note">
+              {{ r.displayName || r.emailNormalized }} · {{ requestStatusLabel(r.status) }}
+              {{ fecha(r.decidedAt) }}
+              @if (r.note) {
+                · {{ r.note }}
+              }
+            </span>
+          </div>
+        </div>
+      }
+    }
+  }
+  @if (requestsError()) {
+    <p class="auth-msg err" role="alert">{{ requestsError() }}</p>
+  }
+
+  <h2 class="auth-note" style="font-weight: 700; margin-top: 18px" data-apartado="cuentas">
+    Cuentas
+  </h2>
   @if (loading()) {
     <p class="auth-note">Cargando perfiles…</p>
   } @else if (profiles().length === 0) {
@@ -92,7 +170,7 @@
   }
 
   <div class="auth-actions">
-    <button type="button" class="btn" (click)="load()">Actualizar</button>
+    <button type="button" class="btn" (click)="refreshAll()">Actualizar</button>
     <button type="button" class="btn btn-ghost" (click)="logout()">Cerrar sesión</button>
   </div>
 </app-auth-card>

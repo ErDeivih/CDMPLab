@@ -1,8 +1,15 @@
 # FASE 9 — Equipos e invitaciones: comportamiento ACTUAL y propuesta futura
 
-> Encargo: _«No cambies la arquitectura ni la base remota en esta ronda. Documenta y prueba el
+> **ACTUALIZACIÓN 22/09/2026 — la propuesta de abajo YA ESTÁ IMPLEMENTADA, con otro diseño.**
+> El encargo del dueño («el admin debe poder aceptar la solicitud de equipo») se resolvió con una
+> **solicitud de equipo** que aprueba un administrador de plataforma, no con un ajuste de
+> plataforma `teamCreationMode`: ver `docs/FASE-10-solicitud-de-equipo.md`. Los puntos 4 y 6 de
+> este documento describen el comportamiento **anterior** y se conservan como auditoría; léelos
+> como historia, no como estado del código.
+>
+> Encargo original: _«No cambies la arquitectura ni la base remota en esta ronda. Documenta y prueba el
 > funcionamiento actual»_. Este documento **no propone cambios de código** (salvo la sección final,
-> marcada como NO IMPLEMENTADA) y describe lo que el repositorio hace hoy, con la evidencia en el
+> marcada como NO IMPLEMENTADA) y describe lo que el repositorio hacía en ese momento, con la evidencia en el
 > propio código.
 
 ## Alcance: qué está verificado y qué no
@@ -39,13 +46,16 @@ pendientes**, la app lleva a `/invitations` (`state: 'accept-invitation'`). Evid
 `src/app/core/access.ts` líneas 46-50 y el caso «aprobado sin equipo y con invitaciones →
 accept-invitation» de `access.spec.ts`.
 
-## 4. Una cuenta aprobada SIN equipo también puede crear uno (comportamiento actual)
+## 4. Una cuenta aprobada SIN equipo también puede crear uno (comportamiento ANTERIOR)
 
-Es el comportamiento de HOY, no un descuido: si el perfil está `approved`, no tiene equipo, no
-pertenece a ninguno y no tiene invitaciones, `decideAccess` devuelve
-`{ state: 'create-team', route: '/onboarding/team' }` (caso «aprobado sin equipo ni invitaciones →
-create-team»). Es decir: **cualquier cuenta aprobada puede crear un equipo por su cuenta**. Esto es
-justo lo que la propuesta final permitiría restringir con un modo configurable.
+> **Ya no es así (22/09/2026).** La cuenta aprobada **solicita** el equipo y lo aprueba un
+> administrador de plataforma; el servidor lo crea al aprobar. Ver
+> `docs/FASE-10-solicitud-de-equipo.md`. Este apartado se conserva como auditoría del estado
+> anterior.
+
+Era el comportamiento de entonces, no un descuido: si el perfil está `approved`, no tiene equipo, no
+pertenece a ninguno y no tiene invitaciones, `decideAccess` devolvía
+`{ state: 'create-team', route: '/onboarding/team' }`. Es decir: **cualquier cuenta aprobada podía crear un equipo por su cuenta**.
 
 > **Actualización 21/09/2026:** la sección 5 describe el contrato histórico de cuatro
 > colaboradores. La migración `20260921085803_increase_team_capacity_to_seven.sql` está
@@ -69,7 +79,12 @@ La función es `security definer` con `search_path = ''` y, tras el endurecimien
 **revocado a `authenticated`** (`20260827000001_entrenolab_hardening.sql`), así que no es una puerta
 trasera: solo se usa desde las RPC públicas de invitación.
 
-## 6. La invitación se guarda en la aplicación; NO se envía un correo automático
+## 6. La invitación se guarda en la aplicación; NO se envía un correo automático (estado ANTERIOR)
+
+> **Ya no es así (22/09/2026).** Ahora la invitación se crea igual, y además el propietario puede
+> **pedir el envío real** del correo desde una función de servidor (Edge Function
+> `invite-team-member`), con estados distinguibles y reintento. El envío real **todavía no se ha
+> probado** (falta proveedor, credenciales y dominio): ver `docs/correo-invitaciones.md`.
 
 La invitación se persiste en `public.team_invitations` con estados
 `pending | accepted | revoked | expired` y fecha de caducidad (`expires_at`, que es la que usa el
@@ -80,10 +95,12 @@ invitación por el canal que quiera y la persona invitada lo acepta desde `/invi
 
 ---
 
-# PROPUESTA — `teamCreationMode = admin-only | approved-users` (NO IMPLEMENTADA)
+# PROPUESTA — `teamCreationMode = admin-only | approved-users` (SUSTITUIDA por el diseño implementado)
 
-> Esta sección es una **propuesta separada**, tal y como pide el encargo. **No está implementada** y
-> no se ha tocado ni el código ni la base remota.
+> Esta sección era una **propuesta separada** y **no se implementó tal cual**. El 22/09/2026 el
+> mismo objetivo se resolvió de otra forma (solicitud + aprobación del administrador, sin tabla de
+> ajustes): ver `docs/FASE-10-solicitud-de-equipo.md`. Se conserva para poder comparar los dos
+> diseños y sus motivos.
 
 ## Problema
 

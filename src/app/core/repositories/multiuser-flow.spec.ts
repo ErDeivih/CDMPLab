@@ -30,7 +30,6 @@ import { TestBed } from '@angular/core/testing';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import { SupabaseRepository } from './supabase-data-source';
-import { DataError } from './data-source';
 import { decideAccess } from '../access';
 import { AccessService } from '../access.service';
 import { SupabaseService } from '../supabase.service';
@@ -95,6 +94,8 @@ interface BackendRow {
   teams: Rw[];
   team_members: Rw[];
   team_invitations: Rw[];
+  /** Cierre del encargo (22/09/2026): solicitudes de equipo. */
+  team_requests: Rw[];
   players: Rw[];
   exercise_folders: Rw[];
   exercises: Rw[];
@@ -110,6 +111,7 @@ export class RlsBackend {
     teams: [],
     team_members: [],
     team_invitations: [],
+    team_requests: [],
     players: [],
     exercise_folders: [],
     exercises: [],
@@ -117,10 +119,28 @@ export class RlsBackend {
     session_exercises: [],
   };
 
+  /**
+   * Administradores de plataforma simulados (`private.platform_admins`). Sin ninguno
+   * dado de alta, `is_platform_admin()` es false para todos, que es el caso por defecto
+   * de esta matriz.
+   */
+  readonly platformAdmins = new Set<string>();
+
   /** Registro: filtros de colección y llamadas RPC (para el test "sin email"). */
   readonly filters: Filter[] = [];
-  readonly rpcCalls: Array<{ name: string; args: unknown; uid: string }> = [];
+  readonly rpcCalls: Array<{
+    name: string;
+    args: unknown;
+    uid: string;
+    /** Rol del token con el que se llamó: 'authenticated' o 'service_role' (servidor). */
+    role: 'authenticated' | 'service_role';
+  }> = [];
   readonly eqCalls: Array<{ table: string; col: string; val: unknown }> = [];
+
+  /** Da de alta un administrador de plataforma (equivale a insertar en private.platform_admins). */
+  addPlatformAdmin(userId: string): void {
+    this.platformAdmins.add(userId);
+  }
 
   // ---------- Seeding ----------
 
@@ -272,9 +292,11 @@ export class RlsBackend {
     return this.profileOf(uid)?.status === 'approved';
   }
 
-  isPlatformAdmin(_uid: string): boolean {
-    // Sin admins en estos tests: la matriz multiusuario no la necesita.
-    return false;
+  isPlatformAdmin(uid: string): boolean {
+    // Cierre del encargo (22/09/2026): la matriz multiusuario SÍ necesita administradores
+    // (aprobar solicitudes de equipo), así que ahora se pueden dar de alta. Por defecto no
+    // hay ninguno, que es como estaba antes.
+    return this.platformAdmins.has(uid);
   }
 
   teamRole(uid: string, teamId: string): 'owner' | 'editor' | 'none' {
@@ -299,6 +321,9 @@ export class RlsBackend {
   private rowVisible(uid: string, table: string, row: Rw): boolean {
     if (table === 'profiles') return row.user_id === uid || this.isPlatformAdmin(uid);
     if (table === 'teams') return this.isTeamMember(uid, row.id as string);
+    // La solicitud la ve quien la presentó y el administrador de plataforma (política
+    // `team_requests_select_own_or_admin`). Nadie más.
+    if (table === 'team_requests') return row.user_id === uid || this.isPlatformAdmin(uid);
     if (table === 'team_invitations') {
       return (
         this.isTeamOwner(uid, row.team_id as string) ||
@@ -319,7 +344,11 @@ export class RlsBackend {
       table === 'profiles' ||
       table === 'teams' ||
       table === 'team_members' ||
-      table === 'team_invitations'
+      table === 'team_invitations' ||
+      // Cierre del encargo (22/09/2026): `team_requests` SOLO se lee desde el cliente;
+      // escribirla pasa por `request_team_creation` (SECURITY DEFINER). Si el cliente
+      // pudiera insertar, podría escribir `status = 'approved'` a mano.
+      table === 'team_requests'
     )
       return false; // solo via RPC
     return this.isTeamMember(uid, payload.team_id as string);
@@ -368,12 +397,27 @@ export class RlsBackend {
 
   // ---------- RPC ----------
 
-  async rpc(name: string, args: unknown, uid: string): Promise<RpcResult> {
-    this.rpcCalls.push({ name, args, uid });
+  async rpc(
+    name: string,
+    args: unknown,
+    uid: string,
+    role: 'authenticated' | 'service_role' = 'authenticated',
+  ): Promise<RpcResult> {
+    this.rpcCalls.push({ name, args, uid, role });
     const a = (args ?? {}) as Rw;
     switch (name) {
       case 'create_my_team':
         return this.rpcCreateMyTeam(a, uid);
+      case 'request_team_creation':
+        return this.rpcRequestTeamCreation(a, uid);
+      case 'admin_list_team_requests':
+        return this.rpcAdminListTeamRequests(a, uid);
+      case 'admin_decide_team_request':
+        return this.rpcAdminDecideTeamRequest(a, uid);
+      case 'prepare_invitation_email':
+        return this.rpcPrepareInvitationEmail(a, uid);
+      case 'record_invitation_email_result':
+        return this.rpcRecordInvitationEmailResult(a, role);
       case 'invite_team_member':
         return this.rpcInvite(a, uid);
       case 'accept_team_invitation':
@@ -393,20 +437,31 @@ export class RlsBackend {
     }
   }
 
+  /**
+   * `create_my_team` DESPUÉS del cierre del encargo (22/09/2026): sólo un administrador de
+   * plataforma puede crear su propio equipo. Antes bastaba con tener el perfil aprobado, y
+   * ése era justo el agujero: la cuenta creaba el equipo saltándose al administrador.
+   */
   private rpcCreateMyTeam(a: Rw, uid: string): RpcResult {
     const name = String(a.p_name ?? '').trim();
     const color = String(a.p_accent_color ?? '');
-    if (!this.isApproved(uid)) return err('42501', 'profile_not_approved');
+    if (!uid) return err('42501', 'not_authenticated');
+    if (!this.isPlatformAdmin(uid)) return err('42501', 'team_creation_requires_approval');
     if (!name) return err('P0001', 'team_name_required');
     if (!/^#[0-9A-Fa-f]{6}$/.test(color)) return err('P0001', 'invalid_accent_color');
     if (this.rows.teams.some((t) => t.owner_user_id === uid)) {
       return err('23505', 'duplicate key value violates unique constraint "teams_owner_unique"');
     }
+    return ok(this.insertTeam(uid, name, color));
+  }
+
+  /** Inserta el equipo y su fila de miembro propietario (trigger add_owner_membership). */
+  private insertTeam(ownerUserId: string, name: string, color: string): string {
     const id = uuid();
     const now = nowIso();
     this.rows.teams.push({
       id,
-      owner_user_id: uid,
+      owner_user_id: ownerUserId,
       name,
       accent_color: color,
       created_at: now,
@@ -414,14 +469,198 @@ export class RlsBackend {
     });
     this.rows.team_members.push({
       team_id: id,
-      user_id: uid,
+      user_id: ownerUserId,
       role: 'owner',
       status: 'active',
       invited_by: null,
       accepted_at: now,
       created_at: now,
     });
+    return id;
+  }
+
+  /**
+   * `request_team_creation`: una cuenta aprobada SIN equipo presenta (o ACTUALIZA) su
+   * solicitud. Idempotente: una sola solicitud pendiente por usuario.
+   */
+  private rpcRequestTeamCreation(a: Rw, uid: string): RpcResult {
+    const name = String(a.p_name ?? '').trim();
+    const color = String(a.p_accent_color ?? '#3056d3').toLowerCase();
+    if (!uid) return err('42501', 'not_authenticated');
+    if (!this.isApproved(uid)) return err('42501', 'profile_not_approved');
+    if (!name) return err('P0001', 'team_name_required');
+    if (name.length > 80) return err('P0001', 'team_name_too_long');
+    if (!/^#[0-9a-f]{6}$/.test(color)) return err('P0001', 'invalid_accent_color');
+    if (this.rows.teams.some((t) => t.owner_user_id === uid))
+      return err('P0001', 'already_has_team');
+    const pending = this.rows.team_requests.find(
+      (r) => r.user_id === uid && r.status === 'pending',
+    );
+    if (pending) {
+      pending.name = name;
+      pending.accent_color = color;
+      pending.revision = Number(pending.revision ?? 1) + 1;
+      pending.updated_at = nowIso();
+      return ok(pending.id);
+    }
+    const id = uuid();
+    this.rows.team_requests.push({
+      id,
+      user_id: uid,
+      name,
+      accent_color: color,
+      status: 'pending',
+      note: null,
+      created_team_id: null,
+      requested_at: nowIso(),
+      updated_at: nowIso(),
+      decided_at: null,
+      decided_by: null,
+      revision: 1,
+    });
     return ok(id);
+  }
+
+  /** `admin_list_team_requests`: solo para administradores; pendientes primero. */
+  private rpcAdminListTeamRequests(a: Rw, uid: string): RpcResult {
+    if (!uid) return err('42501', 'not_authenticated');
+    if (!this.isPlatformAdmin(uid)) return err('42501', 'platform_admin_required');
+    const search = String(a.p_search ?? '')
+      .trim()
+      .toLowerCase();
+    const filas = this.rows.team_requests
+      .filter((r) => {
+        if (search === '') return true;
+        const p = this.profileOf(r.user_id as string);
+        return (
+          String(r.name ?? '')
+            .toLowerCase()
+            .includes(search) ||
+          String(p?.display_name ?? '')
+            .toLowerCase()
+            .includes(search) ||
+          String(p?.email_normalized ?? '').includes(search)
+        );
+      })
+      .map((r) => {
+        const p = this.profileOf(r.user_id as string);
+        return {
+          id: r.id,
+          user_id: r.user_id,
+          display_name: p?.display_name ?? '',
+          email_normalized: p?.email_normalized ?? '',
+          name: r.name,
+          accent_color: r.accent_color,
+          status: r.status,
+          note: r.note,
+          requested_at: r.requested_at,
+          decided_at: r.decided_at,
+          decided_by: r.decided_by,
+          created_team_id: r.created_team_id,
+        };
+      })
+      .sort((x, y) => (x.status === y.status ? 0 : x.status === 'pending' ? -1 : 1));
+    return ok(filas);
+  }
+
+  /**
+   * `admin_decide_team_request`: al APROBAR crea el equipo en la misma transacción; es
+   * idempotente (repetir devuelve el mismo equipo) y reutiliza el equipo si ya existe.
+   */
+  private rpcAdminDecideTeamRequest(a: Rw, uid: string): RpcResult {
+    if (!uid) return err('42501', 'not_authenticated');
+    if (!this.isPlatformAdmin(uid)) return err('42501', 'platform_admin_required');
+    const req = this.rows.team_requests.find((r) => r.id === (a.p_request_id as string));
+    if (!req) return err('P0001', 'team_request_not_found');
+    const approve = a.p_approve === true;
+    if (req.status === 'approved') {
+      if (approve) return ok(req.created_team_id);
+      return err('P0001', 'team_request_already_approved');
+    }
+    if (req.status === 'rejected' && !approve) return ok(null);
+    if (!approve) {
+      req.status = 'rejected';
+      const note = String(a.p_note ?? '').trim();
+      req.note = note === '' ? null : note;
+      req.decided_at = nowIso();
+      req.decided_by = uid;
+      return ok(null);
+    }
+    const prof = this.profileOf(req.user_id as string);
+    if (!prof || prof.status !== 'approved') return err('P0001', 'requester_not_approved');
+    let team = this.rows.teams.find((t) => t.owner_user_id === req.user_id);
+    if (!team) {
+      this.insertTeam(req.user_id as string, req.name as string, req.accent_color as string);
+      team = this.rows.teams.find((t) => t.owner_user_id === req.user_id);
+    }
+    req.status = 'approved';
+    req.note = null;
+    req.decided_at = nowIso();
+    req.decided_by = uid;
+    req.created_team_id = team!.id;
+    return ok(team!.id);
+  }
+
+  /** `prepare_invitation_email`: autoriza por propiedad, aplica cooldown y tope y ABRE intento. */
+  private rpcPrepareInvitationEmail(a: Rw, uid: string): RpcResult {
+    if (!uid) return err('42501', 'not_authenticated');
+    const inv = this.rows.team_invitations.find((i) => i.id === (a.p_invitation_id as string));
+    if (!inv) return err('P0001', 'invitation_not_available');
+    if (!this.isTeamOwner(uid, inv.team_id as string))
+      return err('42501', 'forbidden: not team owner');
+    if (inv.status !== 'pending' || new Date(inv.expires_at as string).getTime() <= Date.now())
+      return err('P0001', 'invitation_not_available');
+    const last = inv.last_email_at ? new Date(inv.last_email_at as string).getTime() : 0;
+    if (inv.email_status !== 'send_error' && last && Date.now() - last < 60_000)
+      return err('P0001', 'email_cooldown');
+    if (Number(inv.email_attempts ?? 0) >= 5) return err('P0001', 'email_attempt_limit');
+    inv.email_status = 'send_pending';
+    inv.email_attempts = Number(inv.email_attempts ?? 0) + 1;
+    inv.last_email_at = nowIso();
+    // Intento NUEVO: invalida el identificador de cualquier envío anterior.
+    inv.email_attempt_id = uuid();
+    const team = this.rows.teams.find((t) => t.id === inv.team_id);
+    return ok({
+      invitation_id: inv.id,
+      team_id: inv.team_id,
+      team_name: team?.name ?? '',
+      email: inv.email_normalized,
+      link_path: `/invitations?invitation=${inv.id}`,
+      attempt_id: inv.email_attempt_id,
+    });
+  }
+
+  /**
+   * `record_invitation_email_result`: SOLO con la credencial de servicio (como en el servidor) y
+   * vinculado al intento vigente.
+   *
+   * CAMBIO DE CONTRATO (revisión del dueño, 22/09/2026): antes bastaba con ser el propietario, así
+   * que un propietario podía falsificar `provider_accepted` y el identificador del proveedor sin
+   * enviar nada. Ahora el rol `authenticated` recibe «permission denied», igual que en PostgreSQL
+   * al no tener EXECUTE.
+   */
+  private rpcRecordInvitationEmailResult(a: Rw, role: 'authenticated' | 'service_role'): RpcResult {
+    if (role !== 'service_role') {
+      return err('42501', 'permission denied for function record_invitation_email_result');
+    }
+    const status = String(a.p_status ?? '');
+    if (status !== 'provider_accepted' && status !== 'send_error')
+      return err('P0001', 'invalid_email_status');
+    if (!a.p_attempt_id) return err('P0001', 'email_attempt_required');
+    const inv = this.rows.team_invitations.find((i) => i.id === (a.p_invitation_id as string));
+    if (!inv) return err('P0001', 'invitation_not_available');
+    // Vinculación al intento: una respuesta tardía del intento anterior NO escribe nada.
+    if (inv.email_attempt_id !== a.p_attempt_id) return err('P0001', 'stale_email_attempt');
+    inv.email_status = status;
+    if (status === 'provider_accepted') {
+      inv.provider_message_id = String(a.p_provider_message_id ?? '').slice(0, 120);
+      inv.last_email_error = null;
+    } else {
+      inv.last_email_error = String(a.p_error ?? '')
+        .replace(/[\r\n\t]+/g, ' ')
+        .slice(0, 300);
+    }
+    return ok(null);
   }
 
   private rpcInvite(a: Rw, uid: string): RpcResult {
@@ -457,6 +696,13 @@ export class RlsBackend {
       invited_by: uid,
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       created_at: now,
+      // Columnas del CORREO (migración 20260922000000): la invitación nace 'created'.
+      email_status: 'created',
+      email_attempts: 0,
+      last_email_at: null,
+      last_email_error: null,
+      provider_message_id: null,
+      email_attempt_id: null,
     });
     return ok(invId);
   }
@@ -641,6 +887,7 @@ export class RlsBackend {
     const filters: Filter[] = [];
     const orderBy: Array<{ col: string; asc: boolean }> = [];
     let rangeWindow: { from: number; to: number } | null = null;
+    let limitWindow: number | null = null;
     let selectReturn = false;
     let limitSingle: 'single' | 'maybeSingle' | null = null;
 
@@ -697,6 +944,8 @@ export class RlsBackend {
         // `.range(from, to)` es el offset/limit de PostgREST (el recorte por `max-rows` no se
         // emula aquí: estas pruebas usan datasets pequeños).
         if (rangeWindow) rows = rows.slice(rangeWindow.from, rangeWindow.to + 1);
+        // `.limit(n)` es el recorte de PostgREST (lo usa la lectura de la solicitud propia).
+        if (limitWindow != null) rows = rows.slice(0, limitWindow);
         return finishRead(rows);
       }
       if (mode === 'insert') {
@@ -759,6 +1008,10 @@ export class RlsBackend {
         rangeWindow = { from, to };
         return builder;
       },
+      limit: (n: number) => {
+        limitWindow = n;
+        return builder;
+      },
       update: (p: Rw) => {
         mode = 'update';
         payload = p;
@@ -797,6 +1050,7 @@ export interface RwQuery {
   in: (col: string, vals: unknown[]) => RwQuery;
   order: (col: string, opts?: { ascending?: boolean }) => RwQuery;
   range: (from: number, to: number) => RwQuery;
+  limit: (n: number) => RwQuery;
   update: (p: Rw) => RwQuery;
   insert: (p: Rw) => RwQuery;
   delete: () => RwQuery;
@@ -818,18 +1072,53 @@ function err(code: string, message: string): RpcResult {
 // (equivale al auth token real, nunca email/metadata).
 // ---------------------------------------------------------------------------
 
-function makeRlsClient(backend: RlsBackend, userId: string) {
+/**
+ * Cliente mock: inyecta la identidad del usuario en cada llamada a rpc/from
+ * (equivale al auth token real, nunca email/metadata).
+ *
+ * `role` modela el ROL del token: 'authenticated' (navegador) o 'service_role' (la credencial
+ * del SERVIDOR que nunca llega al navegador). Es lo que permite comprobar que el registro del
+ * resultado del correo solo lo puede hacer el servidor.
+ */
+function makeRlsClient(
+  backend: RlsBackend,
+  userId: string,
+  role: 'authenticated' | 'service_role' = 'authenticated',
+) {
   const rpcMock = vi.fn(async (name: string, args: unknown): Promise<RpcResult> =>
-    backend.rpc(name, args, userId),
+    backend.rpc(name, args, userId, role),
   );
   const fromMock = vi.fn((table: string): unknown => backend.tableQuery(table, userId));
   const client = { rpc: rpcMock, from: fromMock } as unknown as SupabaseClient<Database>;
-  return { client, rpcMock, fromMock, userId };
+  return { client, rpcMock, fromMock, userId, role };
 }
 
-function makeRepo(backend: RlsBackend, userId: string, teamId: string | null): SupabaseRepository {
-  const { client } = makeRlsClient(backend, userId);
+function makeRepo(
+  backend: RlsBackend,
+  userId: string,
+  teamId: string | null,
+  role: 'authenticated' | 'service_role' = 'authenticated',
+): SupabaseRepository {
+  const { client } = makeRlsClient(backend, userId, role);
   return new SupabaseRepository(client, userId, teamId);
+}
+
+/**
+ * Llama a una RPC como lo haría el SERVIDOR: con la credencial de servicio, que no lleva
+ * usuario. Es la única forma legítima de registrar el resultado de un envío.
+ */
+function rpcServidor(backend: RlsBackend, name: string, args: unknown): Promise<RpcResult> {
+  return backend.rpc(name, args, '', 'service_role');
+}
+
+/** Llama a una RPC como lo haría el NAVEGADOR autenticado (la vía que debe estar cerrada). */
+function rpcNavegador(
+  backend: RlsBackend,
+  name: string,
+  args: unknown,
+  uid: string,
+): Promise<RpcResult> {
+  return backend.rpc(name, args, uid, 'authenticated');
 }
 
 // ---------------------------------------------------------------------------
@@ -901,11 +1190,39 @@ function setupJourney() {
   return { backend };
 }
 
+/** Cuenta administradora de plataforma usada en esta matriz (nadie más lo es). */
+const ADMIN = '00000000-0000-0000-0000-0000000000ad';
+
+/** Alta del administrador de plataforma en el backend simulado. */
+function conAdmin(backend: RlsBackend): void {
+  backend.addPlatformAdmin(ADMIN);
+}
+
+/**
+ * Da de alta el equipo de `userId` por la vía REAL del cierre del encargo (22/09/2026):
+ * la cuenta presenta una SOLICITUD y un administrador la aprueba; el equipo lo crea el
+ * servidor al aprobar. Sustituye a los antiguos `repo.createTeam(...)`, que ya no existen.
+ */
+async function pedirYAprobarEquipo(
+  backend: RlsBackend,
+  userId: string,
+  name: string,
+  color = '#3056d3',
+): Promise<{ id: string; name: string; accentColor: string; createdAt: string }> {
+  conAdmin(backend);
+  const repo = makeRepo(backend, userId, null);
+  const request = await repo.requestTeamCreation(name, color);
+  const adminRepo = makeRepo(backend, ADMIN, null);
+  const teamId = await adminRepo.decideTeamRequest(request.id, true, null);
+  if (!teamId) throw new Error('la aprobación no devolvió equipo');
+  return { id: teamId, name, accentColor: color, createdAt: nowIso() };
+}
+
 /** Editor con una invitación pendiente (aún no aceptada) → estado accept-invitation. */
 async function invitedEditorScenario() {
   const { backend } = setupJourney();
   const ownerRepo = makeRepo(backend, OWNER, null);
-  const team = await ownerRepo.createTeam('Primer', '#3056d3');
+  const team = await pedirYAprobarEquipo(backend, OWNER, 'Primer');
   const invitation = await ownerRepo.inviteMember(team.id, 'editor@example.com');
   return { backend, team, invitation };
 }
@@ -919,7 +1236,7 @@ async function fullJourney() {
   const ownerRepo = makeRepo(backend, OWNER, null);
   const editorRepo = makeRepo(backend, EDITOR, null);
 
-  const team = await ownerRepo.createTeam('Primer Equipo', '#3056d3');
+  const team = await pedirYAprobarEquipo(backend, OWNER, 'Primer Equipo');
   backend.seedPlayer(team.id, {
     id: 'p1',
     name: 'Marcos',
@@ -971,29 +1288,156 @@ async function fullJourney() {
 // =============================================================================
 
 describe('T4 multiuser — el viaje completo (owner → invitado → editor → revocado)', () => {
-  it('el propietario crea su equipo (create_my_team), es suyo, y NO puede crear un segundo', async () => {
+  it('la cuenta aprobada SOLICITA su equipo y el administrador lo aprueba: el equipo es suyo', async () => {
     const { backend } = setupJourney();
+    conAdmin(backend);
     const repo = makeRepo(backend, OWNER, null);
 
-    const team = await repo.createTeam('Primer Equipo', '#3056d3');
-    expect(team.id).toBeTruthy();
-    expect(team.name).toBe('Primer Equipo');
+    // 1) Solicitud (la cuenta NO crea nada todavía).
+    const request = await repo.requestTeamCreation('Primer Equipo', '#3056d3');
+    expect(request.status).toBe('pending');
+    expect(backend.rows.teams).toHaveLength(0);
+
+    // 2) Intento de BYPASS por RPC: `create_my_team` ya no crea equipos a un no administrador.
+    //    Se llama DIRECTAMENTE al servidor simulado: si la interfaz no lo hace, el servidor
+    //    tampoco lo permite (la seguridad no puede depender de la pantalla).
+    const porRpc = await backend.rpc(
+      'create_my_team',
+      { p_name: 'Equipo por RPC', p_accent_color: '#3056d3' },
+      OWNER,
+    );
+    expect((porRpc.error as { message: string } | null)?.message).toContain(
+      'team_creation_requires_approval',
+    );
+    expect(backend.rows.teams).toHaveLength(0);
+
+    // 3) Intento de BYPASS por INSERT directo en `teams`: sin GRANT y sin política de INSERT.
+    const porInsert = await backend
+      .tableQuery('teams', OWNER)
+      .insert({ owner_user_id: OWNER, name: 'Equipo por INSERT', accent_color: '#3056d3' });
+    expect(porInsert.error).not.toBeNull();
+    expect(backend.rows.teams).toHaveLength(0);
+
+    // 4) El cliente ya NO tiene siquiera el método que creaba el equipo: si alguien lo
+    //    reintrodujera, esta prueba se cae.
+    expect((repo as unknown as Record<string, unknown>)['createTeam']).toBeUndefined();
+
+    // 5) Aprobación del administrador: el equipo lo crea el SERVIDOR.
+    const adminRepo = makeRepo(backend, ADMIN, null);
+    const teamId = await adminRepo.decideTeamRequest(request.id, true, null);
+    expect(teamId).toBeTruthy();
 
     // El equipo es SUYO (derivado de auth.uid(), no del email).
     const access = await repo.resolveAccess();
-    expect(access.ownedTeam?.id).toBe(team.id);
+    expect(access.ownedTeam?.id).toBe(teamId);
     expect(access.ownedTeam?.name).toBe('Primer Equipo');
     expect(access.membership).toBeNull();
-
-    // Solo se permite UN equipo propio → el segundo createTeam es rechazado.
-    await expect(repo.createTeam('Otro', '#ff0000')).rejects.toBeInstanceOf(DataError);
     expect(backend.rows.teams).toHaveLength(1);
+
+    // Idempotencia: repetir la aprobación devuelve el MISMO equipo y no crea otro.
+    await expect(adminRepo.decideTeamRequest(request.id, true, null)).resolves.toBe(teamId);
+    expect(backend.rows.teams).toHaveLength(1);
+  });
+
+  it('la solicitud es idempotente: dos envíos seguidos = UNA solicitud pendiente (se actualiza)', async () => {
+    const { backend } = setupJourney();
+    const repo = makeRepo(backend, OWNER, null);
+    const primera = await repo.requestTeamCreation('Primer Equipo', '#3056d3');
+    const segunda = await repo.requestTeamCreation('Primer Equipo (v2)', '#c8102e');
+    expect(segunda.id).toBe(primera.id);
+    expect(backend.rows.team_requests).toHaveLength(1);
+    expect(segunda.name).toBe('Primer Equipo (v2)');
+    expect(segunda.accentColor).toBe('#c8102e');
+  });
+
+  it('un perfil NO aprobado no puede solicitar equipo', async () => {
+    const { backend } = setupJourney();
+    const repo = makeRepo(backend, PENDING, null);
+    await expect(repo.requestTeamCreation('Equipo', '#3056d3')).rejects.toMatchObject({
+      code: 'profile_not_approved',
+    });
+    expect(backend.rows.team_requests).toHaveLength(0);
+  });
+
+  it('el rechazo deja motivo, no crea equipo y permite VOLVER a solicitar', async () => {
+    const { backend } = setupJourney();
+    conAdmin(backend);
+    const repo = makeRepo(backend, OWNER, null);
+    const adminRepo = makeRepo(backend, ADMIN, null);
+
+    const primera = await repo.requestTeamCreation('Equipo', '#3056d3');
+    await expect(
+      adminRepo.decideTeamRequest(primera.id, false, 'Falta documentación del club.'),
+    ).resolves.toBeNull();
+    expect(backend.rows.teams).toHaveLength(0);
+
+    // El solicitante VE el motivo del rechazo.
+    const rechazada = await repo.myTeamRequest();
+    expect(rechazada?.status).toBe('rejected');
+    expect(rechazada?.note).toBe('Falta documentación del club.');
+
+    // Y puede volver a solicitarlo (fila nueva, una sola pendiente).
+    const segunda = await repo.requestTeamCreation('Equipo', '#3056d3');
+    expect(segunda.id).not.toBe(primera.id);
+    expect(segunda.status).toBe('pending');
+
+    // Ahora sí: aprobación → equipo creado.
+    await expect(adminRepo.decideTeamRequest(segunda.id, true, null)).resolves.toBeTruthy();
+    expect(backend.rows.teams).toHaveLength(1);
+  });
+
+  it('solo el administrador de plataforma ve y decide solicitudes (un propietario NO)', async () => {
+    const { backend } = setupJourney();
+    conAdmin(backend);
+    const repo = makeRepo(backend, OWNER, null);
+    const ajenoRepo = makeRepo(backend, FOREIGN, null);
+    const request = await repo.requestTeamCreation('Equipo', '#3056d3');
+
+    // Un usuario normal no puede ni listar la cola ni decidir.
+    await expect(ajenoRepo.listTeamRequests('')).rejects.toMatchObject({
+      code: 'platform_admin_required',
+    });
+    await expect(ajenoRepo.decideTeamRequest(request.id, true, null)).rejects.toMatchObject({
+      code: 'platform_admin_required',
+    });
+    // Ni siquiera el PROPIO solicitante puede aprobarse.
+    await expect(repo.decideTeamRequest(request.id, true, null)).rejects.toMatchObject({
+      code: 'platform_admin_required',
+    });
+    expect(backend.rows.teams).toHaveLength(0);
+
+    // La RLS solo le deja leer SU solicitud (no las de los demás).
+    expect(await ajenoRepo.myTeamRequest()).toBeNull();
+    expect((await repo.myTeamRequest())?.id).toBe(request.id);
+
+    // El administrador sí, y la cola identifica a quien la pidió.
+    const adminRepo = makeRepo(backend, ADMIN, null);
+    const cola = await adminRepo.listTeamRequests('');
+    expect(cola).toHaveLength(1);
+    expect(cola[0]).toMatchObject({ id: request.id, status: 'pending', displayName: 'Ana Owner' });
+  });
+
+  it('una aprobación cuya cuenta dejó de estar aprobada se rechaza (requester_not_approved)', async () => {
+    const { backend } = setupJourney();
+    conAdmin(backend);
+    const repo = makeRepo(backend, OWNER, null);
+    const adminRepo = makeRepo(backend, ADMIN, null);
+    const request = await repo.requestTeamCreation('Equipo', '#3056d3');
+
+    // El administrador suspende la cuenta entre la solicitud y la aprobación.
+    const profile = backend.rows.profiles.find((p) => p.user_id === OWNER)!;
+    profile.status = 'suspended';
+
+    await expect(adminRepo.decideTeamRequest(request.id, true, null)).rejects.toMatchObject({
+      code: 'requester_not_approved',
+    });
+    expect(backend.rows.teams).toHaveLength(0);
   });
 
   it('el propietario invita a un usuario aprobado y la invitación se crea pendiente y con email_normalized', async () => {
     const { backend } = setupJourney();
     const repo = makeRepo(backend, OWNER, null);
-    const team = await repo.createTeam('Primer', '#3056d3');
+    const team = await pedirYAprobarEquipo(backend, OWNER, 'Primer');
 
     const invitation = await repo.inviteMember(team.id, '  Editor@Example.com  ');
     expect(invitation.status).toBe('pending');
@@ -1002,10 +1446,171 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
     expect(invitation.invitedUserId).toBe(EDITOR);
   });
 
+  // =========================================================================
+  // CIERRE DEL ENCARGO — CORREO: quién puede registrar el resultado del proveedor
+  // (revisión del dueño, 22/09/2026). El registro está en manos del SERVIDOR: el
+  // navegador no puede falsificar un `provider_accepted` ni el id del proveedor, y una
+  // respuesta tardía de un intento viejo no puede sobrescribir el intento vigente.
+  // =========================================================================
+
+  /** Escenario listo para el correo: dueño con equipo, invitación pendiente preparada. */
+  async function conIntentoPreparado() {
+    const { backend } = setupJourney();
+    const repo = makeRepo(backend, OWNER, null);
+    const team = await pedirYAprobarEquipo(backend, OWNER, 'Primer');
+    const invitation = await repo.inviteMember(team.id, 'editor@example.com');
+    const prepared = await rpcNavegador(
+      backend,
+      'prepare_invitation_email',
+      { p_invitation_id: invitation.id },
+      OWNER,
+    );
+    const attemptId = (prepared.data as { attempt_id?: string } | null)?.attempt_id ?? '';
+    return { backend, repo, team, invitation, attemptId };
+  }
+
+  it('el registro del resultado exige la credencial del SERVIDOR: el propietario no puede falsificar provider_accepted', async () => {
+    const { backend, invitation, attemptId } = await conIntentoPreparado();
+    expect(attemptId).not.toBe('');
+
+    // El PROPIETARIO autenticado lo intenta por la vía directa (como haría un navegador
+    // malicioso con la RPC): debe recibir el mismo «permission denied» que da PostgreSQL.
+    const porPropietario = await rpcNavegador(
+      backend,
+      'record_invitation_email_result',
+      {
+        p_invitation_id: invitation.id,
+        p_attempt_id: attemptId,
+        p_status: 'provider_accepted',
+        p_provider_message_id: 'falsificado-123',
+        p_error: null,
+      },
+      OWNER,
+    );
+    expect((porPropietario.error as { message: string } | null)?.message).toContain(
+      'permission denied for function record_invitation_email_result',
+    );
+    // Y NADA ha cambiado: sigue en `send_pending` y sin identificador de proveedor.
+    const fila = backend.rows.team_invitations.find((i) => i.id === invitation.id)!;
+    expect(fila.email_status).toBe('send_pending');
+    expect(fila.provider_message_id).toBeNull();
+  });
+
+  it('un NO propietario tampoco puede registrar el resultado (ni con el intento correcto)', async () => {
+    const { backend, invitation, attemptId } = await conIntentoPreparado();
+    const ajeno = await rpcNavegador(
+      backend,
+      'record_invitation_email_result',
+      {
+        p_invitation_id: invitation.id,
+        p_attempt_id: attemptId,
+        p_status: 'provider_accepted',
+        p_provider_message_id: 'falsificado-456',
+        p_error: null,
+      },
+      EDITOR,
+    );
+    expect(ajeno.error).not.toBeNull();
+    const fila = backend.rows.team_invitations.find((i) => i.id === invitation.id)!;
+    expect(fila.email_status).toBe('send_pending');
+    expect(fila.provider_message_id).toBeNull();
+  });
+
+  it('el SERVIDOR sí lo registra, con el intento vigente (y solo con él)', async () => {
+    const { backend, invitation, attemptId } = await conIntentoPreparado();
+
+    // Sin identificador de intento no se registra nada.
+    const sinIntento = await rpcServidor(backend, 'record_invitation_email_result', {
+      p_invitation_id: invitation.id,
+      p_attempt_id: null,
+      p_status: 'provider_accepted',
+      p_provider_message_id: 'prov-1',
+      p_error: null,
+    });
+    expect((sinIntento.error as { message: string } | null)?.message).toContain(
+      'email_attempt_required',
+    );
+
+    // Con el intento vigente, sí.
+    const correcto = await rpcServidor(backend, 'record_invitation_email_result', {
+      p_invitation_id: invitation.id,
+      p_attempt_id: attemptId,
+      p_status: 'provider_accepted',
+      p_provider_message_id: 'prov-1',
+      p_error: null,
+    });
+    expect(correcto.error).toBeNull();
+    const fila = backend.rows.team_invitations.find((i) => i.id === invitation.id)!;
+    expect(fila.email_status).toBe('provider_accepted');
+    expect(fila.provider_message_id).toBe('prov-1');
+  });
+
+  it('un resultado de un intento ANTIGUO no cambia el estado del intento nuevo', async () => {
+    const { backend, invitation, attemptId: intentoViejo } = await conIntentoPreparado();
+    const fila = backend.rows.team_invitations.find((i) => i.id === invitation.id)!;
+    expect(fila.email_status).toBe('send_pending');
+
+    // El envío FALLA → se puede reintentar de inmediato (así lo permite el servidor) → intento NUEVO.
+    await rpcServidor(backend, 'record_invitation_email_result', {
+      p_invitation_id: invitation.id,
+      p_attempt_id: intentoViejo,
+      p_status: 'send_error',
+      p_provider_message_id: null,
+      p_error: 'rechazado por el proveedor',
+    });
+    expect(fila.email_status).toBe('send_error');
+
+    const reintento = await rpcNavegador(
+      backend,
+      'prepare_invitation_email',
+      { p_invitation_id: invitation.id },
+      OWNER,
+    );
+    const intentoNuevo = (reintento.data as { attempt_id?: string } | null)?.attempt_id ?? '';
+    expect(intentoNuevo).not.toBe(intentoViejo);
+    expect(fila.email_status).toBe('send_pending');
+
+    // Llega TARDE la respuesta del intento viejo (un `provider_accepted`): NO debe pisar el nuevo.
+    const tardio = await rpcServidor(backend, 'record_invitation_email_result', {
+      p_invitation_id: invitation.id,
+      p_attempt_id: intentoViejo,
+      p_status: 'provider_accepted',
+      p_provider_message_id: 'prov-tardio',
+      p_error: null,
+    });
+    expect((tardio.error as { message: string } | null)?.message).toContain('stale_email_attempt');
+    expect(fila.email_status).toBe('send_pending');
+    expect(fila.provider_message_id).toBeNull();
+
+    // Y el intento nuevo sí puede cerrarse.
+    await rpcServidor(backend, 'record_invitation_email_result', {
+      p_invitation_id: invitation.id,
+      p_attempt_id: intentoNuevo,
+      p_status: 'provider_accepted',
+      p_provider_message_id: 'prov-nuevo',
+      p_error: null,
+    });
+    expect(fila.email_status).toBe('provider_accepted');
+    expect(fila.provider_message_id).toBe('prov-nuevo');
+  });
+
+  it('el cliente NO tiene ningún método para registrar el resultado del proveedor', async () => {
+    // Contrato de diseño: si alguien añadiera un método al repositorio para escribir el
+    // resultado del correo, esta prueba se cae (el registro es del servidor, no del cliente).
+    const { backend } = setupJourney();
+    const repo = makeRepo(backend, OWNER, null) as unknown as Record<string, unknown>;
+    for (const nombre of [
+      'recordInvitationEmailResult',
+      'recordEmailResult',
+      'setInvitationEmailStatus',
+    ]) {
+      expect(repo[nombre], `el cliente no debe exponer ${nombre}`).toBeUndefined();
+    }
+  });
   it('admite seis colaboradores pendientes además del propietario y rechaza el séptimo', async () => {
     const { backend } = setupJourney();
     const repo = makeRepo(backend, OWNER, null);
-    const team = await repo.createTeam('Primer', '#3056d3');
+    const team = await pedirYAprobarEquipo(backend, OWNER, 'Primer');
 
     for (let i = 0; i < 6; i++) {
       await expect(
@@ -1023,7 +1628,7 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
   it('una invitación caducada no aparece como pendiente ni ocupa una plaza visual', async () => {
     const { backend } = setupJourney();
     const repo = makeRepo(backend, OWNER, null);
-    const team = await repo.createTeam('Primer', '#3056d3');
+    const team = await pedirYAprobarEquipo(backend, OWNER, 'Primer');
     const invitation = await repo.inviteMember(team.id, 'caducado@example.com');
     const row = backend.rows.team_invitations.find((i) => i.id === invitation.id)!;
     row.expires_at = '2000-01-01T00:00:00.000Z';
@@ -1038,7 +1643,7 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
     const { backend } = setupJourney();
     const ownerRepo = makeRepo(backend, OWNER, null);
     const editorRepo = makeRepo(backend, EDITOR, null);
-    const team = await ownerRepo.createTeam('Primer', '#3056d3');
+    const team = await pedirYAprobarEquipo(backend, OWNER, 'Primer');
     await ownerRepo.inviteMember(team.id, 'editor@example.com');
 
     // El editor todavía no tiene equipo/teamId de contexto.
@@ -1054,7 +1659,7 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
     const { backend } = setupJourney();
     const ownerRepo = makeRepo(backend, OWNER, null);
     const editorRepo = makeRepo(backend, EDITOR, null);
-    const team = await ownerRepo.createTeam('Primer', '#3056d3');
+    const team = await pedirYAprobarEquipo(backend, OWNER, 'Primer');
     const invitation = await ownerRepo.inviteMember(team.id, 'editor@example.com');
 
     const acceptedTeamId = await editorRepo.acceptInvitation(invitation.id);
@@ -1353,7 +1958,7 @@ describe('T4 multiuser — resolución de acceso (decideAccess) sobre el estado 
     expect(target.route).toBe('/auth/login');
   });
 
-  it('un perfil aprobado sin equipo ni invitaciones SOLO llega a crear equipo', async () => {
+  it('un perfil aprobado sin equipo ni invitaciones SOLO llega a SOLICITAR equipo', async () => {
     const res: AccessResolution = {
       profile: {
         userId: FOREIGN,
@@ -1365,9 +1970,44 @@ describe('T4 multiuser — resolución de acceso (decideAccess) sobre el estado 
       ownedTeam: null,
       membership: null,
       pendingInvitations: [],
+      teamRequest: null,
     };
     const target = decideAccess(res);
-    expect(target.state).toBe('create-team');
+    // CAMBIO DE CONTRATO (22/09/2026): antes el estado era 'create-team' y la pantalla
+    // creaba el equipo. El servidor ya no lo permite: se SOLICITA y lo aprueba un
+    // administrador de plataforma. La ruta no cambia.
+    expect(target.state).toBe('request-team');
+    expect(target.route).toBe('/onboarding/team');
+  });
+
+  it('con una solicitud PENDIENTE el estado es request-pending (misma pantalla)', async () => {
+    const res: AccessResolution = {
+      profile: {
+        userId: FOREIGN,
+        displayName: 'Luis',
+        emailNormalized: 'foreign@example.com',
+        status: 'approved',
+        approvedAt: null,
+      },
+      ownedTeam: null,
+      membership: null,
+      pendingInvitations: [],
+      teamRequest: {
+        id: 'req1',
+        userId: FOREIGN,
+        displayName: 'Luis',
+        emailNormalized: 'foreign@example.com',
+        name: 'Equipo de Luis',
+        accentColor: '#3056d3',
+        status: 'pending',
+        note: null,
+        requestedAt: nowIso(),
+        decidedAt: null,
+        createdTeamId: null,
+      },
+    };
+    const target = decideAccess(res);
+    expect(target.state).toBe('request-pending');
     expect(target.route).toBe('/onboarding/team');
   });
 
@@ -1381,6 +2021,10 @@ describe('T4 multiuser — resolución de acceso (decideAccess) sobre el estado 
       status: 'pending',
       expiresAt: 'x',
       createdAt: 'y',
+      emailStatus: 'created',
+      emailAttempts: 0,
+      lastEmailAt: null,
+      lastEmailError: null,
     };
     const target = decideAccess({
       profile: {
@@ -1393,6 +2037,7 @@ describe('T4 multiuser — resolución de acceso (decideAccess) sobre el estado 
       ownedTeam: null,
       membership: null,
       pendingInvitations: [inv],
+      teamRequest: null,
     });
     expect(target.state).toBe('accept-invitation');
     expect(target.route).toBe('/invitations');

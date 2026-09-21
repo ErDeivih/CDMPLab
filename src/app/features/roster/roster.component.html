@@ -13,6 +13,25 @@
     }
   </div>
 
+  <!-- Importación de datos locales antiguos (localStorage) al equipo remoto.
+       CAMBIO DE CONTRATO (22/09/2026): este acceso vivía en la pantalla de alta del
+       equipo, que ya no lo crea; se ofrece aquí, que es donde el usuario YA tiene equipo
+       y la importación tiene destino. -->
+  @if (puedeImportarLocal()) {
+    <div class="card" data-importar-local="1">
+      <div class="empty">
+        <div class="empty-title">Tienes datos locales sin subir</div>
+        <div class="empty-sub">
+          En este navegador hay equipos, jugadores, ejercicios o sesiones guardados antes de
+          trabajar con la nube. Puedes importarlos a «{{ team()?.name }}».
+        </div>
+        <button class="btn" style="margin-top: 12px" (click)="irAMigracion()">
+          Importar mis datos locales
+        </button>
+      </div>
+    </div>
+  }
+
   <!-- Sin equipo: crear el primero -->
   @if (!team()) {
     <div class="card create-team">

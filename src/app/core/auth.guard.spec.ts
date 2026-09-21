@@ -17,7 +17,13 @@ function mockSupabase(status: 'authenticated' | 'unauthenticated' | 'disabled'):
 }
 
 function mockAccess(overrides?: Partial<AccessTarget>): AccessService {
-  const target: AccessTarget = { state: 'ready', teamId: 't1', role: 'owner', route: '/team', ...overrides };
+  const target: AccessTarget = {
+    state: 'ready',
+    teamId: 't1',
+    role: 'owner',
+    route: '/team',
+    ...overrides,
+  };
   return {
     target: () => target,
     isReady: () => target.state === 'ready',
@@ -29,7 +35,7 @@ function mockAccess(overrides?: Partial<AccessTarget>): AccessService {
 function setup(
   supabase: SupabaseService,
   access: AccessService,
-  localMode = false
+  localMode = false,
 ): { router: Router; supabase: SupabaseService; access: AccessService } {
   TestBed.configureTestingModule({
     providers: [
@@ -58,7 +64,7 @@ describe('AuthGuard', () => {
   it('permite entrar con auth desactivada EN DESARROLLO (modo local)', async () => {
     const { supabase, access } = setup(mockSupabase('disabled'), mockAccess(), true);
     // El modo local no debe depender de sesión.
-    expect((await TestBed.inject(AuthGuard).canActivate())).toBe(true);
+    expect(await TestBed.inject(AuthGuard).canActivate()).toBe(true);
     expect(supabase).toBeTruthy();
     expect(access).toBeTruthy();
   });
@@ -91,27 +97,52 @@ describe('ApprovedGuard', () => {
   });
 
   it('permite entrar cuando el perfil está aprobado y hay equipo', async () => {
-    setup(mockSupabase('authenticated'), mockAccess({ state: 'ready', teamId: 't1', role: 'owner' }));
+    setup(
+      mockSupabase('authenticated'),
+      mockAccess({ state: 'ready', teamId: 't1', role: 'owner' }),
+    );
     const guard = TestBed.inject(ApprovedGuard);
     expect(await guard.canActivate()).toBe(true);
   });
 
   it('redirige a /pending-approval cuando el perfil está pendiente', async () => {
-    setup(mockSupabase('authenticated'), mockAccess({ state: 'pending', route: '/pending-approval' }));
+    setup(
+      mockSupabase('authenticated'),
+      mockAccess({ state: 'pending', route: '/pending-approval' }),
+    );
     const guard = TestBed.inject(ApprovedGuard);
     const res = await guard.canActivate();
     expect((res as UrlTree).toString()).toBe('/pending-approval');
   });
 
-  it('redirige a /onboarding/team cuando está aprobado sin equipo', async () => {
-    setup(mockSupabase('authenticated'), mockAccess({ state: 'create-team', route: '/onboarding/team' }));
+  it('redirige a /onboarding/team cuando está aprobado sin equipo (a SOLICITARLO)', async () => {
+    // CAMBIO DE CONTRATO (22/09/2026): el estado se llamaba 'create-team'. La ruta es la
+    // misma, pero la pantalla ya no crea el equipo: presenta una solicitud que aprueba un
+    // administrador de plataforma.
+    setup(
+      mockSupabase('authenticated'),
+      mockAccess({ state: 'request-team', route: '/onboarding/team' }),
+    );
+    const guard = TestBed.inject(ApprovedGuard);
+    const res = await guard.canActivate();
+    expect((res as UrlTree).toString()).toBe('/onboarding/team');
+  });
+
+  it('redirige a /onboarding/team cuando la solicitud está PENDIENTE de aprobación', async () => {
+    setup(
+      mockSupabase('authenticated'),
+      mockAccess({ state: 'request-pending', route: '/onboarding/team' }),
+    );
     const guard = TestBed.inject(ApprovedGuard);
     const res = await guard.canActivate();
     expect((res as UrlTree).toString()).toBe('/onboarding/team');
   });
 
   it('redirige a /access-rejected cuando está rechazado', async () => {
-    setup(mockSupabase('authenticated'), mockAccess({ state: 'rejected', route: '/access-rejected' }));
+    setup(
+      mockSupabase('authenticated'),
+      mockAccess({ state: 'rejected', route: '/access-rejected' }),
+    );
     const guard = TestBed.inject(ApprovedGuard);
     const res = await guard.canActivate();
     expect((res as UrlTree).toString()).toBe('/access-rejected');

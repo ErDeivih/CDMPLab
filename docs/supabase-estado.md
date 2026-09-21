@@ -1,5 +1,33 @@
 # CDMPLab — Estado de las migraciones: lo documentado y lo NO verificado
 
+> **Actualización 21/09/2026, posterior al texto histórico siguiente.** Se contrastó el
+> catálogo del proyecto EntrenoLab y se aplicaron las migraciones remotas
+> `20260921193229_team_creation_requests` y
+> `20260921193506_clear_stale_invitation_email_result` (ficheros locales
+> `20260922000000_team_creation_requests.sql` y
+> `20260923000000_clear_stale_invitation_email_result.sql`). La matriz de permisos
+> `supabase/tests/entrenolab_rls.sql` pasó con `ROLLBACK`; confirmó que un usuario
+> autenticado no puede crear equipos directamente ni falsificar el resultado del correo.
+> Los párrafos anteriores a esta actualización se conservan como auditoría histórica, no
+> como descripción vigente del estado remoto. El envío real de correo sigue pendiente de
+> proveedor y dominio.
+
+> **Añadido el 22/09/2026 — migración NUEVA sin aplicar y sin verificar contra el catálogo.**
+> El cierre del encargo «solicitud de equipo aprobada por el administrador + correo de invitación»
+> añade `supabase/migrations/20260922000000_team_creation_requests.sql`. Su estado es:
+>
+> - **NO aplicada** en el proyecto remoto (no se ha ejecutado ninguna migración en esta ronda);
+> - **NO verificada contra el catálogo remoto** (`pg_class` / `pg_proc` / `pg_policies` /
+>   `pg_indexes`): no ha habido acceso al proyecto, así que sus `create table if not exists`,
+>   `drop policy if exists` y `revoke` se escriben contra lo que dice el repositorio;
+> - **validada en estático** (`npm run validate:migration`, que además comprueba 28 propiedades de
+>   seguridad de este fichero) y cubierta por la matriz manual
+>   `supabase/tests/entrenolab_rls.sql` (ampliada con la solicitud, la aprobación, los dos intentos
+>   de bypass y los estados del correo).
+>
+> La cabecera de la propia migración enumera lo que hay que comprobar antes de aplicarla. El diseño
+> y las puertas están en `docs/FASE-10-solicitud-de-equipo.md`.
+>
 > **Actualización verificada el 21/09/2026.** Esta auditoría es una fotografía histórica
 > anterior al acceso remoto. Hoy hay **14 ficheros locales** y el historial remoto incluye
 > `20260921075702_entrenolab_folders_atomic`, aplicada desde el SQL versionado localmente
@@ -149,9 +177,11 @@ Detalles que conviene no perder de vista:
    La frase «la última figura remotamente como…» del README solo es sostenible si «última»
    significa «última de las aplicadas», extremo que no está verificado.
 
-**Lo único que este documento puede afirmar:** hay **12 ficheros locales**; el repositorio
-declara **1** de ellos sin aplicar (el rechazo de invitaciones); **cuántas están aplicadas de
-verdad en el proyecto remoto queda indeterminado** con la información del repositorio.
+**Lo único que este documento puede afirmar:** hay **13 ficheros locales** (12 en la auditoría
+original + `20260922000000_team_creation_requests.sql`, añadido el 22/09/2026 y declarado NO
+aplicado); el repositorio declara **2** de ellos sin aplicar (el rechazo de invitaciones y el de
+solicitud de equipo); **cuántas están aplicadas de verdad en el proyecto remoto queda
+indeterminado** con la información del repositorio.
 
 ## 4. Por qué NO se renombran migraciones ya aplicadas
 

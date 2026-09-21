@@ -1,8 +1,9 @@
 import { Component, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AccessService } from '../../core/access.service';
 import { ConfirmService } from '../../core/confirm.service';
 import { AuthCardComponent } from './auth-card.component';
+import { normalizeInvitationId } from '../../core/invite-email';
 import type { TeamInvitationInfo } from '../../core/repositories/data-source';
 
 @Component({
@@ -14,16 +15,39 @@ export class InvitationsComponent {
   private readonly access = inject(AccessService);
   private readonly router = inject(Router);
   private readonly confirm = inject(ConfirmService);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly invitations = signal<TeamInvitationInfo[]>([]);
   protected readonly loading = signal(true);
   protected readonly busyId = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
+  /**
+   * Invitación señalada por el enlace del correo (`?invitation=…`). El enlace NO concede
+   * acceso: solo sirve para destacar la invitación. Aceptar sigue comprobando en el
+   * servidor la identidad y el correo confirmado de quien entra.
+   */
+  protected readonly senalada = signal<string | null>(null);
 
   private readonly MIN = 15 * 1000;
 
   async ngOnInit(): Promise<void> {
+    // Se lee el parámetro CON `get('invitation')` y no con `queryParamMap.toString()`: en
+    // Angular 22 `ParamMap` no garantiza un `toString()` propio, así que serializarlo devuelve
+    // el genérico de `Object` («[object Object]») y el identificador se perdía en silencio
+    // (medido en la E2E: el aviso del enlace no aparecía nunca).
+    this.senalada.set(normalizeInvitationId(this.route.snapshot.queryParamMap.get('invitation')));
     await this.load();
+  }
+
+  /** Mensaje cuando el enlace apunta a una invitación que esta cuenta no puede usar. */
+  protected senaladaNoDisponible(): boolean {
+    const id = this.senalada();
+    if (!id) return false;
+    return !this.invitations().some((inv) => inv.id === id);
+  }
+
+  protected esSenalada(inv: TeamInvitationInfo): boolean {
+    return this.senalada() === inv.id;
   }
 
   async load(): Promise<void> {

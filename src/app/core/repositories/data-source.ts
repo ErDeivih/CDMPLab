@@ -24,6 +24,29 @@ export type ProfileStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 export type MemberRole = 'owner' | 'editor';
 export type MemberState = 'pending_approval' | 'active' | 'revoked';
 export type InvitationStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
+/** Estado del CORREO de la invitación (distinto del estado de la invitación). */
+export type InvitationEmailStatus = 'created' | 'send_pending' | 'provider_accepted' | 'send_error';
+/** Estado de una SOLICITUD de equipo (creación de equipos aprobada por el administrador). */
+export type TeamRequestStatus = 'pending' | 'approved' | 'rejected';
+
+/** Solicitud de creación de equipo, tal como la ve el solicitante o un administrador. */
+export interface TeamRequestInfo {
+  id: string;
+  userId: string;
+  /** Nombre de quien solicita (lo rellena el servidor; '' si no se pudo leer). */
+  displayName: string;
+  emailNormalized: string;
+  /** Nombre pedido para el equipo. */
+  name: string;
+  accentColor: string;
+  status: TeamRequestStatus;
+  /** Motivo del rechazo, si lo hubo. */
+  note: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
+  /** Equipo creado al aprobar (null mientras esté pendiente o rechazada). */
+  createdTeamId: string | null;
+}
 
 /** Perfil mínimo del usuario (propietario/administrativo). */
 export interface ProfileInfo {
@@ -55,6 +78,15 @@ export interface TeamInvitationInfo {
   status: InvitationStatus;
   expiresAt: string;
   createdAt: string;
+  /**
+   * Estado del ENVÍO por correo. NO es lo mismo que `status`: `provider_accepted`
+   * significa que el proveedor ACEPTÓ el envío (no que se haya entregado), y
+   * `status === 'accepted'` significa que la persona aceptó la invitación.
+   */
+  emailStatus: InvitationEmailStatus;
+  emailAttempts: number;
+  lastEmailAt: string | null;
+  lastEmailError: string | null;
 }
 
 /** Dataset completo de UN equipo (lo que hidrata los signals del StoreService). */
@@ -75,6 +107,12 @@ export interface AccessResolution {
   /** Equipo del que es miembro ACTIVO (owner/editor), distinto del propio. */
   membership: { teamId: string; role: MemberRole } | null;
   pendingInvitations: TeamInvitationInfo[];
+  /**
+   * Solicitud de equipo del usuario (null si no ha solicitado nada nunca). Un perfil
+   * aprobado SIN equipo no crea el equipo: lo SOLICITA y lo aprueba un administrador,
+   * así que la pantalla necesita conocer el estado (pendiente / rechazada).
+   */
+  teamRequest: TeamRequestInfo | null;
 }
 
 /** Error de la capa de datos con código de app y mensaje legible. */
@@ -156,8 +194,32 @@ export interface DataSource {
   loadTeam(teamId: string): Promise<TeamDataset>;
 
   // ---- Teams ----
-  createTeam(name: string, accentColor: string): Promise<Team>;
+  // CAMBIO DE CONTRATO (22/09/2026): aquí vivía `createTeam(name, accentColor)`, que
+  // llamaba a la RPC `create_my_team`. Esa RPC permitía a cualquier perfil aprobado
+  // crear su equipo saltándose al administrador, así que el servidor ya NO lo permite y
+  // la aplicación dejó de tener esa acción: el equipo se crea al aprobarse una SOLICITUD
+  // (`requestTeamCreation` + `decideTeamRequest`, solo para administradores).
   renameTeam(teamId: string, name: string, accentColor: string): Promise<Team>;
+
+  // ---- Solicitudes de equipo (creación aprobada por el administrador) ----
+  /** Solicitud propia (o null). El servidor solo devuelve la del usuario autenticado. */
+  myTeamRequest(): Promise<TeamRequestInfo | null>;
+  /**
+   * Presenta (o ACTUALIZA) la solicitud de equipo del usuario. Idempotente en el
+   * servidor: no puede haber dos solicitudes pendientes del mismo usuario.
+   */
+  requestTeamCreation(name: string, accentColor: string): Promise<TeamRequestInfo>;
+  /** Cola de solicitudes. El servidor exige ser administrador de plataforma. */
+  listTeamRequests(search: string): Promise<TeamRequestInfo[]>;
+  /**
+   * Aprueba o rechaza una solicitud. Al aprobar, el SERVIDOR crea el equipo en la misma
+   * transacción y devuelve su id (null si se rechazó). Idempotente.
+   */
+  decideTeamRequest(
+    requestId: string,
+    approve: boolean,
+    note: string | null,
+  ): Promise<string | null>;
 
   // ---- Jugadores ----
   addPlayer(input: Omit<Player, 'id' | 'teamId' | 'active' | 'createdAt'>): Promise<Player>;

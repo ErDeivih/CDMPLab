@@ -466,7 +466,10 @@ export class StoreService {
   // ---------- Equipos ----------
 
   createTeam(name: string, accentColor: string): Team {
-    // En modo remoto la creación de equipo va por AccessService (createTeamAsync).
+    // Este método es SOLO del modo local (localStorage). En modo remoto un equipo no se crea
+    // desde el cliente: se SOLICITA y lo crea el servidor al aprobarlo un administrador
+    // (migración 20260922000000; ver docs/FASE-10-solicitud-de-equipo.md). Aquí vivía una
+    // llamada a `AccessService.createTeam`, retirada el 22/09/2026.
     const team: Team = {
       id: uid(),
       name,

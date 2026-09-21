@@ -33,6 +33,8 @@ import type {
   TeamDataset,
   TeamInvitationInfo,
   TeamMemberInfo,
+  TeamRequestInfo,
+  TeamRequestStatus,
 } from './data-source';
 import { DataError } from './data-source';
 import type { Exercise, ExerciseFolder, Player, Session, SessionTask, Team } from '../models';
@@ -40,6 +42,7 @@ import {
   exerciseFromRow,
   exerciseRowForInsert,
   folderFromRow,
+  invitationFromRow,
   playerFromRow,
   sessionFromRow,
   teamFromRow,
@@ -87,6 +90,19 @@ const ERROR_MESSAGES: Record<string, string> = {
   profile_not_found: 'No se encontró tu perfil.',
   invalid_profile_status: 'El estado de perfil indicado no es válido.',
   forbidden: 'No tienes permiso para realizar esta operación.',
+  // Cierre del encargo (22/09/2026): solicitud de equipo y correo de invitación.
+  platform_admin_required: 'Solo un administrador de la plataforma puede hacer esto.',
+  not_authenticated: 'Tu sesión no está activa. Vuelve a iniciar sesión.',
+  already_has_team: 'Ya tienes un equipo; no hace falta solicitar otro.',
+  team_name_too_long: 'El nombre del equipo no puede pasar de 80 caracteres.',
+  team_creation_requires_approval:
+    'El equipo lo crea el servidor cuando un administrador aprueba la solicitud.',
+  team_request_not_found: 'No se encontró la solicitud de equipo.',
+  team_request_already_approved: 'Esa solicitud ya estaba aprobada.',
+  requester_not_approved:
+    'No se pudo crear el equipo: la cuenta que lo solicitó ya no está aprobada.',
+  team_creation_failed: 'No se pudo crear el equipo. Inténtalo de nuevo.',
+  invalid_email_status: 'El estado de envío del correo no es válido.',
   team_not_found: 'No se encontró el equipo.',
   folder_cycle: 'No se puede mover una carpeta dentro de sí misma.',
   team_name_required: 'El nombre del equipo es obligatorio.',
@@ -127,18 +143,17 @@ function messageFor(code: string, fallback: string): string {
 function errorToDataError(err: unknown, fallbackCode = 'unknown', fallbackMsg?: string): DataError {
   if (err instanceof DataError) return err;
   const raw = err as { code?: string; message?: string };
-  let code = raw?.code ?? fallbackCode;
-  // PostgREST mete el "code" de la RAISE en `message` a veces (p. ej. P0001).
-  if (code === '42501') code = 'forbidden';
-  if (!code || code === 'P0001') {
-    const m = raw?.message ?? '';
-    for (const key of Object.keys(ERROR_MESSAGES)) {
-      if (m.includes(key)) {
-        code = key;
-        break;
-      }
-    }
-  }
+  const rawCode = raw?.code ?? fallbackCode;
+  const m = raw?.message ?? '';
+  // PostgREST mete el código de la RAISE en `message` (P0001 y también 42501). Si el mensaje
+  // nombra un error CONOCIDO, ése es el motivo real y es el que debe leer el usuario:
+  // `profile_not_approved`, `team_creation_requires_approval` o `platform_admin_required` no
+  // significan lo mismo que un `forbidden` genérico, y antes se perdían («No tienes permiso
+  // para realizar esta operación» en los tres casos).
+  let code = rawCode;
+  const conocido = Object.keys(ERROR_MESSAGES).find((key) => m.includes(key));
+  if (conocido) code = conocido;
+  else if (rawCode === '42501') code = 'forbidden';
   const fallback = fallbackMsg ?? 'Error al comunicarse con el servidor.';
   return new DataError(code, messageFor(code, fallback));
 }
@@ -243,8 +258,12 @@ export class SupabaseRepository implements DataSource {
       : null;
 
     const pendingInvitations = await this.myPendingInvitations();
+    // Solicitud de equipo del usuario (si la presentó). Un perfil aprobado sin equipo NO
+    // crea el equipo: lo solicita, y hasta que un administrador la apruebe la pantalla
+    // debe mostrar el estado (pendiente / rechazada).
+    const teamRequest = await this.myTeamRequest();
 
-    return { profile, ownedTeam, membership, pendingInvitations };
+    return { profile, ownedTeam, membership, pendingInvitations, teamRequest };
   }
 
   // ---------------- Lectura de un equipo ----------------
@@ -431,18 +450,110 @@ export class SupabaseRepository implements DataSource {
 
   // ---------------- Teams ----------------
 
-  async createTeam(name: string, accentColor: string): Promise<Team> {
+  // `createTeam` se ha RETIRADO (cierre del encargo, 22/09/2026): llamaba a
+  // `create_my_team`, que ya no crea equipos a quien no es administrador de plataforma.
+  // El equipo lo crea el SERVIDOR al aprobar una solicitud (`decideTeamRequest`).
+
+  /**
+   * Solicitud propia: la RLS solo deja leer la del usuario autenticado (o todas si es
+   * administrador, pero aquí se filtra por el propio id igualmente).
+   */
+  async myTeamRequest(): Promise<TeamRequestInfo | null> {
     const uid = this.userId;
-    if (!uid) throw new DataError('forbidden', 'No hay sesión.');
-    const { data, error } = await this.client.rpc('create_my_team', {
+    if (!uid) return null;
+    const { data, error } = await this.client
+      .from('team_requests')
+      .select('*')
+      .eq('user_id', uid)
+      // La más reciente manda: si hubo un rechazo y una solicitud nueva, la nueva es la
+      // que el solicitante necesita ver, y la nota del rechazo se conserva en su fila.
+      .order('requested_at', { ascending: false })
+      .limit(1);
+    if (error) throw errorToDataError(error, 'team_request_read');
+    const row = (data ?? [])[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      userId: row.user_id,
+      displayName: '',
+      emailNormalized: '',
+      name: row.name,
+      accentColor: row.accent_color,
+      status: row.status as TeamRequestStatus,
+      note: row.note,
+      requestedAt: row.requested_at,
+      decidedAt: row.decided_at,
+      createdTeamId: row.created_team_id,
+    };
+  }
+
+  /** Presenta o actualiza la solicitud de equipo del usuario (idempotente en servidor). */
+  async requestTeamCreation(name: string, accentColor: string): Promise<TeamRequestInfo> {
+    if (!this.userId) throw new DataError('forbidden', 'No hay sesión.');
+    const { data, error } = await this.client.rpc('request_team_creation', {
       p_name: name,
       p_accent_color: accentColor,
     });
-    if (error) throw errorToDataError(error, 'team_create');
-    const teamId = data as string;
-    return this.loadTeamRow(teamId).then(
-      (t) => t ?? { id: teamId, name, accentColor, createdAt: new Date().toISOString() },
-    );
+    if (error) throw errorToDataError(error, 'team_request_create');
+    const requestId = data as string;
+    if (!requestId) {
+      throw new DataError('team_request_create', 'No se pudo registrar la solicitud.');
+    }
+    const created = await this.myTeamRequest();
+    if (created && created.id === requestId) return created;
+    // La fila existe pero la lectura no la devolvió (RLS/carrera): se devuelve lo pedido.
+    return {
+      id: requestId,
+      userId: this.userId,
+      displayName: '',
+      emailNormalized: '',
+      name,
+      accentColor,
+      status: 'pending',
+      note: null,
+      requestedAt: new Date().toISOString(),
+      decidedAt: null,
+      createdTeamId: null,
+    };
+  }
+
+  /** Cola de solicitudes para el administrador de plataforma. */
+  async listTeamRequests(search: string): Promise<TeamRequestInfo[]> {
+    const { data, error } = await this.client.rpc('admin_list_team_requests', {
+      p_search: search,
+    });
+    if (error) throw errorToDataError(error, 'team_request_list');
+    return (data ?? []).map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      displayName: r.display_name ?? '',
+      emailNormalized: r.email_normalized ?? '',
+      name: r.name,
+      accentColor: r.accent_color,
+      status: r.status as TeamRequestStatus,
+      note: r.note,
+      requestedAt: r.requested_at,
+      decidedAt: r.decided_at,
+      createdTeamId: r.created_team_id,
+    }));
+  }
+
+  /**
+   * Aprueba o rechaza una solicitud. El servidor crea el equipo en la misma transacción
+   * y la operación es idempotente (repetir la aprobación devuelve el mismo equipo).
+   */
+  async decideTeamRequest(
+    requestId: string,
+    approve: boolean,
+    note: string | null,
+  ): Promise<string | null> {
+    const { data, error } = await this.client.rpc('admin_decide_team_request', {
+      p_request_id: requestId,
+      p_approve: approve,
+      p_note: note,
+    });
+    if (error) throw errorToDataError(error, 'team_request_decide');
+    return (data as string | null) ?? null;
   }
 
   async renameTeam(teamId: string, name: string, accentColor: string): Promise<Team> {
@@ -736,16 +847,7 @@ export class SupabaseRepository implements DataSource {
       .gt('expires_at', new Date().toISOString());
     if (error) throw errorToDataError(error, 'invitation_list');
     const team = await this.loadTeamRow(teamId);
-    return (data ?? []).map((r) => ({
-      id: r.id,
-      teamId: r.team_id,
-      teamName: team?.name ?? '',
-      emailNormalized: r.email_normalized,
-      invitedUserId: r.invited_user_id,
-      status: r.status as 'pending',
-      expiresAt: r.expires_at,
-      createdAt: r.created_at,
-    }));
+    return (data ?? []).map((r) => invitationFromRow(r, team?.name ?? ''));
   }
 
   async listTeamInvitations(teamId: string): Promise<TeamInvitationInfo[]> {
@@ -767,16 +869,7 @@ export class SupabaseRepository implements DataSource {
       .single();
     if (rowErr || !row) throw errorToDataError(rowErr, 'invitation_create');
     const team = await this.loadTeamRow(teamId);
-    return {
-      id: row.id,
-      teamId: row.team_id,
-      teamName: team?.name ?? '',
-      emailNormalized: row.email_normalized,
-      invitedUserId: row.invited_user_id,
-      status: row.status as 'pending',
-      expiresAt: row.expires_at,
-      createdAt: row.created_at,
-    };
+    return invitationFromRow(row, team?.name ?? '');
   }
 
   async cancelInvitation(invitationId: string): Promise<void> {
@@ -821,6 +914,12 @@ export class SupabaseRepository implements DataSource {
       status: r.status as 'pending',
       expiresAt: r.expires_at,
       createdAt: r.created_at,
+      // `my_team_invitations()` (RPC) no devuelve el estado del correo: es información
+      // del propietario, no del invitado. Se marca 'created' para no inventar un estado.
+      emailStatus: 'created',
+      emailAttempts: 0,
+      lastEmailAt: null,
+      lastEmailError: null,
     }));
   }
 

@@ -17,7 +17,8 @@
     "lint": "node scripts/lint-check.mjs",
     "typecheck:e2e": "node scripts/typecheck-e2e.mjs",
     "format:check": "node scripts/format-check.mjs",
-    "validate:migration": "node scripts/validate-migration.mjs"
+    "validate:migration": "node scripts/validate-migration.mjs",
+    "validate:invite-email": "node scripts/validate-invite-email.mjs"
   },
   "private": true,
   "dependencies": {

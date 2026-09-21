@@ -24,29 +24,29 @@ omiten y **no** cuentan como cobertura completa.
 
 ## Variables de entorno (obligatorias)
 
-| Variable | Descripción |
-|---|---|
-| `SUPABASE_E2E_ADMIN_EMAIL` / `_ADMIN_PASSWORD` | Administrador de plataforma. |
-| `SUPABASE_E2E_OWNER_EMAIL` / `_OWNER_PASSWORD` | Propietario de un equipo de prueba (sin equipo antes de ejecutar). |
-| `SUPABASE_E2E_COLLAB_EMAIL` / `_COLLAB_PASSWORD` | Colaborador sin equipo propio. |
-| `SUPABASE_E2E_LIMIT_EMAILS` | **6** correos separados por comas (cuentas para probar el límite). |
-| `SUPABASE_E2E_LIMIT_PASSWORD` | Contraseña común para esos 6 correos. |
+| Variable                                         | Descripción                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------------ |
+| `SUPABASE_E2E_ADMIN_EMAIL` / `_ADMIN_PASSWORD`   | Administrador de plataforma.                                       |
+| `SUPABASE_E2E_OWNER_EMAIL` / `_OWNER_PASSWORD`   | Propietario de un equipo de prueba (sin equipo antes de ejecutar). |
+| `SUPABASE_E2E_COLLAB_EMAIL` / `_COLLAB_PASSWORD` | Colaborador sin equipo propio.                                     |
+| `SUPABASE_E2E_LIMIT_EMAILS`                      | **6** correos separados por comas (cuentas para probar el límite). |
+| `SUPABASE_E2E_LIMIT_PASSWORD`                    | Contraseña común para esos 6 correos.                              |
 
 Opcionales (estados de acceso):
 
-| Variable | Descripción |
-|---|---|
-| `SUPABASE_E2E_PENDING_EMAIL` / `_PASSWORD` | Cuenta con perfil `pending`. |
+| Variable                                    | Descripción                   |
+| ------------------------------------------- | ----------------------------- |
+| `SUPABASE_E2E_PENDING_EMAIL` / `_PASSWORD`  | Cuenta con perfil `pending`.  |
 | `SUPABASE_E2E_REJECTED_EMAIL` / `_PASSWORD` | Cuenta con perfil `rejected`. |
 
 ## Precondiciones por cuenta (se preparan a mano, una vez)
 
-| Cuenta | Correo confirmado | Perfil aprobado | En `private.platform_admins` | Sin equipo |
-|---|---|---|---|---|
-| Admin | ✅ | ✅ | ✅ | — |
-| Propietario | ✅ | ✅ | ❌ | ✅ |
-| Colaborador | ✅ | ✅ | ❌ | ✅ |
-| 4 del límite | ✅ | ✅ | ❌ | ✅ |
+| Cuenta       | Correo confirmado | Perfil aprobado | En `private.platform_admins` | Sin equipo |
+| ------------ | ----------------- | --------------- | ---------------------------- | ---------- |
+| Admin        | ✅                | ✅              | ✅                           | —          |
+| Propietario  | ✅                | ✅              | ❌                           | ✅         |
+| Colaborador  | ✅                | ✅              | ❌                           | ✅         |
+| 4 del límite | ✅                | ✅              | ❌                           | ✅         |
 
 > El propietario y el colaborador **no** deben compartir equipo antes de la ejecución.
 > Las 4 cuentas del límite deben existir, estar confirmadas y aprobadas, y no ser
@@ -55,7 +55,11 @@ Opcionales (estados de acceso):
 ## Flujo real cubierto
 
 1. **Admin** inicia sesión y accede a `/admin`.
-2. **Propietario** crea un equipo de prueba inequívoco (prefijo único) y crea jugador, carpeta y ejercicio.
+2. **Propietario** **solicita** un equipo de prueba inequívoco (prefijo único) y el **Admin lo
+   aprueba** en el apartado _Solicitudes de equipo_ de `/admin`; el servidor crea el equipo al
+   aprobar. Después el propietario crea jugador, carpeta y ejercicio.
+   (CAMBIO DE CONTRATO, 22/09/2026: antes el propietario creaba el equipo con un botón; el
+   servidor ya no permite que una cuenta aprobada cree equipos por su cuenta.)
 3. **Colaborador** (antes de ser invitado) **no** ve esos datos.
 4. El propietario **invita** al colaborador; el colaborador **acepta** y **ve** los datos compartidos.
 5. El colaborador **edita** lo permitido y **no** puede gestionar miembros (solo lectura).
@@ -72,6 +76,7 @@ Opcionales (estados de acceso):
 ## Recuperación de contraseña: alcance limitado
 
 La suite **no** pretende leer el correo automáticamente. Solo verifica que:
+
 - el formulario se rellena y se envía desde la UI;
 - la app responde con el mensaje genérico esperado;
 - se realiza una petición real a Supabase Auth.
@@ -87,6 +92,7 @@ se identifican y pueden eliminarse **sin** afectar a registros ajenos.
 
 **La limpieza NO es automática** (la app no expone borrado de equipo desde la UI). Para
 limpiar lo creado por una ejecución se requiere acción **manual** (fuera de la suite):
+
 - borrar el equipo `[PREFIJO] Equipo` (en cascada su jugador/carpeta/ejercicio) desde la
   consola/administración de Supabase: `DELETE FROM public.teams WHERE name LIKE 'e2e-%'`
   (y revisar `team_members`/`team_invitations` asociadas al prefijo), o usar el panel;

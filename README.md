@@ -4,7 +4,8 @@ Pizarra táctica + biblioteca de ejercicios para entrenadores. Una app web (Angu
 con la que un técnico crea y organiza **ejercicios** sobre un **campo táctico a pantalla
 completa** (jugadores, materiales, formas, texto) y los guarda en una **biblioteca** por
 carpetas, con **duplicación**, **exportación** y acceso **multiusuario seguro** (propietario
-+ hasta 6 colaboradores).
+
+- hasta 6 colaboradores).
 
 Proyecto **independiente** (repositorio `CDMPLab`). No incluye ni depende de la app Flutter
 `ClubManager` (que vive en `../app` y es otro proyecto).
@@ -89,17 +90,27 @@ propietario, colaborador y 4 cuentas para el límite). Requiere variables de ent
 ### 5. Validación de migraciones
 
 ```bash
-npm run validate:migration   # análisis ESTÁTICO (sintaxis + endurecimiento de grants)
+npm run validate:migration      # análisis ESTÁTICO (sintaxis + endurecimiento de grants)
+npm run validate:invite-email   # correo de invitación: módulo puro + Edge Function
 ```
 
-Este validador hace **análisis estático** (parseo de sintaxis con `libpg-query` y
-comprobaciones de endurecimiento sobre el SQL diseñado). No sustituye una ejecución real:
-solo comprueba propiedades **estáticas** del SQL versionado y **no verifica el estado
-remoto**. Lo que el repositorio documenta (no lo comprueba esta puerta) es que la migración
-`harden_grants_and_defaults` fue aplicada al proyecto remoto el 2026-09-02 y verificada
-después mediante `role_table_grants`, `routine_privileges`, `pg_default_acl`, historial
-remoto y asesores de Supabase. Estado, recuento y mapeo de identidad de las migraciones:
-[`docs/supabase-estado.md`](docs/supabase-estado.md).
+El primero hace **análisis estático** (parseo de sintaxis con `libpg-query` y
+comprobaciones de endurecimiento sobre el SQL diseñado) y, desde el 22/09/2026, también las
+propiedades de seguridad de la migración de **solicitud de equipo** (permiso de administrador
+comprobado en servidor, bloqueo de fila, idempotencia, estados del correo y permisos mínimos),
+incluido el **estado FINAL** de `public.teams`: la última palabra sobre su DML debe ser un
+`REVOKE`. Nada de esto sustituye una ejecución real: solo comprueba propiedades **estáticas** del
+SQL versionado y **no verifica el estado remoto**. Lo que el repositorio documenta (no lo
+comprueba esta puerta) es que la migración `harden_grants_and_defaults` fue aplicada al proyecto
+remoto el 2026-09-02 y verificada después mediante `role_table_grants`, `routine_privileges`,
+`pg_default_acl`, historial remoto y asesores de Supabase. Estado, recuento y mapeo de identidad de
+las migraciones: [`docs/supabase-estado.md`](docs/supabase-estado.md).
+
+El segundo **importa de verdad** el módulo puro del correo
+(`supabase/functions/_shared/invite-email.ts`, TypeScript con sintaxis borrable) y comprueba el
+comportamiento del enlace, el escapado, la petición a Resend/Postmark y la redacción de errores,
+más propiedades estáticas de la Edge Function. El envío real no se prueba: falta proveedor,
+credenciales y dominio ([`docs/correo-invitaciones.md`](docs/correo-invitaciones.md)).
 
 ### 6. Build de GitHub Pages (base href `/CDMPLab/`)
 
@@ -161,9 +172,10 @@ versionarse. `.env`, `.env.local` y `*.env.*.local` están en `.gitignore`.
 ## Estado real de Supabase
 
 La **build de producción** apunta al proyecto Supabase real (autenticación obligatoria,
-RLS por equipo). Hay **14 ficheros** versionados en `supabase/migrations/`. El historial
-remoto se comprobó el 21/09/2026: incluye las 14 migraciones, aunque algunas versiones
-remotas tienen una marca temporal distinta a la del fichero local. El mapeo y las
+RLS por equipo). Hay **15 ficheros** versionados en `supabase/migrations/`: los 14 que el
+historial remoto incluía el 21/09/2026 más `20260922000000_team_creation_requests.sql`
+(solicitud de equipo y estado del correo de invitación), que está **escrito y validado en
+estático pero NO aplicado ni verificado contra el catálogo remoto**. El mapeo y las
 limitaciones de la verificación están en [`docs/supabase-estado.md`](docs/supabase-estado.md).
 
 Lo que este repositorio **documenta** (afirmación de sus propios documentos, no comprobada
@@ -176,7 +188,27 @@ de función o acceso a `private.platform_admins`.
 Los privilegios por defecto de objetos creados por nuestras migraciones (`postgres`)
 también quedaron endurecidos. Supabase no permite que `postgres` modifique los defaults
 del rol interno `supabase_admin`; esa limitación de la plataforma está documentada en la
-migración. El alta de cuentas, SMTP y la prueba multiusuario real siguen pendientes.
+migración. El SMTP propio (confirmación de registro y recuperación de contraseña) y la
+prueba multiusuario real siguen pendientes.
+
+### Solicitud de equipo (creación aprobada por el administrador)
+
+`supabase/migrations/20260922000000_team_creation_requests.sql` y la corrección incremental
+`20260923000000_clear_stale_invitation_email_result.sql` están **aplicadas en Supabase** y la
+matriz RLS pasó contra la base real con `ROLLBACK`. Cambian un contrato de seguridad: una cuenta aprobada ya **no crea**
+su equipo (`create_my_team` responde `team_creation_requires_approval`, se retira la política
+`teams_insert_owner` y se revoca el `INSERT` sobre `public.teams`); en su lugar **solicita** el
+equipo y lo aprueba un administrador de plataforma, que provoca la creación real en la misma
+transacción. Diseño, puertas y pasos manuales: [`docs/FASE-10-solicitud-de-equipo.md`](docs/FASE-10-solicitud-de-equipo.md).
+
+### Correo de invitación
+
+Las invitaciones se crean igual en `public.team_invitations` y ahora además se puede **pedir el
+envío real** desde una Edge Function (`supabase/functions/invite-team-member`), con estados
+distinguibles y reintento. La clave del proveedor es un **secreto del servidor**. El envío real
+sigue **pendiente** (proveedor, credenciales y dominio): ver
+[`docs/correo-invitaciones.md`](docs/correo-invitaciones.md) y, para el correo de Auth,
+[`docs/smtp-supabase-auth.md`](docs/smtp-supabase-auth.md).
 
 ### Rechazo de invitaciones
 
@@ -231,13 +263,19 @@ completo (equipos, jugadores, carpetas, ejercicios con su `canvas`, sesiones) de
 - **Un propietario** por equipo.
 - El propietario puede crear **hasta 6 colaboradores** (activos + invitaciones pendientes):
   siete cuentas por equipo contando al propietario.
-- Las invitaciones se **crean** en base de datos (no se envía un correo personalizado); la
-  persona invitada debe **registrarse** con ese correo, ser **aprobada** por el administrador
-  y después **aceptar** la invitación.
+- **Un equipo lo crea el servidor cuando un administrador aprueba la SOLICITUD** de una cuenta
+  aprobada: la cuenta no puede crearlo por su cuenta (el intento por RPC o por `INSERT` directo
+  se rechaza en el servidor). El solicitante ve el estado (pendiente / rechazado) y puede volver
+  a solicitarlo.
+- Las invitaciones se **crean** en base de datos y se puede **pedir el envío real** del correo
+  desde una función de servidor; la persona invitada debe **registrarse** con ese correo, ser
+  **aprobada** por el administrador y después **aceptar** la invitación (el enlace no concede
+  acceso por sí solo).
 - Un colaborador puede ver/editar jugadores y ejercicios del equipo, pero **no** gestionar
   miembros ni invitar.
 - El admin de plataforma (tabla privada `private.platform_admins`, accedida solo vía
-  funciones `SECURITY DEFINER`) aprueba los perfiles.
+  funciones `SECURITY DEFINER`) aprueba los perfiles **y** las solicitudes de equipo: son dos
+  decisiones distintas.
 
 ## Estructura
 

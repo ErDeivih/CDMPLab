@@ -7,6 +7,15 @@ import { SupabaseService } from '../../core/supabase.service';
 import { ConfirmService } from '../../core/confirm.service';
 import { AuthCardComponent } from './auth-card.component';
 import type { TeamInvitationInfo, TeamMemberInfo } from '../../core/repositories/data-source';
+import {
+  EMAIL_ATTEMPT_LIMIT,
+  STORED_EMAIL_LABEL,
+  canRetryInvitationEmail,
+  invitationLink,
+  retryWaitSeconds,
+  storedEmailMessage,
+  type StoredEmailStatus,
+} from '../../core/invite-email';
 
 const SEAT_LIMIT = 6;
 
@@ -30,6 +39,8 @@ export class MembersComponent {
   protected readonly busyId = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly success = signal<string | null>(null);
+  /** Invitación cuyo envío de correo está en curso (para deshabilitar su botón). */
+  protected readonly enviandoId = signal<string | null>(null);
 
   protected readonly isOwner = computed(() => this.access.target().role === 'owner');
   /**
@@ -84,18 +95,80 @@ export class MembersComponent {
     this.error.set(null);
     this.success.set(null);
     try {
-      await this.access.inviteMember(email);
+      const invitation = await this.access.inviteMember(email);
       this.inviteEmail.set('');
-      // Decisión de usabilidad (dueño): NO se envía correo personalizado, solo se
-      // crea el registro de invitación. El mensaje debe ser veraz.
-      this.success.set(
-        `Invitación creada para ${email}. La persona debe registrarse en CDMPLab con esa misma dirección.`,
-      );
+      // CAMBIO DE CONTRATO (22/09/2026): ya no se dice «solo se crea el registro». Se CREA
+      // la invitación y se PIDE el envío a la función de servidor; el mensaje refleja lo que
+      // haya respondido de verdad (aceptado por el proveedor, no configurado o error).
       await this.load();
+      await this.enviarCorreo(invitation, email);
     } catch (e) {
       this.error.set(this.friendly((e as Error)?.message ?? 'No se pudo invitar.'));
     } finally {
       this.submitting.set(false);
+    }
+  }
+
+  /** Pide el envío (o el reenvío) del correo de una invitación concreta. */
+  protected async reintentarEnvio(inv: TeamInvitationInfo): Promise<void> {
+    this.enviandoId.set(inv.id);
+    this.error.set(null);
+    this.success.set(null);
+    try {
+      await this.enviarCorreo(inv, inv.emailNormalized);
+    } finally {
+      this.enviandoId.set(null);
+    }
+  }
+
+  private async enviarCorreo(inv: TeamInvitationInfo, email: string): Promise<void> {
+    const result = await this.access.sendInvitationEmail(inv.id);
+    if (result.ok) {
+      this.success.set(`${email}: ${result.message}`);
+    } else {
+      // Nada de «correo enviado» cuando no lo está: el texto viene del estado real.
+      this.error.set(`${email}: ${result.message}`);
+    }
+    await this.load();
+  }
+
+  /** Etiqueta del estado del correo (nunca promete entrega). */
+  protected emailLabel(inv: TeamInvitationInfo): string {
+    const status = inv.emailStatus as StoredEmailStatus;
+    if (status === 'send_error') return storedEmailMessage('send_error', inv.lastEmailError);
+    return STORED_EMAIL_LABEL[status] ?? STORED_EMAIL_LABEL.created;
+  }
+
+  /** Segundos que faltan para poder reintentar (0 = ya se puede). */
+  protected esperaReintento(inv: TeamInvitationInfo): number {
+    return retryWaitSeconds(inv);
+  }
+
+  protected puedeReintentar(inv: TeamInvitationInfo): boolean {
+    return canRetryInvitationEmail(inv);
+  }
+
+  protected readonly intentosMaximos = EMAIL_ATTEMPT_LIMIT;
+
+  /**
+   * Enlace de la invitación para copiar/pegar, derivado del `base href` real. Devuelve null
+   * si la base es local (nunca se ofrece un enlace a localhost desde una build publicada).
+   */
+  protected enlaceInvitacion(inv: TeamInvitationInfo): string | null {
+    return invitationLink(document.baseURI, inv.id);
+  }
+
+  protected async copiarEnlace(inv: TeamInvitationInfo): Promise<void> {
+    const link = this.enlaceInvitacion(inv);
+    if (!link) {
+      this.error.set('No se pudo construir el enlace de la invitación en este entorno.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      this.success.set(`Enlace copiado: ${link}`);
+    } catch {
+      this.success.set(`Enlace de la invitación: ${link}`);
     }
   }
 

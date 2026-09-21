@@ -71,7 +71,7 @@ export class AuthGuard implements CanActivate {
  *   · pending      → /pending-approval
  *   · rejected     → /access-rejected
  *   · suspended    → /access-suspended
- *   · approved sin equipo → /onboarding/team (crear) o /invitations (aceptar)
+ *   · approved sin equipo → /onboarding/team (SOLICITAR equipo) o /invitations (aceptar)
  *
  * Con auth desactivada en desarrollo → deja pasar (modo local).
  */

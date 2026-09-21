@@ -11,9 +11,10 @@ import type {
   ExerciseFoldersRow,
   PlayersRow,
   SessionsRow,
+  TeamInvitationsRow,
   TeamsRow,
 } from '../database.types';
-import type { ProfileStatus } from './data-source';
+import type { ProfileStatus, TeamInvitationInfo } from './data-source';
 import type {
   CanvasDocument,
   Exercise,
@@ -32,6 +33,42 @@ export function teamFromRow(row: TeamsRow): Team {
     name: row.name,
     accentColor: row.accent_color,
     createdAt: row.created_at,
+  };
+}
+
+// ---------- TeamInvitation ----------
+
+/**
+ * Fila de `team_invitations` → `TeamInvitationInfo`.
+ *
+ * Las columnas del CORREO (`email_*`) pueden faltar en una base donde la migración
+ * 20260922000000 todavía no se ha aplicado: en ese caso se devuelve `created`, que es
+ * exactamente lo que significa (invitación creada, sin intento de envío registrado).
+ * Inventar otro estado sería mentir sobre el envío.
+ */
+export function invitationFromRow(row: TeamInvitationsRow, teamName: string): TeamInvitationInfo {
+  const raw = row as TeamInvitationsRow & {
+    email_status?: string | null;
+    email_attempts?: number | null;
+    last_email_at?: string | null;
+    last_email_error?: string | null;
+  };
+  const estados = ['created', 'send_pending', 'provider_accepted', 'send_error'];
+  const status =
+    raw.email_status && estados.includes(raw.email_status) ? raw.email_status : 'created';
+  return {
+    id: row.id,
+    teamId: row.team_id,
+    teamName,
+    emailNormalized: row.email_normalized,
+    invitedUserId: row.invited_user_id,
+    status: row.status,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    emailStatus: status as TeamInvitationInfo['emailStatus'],
+    emailAttempts: raw.email_attempts ?? 0,
+    lastEmailAt: raw.last_email_at ?? null,
+    lastEmailError: raw.last_email_error ?? null,
   };
 }
 
@@ -93,7 +130,9 @@ export function exerciseFromRow(row: ExercisesRow): Exercise {
   };
 }
 
-export function exerciseRowForInsert(ex: Exercise): Omit<ExercisesRow, 'created_at' | 'updated_at' | 'revision'> {
+export function exerciseRowForInsert(
+  ex: Exercise,
+): Omit<ExercisesRow, 'created_at' | 'updated_at' | 'revision'> {
   return {
     id: ex.id,
     team_id: ex.teamId,

@@ -46,7 +46,7 @@
 
     @if (isOwner()) {
       @for (inv of invitations(); track inv.id) {
-        <div class="card invite-row">
+        <div class="card invite-row" [attr.data-invitacion]="inv.emailStatus">
           <div class="invite-main">
             <strong>{{ inv.emailNormalized }}</strong>
             <span class="auth-note">
@@ -55,15 +55,61 @@
                 a {{ inv.teamName }}
               }
             </span>
+            <!-- Estado del CORREO, que es distinto del estado de la invitación. Nunca se
+                 presenta «entregado»: el proveedor solo confirma que aceptó el envío. -->
+            <span class="auth-note" [attr.data-estado-correo]="inv.emailStatus">
+              {{ emailLabel(inv) }}
+              @if (inv.emailAttempts > 0) {
+                · {{ inv.emailAttempts }} {{ inv.emailAttempts === 1 ? 'intento' : 'intentos' }}
+              }
+            </span>
+            @if (inv.emailStatus === 'send_error' && inv.lastEmailError) {
+              <span class="auth-note" role="status">{{ inv.lastEmailError }}</span>
+            }
+            @if (esperaReintento(inv) > 0) {
+              <span class="auth-note">
+                Podrás reintentar el envío en {{ esperaReintento(inv) }} s.
+              </span>
+            }
+            @if (!puedeReintentar(inv) && inv.emailAttempts >= intentosMaximos) {
+              <span class="auth-note">
+                Se agotaron los {{ intentosMaximos }} intentos de envío de esta invitación.
+              </span>
+            }
           </div>
-          <button
-            type="button"
-            class="btn btn-ghost"
-            [disabled]="busy(inv.id)"
-            (click)="cancel(inv)"
-          >
-            {{ busy(inv.id) ? '…' : 'Cancelar' }}
-          </button>
+          <div class="admin-actions">
+            <button
+              type="button"
+              class="btn"
+              [disabled]="busy(inv.id) || enviandoId() === inv.id || !puedeReintentar(inv)"
+              (click)="reintentarEnvio(inv)"
+            >
+              {{
+                enviandoId() === inv.id
+                  ? 'Enviando…'
+                  : inv.emailStatus === 'created'
+                    ? 'Enviar por correo'
+                    : 'Reenviar'
+              }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              [disabled]="busy(inv.id)"
+              (click)="copiarEnlace(inv)"
+              title="Copiar el enlace de la invitación (útil si el correo no sale)"
+            >
+              Copiar enlace
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              [disabled]="busy(inv.id)"
+              (click)="cancel(inv)"
+            >
+              {{ busy(inv.id) ? '…' : 'Cancelar' }}
+            </button>
+          </div>
         </div>
       }
     }
@@ -90,13 +136,14 @@
             {{ submitting() ? 'Creando…' : 'Invitar' }}
           </button>
         </div>
-        <!-- Decisión de usabilidad (dueño): solo se CREA la invitación en la base,
-             no se envía un correo personalizado. Explicamos qué ocurre y qué debe
-             hacer la persona invitada, sin afirmar que se ha enviado un correo. -->
+        <!-- Honestidad sobre el correo: la invitación se crea SIEMPRE; el envío depende de
+             que la función de servidor y el proveedor estén configurados. Se dice lo que ha
+             pasado de verdad, sin prometer un correo que quizá no salga. -->
         <p class="invite-note">
-          Se crea una invitación pendiente. Si la persona aún no tiene cuenta, debe registrarse en
-          CDMPLab con ese mismo correo; su cuenta tendrá que ser aprobada por el administrador y
-          después podrá aceptar la invitación.
+          Se crea una invitación pendiente y se intenta enviar el correo de invitación. Si el envío
+          no está configurado o falla, la invitación sigue creada y puedes reintentarlo desde la
+          lista de arriba. Si la persona aún no tiene cuenta, debe registrarse en CDMPLab con ese
+          mismo correo y esperar la aprobación del administrador.
         </p>
       </div>
     }

@@ -5,7 +5,11 @@ import { AccessService } from '../../core/access.service';
 import { SupabaseService } from '../../core/supabase.service';
 import { ConfirmService } from '../../core/confirm.service';
 import { AuthCardComponent } from './auth-card.component';
-import type { ProfileInfo, ProfileStatus } from '../../core/repositories/data-source';
+import type {
+  ProfileInfo,
+  ProfileStatus,
+  TeamRequestInfo,
+} from '../../core/repositories/data-source';
 
 @Component({
   selector: 'app-admin-access',
@@ -24,13 +28,37 @@ export class AdminAccessComponent {
   protected readonly busyId = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
 
-  protected readonly pending = computed(() => this.profiles().filter((p) => p.status === 'pending'));
-  protected readonly approved = computed(() => this.profiles().filter((p) => p.status === 'approved'));
-  protected readonly rejected = computed(() => this.profiles().filter((p) => p.status === 'rejected'));
-  protected readonly suspended = computed(() => this.profiles().filter((p) => p.status === 'suspended'));
+  protected readonly pending = computed(() =>
+    this.profiles().filter((p) => p.status === 'pending'),
+  );
+  protected readonly approved = computed(() =>
+    this.profiles().filter((p) => p.status === 'approved'),
+  );
+  protected readonly rejected = computed(() =>
+    this.profiles().filter((p) => p.status === 'rejected'),
+  );
+  protected readonly suspended = computed(() =>
+    this.profiles().filter((p) => p.status === 'suspended'),
+  );
+
+  // ---- Solicitudes de EQUIPO (separadas de la aprobación de CUENTAS) ----
+  // Aprobar una cuenta NO aprueba un equipo: son dos decisiones distintas y así se
+  // muestran (dos apartados con su propio encabezado).
+  protected readonly requests = signal<TeamRequestInfo[]>([]);
+  protected readonly requestsLoading = signal(true);
+  protected readonly requestsError = signal<string | null>(null);
+  protected readonly busyRequestId = signal<string | null>(null);
+  protected readonly rejectNote = signal<Record<string, string>>({});
+
+  protected readonly pendingRequests = computed(() =>
+    this.requests().filter((r) => r.status === 'pending'),
+  );
+  protected readonly decidedRequests = computed(() =>
+    this.requests().filter((r) => r.status !== 'pending'),
+  );
 
   async ngOnInit(): Promise<void> {
-    await this.load();
+    await Promise.all([this.load(), this.loadRequests()]);
   }
 
   async load(): Promise<void> {
@@ -45,8 +73,97 @@ export class AdminAccessComponent {
     }
   }
 
+  async loadRequests(): Promise<void> {
+    this.requestsLoading.set(true);
+    this.requestsError.set(null);
+    try {
+      this.requests.set(await this.access.listTeamRequests(this.query().trim()));
+    } catch (e) {
+      this.requestsError.set((e as Error)?.message ?? 'No se pudieron cargar las solicitudes.');
+    } finally {
+      this.requestsLoading.set(false);
+    }
+  }
+
   protected onSearch(evt: Event): void {
     this.query.set((evt.target as HTMLInputElement).value);
+  }
+
+  protected onRejectNote(evt: Event, requestId: string): void {
+    const value = (evt.target as HTMLInputElement).value;
+    this.rejectNote.update((m) => ({ ...m, [requestId]: value }));
+  }
+
+  protected noteFor(requestId: string): string {
+    return this.rejectNote()[requestId] ?? '';
+  }
+
+  /** Aprobar: el SERVIDOR crea el equipo y devuelve su id (idempotente). */
+  protected approveRequest(r: TeamRequestInfo): void {
+    this.confirm.ask({
+      title: 'Aprobar solicitud de equipo',
+      message: `¿Crear el equipo «${r.name}» para ${r.displayName || r.emailNormalized}?`,
+      confirmLabel: 'Aprobar y crear',
+      onConfirm: () => {
+        this.busyRequestId.set(r.id);
+        this.requestsError.set(null);
+        this.access
+          .approveTeamRequest(r.id)
+          .then(() => this.loadRequests())
+          .catch((e) =>
+            this.requestsError.set((e as Error)?.message ?? 'No se pudo aprobar la solicitud.'),
+          )
+          .finally(() => this.busyRequestId.set(null));
+      },
+    });
+  }
+
+  protected rejectRequest(r: TeamRequestInfo): void {
+    const note = this.noteFor(r.id).trim();
+    this.confirm.ask({
+      title: 'Rechazar solicitud de equipo',
+      message: note
+        ? `¿Rechazar la solicitud de «${r.name}» con el motivo «${note}»?`
+        : `¿Rechazar la solicitud de «${r.name}»? El solicitante podrá volver a pedirlo.`,
+      confirmLabel: 'Rechazar',
+      onConfirm: () => {
+        this.busyRequestId.set(r.id);
+        this.requestsError.set(null);
+        this.access
+          .rejectTeamRequest(r.id, note === '' ? null : note)
+          .then(() => this.loadRequests())
+          .catch((e) =>
+            this.requestsError.set((e as Error)?.message ?? 'No se pudo rechazar la solicitud.'),
+          )
+          .finally(() => this.busyRequestId.set(null));
+      },
+    });
+  }
+
+  protected requestBusy(id: string): boolean {
+    return this.busyRequestId() === id;
+  }
+
+  protected requestStatusLabel(s: TeamRequestInfo['status']): string {
+    return { pending: 'Pendiente', approved: 'Aprobada', rejected: 'Rechazada' }[s];
+  }
+
+  protected fecha(iso: string | null): string {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+    } catch {
+      return iso;
+    }
+  }
+
+  /** Búsqueda: perfiles y solicitudes con el mismo criterio. */
+  protected async refreshAll(): Promise<void> {
+    await Promise.all([this.load(), this.loadRequests()]);
   }
 
   protected setStatus(p: ProfileInfo, status: ProfileStatus, label: string): void {
@@ -88,7 +205,12 @@ export class AdminAccessComponent {
   }
 
   protected statusLabel(s: ProfileStatus): string {
-    return { pending: 'Pendiente', approved: 'Aprobado', rejected: 'Rechazado', suspended: 'Suspendido' }[s];
+    return {
+      pending: 'Pendiente',
+      approved: 'Aprobado',
+      rejected: 'Rechazado',
+      suspended: 'Suspendido',
+    }[s];
   }
 
   protected async logout(): Promise<void> {

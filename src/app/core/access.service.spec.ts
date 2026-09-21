@@ -16,6 +16,12 @@ describe('AccessService invitations', () => {
       status: 'pending',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       createdAt: new Date().toISOString(),
+      // Columnas del estado del CORREO (migración 20260922000000): una invitación nace
+      // sin intento de envío, así que el estado es 'created'.
+      emailStatus: 'created',
+      emailAttempts: 0,
+      lastEmailAt: null,
+      lastEmailError: null,
     };
     const repo = {
       teamId: null,
