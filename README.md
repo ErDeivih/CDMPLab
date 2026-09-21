@@ -201,6 +201,15 @@ consultó el catálogo del proyecto remoto y el resultado es este:
 **La migración aún no está aplicada.** Aplicarla en el proyecto remoto es una decisión del
 propietario; `npm run validate:migration` solo hace análisis estático y no la ejecuta.
 
+### Operaciones atómicas de carpetas
+
+La migración `20260911000000_entrenolab_folders_atomic.sql` se aplicó al proyecto remoto
+EntrenoLab el 21/09/2026; Supabase la registró como
+`20260921075702_entrenolab_folders_atomic`. Se verificaron la existencia de sus tres
+funciones y los permisos de ejecución: las dos RPC públicas admiten `authenticated`, pero
+no `anon` ni `PUBLIC`. El cliente todavía utiliza sus operaciones anteriores de carpetas;
+la migración por sí sola no activa el uso de las nuevas RPC.
+
 ## Plantillas de campo
 
 El pizarra ofrece, con la misma fuente de proporciones reales:

@@ -1,5 +1,16 @@
 # CDMPLab — Estado de las migraciones: lo documentado y lo NO verificado
 
+> **Actualización verificada el 21/09/2026.** Esta auditoría es una fotografía histórica
+> anterior al acceso remoto. Hoy hay **13 ficheros locales** y el historial remoto incluye
+> `20260921075702_entrenolab_folders_atomic`, aplicada desde el SQL versionado localmente
+> como `20260911000000_entrenolab_folders_atomic.sql`. Las funciones
+> `private.folder_team(uuid)`, `public.delete_folder_tree(uuid)` y
+> `public.duplicate_folder_tree(uuid)` existen en el catálogo remoto. Las dos RPC públicas
+> son ejecutables por `authenticated`, no por `anon` ni `PUBLIC`; la función privada no es
+> ejecutable por esos roles. La migración de rechazo de invitaciones sigue sin constar en
+> el historial remoto. El resto de este documento conserva las afirmaciones de su auditoría
+> original y no debe leerse como un estado actualizado.
+
 > **Alcance de este documento.** Es una auditoría **de documentación y de repositorio**.
 > Se ha escrito **sin claves y sin acceso al proyecto remoto**: aquí no se aplica nada, no
 > se consulta el catálogo, no se ejecuta SQL y **no se reproduce ningún volcado de
