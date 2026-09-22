@@ -73,7 +73,7 @@ export const TACTIC_ASSETS: TacticAsset[] = [
   // el PNG no era reconocible a tamaño pequeño (la escalera y la miniportería se confundían entre sí
   // y con la portería). Los PNG siguen en el repositorio: los documentos antiguos conservan su
   // `asset` guardado, pero el render los pinta vectoriales por la lista `SIEMPRE_VECTOR`.
-  { kind: 'ladder', asset: '', label: 'Escalera', color: '#e8edf2' },
+  { kind: 'ladder', asset: '', label: 'Escalera', color: '#f6c945' },
   {
     kind: 'ladder_yellow',
     asset: '',
@@ -205,8 +205,8 @@ export const TACTICAL_BBOX: Record<string, BBoxFrac> = {
   // seleccionaba césped vacío por encima y por debajo del marco.
   goal: { w: 1, h: 0.34 },
   flag: { w: 0.367, h: 1 },
-  ladder: { w: 1, h: 0.28 },
-  ladder_yellow: { w: 0.293, h: 1 },
+  ladder: { w: 1.2, h: 0.44 },
+  ladder_yellow: { w: 1.2, h: 0.44 },
   hurdle: { w: 0.78, h: 1 },
   minigoal: { w: 1, h: 0.573 },
   ring: { w: 1, h: 1 },

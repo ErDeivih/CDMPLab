@@ -752,6 +752,223 @@ try {
     }
   }
 
+  // ---- BORRADO de EQUIPO (auditoría + confirmación por nombre en el servidor) ----
+  {
+    const f12 = 'supabase/migrations/20260925000000_team_deletion.sql';
+    if (!fs.existsSync(f12)) {
+      fail('falta la migración de borrado de equipo');
+    } else {
+      const sqlBruto = fs.readFileSync(f12, 'utf8');
+      const sql = sqlBruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+      console.log(`\nBorrado de equipo (${path.basename(f12)}):`);
+
+      has(sql, 'create table if not exists public.team_deletions')
+        ? ok('existe el registro de equipos eliminados')
+        : fail('no se crea public.team_deletions');
+      /deleted_team_id uuid not null,\s*team_name/.test(sql)
+        ? ok('la auditoría NO tiene clave foránea al equipo (sobrevive a la cascada)')
+        : fail('la auditoría referencia el equipo: se borraría con él');
+      has(sql, 'alter table public.team_deletions enable row level security') &&
+      has(sql, 'using (private.is_platform_admin())')
+        ? ok('la auditoría de equipos solo la lee el administrador')
+        : fail('la auditoría de equipos no está restringida al administrador');
+      has(sql, 'revoke all on table public.team_deletions from public, anon, authenticated') &&
+      has(sql, 'grant select on table public.team_deletions to authenticated')
+        ? ok('auditoría de equipos: solo SELECT a authenticated')
+        : fail('los permisos de la auditoría de equipos no son mínimos');
+      /for\s+(insert|update|delete)\s+to\s+authenticated/i.test(sql)
+        ? fail('hay una política de ESCRITURA directa sobre la auditoría de equipos')
+        : ok('la auditoría de equipos no se escribe desde el cliente');
+
+      // Autorización: propietario del equipo o administrador de plataforma.
+      /v_team\.owner_user_id <> v_uid and not private\.is_platform_admin\(\)/.test(sql)
+        ? ok('borrado de equipo: propietario o administrador de plataforma')
+        : fail('borrado de equipo: no comprueba quién puede borrarlo');
+      has(sql, 'not_authorized_for_team_deletion')
+        ? ok('borrado de equipo: motivo propio cuando no está autorizado')
+        : fail('borrado de equipo: falta el motivo de no autorizado');
+      // CONFIRMACIÓN REFORZADA EN EL SERVIDOR: el nombre exacto.
+      /v_nombre <> v_team\.name/.test(sql) && has(sql, 'team_name_confirmation_mismatch')
+        ? ok('borrado de equipo: exige el nombre EXACTO en el propio servidor')
+        : fail('borrado de equipo: la confirmación por nombre no se comprueba en el servidor');
+      const previewBody =
+        sql
+          .split('create or replace function public.team_deletion_preview(p_team_id uuid)')[1]
+          ?.split('create or replace function public.delete_team(')[0] ?? '';
+      has(previewBody, "raise exception 'not_authorized_for_team_deletion'")
+        ? ok('vista previa: no filtra datos de equipos ajenos')
+        : fail('vista previa: expone datos del equipo a quien no puede borrarlo');
+      /from public\.teams where id = p_team_id for update/.test(sql)
+        ? ok('borrado de equipo: bloquea el equipo (sin borrados simultáneos)')
+        : fail('borrado de equipo: no bloquea la fila del equipo');
+      const auditPos = sql.indexOf('insert into public.team_deletions');
+      const deletePos = sql.indexOf('delete from public.teams');
+      auditPos > 0 && deletePos > 0 && auditPos < deletePos
+        ? ok('borrado de equipo: la auditoría se escribe ANTES del borrado (misma transacción)')
+        : fail('la auditoría del equipo se escribe después del borrado o no se escribe');
+
+      // Permisos de las dos RPC.
+      const rpcEquipo = [
+        'public.team_deletion_preview(uuid)',
+        'public.delete_team(uuid, text, text)',
+      ];
+      rpcEquipo.every((f) => has(sql, `revoke execute on function ${f} from public, anon`))
+        ? ok('RPC de borrado de equipo: EXECUTE revocado a PUBLIC y anon')
+        : fail('RPC de borrado de equipo: falta revocar EXECUTE a PUBLIC/anon');
+      rpcEquipo.every((f) => has(sql, `grant execute on function ${f} to authenticated`))
+        ? ok('RPC de borrado de equipo: EXECUTE a authenticated (autorizan dentro)')
+        : fail('RPC de borrado de equipo: falta el GRANT a authenticated');
+      has(sql, 'user_metadata')
+        ? fail('usa user_metadata para autorizar (prohibido)')
+        : ok('NO usa user_metadata');
+      countTokens(sql, 'security definer') >= 2 && countTokens(sql, "set search_path = ''") >= 2
+        ? ok('borrado de equipo: DEFINER con search_path vacío')
+        : fail('borrado de equipo: falta DEFINER o search_path vacío');
+      // La cascada que se asume debe quedar documentada y comprobable.
+      has(sqlBruto, 'confdeltype') && has(sqlBruto, 'CATÁLOGO REMOTO VERIFICADO ANTES DE APLICAR')
+        ? ok('declara la cascada y la verificación previa del catálogo remoto')
+        : fail('no documenta la comprobación previa de la cascada en el catálogo remoto');
+    }
+  }
+
+  // ---- HISTORIAL de solicitud tras borrar el equipo ----
+  {
+    const f13 = 'supabase/migrations/20260926000000_team_deletion_request_history.sql';
+    if (!fs.existsSync(f13)) {
+      fail('falta la migración que conserva solicitudes aprobadas tras borrar el equipo');
+    } else {
+      const sql = fs.readFileSync(f13, 'utf8');
+      console.log(`\nHistorial de solicitud tras borrar equipo (${path.basename(f13)}):`);
+      has(sql, 'drop constraint if exists team_requests_decided_consistency') &&
+      has(sql, "status = 'approved' and decided_at is not null") &&
+      !has(sql, "status = 'approved' and decided_at is not null and created_team_id is not null")
+        ? ok('solicitud aprobada conserva el historial si created_team_id queda a NULL')
+        : fail('una solicitud aprobada aún exige un equipo que puede haber sido eliminado');
+    }
+  }
+
+  // ---- ADMINISTRACIÓN de plataforma (acceso del administrador + alta/baja de administradores) ----
+  {
+    const f14 = 'supabase/migrations/20260927000000_platform_administration.sql';
+    if (!fs.existsSync(f14)) {
+      fail('falta la migración de administración de plataforma');
+    } else {
+      const sqlBruto = fs.readFileSync(f14, 'utf8');
+      const sql = sqlBruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+      console.log(`\nAdministración de plataforma (${path.basename(f14)}):`);
+
+      // El administrador entra como EDITOR en cualquier equipo existente, sin ocupar plaza de
+      // colaborador. La comprobación de propiedad va PRIMERO: si un administrador además es
+      // propietario, debe seguir siendo `owner` (si no, perdería el traspaso y el borrado).
+      const rolEquipo =
+        sql
+          .split('create or replace function private.team_role(t uuid)')[1]
+          ?.split('create or replace function public.admin_list_administrators')[0] ?? '';
+      rolEquipo && has(rolEquipo, "not private.is_approved() then 'none'")
+        ? ok('team_role: una cuenta no aprobada sigue sin entrar (ni siendo administrador)')
+        : fail('team_role: no comprueba que la cuenta esté aprobada');
+      rolEquipo && rolEquipo.indexOf("'owner'") < rolEquipo.indexOf('is_platform_admin')
+        ? ok('team_role: la propiedad del equipo tiene prioridad sobre el rol de administrador')
+        : fail('team_role: el administrador podría pisar el rol de propietario');
+      rolEquipo &&
+      /is_platform_admin\(\)\s+and\s+exists\s*\(\s*select 1 from public\.teams/i.test(rolEquipo)
+        ? ok('team_role: el administrador solo entra en equipos que EXISTEN (editor)')
+        : fail('team_role: el administrador no queda como editor de los equipos existentes');
+
+      // Autorización dentro de las tres RPC: nunca por correo ni por metadatos del token.
+      countTokens(sql, "raise exception 'platform_admin_required'") >= 3
+        ? ok('las tres RPC exigen ser administrador de plataforma dentro del servidor')
+        : fail('alguna RPC de administración no comprueba quién llama');
+      has(sql, 'user_metadata') || has(sql, 'raw_user_meta_data')
+        ? fail('autoriza por metadatos del usuario (prohibido)')
+        : ok('NO autoriza por metadatos ni por correo');
+      has(sql, 'private.platform_admins')
+        ? ok('la fuente de verdad del administrador es la tabla privada')
+        : fail('no se lee private.platform_admins');
+
+      // Alta de administrador: idempotente y solo sobre perfiles aprobados.
+      has(sql, 'profile_not_approved') && /status\s*=\s*'approved'/.test(sql)
+        ? ok('alta de administrador: exige perfil aprobado en el servidor')
+        : fail('alta de administrador: no comprueba que el perfil esté aprobado');
+      has(
+        sql,
+        'insert into private.platform_admins(user_id) values(p_user_id) on conflict do nothing',
+      )
+        ? ok('alta de administrador: idempotente (ON CONFLICT DO NOTHING)')
+        : fail('el alta de administrador no es idempotente');
+
+      // Un administrador no puede quedarse fuera por la puerta de atrás: suspender su perfil.
+      has(sql, 'create trigger protect_admin_profile before update of status on public.profiles') &&
+      has(sql, 'cannot_suspend_platform_admin')
+        ? ok('suspender el perfil de un administrador está bloqueado por disparador')
+        : fail('se puede expulsar a un administrador suspendiendo su perfil');
+      has(sql, 'drop trigger if exists protect_admin_profile on public.profiles')
+        ? ok('el disparador se recrea (migración re-ejecutable)')
+        : fail('el disparador no se elimina antes de crearse: la migración no es re-ejecutable');
+
+      // Baja voluntaria del propio administrador.
+      const baja = sql.split('create or replace function public.delete_my_admin_account')[1] ?? '';
+      baja
+        ? ok('existe la baja voluntaria del administrador')
+        : fail('falta delete_my_admin_account');
+      /delete from auth\.users where id\s*=\s*auth\.uid\(\)/.test(baja)
+        ? ok('la baja solo borra la identidad de QUIEN llama (nunca otro usuario)')
+        : fail('la baja puede borrar la identidad de otro usuario');
+      /p_user_id/.test(baja)
+        ? fail('la baja acepta un id de usuario: podría dar de baja a otro administrador')
+        : ok('la baja no acepta id de usuario (no puede darse de baja a otro)');
+      has(baja, 'email_confirmation_mismatch') &&
+      /lower\(btrim\(coalesce\(p_confirm_email,''\)\)\)\s*<>\s*v_profile\.email_normalized/.test(
+        baja,
+      )
+        ? ok('la baja exige el correo exacto, comprobado en el servidor')
+        : fail('la baja no confirma el correo en el servidor');
+      has(baja, 'target_owns_team') &&
+      /from public\.teams where owner_user_id\s*=\s*auth\.uid\(\)/.test(baja)
+        ? ok('la baja exige haber dejado el equipo propio antes')
+        : fail('la baja permite irse dejando un equipo sin propietario');
+      has(baja, 'last_platform_admin') &&
+      /count\(\*\) from private\.platform_admins\)\s*<\s*2/.test(baja)
+        ? ok('la baja exige que quede OTRO administrador (la plataforma no se queda sin ninguno)')
+        : fail('la baja no impide quedarse sin ningún administrador');
+      /lock table private\.platform_admins in share row exclusive mode/.test(baja)
+        ? ok('las bajas se serializan (dos bajas simultáneas no se cuelan por el último hueco)')
+        : fail('las bajas simultáneas pueden dejar la plataforma sin administradores');
+      // Auditoría ANTES del borrado: el registro sobrevive a la cascada del usuario.
+      const posAuditoria = baja.indexOf('insert into public.account_deletions');
+      const posBorrado = baja.indexOf('delete from auth.users');
+      posAuditoria > 0 && posBorrado > 0 && posAuditoria < posBorrado
+        ? ok('la baja deja auditoría ANTES de borrar la identidad (misma transacción)')
+        : fail('la baja no audita antes de borrar la identidad');
+
+      // Permisos: solo authenticated, y las funciones autorizan dentro.
+      const rpcAdmin = [
+        'public.admin_list_administrators()',
+        'public.admin_grant_platform_admin(uuid)',
+        'public.delete_my_admin_account(text)',
+      ];
+      rpcAdmin.every((f) => has(sql, `revoke all on function ${f} from public,anon`))
+        ? ok('RPC de administración: EXECUTE revocado a PUBLIC y anon')
+        : fail('RPC de administración: falta revocar EXECUTE a PUBLIC/anon');
+      rpcAdmin.every((f) => has(sql, `grant execute on function ${f} to authenticated`))
+        ? ok('RPC de administración: EXECUTE a authenticated (autorizan dentro)')
+        : fail('RPC de administración: falta el GRANT a authenticated');
+      /grant[^;]*private\.platform_admins[^;]*to\s+(anon|authenticated|public)/i.test(sql)
+        ? fail('se concede acceso de TABLA a private.platform_admins')
+        : ok('private.platform_admins: sigue sin acceso de tabla para el cliente');
+      // Se acepta `set search_path=''` y `set search_path = ''`: esta migración usa la forma sin
+      // espacios, así que la comprobación no puede depender del espaciado.
+      countTokens(sql, 'security\\s+definer') >= 4 &&
+      countTokens(sql, "set\\s+search_path\\s*=\\s*''") >= 4
+        ? ok('administración: DEFINER con search_path vacío en todas las funciones')
+        : fail('administración: alguna función sin DEFINER o sin search_path vacío');
+      // La tabla de administradores no se escribe desde el cliente: solo desde estas RPC.
+      /policy[^;]*on private\.platform_admins/i.test(sql)
+        ? fail('se crea una política sobre private.platform_admins')
+        : ok('no se abren políticas nuevas sobre private.platform_admins');
+    }
+  }
+
   if (failed > 0) {
     console.error(`\nVALIDACIÓN ESTÁTICA CON ${failed} PROBLEMA(S).`);
     process.exit(1);

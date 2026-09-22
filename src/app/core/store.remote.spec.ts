@@ -13,6 +13,37 @@ import type {
 } from './repositories/data-source';
 import type { Exercise, ExerciseFolder, Player, Session, Team } from './models';
 
+/** Equipo real que devuelven los datasets de prueba (el `connectDataSource` lo exige). */
+const EQUIPO_DE_PRUEBA: Team = {
+  id: 'team-1',
+  name: 'Primer Equipo',
+  accentColor: '#3056d3',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+/**
+ * Dataset de equipo con EQUIPO REAL por defecto.
+ *
+ * CAMBIO DE CONTRATO (22/09/2026): `StoreService.connectDataSource` RECHAZA un dataset sin equipo
+ * («El equipo ya no existe o no tienes acceso.») porque hidratar una pizarra vacía con un equipo que
+ * ya no existe es peor que avisar. Antes los fakes de este fichero devolvían `team: null` «de
+ * relleno» —solo querían fijar ejercicios o carpetas— y las pruebas pasaban mientras ese caso real
+ * quedaba sin cubrir; ahora el valor por defecto es un equipo y quien quiera el caso «sin equipo» lo
+ * pide EXPLÍCITAMENTE con `teamDataset({ team: null })`.
+ */
+function teamDataset(overrides: Partial<TeamDataset> = {}): TeamDataset {
+  return {
+    team: { ...EQUIPO_DE_PRUEBA },
+    players: [],
+    folders: [],
+    exercises: [],
+    sessions: [],
+    members: [],
+    invitations: [],
+    ...overrides,
+  };
+}
+
 /** Data source fake para verificar hidratación, rollback, conflicto y claves. */
 function makeFake(overrides?: Partial<DataSource>): DataSource {
   const base = {
@@ -22,15 +53,7 @@ function makeFake(overrides?: Partial<DataSource>): DataSource {
     resolveAccess: vi
       .fn<() => Promise<AccessResolution>>()
       .mockResolvedValue({} as AccessResolution),
-    loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-      team: null,
-      players: [],
-      folders: [],
-      exercises: [],
-      sessions: [],
-      members: [],
-      invitations: [],
-    }),
+    loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue(teamDataset()),
     createTeam: vi.fn<() => Promise<Team>>(),
     renameTeam: vi.fn<() => Promise<Team>>(),
     addPlayer: vi.fn<() => Promise<Player>>(),
@@ -101,6 +124,19 @@ describe('StoreService en modo remoto', () => {
     store.resetToLocal();
   });
 
+  it('si el equipo ya no existe (o no hay acceso) NO conecta y avisa: no hidrata una pizarra vacía', async () => {
+    // Contrato NUEVO (22/09/2026): `loadTeam` devolviendo `team: null` significa que el equipo se
+    // borró o que el usuario perdió el acceso. Antes se hidrataba igualmente (pizarra vacía como si
+    // el equipo existiera) y el usuario no sabía por qué había perdido todo.
+    const fake = makeFake({
+      teamId: 'team-1',
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue(teamDataset({ team: null })),
+    });
+    await expect(store.connectDataSource(fake, 'team-1')).rejects.toThrow(
+      /ya no existe o no tienes acceso/,
+    );
+  });
+
   it('hidrata los signals desde el data source', async () => {
     const fake = makeFake({
       teamId: 'team-1',
@@ -136,15 +172,9 @@ describe('StoreService en modo remoto', () => {
     const latest = EX('e1', { title: 'Versión servidor', revision: 2 });
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [],
-        exercises: [EX('e1')],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi
+        .fn<() => Promise<TeamDataset>>()
+        .mockResolvedValue(teamDataset({ exercises: [EX('e1')] })),
       saveExercise: vi
         .fn<() => Promise<SaveExerciseResult>>()
         .mockResolvedValue({ conflict: true, revision: 2, exercise: latest }),
@@ -170,15 +200,9 @@ describe('StoreService en modo remoto', () => {
       });
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [],
-        exercises: [EX('e1')],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi
+        .fn<() => Promise<TeamDataset>>()
+        .mockResolvedValue(teamDataset({ exercises: [EX('e1')] })),
       saveExercise,
     });
     await store.connectDataSource(fake, 'team-1');
@@ -199,15 +223,9 @@ describe('StoreService en modo remoto', () => {
     const latest = EX('e1', { title: 'Versión servidor', revision: 2 });
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [],
-        exercises: [EX('e1')],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi
+        .fn<() => Promise<TeamDataset>>()
+        .mockResolvedValue(teamDataset({ exercises: [EX('e1')] })),
       saveExercise: vi
         .fn<() => Promise<SaveExerciseResult>>()
         .mockResolvedValue({ conflict: true, revision: 2, exercise: latest }),
@@ -229,15 +247,7 @@ describe('StoreService en modo remoto', () => {
       .mockResolvedValue({ conflict: false, revision: 1, exercise: saved });
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [],
-        exercises: [],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue(teamDataset()),
       saveExercise,
     });
     await store.connectDataSource(fake, 'team-1');
@@ -265,15 +275,7 @@ describe('StoreService en modo remoto', () => {
       .mockRejectedValue(new Error('el servidor sigue caído'));
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [],
-        exercises: [],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue(teamDataset()),
       saveExercise,
     });
     await store.connectDataSource(fake, 'team-1');
@@ -299,15 +301,7 @@ describe('StoreService en modo remoto', () => {
       .mockResolvedValue({ conflict: false, revision: 1, exercise: EX('e2') });
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [],
-        exercises: [],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue(teamDataset()),
       saveExercise,
     });
     await store.connectDataSource(fake, 'team-1');
@@ -344,15 +338,7 @@ describe('StoreService en modo remoto', () => {
       .mockReturnValueOnce(b.promise);
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [],
-        exercises: [],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue(teamDataset()),
       saveExercise,
     });
     await store.connectDataSource(fake, 'team-1');
@@ -385,15 +371,7 @@ describe('StoreService en modo remoto', () => {
       .mockReturnValueOnce(b.promise);
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [],
-        exercises: [],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue(teamDataset()),
       saveExercise,
     });
     await store.connectDataSource(fake, 'team-1');
@@ -418,15 +396,7 @@ describe('StoreService en modo remoto', () => {
   it('hace ROLLBACK visible en la señal cuando el servidor falla', async () => {
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [],
-        exercises: [],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue(teamDataset()),
       saveExercise: vi.fn<() => Promise<SaveExerciseResult>>().mockRejectedValue(new Error('boom')),
     });
     await store.connectDataSource(fake, 'team-1');
@@ -443,15 +413,11 @@ describe('StoreService en modo remoto', () => {
     let rechazar: (e: Error) => void = () => {};
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [],
-        exercises: [EX('e1', { title: 'Primero' }), EX('e2', { title: 'Segundo' })],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue(
+        teamDataset({
+          exercises: [EX('e1', { title: 'Primero' }), EX('e2', { title: 'Segundo' })],
+        }),
+      ),
       deleteExercise: vi.fn<() => Promise<void>>().mockImplementation(
         () =>
           new Promise<void>((_, reject) => {
@@ -491,15 +457,12 @@ describe('StoreService en modo remoto', () => {
     const carpeta: ExerciseFolder = { id: 'f1', teamId: 'team-1', name: 'Carpeta', parentId: null };
     const fake = makeFake({
       teamId: 'team-1',
-      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue({
-        team: null,
-        players: [],
-        folders: [carpeta],
-        exercises: [EX('e1', { folderId: 'f1', title: 'Primero' })],
-        sessions: [],
-        members: [],
-        invitations: [],
-      }),
+      loadTeam: vi.fn<() => Promise<TeamDataset>>().mockResolvedValue(
+        teamDataset({
+          folders: [carpeta],
+          exercises: [EX('e1', { folderId: 'f1', title: 'Primero' })],
+        }),
+      ),
       deleteFolder: vi.fn<() => Promise<void>>().mockImplementation(
         () =>
           new Promise<void>((_, reject) => {

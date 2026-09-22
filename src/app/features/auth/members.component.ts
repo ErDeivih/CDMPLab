@@ -17,12 +17,17 @@ import {
   type StoredEmailStatus,
 } from '../../core/invite-email';
 import {
+  canDeleteTeam,
   canLeaveTeam,
   canTransferOwnership,
   leaveTeamBlockedReason,
   leaveTeamConsequences,
+  teamDeletionConfirmMatches,
+  teamDeletionConsequences,
+  teamDeletionSummary,
   transferBlockedReason,
   transferConsequences,
+  type TeamDeletionPreview,
 } from '../../core/team-management';
 
 const SEAT_LIMIT = 6;
@@ -167,6 +172,91 @@ export class MembersComponent {
     const id = this.access.target().teamId;
     if (!id) throw new Error('No hay equipo de contexto.');
     return id;
+  }
+
+  // ---- ZONA PELIGROSA: eliminar el equipo (propietario, con el nombre escrito) ----
+  protected readonly borradoEquipo = signal<TeamDeletionPreview | null>(null);
+  protected readonly borradoEquipoTyped = signal('');
+  protected readonly borradoEquipoReason = signal('');
+  protected readonly borradoEquipoCargando = signal(false);
+  protected readonly borradoEquipoError = signal<string | null>(null);
+  protected readonly borradoEquipoAbierto = signal(false);
+
+  protected readonly borradoEquipoResumen = computed(() => {
+    const preview = this.borradoEquipo();
+    return preview ? teamDeletionSummary(preview) : '';
+  });
+  protected readonly borradoEquipoPermitido = computed(() => canDeleteTeam(this.borradoEquipo()));
+  protected readonly borradoEquipoConfirmado = computed(() =>
+    teamDeletionConfirmMatches(
+      this.borradoEquipoTyped(),
+      this.borradoEquipo()?.confirmNameRequired ?? '',
+    ),
+  );
+
+  /** Abre la zona peligrosa con la vista previa del servidor (qué se borraría). */
+  protected async abrirBorradoEquipo(): Promise<void> {
+    this.borradoEquipoAbierto.set(true);
+    this.borradoEquipo.set(null);
+    this.borradoEquipoTyped.set('');
+    this.borradoEquipoReason.set('');
+    this.borradoEquipoError.set(null);
+    this.borradoEquipoCargando.set(true);
+    try {
+      this.borradoEquipo.set(await this.access.teamDeletionPreview());
+    } catch (e) {
+      this.borradoEquipoError.set(
+        (e as Error)?.message ?? 'No se pudo comprobar qué se borraría con el equipo.',
+      );
+    } finally {
+      this.borradoEquipoCargando.set(false);
+    }
+  }
+
+  protected cancelarBorradoEquipo(): void {
+    this.borradoEquipoAbierto.set(false);
+    this.borradoEquipo.set(null);
+    this.borradoEquipoTyped.set('');
+    this.borradoEquipoReason.set('');
+    this.borradoEquipoError.set(null);
+  }
+
+  protected onBorradoEquipoTyped(evt: Event): void {
+    this.borradoEquipoTyped.set((evt.target as HTMLInputElement).value);
+  }
+
+  protected onBorradoEquipoReason(evt: Event): void {
+    this.borradoEquipoReason.set((evt.target as HTMLInputElement).value);
+  }
+
+  /**
+   * Borra el equipo: además de escribir el nombre (que el SERVIDOR vuelve a comprobar), se pide
+   * la confirmación del diálogo. Después el usuario se queda sin equipo y se le lleva a donde el
+   * servidor diga (solicitar otro).
+   */
+  protected confirmarBorradoEquipo(): void {
+    const preview = this.borradoEquipo();
+    if (!preview || !this.borradoEquipoPermitido() || !this.borradoEquipoConfirmado()) return;
+    this.confirm.ask({
+      title: 'Eliminar el equipo',
+      message: `¿Eliminar «${preview.name}»? ${this.borradoEquipoResumen()} ${teamDeletionConsequences()}`,
+      confirmLabel: 'Eliminar el equipo',
+      onConfirm: () => {
+        this.busySalir.set(true);
+        this.borradoEquipoError.set(null);
+        const motivo = this.borradoEquipoReason().trim();
+        this.access
+          .deleteTeam(preview.confirmNameRequired, motivo === '' ? null : motivo)
+          .then(() => {
+            const destino = this.access.target().route || '/onboarding/team';
+            return this.router.navigate([destino]);
+          })
+          .catch((e) =>
+            this.borradoEquipoError.set((e as Error)?.message ?? 'No se pudo eliminar el equipo.'),
+          )
+          .finally(() => this.busySalir.set(false));
+      },
+    });
   }
 
   async ngOnInit(): Promise<void> {

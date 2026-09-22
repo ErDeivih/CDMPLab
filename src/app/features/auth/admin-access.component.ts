@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import type { Team } from '../../core/models';
 import { AccessService } from '../../core/access.service';
 import { SupabaseService } from '../../core/supabase.service';
 import { ConfirmService } from '../../core/confirm.service';
@@ -12,6 +13,7 @@ import type {
   TeamRequestInfo,
 } from '../../core/repositories/data-source';
 import {
+  adminSelfDeletionConsequences,
   canDeleteAccount,
   deletionBlockerMessage,
   deletionConfirmationMatches,
@@ -34,6 +36,105 @@ export class AdminAccessComponent {
   protected readonly loading = signal(true);
   protected readonly busyId = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
+  protected readonly administrators = signal<string[]>([]);
+  protected readonly teams = signal<Team[]>([]);
+  protected readonly selfEmail = signal('');
+  /**
+   * ¿El SERVIDOR ha confirmado que soy administrador? (`checkIsPlatformAdmin` → RPC
+   * `is_platform_admin`). NO significa «la lista se ha cargado»: antes bastaba con que las dos
+   * consultas no fallaran, y en modo local (sin Supabase) devuelven listas vacías, así que el
+   * panel pintaba sus acciones —incluida la baja definitiva de la cuenta— a cualquiera que
+   * abriera /admin, sin sesión y sin permiso. La barrera real es el servidor; esto evita
+   * OFRECER lo que va a rechazar.
+   */
+  protected readonly adminReady = signal(false);
+
+  protected isAdmin(userId: string): boolean {
+    return this.administrators().includes(userId);
+  }
+
+  protected async loadAdministration(): Promise<void> {
+    this.adminReady.set(false);
+    try {
+      // El permiso se comprueba CONTRA EL SERVIDOR antes de ofrecer nada (ver `adminReady`).
+      const esAdmin = await this.access.checkIsPlatformAdmin();
+      const [admins, teams] = await Promise.all([
+        this.access.listAdministrators(),
+        this.access.listAccessibleTeams(),
+      ]);
+      this.administrators.set(admins);
+      this.teams.set(teams);
+      this.adminReady.set(esAdmin);
+    } catch (e) {
+      this.error.set((e as Error).message);
+    }
+  }
+
+  protected promote(p: ProfileInfo): void {
+    this.confirm.ask({
+      title: 'Nombrar administrador',
+      message: `${p.emailNormalized} tendrá acceso a todos los equipos y podrá aprobar equipos y nombrar administradores. Los administradores no pueden quitarse permisos entre sí.`,
+      confirmLabel: 'Nombrar administrador',
+      onConfirm: () => {
+        this.busyId.set(p.userId);
+        this.access
+          .grantAdministrator(p.userId)
+          .then(() => this.loadAdministration())
+          .catch((e) => this.error.set((e as Error).message))
+          .finally(() => this.busyId.set(null));
+      },
+    });
+  }
+
+  protected async openTeam(team: Team): Promise<void> {
+    this.busyId.set(team.id);
+    try {
+      await this.access.openAdminTeam(team.id);
+      await this.router.navigate(['/library']);
+    } catch (e) {
+      this.error.set((e as Error).message);
+    } finally {
+      this.busyId.set(null);
+    }
+  }
+
+  protected deleteSelf(): void {
+    const email = this.selfEmail().trim();
+    if (!this.selfDeletionConfirmado()) {
+      this.error.set('Escribe tu correo completo para confirmar la baja.');
+      return;
+    }
+    this.confirm.ask({
+      title: 'Eliminar mi cuenta',
+      message: `¿Eliminar definitivamente tu cuenta de administrador (${this.myEmail()})? ${adminSelfDeletionConsequences()}`,
+      confirmLabel: 'Eliminar mi cuenta',
+      onConfirm: () => {
+        this.busyId.set('self');
+        this.access
+          .deleteMyAdminAccount(email)
+          .then(() => this.router.navigate(['/auth/login']))
+          .catch((e) => this.error.set((e as Error).message))
+          .finally(() => this.busyId.set(null));
+      },
+    });
+  }
+
+  /** El correo de la SESIÓN: con él confirma el servidor la baja (`profiles.email_normalized`). */
+  protected readonly myEmail = computed(() => this.supabase.user()?.email ?? '');
+
+  /**
+   * Confirmación REFORZADA de la baja propia: hay que escribir MI correo. Usa la MISMA regla que
+   * el borrado de una cuenta ajena (`deletionConfirmationMatches`); el servidor la vuelve a
+   * comprobar y además exige que quede otro administrador.
+   */
+  protected readonly selfDeletionConfirmado = computed(() =>
+    deletionConfirmationMatches(this.selfEmail(), this.myEmail()),
+  );
+
+  /** Qué implica la baja, contado antes de escribir el correo (no después del error). */
+  protected selfBajaConsecuencias(): string {
+    return adminSelfDeletionConsequences();
+  }
 
   protected readonly pending = computed(() =>
     this.profiles().filter((p) => p.status === 'pending'),
@@ -65,7 +166,7 @@ export class AdminAccessComponent {
   );
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.load(), this.loadRequests()]);
+    await Promise.all([this.load(), this.loadRequests(), this.loadAdministration()]);
   }
 
   async load(): Promise<void> {
@@ -170,7 +271,7 @@ export class AdminAccessComponent {
 
   /** Búsqueda: perfiles y solicitudes con el mismo criterio. */
   protected async refreshAll(): Promise<void> {
-    await Promise.all([this.load(), this.loadRequests()]);
+    await Promise.all([this.load(), this.loadRequests(), this.loadAdministration()]);
   }
 
   // ---- BORRADO de cuentas (destructivo: vista previa + confirmación escribiendo el correo) ----

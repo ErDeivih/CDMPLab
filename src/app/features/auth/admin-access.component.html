@@ -20,6 +20,24 @@
     <button type="button" class="btn" (click)="refreshAll()">Buscar</button>
   </div>
 
+  @if (adminReady()) {
+    <h2 class="auth-note" style="font-weight: 700; margin-top: 18px">Todos los equipos</h2>
+    <p class="auth-note">
+      Entra en cualquier equipo para revisar y editar su biblioteca, plantilla y sesiones.
+    </p>
+    @for (team of teams(); track team.id) {
+      <div class="card invite-row">
+        <strong>{{ team.name }}</strong>
+        <button class="btn" type="button" [disabled]="busyId() !== null" (click)="openTeam(team)">
+          Abrir equipo
+        </button>
+      </div>
+    }
+    @if (teams().length === 0) {
+      <p class="auth-note">Todavía no hay equipos.</p>
+    }
+  }
+
   <!-- ============================================================
        SOLICITUDES DE EQUIPO
        Apartado propio y SEPARADO de la aprobación de cuentas: aprobar una cuenta no
@@ -111,12 +129,20 @@
           <strong>{{ p.displayName || p.emailNormalized }}</strong>
           <span class="auth-note">
             {{ p.emailNormalized }} · {{ statusLabel(p.status) }}
+            @if (isAdmin(p.userId)) {
+              · Administrador
+            }
             @if (me(p.userId)) {
               · tú
             }
           </span>
         </div>
         <div class="admin-actions">
+          @if (adminReady() && !isAdmin(p.userId) && p.status === 'approved') {
+            <button type="button" class="btn" [disabled]="busy(p.userId)" (click)="promote(p)">
+              Nombrar administrador
+            </button>
+          }
           @if (p.status !== 'approved') {
             <button
               type="button"
@@ -130,7 +156,12 @@
           <!-- Nadie se rechaza ni se suspende a SÍ MISMO: era un pie de banco con final irreversible
                desde la interfaz (el usuario se quedaba fuera de /team, /library, /sessions y /board
                sin poder deshacerlo). Aprobar y reactivar sí se dejan: no encierran a nadie. -->
-          @if (!me(p.userId) && (p.status === 'pending' || p.status === 'approved')) {
+          @if (
+            adminReady() &&
+            !isAdmin(p.userId) &&
+            !me(p.userId) &&
+            (p.status === 'pending' || p.status === 'approved')
+          ) {
             <button
               type="button"
               class="btn btn-ghost btn-danger-text"
@@ -140,7 +171,7 @@
               Rechazar
             </button>
           }
-          @if (!me(p.userId) && p.status === 'approved') {
+          @if (adminReady() && !isAdmin(p.userId) && !me(p.userId) && p.status === 'approved') {
             <button
               type="button"
               class="btn btn-ghost btn-danger-text"
@@ -157,7 +188,7 @@
           }
           <!-- BORRAR la cuenta es lo más destructivo del panel: no se ofrece sobre la propia
                cuenta (el servidor también lo prohibe) y pide una confirmación reforzada. -->
-          @if (!me(p.userId)) {
+          @if (adminReady() && !isAdmin(p.userId) && !me(p.userId)) {
             <button
               type="button"
               class="btn btn-ghost btn-danger-text"
@@ -248,4 +279,36 @@
     <button type="button" class="btn" (click)="refreshAll()">Actualizar</button>
     <button type="button" class="btn btn-ghost" (click)="logout()">Cerrar sesión</button>
   </div>
+  @if (adminReady()) {
+    <details class="card" style="margin-top: 24px; padding: 16px">
+      <summary>Mi cuenta · baja definitiva</summary>
+      <p class="auth-note">
+        Solo tú puedes eliminar tu cuenta de administrador. Antes debes traspasar o eliminar tus
+        equipos y dejar otro administrador.
+      </p>
+      <!-- Lo que implica, contado ANTES de escribir el correo: es irreversible y el servidor
+           rechaza la baja si eres la única persona administradora o si posees un equipo. -->
+      <p class="auth-note" data-consecuencias-baja-admin="1">{{ selfBajaConsecuencias() }}</p>
+      <label class="field-label" for="self-admin-email">
+        Escribe tu correo ({{ myEmail() }}) para confirmar
+      </label>
+      <input
+        id="self-admin-email"
+        class="input"
+        type="email"
+        autocomplete="off"
+        [ngModel]="selfEmail()"
+        (ngModelChange)="selfEmail.set($event)"
+      />
+      <button
+        class="btn btn-ghost btn-danger-text"
+        type="button"
+        data-accion="eliminar-mi-cuenta"
+        [disabled]="busyId() !== null || !selfDeletionConfirmado()"
+        (click)="deleteSelf()"
+      >
+        Eliminar mi cuenta
+      </button>
+    </details>
+  }
 </app-auth-card>

@@ -19,9 +19,9 @@
 // =============================================================
 
 import type { Exercise, ExerciseFolder, Player, Session, SessionTask, Team } from '../models';
-import type { AccountDeletionPreview } from '../team-management';
+import type { AccountDeletionPreview, TeamDeletionPreview } from '../team-management';
 
-export type { AccountDeletionPreview };
+export type { AccountDeletionPreview, TeamDeletionPreview };
 
 export type ProfileStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 export type MemberRole = 'owner' | 'editor';
@@ -279,6 +279,13 @@ export interface DataSource {
    * `owner_user_id` cambian en la misma transacción del servidor.
    */
   transferTeamOwnership(teamId: string, newOwnerUserId: string): Promise<void>;
+  /** Qué se borraría con este equipo (y qué nombre hay que escribir). Propietario o administrador. */
+  teamDeletionPreview(teamId: string): Promise<TeamDeletionPreview>;
+  /**
+   * BORRA el equipo y todos sus datos. Exige el nombre EXACTO en `confirmName`: la confirmación
+   * reforzada la impone el servidor, no la pantalla.
+   */
+  deleteTeam(teamId: string, confirmName: string, reason: string | null): Promise<void>;
 
   // ---- Administración (plataforma) ----
   isPlatformAdmin(): Promise<boolean>;

@@ -82,6 +82,19 @@
         <span class="msi">more_horiz</span>
       </button>
     </div>
+    <!-- Papelera fuera del lienzo: solo aparece durante un arrastre y no reserva ni tapa
+         ninguna zona del campo. El puntero sigue capturado por `.board-host`, por lo que
+         soltar aquí completa el mismo gesto aunque el destino esté en la cabecera. -->
+    <div
+      #trash
+      class="board-trash"
+      [class.trash-visible]="trashOpen()"
+      [class.trash-hot]="overTrash"
+      role="button"
+      aria-label="Soltar aquí para eliminar"
+    >
+      <span class="msi">delete</span>
+    </div>
   </header>
 
   <div class="studio-main">
@@ -268,18 +281,6 @@
             <span class="msi">chevron_right</span>
           </div>
         }
-        <div
-          #trash
-          class="board-trash"
-          [class.trash-visible]="trashOpen()"
-          [class.trash-hot]="overTrash"
-          [style.left]="trashPos().left + 'px'"
-          [style.top]="trashPos().top + 'px'"
-          role="button"
-          aria-label="Soltar aquí para eliminar"
-        >
-          <span class="msi">delete</span>
-        </div>
       </div>
       @if (fillHintVisible()) {
         <div

@@ -21,7 +21,12 @@ import type {
   ProfileInfo,
 } from './repositories/data-source';
 import type { InviteEmailResult } from './invite-email';
-import { missingDeletionPreview, type AccountDeletionPreview } from './team-management';
+import {
+  missingDeletionPreview,
+  missingTeamDeletionPreview,
+  type AccountDeletionPreview,
+  type TeamDeletionPreview,
+} from './team-management';
 import { SupabaseRepository } from './repositories/supabase-data-source';
 
 @Injectable({ providedIn: 'root' })
@@ -48,7 +53,9 @@ export class AccessService {
 
   /** Resuelve el acceso UNA sola vez (idempotente). Los guards lo esperan. */
   async resolve(): Promise<AccessTarget> {
-    if (!this._initPromise) this._initPromise = this.initialize();
+    // Primera pasada: si el equipo de la resolución ya no existe, todavía puede reintentarse
+    // una vez (ver `initialize`).
+    if (!this._initPromise) this._initPromise = this.initialize(true);
     await this._initPromise;
     return this._target();
   }
@@ -83,7 +90,15 @@ export class AccessService {
 
   // ---------- Inicialización ----------
 
-  private async initialize(): Promise<void> {
+  /**
+   * Resuelve sesión + perfil + pertenencia y, si el destino es `ready`, CONECTA el
+   * repositorio al store.
+   *
+   * `reintentarSiElEquipoDesaparece` distingue la pasada normal (puede recuperarse de una
+   * resolución obsoleta) de la de recuperación (ya no: si el equipo tampoco carga, se avisa).
+   * Sin esa distinción el reintento sería infinito.
+   */
+  private async initialize(reintentarSiElEquipoDesaparece: boolean): Promise<void> {
     await this.supabase.ensureResolved();
     const status = this.supabase.status();
     if (status !== 'authenticated') {
@@ -109,7 +124,26 @@ export class AccessService {
       if (target.state === 'ready' && target.teamId) {
         repo.setTeam(target.teamId);
         this._repo = repo;
-        await this.store.connectDataSource(repo, target.teamId);
+        try {
+          await this.store.connectDataSource(repo, target.teamId);
+        } catch (err) {
+          // `resolveAccess` dijo «ready» pero el equipo ya no está (borrado, salida del equipo o
+          // acceso revocado entre las dos consultas): esa resolución está OBSOLETA. Antes el
+          // fallo caía en el catch de abajo y el usuario —con sesión perfectamente válida—
+          // acababa en la pantalla de login sin ninguna explicación, y desde ahí no había forma
+          // de llegar a solicitar un equipo. Se vuelve a resolver UNA vez desde cero, que es lo
+          // que devuelve el estado real (solicitar equipo, aceptar invitación…).
+          if (!reintentarSiElEquipoDesaparece) throw err;
+          console.warn(
+            '[AccessService] el equipo resuelto ya no se pudo cargar; se vuelve a resolver el acceso',
+            err,
+          );
+          this._repo = null;
+          this._resolution.set(null);
+          this._initPromise = null;
+          this._initPromise = this.initialize(false);
+          await this._initPromise;
+        }
       } else {
         this._repo = repo; // disponible para acciones (crear equipo / aceptar invitación)
       }
@@ -259,6 +293,50 @@ export class AccessService {
     return repo.listProfiles(search);
   }
 
+  async listAdministrators(): Promise<string[]> {
+    const repo = await this.ensureRepo();
+    return repo ? repo.listAdministrators() : [];
+  }
+
+  async grantAdministrator(userId: string): Promise<void> {
+    const repo = await this.ensureRepo();
+    if (!repo) throw new Error('No hay sesión.');
+    await repo.grantAdministrator(userId);
+  }
+
+  async deleteMyAdminAccount(email: string): Promise<void> {
+    const repo = await this.ensureRepo();
+    if (!repo) throw new Error('No hay sesión.');
+    await repo.deleteMyAdminAccount(email);
+    await this.supabase.signOut();
+    await this.clear();
+  }
+
+  async listAccessibleTeams(): Promise<import('./models').Team[]> {
+    const repo = await this.ensureRepo();
+    return repo ? repo.listAccessibleTeams() : [];
+  }
+
+  async openAdminTeam(teamId: string): Promise<void> {
+    if (this.store.pendingWrites() > 0 || this.store.lastError()) {
+      throw new Error(
+        'Espera a que terminen los cambios y resuelve cualquier error de guardado antes de cambiar de equipo.',
+      );
+    }
+    if (!(await this.checkIsPlatformAdmin()))
+      throw new Error('Solo los administradores pueden acceder a todos los equipos.');
+    const client = await this.supabase.getClient();
+    const userId = this.supabase.user()?.id;
+    if (!client || !userId) throw new Error('No hay sesión.');
+    const repo = new SupabaseRepository(client, userId, teamId);
+    await this.store.connectDataSource(repo, teamId);
+    this._repo = repo;
+    this._resolution.update((r) =>
+      r ? { ...r, ownedTeam: null, membership: { teamId, role: 'editor' } } : r,
+    );
+    this._state.set('ready');
+  }
+
   /** Importa datos locales antiguos a Supabase de forma idempotente. */
   async importLocalData(data: {
     players: import('./models').Player[];
@@ -310,6 +388,28 @@ export class AccessService {
     const repo = await this.ensureRepo();
     if (!repo || !repo.teamId) throw new Error('No hay equipo de contexto.');
     await repo.transferTeamOwnership(repo.teamId, newOwnerUserId);
+    await this.refreshAfterMembershipChange();
+  }
+
+  /** Qué se borraría con el equipo de contexto (propietario o administrador). */
+  async teamDeletionPreview(): Promise<TeamDeletionPreview> {
+    const repo = await this.ensureRepo();
+    const teamId = repo?.teamId;
+    if (!repo || !teamId) return missingTeamDeletionPreview('');
+    return repo.teamDeletionPreview(teamId);
+  }
+
+  /**
+   * BORRA el equipo de contexto y todos sus datos. El nombre debe coincidir EXACTAMENTE (lo
+   * comprueba el servidor). Después se vuelve a resolver el acceso: quien lo borró se queda sin
+   * equipo y los guards lo llevarán a solicitar otro.
+   */
+  async deleteTeam(confirmName: string, reason: string | null): Promise<void> {
+    const repo = await this.ensureRepo();
+    const teamId = repo?.teamId;
+    if (!repo || !teamId) throw new Error('No hay equipo de contexto.');
+    await repo.deleteTeam(teamId, confirmName, reason);
+    repo.setTeam(null);
     await this.refreshAfterMembershipChange();
   }
 

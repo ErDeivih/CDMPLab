@@ -18,7 +18,7 @@
 // =============================================================
 
 /** Proveedores de correo soportados. Se elige con `EMAIL_PROVIDER`. */
-export type EmailProvider = 'resend' | 'postmark';
+export type EmailProvider = 'resend' | 'postmark' | 'brevo';
 
 /** Configuración de correo ya validada y lista para usar. */
 export interface EmailConfig {
@@ -154,12 +154,18 @@ export function resolveEmailConfig(
   const missing: string[] = [];
 
   const requested = readEnv(env, 'EMAIL_PROVIDER').toLowerCase();
-  if (requested !== '' && requested !== 'resend' && requested !== 'postmark') {
+  if (
+    requested !== '' &&
+    requested !== 'resend' &&
+    requested !== 'postmark' &&
+    requested !== 'brevo'
+  ) {
     missing.push('EMAIL_PROVIDER');
   }
   // Valor por defecto: `resend`. Aun con un valor inválido se rellena con `resend`, pero el
   // error ya está anotado arriba y la función no devolverá `ok: true`.
-  const provider: EmailProvider = requested === 'postmark' ? 'postmark' : 'resend';
+  const provider: EmailProvider =
+    requested === 'postmark' ? 'postmark' : requested === 'brevo' ? 'brevo' : 'resend';
 
   const apiKey = readEnv(env, 'EMAIL_API_KEY');
   if (apiKey === '') missing.push('EMAIL_API_KEY');
@@ -423,6 +429,9 @@ export function renderInviteEmail(input: {
  *
  * Resend: `POST https://api.resend.com/emails` con `Authorization: Bearer <clave>`.
  * Postmark: `POST https://api.postmarkapp.com/email` con `X-Postmark-Server-Token: <clave>`.
+ * Brevo: `POST https://api.brevo.com/v3/smtp/email` con `api-key: <clave>`. Es el que sirve
+ * **sin dominio propio**: Brevo permite verificar una ÚNICA dirección remitente (Single Sender
+ * Verification), así que se puede enviar desde un correo que ya se tenga.
  * La clave viaja SOLO en la cabecera: ni en el cuerpo, ni en un log, ni en el mensaje de error.
  */
 export function providerRequest(
@@ -431,6 +440,26 @@ export function providerRequest(
   message: { to: string; subject: string; html: string; text: string },
 ): { url: string; headers: Record<string, string>; body: string } {
   const from = fromHeader(config);
+
+  if (kind === 'brevo') {
+    const payload: Record<string, unknown> = {
+      sender: { email: config.from, name: config.fromName },
+      to: [{ email: message.to }],
+      subject: message.subject,
+      htmlContent: message.html,
+      textContent: message.text,
+    };
+    if (config.replyTo !== null) payload.replyTo = { email: config.replyTo };
+    return {
+      url: 'https://api.brevo.com/v3/smtp/email',
+      headers: {
+        'api-key': config.apiKey,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    };
+  }
 
   if (kind === 'postmark') {
     const payload: Record<string, unknown> = {
@@ -473,15 +502,28 @@ export function providerRequest(
 /**
  * Traduce la respuesta del proveedor.
  *
- * Aceptar (200/201 en Resend, 200 en Postmark) significa ACEPTADO PARA ENVÍO, no entregado: el
- * proveedor aún puede rebotar el mensaje después. Cualquier otro código es un error, y su
- * texto pasa por `redactError` antes de guardarse o mostrarse.
+ * Aceptar (200/201 en Resend, 201 en Brevo, 200 en Postmark) significa ACEPTADO PARA ENVÍO, no
+ * entregado: el proveedor aún puede rebotar el mensaje después. Cualquier otro código es un
+ * error, y su texto pasa por `redactError` antes de guardarse o mostrarse.
  */
 export function mapProviderResponse(
   kind: EmailProvider,
   httpStatus: number,
   body: unknown,
 ): { ok: boolean; providerMessageId?: string; error?: string } {
+  if (kind === 'brevo') {
+    // Brevo responde 201 con `{ messageId: "<...>" }`; los errores traen `{ code, message }`.
+    if (httpStatus === 201 || httpStatus === 200) {
+      const messageId = pickText(body, ['messageId', 'message_id', 'MessageId']);
+      return messageId === '' ? { ok: true } : { ok: true, providerMessageId: messageId };
+    }
+    const detail = pickText(body, ['message', 'Message', 'error', 'code']);
+    return {
+      ok: false,
+      error: redactError(detail === '' ? 'brevo_http_' + httpStatus : detail),
+    };
+  }
+
   if (kind === 'postmark') {
     if (httpStatus === 200) {
       const messageId = pickText(body, ['MessageID', 'MessageId', 'messageId']);

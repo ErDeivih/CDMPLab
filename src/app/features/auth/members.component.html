@@ -184,6 +184,81 @@
           mismo correo y esperar la aprobación del administrador.
         </p>
       </div>
+
+      <!-- ZONA PELIGROSA: eliminar el equipo. Es lo más destructivo de la aplicación (se lleva
+           jugadores, ejercicios, carpetas, sesiones, membresías e invitaciones), así que exige
+           ver la vista previa, ESCRIBIR EL NOMBRE EXACTO (el servidor lo vuelve a comprobar) y
+           pasar por el diálogo de confirmación. -->
+      <div class="auth-stack" data-zona-peligrosa="1">
+        <strong>Eliminar este equipo</strong>
+        <span class="auth-note">
+          Se borrarán para siempre los jugadores, ejercicios, carpetas, sesiones, colaboradores e
+          invitaciones del equipo. Si lo que quieres es dejar de usar la aplicación, puedes eliminar
+          el equipo y después pedir al administrador que borre tu cuenta.
+        </span>
+        @if (!borradoEquipoAbierto()) {
+          <button
+            type="button"
+            class="btn btn-ghost btn-danger-text"
+            data-accion="abrir-borrado-equipo"
+            (click)="abrirBorradoEquipo()"
+          >
+            Eliminar el equipo…
+          </button>
+        } @else {
+          @if (borradoEquipoCargando()) {
+            <span class="auth-note">Comprobando qué se borraría…</span>
+          }
+          @if (borradoEquipo(); as prev) {
+            <span class="auth-note" data-resumen-borrado-equipo="1">{{
+              borradoEquipoResumen()
+            }}</span>
+            @if (borradoEquipoPermitido()) {
+              <label class="field-label" for="borrar-equipo-nombre">
+                Escribe «{{ prev.confirmNameRequired }}» para confirmar
+              </label>
+              <input
+                id="borrar-equipo-nombre"
+                class="input"
+                type="text"
+                autocomplete="off"
+                [value]="borradoEquipoTyped()"
+                (input)="onBorradoEquipoTyped($event)"
+                [placeholder]="prev.confirmNameRequired"
+              />
+              <label class="field-label" for="borrar-equipo-motivo">Motivo (opcional)</label>
+              <input
+                id="borrar-equipo-motivo"
+                class="input"
+                type="text"
+                autocomplete="off"
+                [value]="borradoEquipoReason()"
+                (input)="onBorradoEquipoReason($event)"
+              />
+            } @else {
+              <span class="auth-msg err" role="alert">
+                Solo el propietario del equipo (o un administrador de la plataforma) puede
+                eliminarlo.
+              </span>
+            }
+          }
+          <div class="admin-actions">
+            <button
+              type="button"
+              class="btn btn-ghost btn-danger-text"
+              data-accion="confirmar-borrado-equipo"
+              [disabled]="!borradoEquipoPermitido() || !borradoEquipoConfirmado() || busySalir()"
+              (click)="confirmarBorradoEquipo()"
+            >
+              {{ busySalir() ? 'Eliminando…' : 'Eliminar el equipo definitivamente' }}
+            </button>
+            <button type="button" class="btn" (click)="cancelarBorradoEquipo()">Cancelar</button>
+          </div>
+          @if (borradoEquipoError()) {
+            <span class="auth-msg err" role="alert">{{ borradoEquipoError() }}</span>
+          }
+        }
+      </div>
     }
   }
 

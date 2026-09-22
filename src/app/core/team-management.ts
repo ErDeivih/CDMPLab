@@ -181,3 +181,106 @@ export function transferConsequences(targetName: string): string {
     'Solo podrás recuperar la propiedad si el nuevo propietario te la devuelve.',
   ].join(' ');
 }
+
+// -------------------------------------------------------------
+// Baja del PROPIO administrador (permiso de plataforma)
+// -------------------------------------------------------------
+
+/**
+ * Qué implica darse de baja como administrador. El servidor comprueba, en este orden: ser
+ * administrador, que quede OTRO administrador, que el correo escrito sea el exacto y no ser
+ * propietario de ningún equipo. Se cuenta ANTES para que nadie escriba su correo y descubra
+ * después que la baja no era posible (o al revés: que era irreversible).
+ */
+export function adminSelfDeletionConsequences(): string {
+  return [
+    'Tu cuenta y tu perfil se eliminan definitivamente: no se puede deshacer.',
+    'La plataforma tiene que seguir teniendo otra persona administradora: si eres la única, el servidor rechazará la baja.',
+    'Antes tienes que traspasar o eliminar los equipos de los que seas propietario; los equipos que solo administras siguen existiendo con sus datos.',
+    'La baja queda registrada en el listado de bajas (quién y cuándo) sin datos personales de más.',
+  ].join(' ');
+}
+
+// -------------------------------------------------------------
+// Eliminar un equipo
+// -------------------------------------------------------------
+
+/** Vista previa del borrado de un equipo, tal como la devuelve `team_deletion_preview`. */
+export interface TeamDeletionPreview {
+  found: boolean;
+  teamId: string;
+  name: string;
+  accentColor: string;
+  ownerUserId: string;
+  ownerEmail: string;
+  isOwner: boolean;
+  isPlatformAdmin: boolean;
+  /** El servidor autoriza a borrarlo (propietario o administrador de plataforma). */
+  canDelete: boolean;
+  /** Nombre EXACTO que hay que escribir: lo impone el servidor, no la pantalla. */
+  confirmNameRequired: string;
+  data: {
+    players: number;
+    folders: number;
+    exercises: number;
+    sessions: number;
+    members: number;
+    pendingInvitations: number;
+  };
+}
+
+/** Vista previa de un equipo que ya no existe. */
+export function missingTeamDeletionPreview(teamId: string): TeamDeletionPreview {
+  return {
+    found: false,
+    teamId,
+    name: '',
+    accentColor: '',
+    ownerUserId: '',
+    ownerEmail: '',
+    isOwner: false,
+    isPlatformAdmin: false,
+    canDelete: false,
+    confirmNameRequired: '',
+    data: { players: 0, folders: 0, exercises: 0, sessions: 0, members: 0, pendingInvitations: 0 },
+  };
+}
+
+/** ¿Se puede borrar este equipo? (El servidor lo vuelve a comprobar de todos modos.) */
+export function canDeleteTeam(preview: TeamDeletionPreview | null): boolean {
+  return !!preview && preview.found && preview.canDelete;
+}
+
+/**
+ * Confirmación REFORZADA, igual que en las bajas de cuenta: hay que escribir el nombre EXACTO
+ * del equipo. Se ignoran mayúsculas y espacios de los extremos; el nombre NO se normaliza en la
+ * base, así que la comparación es contra el nombre real (sin acentos ni mayúsculas forzadas).
+ */
+export function teamDeletionConfirmMatches(typed: string, teamName: string): boolean {
+  const a = (typed ?? '').trim().toLowerCase();
+  const b = (teamName ?? '').trim().toLowerCase();
+  return a !== '' && a === b;
+}
+
+/** Qué se va a borrar, contado. Nunca promete recuperación. */
+export function teamDeletionSummary(preview: TeamDeletionPreview): string {
+  if (!preview.found) return 'Ese equipo ya no existe.';
+  const d = preview.data;
+  const partes = [
+    `${d.players} jugador(es)`,
+    `${d.exercises} ejercicio(s)`,
+    `${d.folders} carpeta(s)`,
+    `${d.sessions} sesión(es)`,
+    `${d.members} cuenta(s) en el equipo`,
+  ];
+  if (d.pendingInvitations > 0) partes.push(`${d.pendingInvitations} invitación(es) pendiente(s)`);
+  return `Se borrará el equipo «${preview.name}» y TODO lo suyo: ${partes.join(', ')}. No se puede deshacer.`;
+}
+
+/** Consecuencias para las personas y para quien borra el equipo. */
+export function teamDeletionConsequences(): string {
+  return [
+    'Los colaboradores perderán el acceso a este equipo (su cuenta seguirá existiendo).',
+    'Tú dejarás de tener equipo: podrás solicitar otro o pedir al administrador que borre tu cuenta.',
+  ].join(' ');
+}

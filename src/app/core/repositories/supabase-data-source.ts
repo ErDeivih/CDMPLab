@@ -39,8 +39,10 @@ import type {
 import { DataError } from './data-source';
 import {
   missingDeletionPreview,
+  missingTeamDeletionPreview,
   type AccountDeletionPreview,
   type DeletionBlocker,
+  type TeamDeletionPreview,
 } from '../team-management';
 import type { Exercise, ExerciseFolder, Player, Session, SessionTask, Team } from '../models';
 import {
@@ -111,6 +113,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   // Gestión de cuentas y pertenencia (migración 20260923000000).
   account_not_found: 'Esa cuenta ya no existe.',
   cannot_delete_self: 'No puedes borrar tu propia cuenta.',
+  cannot_suspend_platform_admin:
+    'Los administradores no pueden suspenderse ni rechazarse entre sí.',
+  last_platform_admin:
+    'Nombra primero a otro administrador para que la plataforma siga teniendo una persona responsable.',
+  email_confirmation_mismatch: 'Escribe exactamente tu correo para confirmar la baja.',
   cannot_delete_platform_admin:
     'Esa cuenta es administradora de la plataforma: no se borra desde aquí.',
   target_owns_team:
@@ -123,6 +130,11 @@ const ERROR_MESSAGES: Record<string, string> = {
     'Solo se puede traspasar el equipo a un colaborador que ya haya aceptado la invitación.',
   new_owner_not_approved: 'Esa persona todavía no tiene el perfil aprobado.',
   new_owner_already_has_team: 'Esa persona ya es propietaria de otro equipo.',
+  // Borrado de EQUIPO (migración 20260925000000).
+  not_authorized_for_team_deletion:
+    'Solo el propietario del equipo o un administrador de la plataforma pueden eliminarlo.',
+  team_name_confirmation_mismatch:
+    'El nombre escrito no coincide con el del equipo: escribe el nombre exacto para confirmar.',
   team_not_found: 'No se encontró el equipo.',
   folder_cycle: 'No se puede mover una carpeta dentro de sí misma.',
   team_name_required: 'El nombre del equipo es obligatorio.',
@@ -965,6 +977,29 @@ export class SupabaseRepository implements DataSource {
     return data === true;
   }
 
+  async listAdministrators(): Promise<string[]> {
+    const { data, error } = await this.client.rpc('admin_list_administrators');
+    if (error) throw errorToDataError(error, 'admin_list');
+    return (data ?? []).map((r) => r.user_id);
+  }
+
+  async grantAdministrator(userId: string): Promise<void> {
+    const { error } = await this.client.rpc('admin_grant_platform_admin', { p_user_id: userId });
+    if (error) throw errorToDataError(error, 'admin_grant');
+  }
+
+  async deleteMyAdminAccount(email: string): Promise<void> {
+    const { error } = await this.client.rpc('delete_my_admin_account', { p_confirm_email: email });
+    if (error) throw errorToDataError(error, 'admin_self_delete');
+  }
+
+  async listAccessibleTeams(): Promise<Team[]> {
+    const rows = await this.loadAllPages<TeamsRow>('team_list', (from, to) =>
+      this.client.from('teams').select('*').order('id').range(from, to),
+    );
+    return rows.map(teamFromRow);
+  }
+
   async listProfiles(search: string): Promise<ProfileInfo[]> {
     const { data, error } = await this.client.rpc('admin_list_profiles', { p_search: search });
     if (error) throw errorToDataError(error, 'profile_list');
@@ -1048,6 +1083,50 @@ export class SupabaseRepository implements DataSource {
       p_new_owner_user_id: newOwnerUserId,
     });
     if (error) throw errorToDataError(error, 'team_transfer');
+  }
+
+  /** Qué se borraría con este equipo (propietario o administrador de plataforma). */
+  async teamDeletionPreview(teamId: string): Promise<TeamDeletionPreview> {
+    const { data, error } = await this.client.rpc('team_deletion_preview', {
+      p_team_id: teamId,
+    });
+    if (error) throw errorToDataError(error, 'team_deletion_preview');
+    const raw = (data ?? {}) as Record<string, unknown>;
+    if (raw['found'] !== true) return missingTeamDeletionPreview(teamId);
+    const datos = (raw['data'] ?? {}) as Record<string, unknown>;
+    return {
+      found: true,
+      teamId: String(raw['team_id'] ?? teamId),
+      name: String(raw['name'] ?? ''),
+      accentColor: String(raw['accent_color'] ?? ''),
+      ownerUserId: String(raw['owner_user_id'] ?? ''),
+      ownerEmail: String(raw['owner_email'] ?? ''),
+      isOwner: raw['is_owner'] === true,
+      isPlatformAdmin: raw['is_platform_admin'] === true,
+      canDelete: raw['can_delete'] === true,
+      confirmNameRequired: String(raw['confirm_name_required'] ?? ''),
+      data: {
+        players: Number(datos['players'] ?? 0),
+        folders: Number(datos['folders'] ?? 0),
+        exercises: Number(datos['exercises'] ?? 0),
+        sessions: Number(datos['sessions'] ?? 0),
+        members: Number(datos['members'] ?? 0),
+        pendingInvitations: Number(datos['pending_invitations'] ?? 0),
+      },
+    };
+  }
+
+  /**
+   * BORRA el equipo y todos sus datos. `confirmName` debe ser el nombre EXACTO: el servidor lo
+   * comprueba y responde `team_name_confirmation_mismatch` si no coincide.
+   */
+  async deleteTeam(teamId: string, confirmName: string, reason: string | null): Promise<void> {
+    const { error } = await this.client.rpc('delete_team', {
+      p_team_id: teamId,
+      p_confirm_name: confirmName,
+      p_reason: reason,
+    });
+    if (error) throw errorToDataError(error, 'team_delete');
   }
 
   // ---------------- Importación local→Supabase ----------------

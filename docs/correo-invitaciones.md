@@ -209,15 +209,15 @@ Todo va por **variables de entorno de la función** (secretos de Supabase), nunc
 navegador. La tabla completa, con los valores de ejemplo y los comandos de despliegue, está en
 `supabase/functions/invite-team-member/README.md`. Resumen:
 
-| Variable                    | Ejemplo (FICTICIO)                   | Regla                                                                                                                                                                                        |
-| --------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EMAIL_PROVIDER`            | `resend`                             | `resend` (por defecto) o `postmark`. Cualquier otro valor se señala como faltante.                                                                                                           |
-| `EMAIL_API_KEY`             | `CLAVE-DE-EJEMPLO-NO-REAL`           | Solo viaja en la cabecera de la petición HTTPS. Nunca en el cuerpo, en un log ni en un mensaje.                                                                                              |
-| `EMAIL_FROM`                | `no-reply@EJEMPLO.com`               | **Solo la dirección.** Debe ser de un dominio verificado en el proveedor.                                                                                                                    |
-| `EMAIL_FROM_NAME`           | `CDMPLab`                            | Por defecto `CDMPLab`. El encabezado se compone como `Nombre <dirección>`.                                                                                                                   |
-| `EMAIL_REPLY_TO`            | `soporte@EJEMPLO.com`                | Opcional. Si falta, la cabecera no se envía.                                                                                                                                                 |
-| `SUPABASE_SERVICE_ROLE_KEY` | (la inyecta la plataforma)           | **No se define a mano** en Edge Functions alojadas. Se usa solo para registrar el resultado; si falta, la función rechaza antes de abrir intento o enviar. Nunca se registra ni se devuelve. |
-| `INVITE_LINK_BASE`          | `https://USUARIO.github.io/CDMPLab/` | Debe ser `https://`; admite subcarpeta (la build de Pages usa `/CDMPLab/`).                                                                                                                  |
+| Variable                    | Ejemplo (FICTICIO)                    | Regla                                                                                                                                                                                        |
+| --------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_PROVIDER`            | `resend`                              | `resend` (por defecto), `postmark` o **`brevo`**. Cualquier otro valor se señala como faltante.                                                                                              |
+| `EMAIL_API_KEY`             | `CLAVE-DE-EJEMPLO-NO-REAL`            | Solo viaja en la cabecera de la petición HTTPS. Nunca en el cuerpo, en un log ni en un mensaje.                                                                                              |
+| `EMAIL_FROM`                | `no-reply@EJEMPLO.com`                | **Solo la dirección.** Con `brevo` basta con que sea una dirección remitente **verificada** (no hace falta dominio propio).                                                                  |
+| `EMAIL_FROM_NAME`           | `CDMPLab`                             | Por defecto `CDMPLab`. El encabezado se compone como `Nombre <dirección>`.                                                                                                                   |
+| `EMAIL_REPLY_TO`            | `soporte@EJEMPLO.com`                 | Opcional. Si falta, la cabecera no se envía.                                                                                                                                                 |
+| `SUPABASE_SERVICE_ROLE_KEY` | (la inyecta la plataforma)            | **No se define a mano** en Edge Functions alojadas. Se usa solo para registrar el resultado; si falta, la función rechaza antes de abrir intento o enviar. Nunca se registra ni se devuelve. |
+| `INVITE_LINK_BASE`          | `https://erdeivih.github.io/CDMPLab/` | Debe ser `https://`; admite subcarpeta (la build de Pages usa `/CDMPLab/`).                                                                                                                  |
 
 **`INVITE_LINK_BASE` es la pieza que más fácil se equivoca.** Reglas, y todas se comprueban en
 la puerta local:
@@ -234,10 +234,52 @@ la puerta local:
   `https://USUARIO.github.io/CDMPLab/` (o el dominio propio el día que exista) y el enlace final
   queda `https://USUARIO.github.io/CDMPLab/invitations?invitation=<uuid>`. No se duplican barras.
 
-**Dominio y remitente.** Resend y Postmark exigen que la dirección de `EMAIL_FROM` pertenezca a
-un **dominio verificado** por ellos (registros DNS: SPF, DKIM; conviene añadir DMARC). Mientras
-no haya dominio, hay que usar la dirección de pruebas del proveedor: sirve para probar, no para
-producción, y muchos buzones lo mandan a spam o lo rechazan. El dominio **no está** configurado.
+**El valor exacto de este proyecto**: el repositorio es `github.com/ErDeivih/CDMPLab` (remoto
+`origin`), así que la app publicada está en `https://erdeivih.github.io/CDMPLab/` y el secreto es:
+
+```bash
+supabase secrets set INVITE_LINK_BASE=https://erdeivih.github.io/CDMPLab/
+```
+
+### 5.1 Sin dominio propio: qué se puede hacer hoy
+
+Un dominio propio es lo ideal (buena reputación, DMARC, sin límites del proveedor), pero **no es
+imprescindible para arrancar**. Tres caminos, de menos a más esfuerzo:
+
+| Camino                                             | ¿Hace falta dominio? | Qué permite de verdad                                                                                                                                                                                   | Límites que hay que decir en voz alta                                                                                                          |
+| -------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Brevo con remitente verificado** (recomendado)   | **No**               | Brevo verifica una **dirección remitente suelta** (Single Sender Verification): se puede enviar desde un correo que ya tengas (por ejemplo tu Gmail). Plan gratuito con cientos de correos al día.      | El remitente es tu dirección personal (visible para los invitados) y los buzones grandes (Gmail/Outlook) pueden marcar como spam al principio. |
+| **Resend con su dirección de pruebas**             | No                   | `onboarding@resend.dev` solo envía **a la dirección del dueño de la cuenta de Resend**. Sirve para comprobar que TODO el circuito funciona (función → proveedor → buzón), no para invitar a terceros.   | No sirve para producción: no llegará a los invitados.                                                                                          |
+| **Dominio propio** (comprar o subdominio gratuito) | Sí                   | Remitente del club (`no-reply@tudominio`), SPF/DKIM/DMARC, mejor entrega y sin el límite de remitente personal. Los `*.js.org` (para proyectos de GitHub) son un subdominio gratuito, pero tardan días. | Cuesta dinero y tiempo; hay que publicar registros DNS.                                                                                        |
+
+Con **Brevo** el cambio es solo de configuración (el código ya lo soporta):
+
+```bash
+supabase secrets set EMAIL_PROVIDER=brevo \
+  EMAIL_API_KEY=TU-CLAVE-DE-BREVO \
+  EMAIL_FROM=tu-correo-verificado@ejemplo.com \
+  EMAIL_FROM_NAME=CDMPLab \
+  INVITE_LINK_BASE=https://erdeivih.github.io/CDMPLab/
+```
+
+y en el panel de Brevo: _Senders, Domains & Dedicated IPs → Senders → Add a sender_ (verifica el
+correo desde el enlace que te envían). La clave se crea en _SMTP & API → API Keys_.
+
+> **Ninguna clave se escribe en el repositorio ni en el chat**: van con `supabase secrets set` (o
+> en el panel de Supabase → Edge Functions → Secrets) y el navegador nunca las ve.
+
+### 5.2 Correo de registro y recuperación (Supabase Auth): sin dominio también se puede
+
+Es **otra cosa distinta** del correo de invitación (va por el SMTP de Supabase Auth, no por la
+Edge Function). Sin dominio propio hay dos opciones razonables:
+
+- **El servicio por defecto de Supabase** (sin configurar nada): acepta muy poco volumen
+  (del orden de 2-4 correos por hora) y **solo** envía a direcciones de los miembros del equipo del
+  proyecto. Suficiente para probar el registro, no para un club real.
+- **El SMTP de Brevo** (mismo remitente verificado) en _Supabase → Authentication → SMTP_:
+  `smtp-relay.brevo.com`, puerto `587`, usuario y clave SMTP de Brevo. Con eso ya se pueden
+  mandar confirmaciones y recuperaciones a cualquier dirección. Pasos completos en
+  `docs/smtp-supabase-auth.md`.
 
 ## 6. Dónde vive el secreto y qué se registra
 

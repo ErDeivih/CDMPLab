@@ -52,6 +52,7 @@ declare
   v_attempt uuid;
   v_preview jsonb;
   v_miembros_antes integer;
+  v_borrar_team uuid;
   editor_invitation uuid;
   c2_invitation uuid;
   other_invitation uuid;
@@ -827,6 +828,121 @@ begin
   end if;
 
   -- ============================================================
+  -- BORRADO DE EQUIPO (migración 20260925000000)
+  --   · la vista previa la ve el propietario (y el administrador), no un ajeno;
+  --   · solo el propietario (o un administrador) puede borrar;
+  --   · la confirmación por NOMBRE la comprueba el servidor;
+  --   · el borrado arrastra todo lo del equipo y deja auditoría.
+  -- ============================================================
+  -- Equipo desechable del propietario para no destruir el de la matriz: se crea por la vía real.
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  -- (El propietario y c5 ya tienen equipo: se usa una cuenta de prueba libre → c3.)
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000005', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', '10000000-0000-4000-8000-000000000005', 'role', 'authenticated')::text, true);
+  select public.request_team_creation('Equipo a borrar', '#c8102e') into v_request_other;
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
+  select public.admin_decide_team_request(v_request_other, true, null) into v_borrar_team;
+  if v_borrar_team is null then
+    raise exception 'FAIL no se pudo preparar el equipo a borrar';
+  end if;
+  -- Le añadimos datos para comprobar la cascada.
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000005', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', '10000000-0000-4000-8000-000000000005', 'role', 'authenticated')::text, true);
+  insert into public.players(team_id, name) values (v_borrar_team, 'Jugador del equipo a borrar');
+
+  -- Vista previa: la ve el propietario y dice qué se llevaría.
+  v_preview := public.team_deletion_preview(v_borrar_team);
+  if not (v_preview->>'can_delete')::boolean then
+    raise exception 'FAIL el propietario no puede borrar su equipo según la vista previa: %', v_preview;
+  end if;
+  if (v_preview->>'confirm_name_required') <> 'Equipo a borrar' then
+    raise exception 'FAIL la vista previa no pide el nombre exacto: %', v_preview;
+  end if;
+  if (v_preview->'data'->>'players')::integer <> 1 then
+    raise exception 'FAIL la vista previa no cuenta los jugadores: %', v_preview;
+  end if;
+
+  -- Un AJENO no puede borrarlo, y con el nombre mal escrito tampoco el propietario.
+  perform set_config('request.jwt.claim.sub', other_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', other_id, 'role', 'authenticated')::text, true);
+  begin
+    perform public.team_deletion_preview(v_borrar_team);
+    raise exception '__unexpected_success_foreign_team_preview__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_foreign_team_preview__' then raise; end if;
+    if position('not_authorized_for_team_deletion' in sqlerrm) = 0 then
+      raise exception 'FAIL foreign team preview error: %', sqlerrm;
+    end if;
+  end;
+  begin
+    perform public.delete_team(v_borrar_team, 'Equipo a borrar', null);
+    raise exception '__unexpected_success_foreign_team_delete__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_foreign_team_delete__' then raise; end if;
+    if position('not_authorized_for_team_deletion' in sqlerrm) = 0 then
+      raise exception 'FAIL foreign team delete error: %', sqlerrm;
+    end if;
+  end;
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000005', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', '10000000-0000-4000-8000-000000000005', 'role', 'authenticated')::text, true);
+  begin
+    perform public.delete_team(v_borrar_team, 'Otro nombre', null);
+    raise exception '__unexpected_success_bad_name_team_delete__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_bad_name_team_delete__' then raise; end if;
+    if position('team_name_confirmation_mismatch' in sqlerrm) = 0 then
+      raise exception 'FAIL team delete confirmation error: %', sqlerrm;
+    end if;
+  end;
+  if not exists (select 1 from public.teams where id = v_borrar_team) then
+    raise exception 'FAIL el equipo se borró sin la confirmación correcta';
+  end if;
+
+  -- Borrado REAL con el nombre correcto: cascada + auditoría.
+  perform public.delete_team(v_borrar_team, 'Equipo a borrar', 'Baja de prueba');
+  if exists (select 1 from public.teams where id = v_borrar_team) then
+    raise exception 'FAIL el equipo sigue existiendo tras el borrado';
+  end if;
+  if exists (select 1 from public.players where team_id = v_borrar_team)
+     or exists (select 1 from public.team_members where team_id = v_borrar_team)
+     or exists (select 1 from public.team_invitations where team_id = v_borrar_team) then
+    raise exception 'FAIL la cascada del borrado de equipo dejó filas';
+  end if;
+  -- La auditoría es intencionadamente privada: solo el administrador puede verla.
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
+  if not exists (
+    select 1 from public.team_deletions
+    where deleted_team_id = v_borrar_team
+      and team_name = 'Equipo a borrar'
+      and reason = 'Baja de prueba'
+      and deleted_by = '10000000-0000-4000-8000-000000000005'
+  ) then
+    raise exception 'FAIL no quedó registro del equipo borrado';
+  end if;
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000005', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', '10000000-0000-4000-8000-000000000005', 'role', 'authenticated')::text, true);
+  -- El propietario se queda SIN equipo (y ya no aparece como propietario de nada).
+  if exists (select 1 from public.teams where owner_user_id = '10000000-0000-4000-8000-000000000005') then
+    raise exception 'FAIL el propietario del equipo borrado sigue teniendo equipo';
+  end if;
+  -- La auditoría de equipos la lee el administrador, no un usuario normal.
+  perform set_config('request.jwt.claim.sub', other_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', other_id, 'role', 'authenticated')::text, true);
+  if (select count(*) from public.team_deletions) <> 0 then
+    raise exception 'FAIL un usuario normal lee la auditoría de equipos';
+  end if;
+  begin
+    insert into public.team_deletions (deleted_team_id, team_name)
+    values (v_borrar_team, 'Falso');
+    raise exception '__unexpected_success_direct_team_deletion_insert__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_direct_team_deletion_insert__' then raise; end if;
+  end;
+
+  -- ============================================================
   -- IMPORTACIÓN ATÓMICA (public.import_team_dataset)
   --   · gráfo completo + canvas + tarea → se crea y enlaza
   --   · reimportación idéntica = idempotente (skipped)
@@ -1070,6 +1186,82 @@ begin
       raise exception 'FAIL active editor did not create folder';
     end if;
 
+  -- Administración global: un editor no puede elevarse y los administradores no
+  -- pueden suspenderse, eliminarse ni expulsarse indirectamente entre sí. Además: la baja propia
+  -- exige el correo exacto, no se permite si es el ÚLTIMO administrador ni si posee un equipo, y un
+  -- administrador que también es propietario conserva el rol `owner` en su equipo.
+  begin
+    perform public.admin_grant_platform_admin(v_import_editor);
+    raise exception '__unexpected_promotion__';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
+  perform public.admin_grant_platform_admin(v_import_editor);
+  if not exists(select 1 from public.admin_list_administrators() where user_id=v_import_editor) then
+    raise exception 'FAIL administrator promotion';
+  end if;
+  begin
+    perform public.admin_set_profile_status(v_import_editor,'suspended');
+    raise exception '__unexpected_admin_suspension__';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.admin_delete_account(v_import_editor,null);
+    raise exception '__unexpected_admin_deletion__';
+  exception when others then
+    if position('cannot_delete_platform_admin' in sqlerrm)=0 then raise; end if;
+  end;
+  if private.team_role(v_team_id) <> 'editor' then raise exception 'FAIL global team access'; end if;
+  if not exists(select 1 from public.exercises where team_id=v_team_id) then raise exception 'FAIL admin cannot read team exercises'; end if;
+  perform set_config('request.jwt.claim.sub', v_import_editor::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_import_editor, 'role', 'authenticated')::text, true);
+  begin
+    perform public.delete_my_admin_account('wrong@test.local');
+    raise exception '__unexpected_self_deletion__';
+  exception when others then
+    if position('email_confirmation_mismatch' in sqlerrm)=0 then raise; end if;
+  end;
+  perform public.delete_my_admin_account('rls-c4@test.local');
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
+  if exists(select 1 from public.admin_list_administrators() where user_id=v_import_editor) then raise exception 'FAIL self deletion'; end if;
+
+  -- Con UN SOLO administrador, la baja propia se rechaza: la plataforma no puede quedarse sin
+  -- nadie. El correo va correcto a propósito, para que la guarda que salte sea la del recuento
+  -- (va antes) y no la de la confirmación.
+  begin
+    perform public.delete_my_admin_account('rls-admin@test.local');
+    raise exception '__unexpected_last_admin_self_deletion__';
+  exception when others then
+    if sqlerrm = '__unexpected_last_admin_self_deletion__' then raise; end if;
+    if position('last_platform_admin' in sqlerrm) = 0 then
+      raise exception 'FAIL last admin self deletion error: %', sqlerrm;
+    end if;
+  end;
+  if not exists(select 1 from public.admin_list_administrators() where user_id=admin_id) then
+    raise exception 'FAIL el único administrador desapareció';
+  end if;
+
+  -- Un administrador que además es PROPIETARIO de un equipo: (a) su rol en su equipo sigue siendo
+  -- `owner` —la propiedad se comprueba antes que el permiso de administrador— y (b) no puede darse
+  -- de baja sin traspasarlo. Aquí ya hay DOS administradores, así que la guarda que debe saltar es
+  -- la del equipo, no la del recuento.
+  perform public.admin_grant_platform_admin(owner_id);
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  if private.team_role(v_team_id) <> 'owner' then
+    raise exception 'FAIL el administrador propietario perdió su rol de propietario';
+  end if;
+  begin
+    perform public.delete_my_admin_account('rls-owner@test.local');
+    raise exception '__unexpected_owner_admin_self_deletion__';
+  exception when others then
+    if sqlerrm = '__unexpected_owner_admin_self_deletion__' then raise; end if;
+    if position('target_owns_team' in sqlerrm) = 0 then
+      raise exception 'FAIL owner admin self deletion error: %', sqlerrm;
+    end if;
+  end;
   raise notice 'all_remote_rls_rpc_tests_passed';
 end
 $test$;

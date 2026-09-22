@@ -218,6 +218,20 @@ export type AccountDeletionsRow = {
   deleted_at: string;
 };
 
+/** Registro de un equipo eliminado (migración 20260925000000). Tampoco tiene clave foránea al
+ *  equipo: la fila sobrevive al borrado y solo la lee un administrador de plataforma. */
+export type TeamDeletionsRow = {
+  id: string;
+  deleted_team_id: string;
+  team_name: string;
+  owner_user_id: string | null;
+  owner_email: string | null;
+  data_summary: Json;
+  reason: string | null;
+  deleted_by: string | null;
+  deleted_at: string;
+};
+
 // ---------- players ----------
 
 export type PlayersRow = {
@@ -461,6 +475,12 @@ export interface Database {
         Update: never;
         Relationships: [];
       };
+      team_deletions: {
+        Row: TeamDeletionsRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       players: {
         Row: PlayersRow;
         Insert: PlayersInsert;
@@ -545,6 +565,12 @@ export interface Database {
         Args: { p_new_owner_user_id: string; p_team_id: string };
         Returns: undefined;
       };
+      // Borrado de EQUIPO (migración 20260925000000).
+      team_deletion_preview: { Args: { p_team_id: string }; Returns: Json };
+      delete_team: {
+        Args: { p_confirm_name: string; p_reason?: string | null; p_team_id: string };
+        Returns: Json;
+      };
       prepare_invitation_email: {
         Args: { p_invitation_id: string };
         Returns: Json;
@@ -568,6 +594,9 @@ export interface Database {
       import_team_dataset: { Args: { p_payload: Json; p_team_id: string }; Returns: Json };
       invite_team_member: { Args: { p_email: string; p_team_id: string }; Returns: string };
       is_platform_admin: { Args: never; Returns: boolean };
+      admin_list_administrators: { Args: never; Returns: Array<{ user_id: string }> };
+      admin_grant_platform_admin: { Args: { p_user_id: string }; Returns: undefined };
+      delete_my_admin_account: { Args: { p_confirm_email: string }; Returns: undefined };
       list_team_members: {
         Args: { p_team_id: string };
         Returns: Array<{

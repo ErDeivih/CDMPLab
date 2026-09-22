@@ -595,8 +595,50 @@ check('providerRequest sin replyTo no inventa la clave', () => {
   const config = resolveEmailConfig(env).config;
   const resend = JSON.parse(providerRequest('resend', config, MESSAGE).body);
   const postmark = JSON.parse(providerRequest('postmark', config, MESSAGE).body);
+  const brevo = JSON.parse(providerRequest('brevo', config, MESSAGE).body);
   assert.ok(!('reply_to' in resend), 'resend añade reply_to sin configurarlo');
   assert.ok(!('ReplyTo' in postmark), 'postmark añade ReplyTo sin configurarlo');
+  assert.ok(!('replyTo' in brevo), 'brevo añade replyTo sin configurarlo');
+});
+
+// Brevo es la opción que sirve SIN dominio propio: verifica una única dirección remitente.
+check(
+  'providerRequest (brevo): URL, cabecera api-key, remitente como objeto y contenido en su formato',
+  () => {
+    const config = resolveEmailConfig({ ...COMPLETE_ENV, EMAIL_PROVIDER: 'brevo' }).config;
+    assert.equal(config.provider, 'brevo', 'EMAIL_PROVIDER=brevo no se reconoce');
+    const request = providerRequest('brevo', config, MESSAGE);
+    assert.equal(request.url, 'https://api.brevo.com/v3/smtp/email');
+    assert.equal(request.headers['api-key'], FAKE_KEY, 'falta la cabecera api-key');
+    assert.equal(request.headers.Accept, 'application/json');
+    assert.equal(request.headers['Content-Type'], 'application/json');
+    assert.ok(!('Authorization' in request.headers), 'Brevo no usa Authorization');
+    const body = JSON.parse(request.body);
+    assert.deepEqual(
+      body.sender,
+      { email: 'no-reply@ejemplo.com', name: 'CDMPLab' },
+      'el remitente debe ir como objeto { email, name }',
+    );
+    assert.deepEqual(body.to, [{ email: MESSAGE.to }], 'el destinatario no es el esperado');
+    assert.equal(body.subject, MESSAGE.subject, 'el asunto no es el esperado');
+    assert.equal(body.htmlContent, MESSAGE.html);
+    assert.equal(body.textContent, MESSAGE.text);
+    assert.deepEqual(body.replyTo, { email: 'soporte@ejemplo.com' });
+    assert.ok(!request.body.includes(FAKE_KEY), 'la clave se cuela en el CUERPO de la petición');
+  },
+);
+
+check('mapProviderResponse (brevo): 201 con messageId; 400 con el error REDACTADO', () => {
+  const ok = mapProviderResponse('brevo', 201, { messageId: '<abc@brevo>' });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.providerMessageId, '<abc@brevo>');
+  const rechazado = mapProviderResponse('brevo', 400, {
+    code: 'invalid_parameter',
+    message: 'sender is not valid; key=xkeysib-' + 'a'.repeat(20),
+  });
+  assert.equal(rechazado.ok, false);
+  assert.ok(rechazado.error.includes('invalid_parameter') || rechazado.error.includes('sender'));
+  assert.ok(!rechazado.error.includes('xkeysib-'), 'el error filtra la credencial');
 });
 
 check('mapProviderResponse acepta 200 y 201 (resend) y 200 (postmark) con identificador', () => {

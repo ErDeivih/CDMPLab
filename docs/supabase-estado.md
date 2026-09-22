@@ -1,5 +1,47 @@
 # CDMPLab — Estado de las migraciones: lo documentado y lo NO verificado
 
+> **Añadido el 22/09/2026 (tarde) — TRES migraciones nuevas, y qué está verificado de cada una.**
+> El repositorio tiene hoy **20 ficheros** en `supabase/migrations/`. Los tres últimos del encargo
+> son:
+>
+> | Fichero local                                      | Qué hace                                                                                                        |
+> | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+> | `20260925000000_team_deletion.sql`                 | borrar un equipo (propietario o administrador), con el **nombre exacto** comprobado en el servidor y auditoría  |
+> | `20260926000000_team_deletion_request_history.sql` | conservar el historial de una solicitud aprobada cuando su equipo se borra (`created_team_id` → NULL)           |
+> | `20260927000000_platform_administration.sql`       | administrador de plataforma: entra como editor en cualquier equipo, listar/nombrar administradores, baja propia |
+>
+> **Lo verificado en esta ronda, desde esta máquina:**
+>
+> - `npm run validate:migration` verde con **141 comprobaciones**, **23 de ellas nuevas** para la
+>   migración de administración (permisos, guardas, auditoría antes del borrado, `lock table` de la
+>   baja, disparador que impide suspender a un administrador, `DEFINER` con `search_path` vacío).
+>   Esas 23 comprobaciones **se probaron rompiendo la migración a propósito** (quitar el `lock
+table` y mover la auditoría detrás del borrado): fallaron las dos que les correspondían, y al
+>   restaurar el fichero volvieron a pasar;
+> - la matriz `supabase/tests/entrenolab_rls.sql` **incluye** casos para las tres (alta y baja de
+>   administrador, `last_platform_admin`, `cannot_suspend_platform_admin`, correo de confirmación,
+>   `target_owns_team`, borrado de equipo con nombre exacto y auditoría) y **parsea** sin errores.
+>
+> **Lo NO verificado, y por qué:** el catálogo del proyecto remoto **no se ha podido consultar**
+> desde esta máquina —`npx supabase projects list` responde _«Access token not provided»_ y no hay
+> `SUPABASE_ACCESS_TOKEN`, ni `~/.supabase/access-token`, ni `config.toml`, ni `.env`—, así que
+> este documento **no afirma** qué migraciones están aplicadas en remoto, ni que su contenido
+> coincida con el local. La sesión que aplicó `20260925000000` y `20260926000000` dejó constancia
+> de haberlo hecho; eso es **información de segunda mano** y aquí queda marcado como tal: para
+> cerrarlo hace falta ejecutar
+> `select version, name from supabase_migrations.schema_migrations order by version;` con un token
+> temporal (y revocarlo después). La **matriz SQL tampoco se ha ejecutado** en esta ronda: solo se
+> ha comprobado que parsea.
+
+> **Añadido el 22/09/2026 — borrado de EQUIPO: NUEVA, sin aplicar y sin verificar.**
+> `supabase/migrations/20260925000000_team_deletion.sql` (borrar un equipo con confirmación por
+> nombre comprobada **en el servidor** y auditoría en `public.team_deletions`) está **escrita,
+> validada en estático y NO aplicada**. Antes de aplicarla hay que comprobar la cascada que asume
+> (`select conrelid::regclass, confdeltype from pg_constraint where confrelid = 'public.teams'::regclass`,
+> esperando `c` en las tablas del equipo) y que la tabla y las dos funciones no existan ya.
+> Cumple además lo que exige la regla del proyecto: **no se crea nada sin verificar antes el
+> catálogo remoto**, y esa verificación está pendiente.
+>
 > **Actualización verificada el 22/09/2026 — gestión de cuentas y pertenencia APLICADA.**
 > `supabase/migrations/20260924000000_account_and_membership_management.sql` (borrar cuenta con
 > auditoría, salir de un equipo y traspasar la propiedad) se aplicó en remoto como

@@ -431,17 +431,6 @@ export class BoardComponent {
     return this.movingIds.length > 0 || !!this.resizing;
   }
   protected overTrash = false;
-  /** Posición (px relativa a `.board-host`) del CENTRO de la papelera: se ancla al borde
-   *  inferior CENTRAL del campo (norm 0.5, ~0.965) para que un objeto que se arrastra
-   *  hacia abajo SÍ pueda entrar visualmente en ella (el objeto se clampa al campo, así
-   *  que la papelera debe solaparse con la zona inferior alcanzable del campo, en vez de
-   *  quedar fuera de su alcance en "Campo completo"). Usamos el mismo mapeo norm→pantalla
-   *  que el render (normToScreenDisplay), de modo que sigue pegada al campo con pan/zoom. */
-  protected readonly trashPos = computed<{ left: number; top: number }>(() => {
-    const c = this.normToScreenDisplay(0.5, 0.965);
-    return { left: c.x, top: c.y };
-  });
-
   // ---------- Estado "sin guardar" (pérdida de trabajo) ----------
   protected readonly dirty = this.sessionSvc.dirty;
   protected markDirty(): void {
@@ -2678,11 +2667,10 @@ export class BoardComponent {
           peldaños += `<rect x="${(-1.8 + i * 0.6).toFixed(2)}" y="-0.9" width="0.26" height="1.8" rx="0.13"/>`;
         }
         inner =
-          `<g fill="${c}" stroke="#20242a" stroke-width="0.1">` +
-          `<rect x="-2.4" y="-1.05" width="4.8" height="0.42" rx="0.21"/>` +
-          `<rect x="-2.4" y="0.63" width="4.8" height="0.42" rx="0.21"/>` +
+          `<g fill="#f6c945" stroke="#20242a" stroke-width="0.1">` +
+          `<rect x="-2.4" y="-1.05" width="4.8" height="0.24" rx="0.12" fill="#252b32"/>` +
+          `<rect x="-2.4" y="0.81" width="4.8" height="0.24" rx="0.12" fill="#252b32"/>` +
           peldaños +
-          `<rect x="-2.62" y="-1.05" width="0.32" height="2.1" rx="0.16"/>` +
           `</g>`;
         break;
       }

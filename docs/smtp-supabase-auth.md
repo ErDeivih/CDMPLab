@@ -204,6 +204,22 @@ Resumen de las recomendaciones de Supabase, que aplican igual a este montaje:
    **No hecho: sin credenciales no se puede.**
 7. **Decidir si se activa CAPTCHA** en el registro. **Pendiente de decisión.**
 8. Opcional: valorar un **dominio propio** para Auth. **Pendiente de decisión.**
+9. **Activar la protección contra contraseñas filtradas** (el aviso que Supabase sigue mostrando).
+   Está en _Authentication → Settings → Password strength_ (**Leaked password protection**): al
+   activarlo, Supabase comprueba la contraseña contra HaveIBeenPwned y rechaza las filtradas. Es un
+   interruptor del panel, **no necesita dominio ni código**, y **no se ha activado** (el aviso del
+   panel sigue ahí a propósito, porque activarlo es una decisión del dueño). Conviene activarlo
+   junto con los pasos de correo, porque el registro es público.
+
+### Sin dominio propio: qué hacer primero (resumen)
+
+1. Verificar una **dirección remitente suelta** en Brevo (Single Sender Verification) — no hace
+   falta dominio.
+2. Poner el **SMTP de Brevo** en Authentication → SMTP (`smtp-relay.brevo.com`, puerto `587`).
+3. Rellenar **Authentication → URL Configuration** con la app publicada:
+   `https://erdeivih.github.io/CDMPLab/` como Site URL y esa misma URL como Redirect.
+4. Activar **leaked password protection**.
+5. Enviar un registro de prueba y una recuperación a un buzón propio.
 
 ## 8. Qué NO está verificado
 

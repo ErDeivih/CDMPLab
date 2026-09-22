@@ -14,7 +14,7 @@
         "h": 16.7
       },
       "escalera": {
-        "w": 85.7,
+        "w": 82.5,
         "h": 33.7
       },
       "miniporteria": {
@@ -52,7 +52,7 @@
         "h": 20
       },
       "escalera": {
-        "w": 102.9,
+        "w": 99,
         "h": 40.4
       },
       "miniporteria": {
@@ -90,7 +90,7 @@
         "h": 21.2
       },
       "escalera": {
-        "w": 108.9,
+        "w": 104.8,
         "h": 42.8
       },
       "miniporteria": {
@@ -128,7 +128,7 @@
         "h": 19.6
       },
       "escalera": {
-        "w": 100.8,
+        "w": 97,
         "h": 39.6
       },
       "miniporteria": {
@@ -166,7 +166,7 @@
         "h": 19.6
       },
       "escalera": {
-        "w": 101,
+        "w": 97.2,
         "h": 39.7
       },
       "miniporteria": {
@@ -204,7 +204,7 @@
         "h": 16.7
       },
       "escalera": {
-        "w": 85.7,
+        "w": 82.5,
         "h": 33.7
       },
       "miniporteria": {
@@ -236,14 +236,14 @@
     "jugador@half=1.199",
     "cono@half=1.199",
     "chino@half=1.201",
-    "escalera@half=1.201",
+    "escalera@half=1.200",
     "miniporteria@half=1.201",
     "maniqui@half=1.200",
     "balon@half=1.200",
     "jugador@third=1.269",
     "cono@third=1.270",
     "chino@third=1.268",
-    "escalera@third=1.271",
+    "escalera@third=1.270",
     "miniporteria@third=1.271",
     "maniqui@third=1.271",
     "balon@third=1.270",
@@ -257,7 +257,7 @@
     "jugador@f7=1.176",
     "cono@f7=1.178",
     "chino@f7=1.177",
-    "escalera@f7=1.179",
+    "escalera@f7=1.178",
     "miniporteria@f7=1.177",
     "maniqui@f7=1.178",
     "balon@f7=1.177",

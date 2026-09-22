@@ -19,6 +19,7 @@
 
 // ---------- Barra superior ----------
 .studio-top {
+  position: relative;
   height: 48px;
   flex-shrink: 0;
   display: flex;
@@ -147,17 +148,18 @@
   }
 }
 
-// La papelera vive DENTRO de `.board-host` (ancla: position:relative), anclada al borde
-// INFERIOR del campo vía `trashPos` (left/top bindeados al centro). Así el objeto que se
-// arrastra hacia abajo entra VISUALMENTE en ella (no queda atascado en el borde del
-// campo). Se centra en su punto con translate(-50%,-50%).
+// Papelera fuera del campo, en la cabecera del estudio. Durante un arrastre el host conserva
+// el pointer capture, por lo que soltar en ella sigue terminando el gesto aunque no pertenezca
+// al lienzo. Así nunca bloquea la zona táctica inferior ni aparece en PNG/miniaturas.
 .board-trash {
   position: absolute;
+  left: 50%;
+  top: 50%;
   transform: translate(-50%, -50%) scale(0.8);
-  z-index: 29;
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+  z-index: 80;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
   background: rgba(38, 46, 53, 0.92);
@@ -168,7 +170,7 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
 
   .msi {
-    font-size: 26px;
+    font-size: 22px;
   }
 
   &.trash-visible {

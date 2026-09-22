@@ -98,6 +98,8 @@ interface BackendRow {
   team_requests: Rw[];
   /** Auditoría de bajas de cuenta (migración 20260923000000): sin FK al perfil. */
   account_deletions: Rw[];
+  /** Auditoría de equipos eliminados (migración 20260925000000): sin FK al equipo. */
+  team_deletions: Rw[];
   players: Rw[];
   exercise_folders: Rw[];
   exercises: Rw[];
@@ -115,6 +117,7 @@ export class RlsBackend {
     team_invitations: [],
     team_requests: [],
     account_deletions: [],
+    team_deletions: [],
     players: [],
     exercise_folders: [],
     exercises: [],
@@ -329,6 +332,8 @@ export class RlsBackend {
     if (table === 'team_requests') return row.user_id === uid || this.isPlatformAdmin(uid);
     // La auditoría de bajas solo la lee el administrador (y nadie la escribe desde el cliente).
     if (table === 'account_deletions') return this.isPlatformAdmin(uid);
+    // La auditoría de equipos eliminados también es solo del administrador.
+    if (table === 'team_deletions') return this.isPlatformAdmin(uid);
     if (table === 'team_invitations') {
       return (
         this.isTeamOwner(uid, row.team_id as string) ||
@@ -431,6 +436,10 @@ export class RlsBackend {
         return this.rpcAdminDeletionPreview(a, uid);
       case 'admin_delete_account':
         return this.rpcAdminDeleteAccount(a, uid);
+      case 'team_deletion_preview':
+        return this.rpcTeamDeletionPreview(a, uid);
+      case 'delete_team':
+        return this.rpcDeleteTeam(a, uid);
       case 'invite_team_member':
         return this.rpcInvite(a, uid);
       case 'accept_team_invitation':
@@ -821,6 +830,93 @@ export class RlsBackend {
     return ok({ deleted: true, user_id: objetivo, email_normalized: prof.email_normalized });
   }
 
+  // ---------- Borrado de EQUIPO (migración 20260925000000) ----------
+
+  /** Resumen de lo que hay en un equipo (lo que se llevará por delante el borrado). */
+  private resumenEquipo(teamId: string): Rw {
+    const cuenta = (tabla: 'players' | 'exercise_folders' | 'exercises' | 'sessions'): number =>
+      this.rows[tabla].filter((r) => r.team_id === teamId).length;
+    return {
+      players: cuenta('players'),
+      folders: cuenta('exercise_folders'),
+      exercises: cuenta('exercises'),
+      sessions: cuenta('sessions'),
+      members: this.rows.team_members.filter((m) => m.team_id === teamId).length,
+      pending_invitations: this.rows.team_invitations.filter(
+        (i) => i.team_id === teamId && i.status === 'pending',
+      ).length,
+    };
+  }
+
+  /** `team_deletion_preview`: lo mira el propietario del equipo o un administrador. */
+  private rpcTeamDeletionPreview(a: Rw, uid: string): RpcResult {
+    if (!uid) return err('42501', 'not_authenticated');
+    const teamId = a.p_team_id as string;
+    const team = this.rows.teams.find((t) => t.id === teamId);
+    if (!team) return ok({ found: false, team_id: teamId });
+    const owner = this.profileOf(team.owner_user_id as string);
+    const isOwner = team.owner_user_id === uid;
+    const isPlatformAdmin = this.isPlatformAdmin(uid);
+    if (!isOwner && !isPlatformAdmin) return err('42501', 'not_authorized_for_team_deletion');
+    return ok({
+      found: true,
+      team_id: team.id,
+      name: team.name,
+      accent_color: team.accent_color,
+      owner_user_id: team.owner_user_id,
+      owner_email: owner?.email_normalized ?? '',
+      is_owner: isOwner,
+      is_platform_admin: isPlatformAdmin,
+      can_delete: true,
+      confirm_name_required: team.name,
+      data: this.resumenEquipo(teamId),
+    });
+  }
+
+  /**
+   * `delete_team`: propietario o administrador, y CONFIRMACIÓN REFORZADA EN EL SERVIDOR (el
+   * nombre exacto del equipo). Deja auditoría y arrastra por cascada todo lo del equipo.
+   */
+  private rpcDeleteTeam(a: Rw, uid: string): RpcResult {
+    if (!uid) return err('42501', 'not_authenticated');
+    const teamId = a.p_team_id as string;
+    const team = this.rows.teams.find((t) => t.id === teamId);
+    if (!team) return err('P0001', 'team_not_found');
+    if (team.owner_user_id !== uid && !this.isPlatformAdmin(uid)) {
+      return err('42501', 'not_authorized_for_team_deletion');
+    }
+    const escrito = String(a.p_confirm_name ?? '').trim();
+    if (escrito === '' || escrito !== team.name) {
+      return err('P0001', 'team_name_confirmation_mismatch');
+    }
+    const resumen = this.resumenEquipo(teamId);
+    const owner = this.profileOf(team.owner_user_id as string);
+    // Auditoría ANTES del borrado (sin FK al equipo: sobrevive).
+    this.rows.team_deletions.push({
+      id: uuid(),
+      deleted_team_id: team.id,
+      team_name: team.name,
+      owner_user_id: team.owner_user_id,
+      owner_email: owner?.email_normalized ?? '',
+      data_summary: resumen,
+      reason: a.p_reason ?? null,
+      deleted_by: uid,
+      deleted_at: nowIso(),
+    });
+    // Cascada: todo lo que cuelga del equipo.
+    this.rows.teams = this.rows.teams.filter((t) => t.id !== teamId);
+    this.rows.team_members = this.rows.team_members.filter((m) => m.team_id !== teamId);
+    this.rows.team_invitations = this.rows.team_invitations.filter((i) => i.team_id !== teamId);
+    for (const tabla of ['players', 'exercise_folders', 'exercises', 'sessions'] as const) {
+      this.rows[tabla] = this.rows[tabla].filter((r) => r.team_id !== teamId);
+    }
+    // Las solicitudes que apuntaban al equipo quedan sin equipo creado (FK `on delete set null`).
+    for (const r of this.rows.team_requests) {
+      if (r.created_team_id === teamId) r.created_team_id = null;
+    }
+    return ok({ deleted: true, team_id: team.id, name: team.name, data: resumen });
+  }
+
   private rpcInvite(a: Rw, uid: string): RpcResult {
     const teamId = a.p_team_id as string;
     const normalized = String(a.p_email ?? '')
@@ -1142,6 +1238,7 @@ export class RlsBackend {
         'team_invitations',
         'team_requests',
         'account_deletions',
+        'team_deletions',
       ];
       if (soloPorRpc.includes(table)) {
         return err('42501', 'new row violates row-level security policy');
@@ -2289,6 +2386,69 @@ describe('T4 multiuser — AccessService (gate al entrar al equipo)', () => {
     expect(target.route).toBe('/invitations');
     expect(store.connectDataSource).not.toHaveBeenCalled();
   });
+
+  // El equipo puede desaparecer ENTRE `resolveAccess` y la carga del dataset (el propietario lo
+  // borra, el administrador revoca el acceso…). `connectDataSource` rechaza entonces a propósito
+  // —hidratar una pizarra vacía como si el equipo existiera es peor— y la resolución que teníamos
+  // queda obsoleta. Antes ese rechazo caía en el catch genérico de la inicialización: el usuario,
+  // con sesión válida, aparecía en la pantalla de LOGIN sin explicación y sin camino a «solicitar
+  // equipo». Ahora se vuelve a resolver el acceso, que es lo que dice la verdad.
+  it('si el equipo resuelto ya no se puede cargar, vuelve a resolver el acceso (no echa al login)', async () => {
+    const { backend, team } = await fullJourney();
+    const supabase = makeSupabase(backend, EDITOR);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const store = makeStore();
+    store.connectDataSource.mockRejectedValueOnce(
+      new Error('El equipo ya no existe o no tienes acceso.'),
+    );
+    TestBed.configureTestingModule({
+      providers: [
+        AccessService,
+        { provide: SupabaseService, useValue: supabase },
+        { provide: StoreService, useValue: store },
+      ],
+    });
+    const service = TestBed.inject(AccessService);
+
+    const target = await service.resolve();
+
+    expect(store.connectDataSource).toHaveBeenCalledTimes(2);
+    expect(target.state, 'la segunda resolución sí tiene equipo').toBe('ready');
+    expect(target.teamId).toBe(team.id);
+    expect(service.isReady()).toBe(true);
+    expect(
+      store.resetToLocal,
+      'la sesión sigue siendo válida: NO se vuelve a modo local',
+    ).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('si el equipo tampoco carga al reintentar, avisa UNA vez y no se queda en bucle', async () => {
+    const { backend } = await fullJourney();
+    const supabase = makeSupabase(backend, EDITOR);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const store = makeStore();
+    store.connectDataSource.mockRejectedValue(
+      new Error('El equipo ya no existe o no tienes acceso.'),
+    );
+    TestBed.configureTestingModule({
+      providers: [
+        AccessService,
+        { provide: SupabaseService, useValue: supabase },
+        { provide: StoreService, useValue: store },
+      ],
+    });
+    const service = TestBed.inject(AccessService);
+
+    const target = await service.resolve();
+
+    expect(store.connectDataSource, 'un único reintento, nunca un bucle').toHaveBeenCalledTimes(2);
+    expect(target.state).toBe('unauthenticated');
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+    warn.mockRestore();
+  });
 });
 
 // =============================================================================
@@ -2564,5 +2724,119 @@ describe('T5 multiuser — borrar una cuenta (solo el administrador, con guardas
     for (const nombre of ['purgeAccount', 'deleteProfile', 'removeAccount']) {
       expect(repo[nombre], `el cliente no debe exponer ${nombre}`).toBeUndefined();
     }
+  });
+});
+
+describe('T5 multiuser — eliminar un equipo', () => {
+  it('la vista previa solo la ven el propietario o un administrador; un miembro no puede borrar', async () => {
+    const { backend, ownerRepo, team } = await equipoConEditorActivo();
+    backend.seedExercise(team.id, { id: 'ex-borrar', title: 'Ejercicio que desaparece' });
+
+    const preview = await ownerRepo.teamDeletionPreview(team.id);
+    expect(preview).toMatchObject({ found: true, canDelete: true, isOwner: true });
+    expect(preview.confirmNameRequired).toBe(preview.name);
+    // El escenario base ya trae 1 jugador, 1 carpeta, 1 ejercicio y 1 sesión; aquí se añade otro.
+    expect(preview.data.players).toBe(1);
+    expect(preview.data.folders).toBe(1);
+    expect(preview.data.exercises).toBe(2);
+    expect(preview.data.sessions).toBe(1);
+    expect(preview.data.members).toBe(2);
+
+    // Un miembro que NO es propietario no puede ni ver el resumen destructivo ni borrar.
+    const editorRepo = makeRepo(backend, EDITOR, team.id);
+    await expect(editorRepo.teamDeletionPreview(team.id)).rejects.toMatchObject({
+      code: 'not_authorized_for_team_deletion',
+    });
+    await expect(editorRepo.deleteTeam(team.id, preview.name, null)).rejects.toMatchObject({
+      code: 'not_authorized_for_team_deletion',
+    });
+    // Y un ajeno tampoco.
+    const ajeno = makeRepo(backend, FOREIGN, null);
+    await expect(ajeno.teamDeletionPreview(team.id)).rejects.toMatchObject({
+      code: 'not_authorized_for_team_deletion',
+    });
+    await expect(ajeno.deleteTeam(team.id, preview.name, null)).rejects.toMatchObject({
+      code: 'not_authorized_for_team_deletion',
+    });
+    // El equipo sigue ahí con sus datos.
+    expect(backend.rows.teams.some((t) => t.id === team.id)).toBe(true);
+    expect(backend.rows.exercises.some((e) => e.id === 'ex-borrar')).toBe(true);
+  });
+
+  it('la confirmación por nombre la comprueba el SERVIDOR (no la pantalla)', async () => {
+    const { backend, ownerRepo, team } = await equipoConEditorActivo();
+
+    await expect(ownerRepo.deleteTeam(team.id, '', null)).rejects.toMatchObject({
+      code: 'team_name_confirmation_mismatch',
+    });
+    await expect(ownerRepo.deleteTeam(team.id, 'Otro nombre', null)).rejects.toMatchObject({
+      code: 'team_name_confirmation_mismatch',
+    });
+    // Nada se ha borrado ni auditado.
+    expect(backend.rows.teams.some((t) => t.id === team.id)).toBe(true);
+    expect(backend.rows.team_deletions).toHaveLength(0);
+  });
+
+  it('con el nombre correcto borra el equipo y TODO lo suyo, y deja auditoría', async () => {
+    const { backend, ownerRepo, editorRepo, team } = await equipoConEditorActivo();
+    backend.seedExercise(team.id, { id: 'ex-1', title: 'Uno' });
+    const nombre = (await ownerRepo.teamDeletionPreview(team.id)).confirmNameRequired;
+
+    await ownerRepo.deleteTeam(team.id, nombre, 'Prueba de borrado');
+
+    expect(backend.rows.teams.some((t) => t.id === team.id)).toBe(false);
+    for (const tabla of ['players', 'exercise_folders', 'exercises', 'sessions'] as const) {
+      expect(
+        backend.rows[tabla].some((r) => r.team_id === team.id),
+        `${tabla} debería haberse borrado`,
+      ).toBe(false);
+    }
+    expect(backend.rows.team_members.some((m) => m.team_id === team.id)).toBe(false);
+    expect(backend.rows.team_invitations.some((i) => i.team_id === team.id)).toBe(false);
+    // Auditoría con el resumen y el motivo.
+    expect(backend.rows.team_deletions).toHaveLength(1);
+    expect(backend.rows.team_deletions[0]).toMatchObject({
+      deleted_team_id: team.id,
+      reason: 'Prueba de borrado',
+      deleted_by: OWNER,
+    });
+    // El propietario se queda SIN equipo (podrá solicitar otro) y el editor pierde la pertenencia.
+    const accesoOwner = await ownerRepo.resolveAccess();
+    expect(accesoOwner.ownedTeam).toBeNull();
+    expect(accesoOwner.membership).toBeNull();
+    const accesoEditor = await editorRepo.resolveAccess();
+    expect(accesoEditor.membership).toBeNull();
+  });
+
+  it('un administrador de plataforma también puede borrarlo (soporte), con el nombre escrito', async () => {
+    const { backend, team } = await equipoConEditorActivo();
+    conAdmin(backend);
+    const adminRepo = makeRepo(backend, ADMIN, null);
+
+    const preview = await adminRepo.teamDeletionPreview(team.id);
+    expect(preview).toMatchObject({ canDelete: true, isPlatformAdmin: true, isOwner: false });
+    await expect(adminRepo.deleteTeam(team.id, 'nombre equivocado', null)).rejects.toMatchObject({
+      code: 'team_name_confirmation_mismatch',
+    });
+    await adminRepo.deleteTeam(team.id, preview.confirmNameRequired, null);
+    expect(backend.rows.teams.some((t) => t.id === team.id)).toBe(false);
+    expect(backend.rows.team_deletions[0]).toMatchObject({ deleted_by: ADMIN });
+  });
+
+  it('la auditoría de equipos solo la lee el administrador (y no se escribe desde el cliente)', async () => {
+    const { backend, ownerRepo, team } = await equipoConEditorActivo();
+    const nombre = (await ownerRepo.teamDeletionPreview(team.id)).confirmNameRequired;
+    await ownerRepo.deleteTeam(team.id, nombre, null);
+
+    // El propietario que lo borró NO puede leer la tabla de auditoría (es del administrador).
+    const lectura = (await backend.tableQuery('team_deletions', OWNER).select()) as {
+      data?: Rw[] | null;
+    };
+    expect(lectura.data ?? []).toHaveLength(0);
+    // Y un insert directo no es una vía alternativa.
+    const porTabla = await backend
+      .tableQuery('team_deletions', OWNER)
+      .insert({ deleted_team_id: team.id, team_name: team.name });
+    expect(porTabla.error).not.toBeNull();
   });
 });

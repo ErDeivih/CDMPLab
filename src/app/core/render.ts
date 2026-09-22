@@ -1041,7 +1041,7 @@ function elStr(
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
       const s = materialSize(el) * objectScale;
-      const c = el.c ?? '#e8edf2';
+      const c = el.c ?? '#f6c945';
       const L = 3.1; // media longitud (eje largo, HORIZONTAL en pantalla: como el PNG anterior)
       const aw = 1.0; // media anchura
       const rail = 0.24; // grosor del raíl
@@ -1056,12 +1056,10 @@ function elStr(
         `<g transform="translate(${x} ${y}) scale(${s})">` +
         `<ellipse cx="0" cy="${(aw + 0.25).toFixed(2)}" rx="${(L * 0.6).toFixed(2)}" ry="0.16" fill="#00000038"/>` +
         `<g fill="${c}" stroke="#20242a" stroke-width="0.1">` +
-        `<rect x="${(-L).toFixed(2)}" y="${(-aw - rail / 2).toFixed(2)}" width="${(2 * L).toFixed(2)}" height="${rail}" rx="${(rail / 2).toFixed(2)}"/>` +
-        `<rect x="${(-L).toFixed(2)}" y="${(aw - rail / 2).toFixed(2)}" width="${(2 * L).toFixed(2)}" height="${rail}" rx="${(rail / 2).toFixed(2)}"/>` +
+        `<rect x="${(-L).toFixed(2)}" y="${(-aw - rail / 2).toFixed(2)}" width="${(2 * L).toFixed(2)}" height="${rail}" rx="${(rail / 2).toFixed(2)}" fill="#252b32"/>` +
+        `<rect x="${(-L).toFixed(2)}" y="${(aw - rail / 2).toFixed(2)}" width="${(2 * L).toFixed(2)}" height="${rail}" rx="${(rail / 2).toFixed(2)}" fill="#252b32"/>` +
         peldaños +
         `</g>` +
-        // Tope del extremo: refuerza la lectura «escalera vista desde arriba».
-        `<rect x="${(-L - rail).toFixed(2)}" y="${(-aw - rail / 2).toFixed(2)}" width="${rail}" height="${(2 * aw + rail).toFixed(2)}" rx="${(rail / 2).toFixed(2)}" fill="${c}" stroke="#20242a" stroke-width="0.1"/>` +
         `</g>`;
       return rotWrap(g, el.rot, x, y);
     }

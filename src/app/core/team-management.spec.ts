@@ -10,7 +10,9 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  adminSelfDeletionConsequences,
   canDeleteAccount,
+  canDeleteTeam,
   canLeaveTeam,
   canTransferOwnership,
   deletionBlockerMessage,
@@ -19,9 +21,14 @@ import {
   leaveTeamBlockedReason,
   leaveTeamConsequences,
   missingDeletionPreview,
+  missingTeamDeletionPreview,
+  teamDeletionConfirmMatches,
+  teamDeletionConsequences,
+  teamDeletionSummary,
   transferBlockedReason,
   transferConsequences,
   type AccountDeletionPreview,
+  type TeamDeletionPreview,
   type TransferTarget,
 } from './team-management';
 
@@ -179,5 +186,83 @@ describe('traspasar la propiedad — permisos y consecuencias', () => {
     expect(texto).toContain('colaborador');
     expect(texto).toContain('no podrás gestionar miembros');
     expect(texto).toContain('recuperar la propiedad');
+  });
+});
+
+describe('eliminar un equipo — permiso, confirmación escrita y resumen', () => {
+  const preview = (over: Partial<TeamDeletionPreview> = {}): TeamDeletionPreview => ({
+    found: true,
+    teamId: 't1',
+    name: 'Primer Equipo',
+    accentColor: '#3056d3',
+    ownerUserId: 'u1',
+    ownerEmail: 'ana@example.com',
+    isOwner: true,
+    isPlatformAdmin: false,
+    canDelete: true,
+    confirmNameRequired: 'Primer Equipo',
+    data: { players: 11, folders: 2, exercises: 5, sessions: 3, members: 4, pendingInvitations: 1 },
+    ...over,
+  });
+
+  it('solo se puede borrar cuando el servidor lo autoriza', () => {
+    expect(canDeleteTeam(preview())).toBe(true);
+    expect(canDeleteTeam(preview({ canDelete: false, isOwner: false }))).toBe(false);
+    expect(canDeleteTeam(preview({ found: false }))).toBe(false);
+    expect(canDeleteTeam(null)).toBe(false);
+    expect(canDeleteTeam(missingTeamDeletionPreview('t9'))).toBe(false);
+  });
+
+  it('la confirmación exige el nombre del equipo (sin distinguir mayúsculas ni espacios)', () => {
+    expect(teamDeletionConfirmMatches('Primer Equipo', 'Primer Equipo')).toBe(true);
+    expect(teamDeletionConfirmMatches('  primer equipo ', 'Primer Equipo')).toBe(true);
+    expect(teamDeletionConfirmMatches('Primer', 'Primer Equipo')).toBe(false);
+    expect(teamDeletionConfirmMatches('', 'Primer Equipo')).toBe(false);
+    expect(teamDeletionConfirmMatches('   ', 'Primer Equipo')).toBe(false);
+  });
+
+  it('el resumen cuenta lo que se destruye y avisa de que no se puede deshacer', () => {
+    const texto = teamDeletionSummary(preview());
+    expect(texto).toContain('Primer Equipo');
+    expect(texto).toContain('11 jugador(es)');
+    expect(texto).toContain('5 ejercicio(s)');
+    expect(texto).toContain('1 invitación(es) pendiente(s)');
+    expect(texto).toContain('No se puede deshacer');
+    // Sin invitaciones pendientes no se menciona esa parte.
+    const sinInvitaciones = teamDeletionSummary(
+      preview({ data: { ...preview().data, pendingInvitations: 0 } }),
+    );
+    expect(sinInvitaciones).not.toContain('invitación');
+  });
+
+  it('las consecuencias dicen qué pasa con las personas y contigo', () => {
+    const texto = teamDeletionConsequences();
+    expect(texto).toContain('colaboradores perderán el acceso');
+    expect(texto).toContain('su cuenta seguirá existiendo');
+    expect(texto).toContain('podrás solicitar otro');
+  });
+});
+
+describe('baja del propio administrador — se explica antes de escribir el correo', () => {
+  it('avisa de que es definitiva y de que debe quedar otro administrador', () => {
+    const texto = adminSelfDeletionConsequences();
+    expect(texto).toContain('definitivamente');
+    expect(texto).toContain('otra persona administradora');
+    expect(texto).toContain('rechazará la baja');
+  });
+
+  it('avisa de que los equipos propios hay que traspasarlos antes, y que los ajenos siguen', () => {
+    const texto = adminSelfDeletionConsequences();
+    expect(texto).toContain('traspasar o eliminar los equipos');
+    expect(texto).toContain('siguen existiendo');
+  });
+
+  it('la confirmación reforzada reutiliza la MISMA regla que el borrado de cuentas', () => {
+    // El servidor compara `p_confirm_email` con el correo normalizado del perfil, así que la
+    // pantalla usa la misma comparación (sin mayúsculas ni espacios de sobra) que en el borrado
+    // de una cuenta ajena: una sola regla, no dos parecidas que se puedan separar.
+    expect(deletionConfirmationMatches(' jefe@Example.com ', 'jefe@example.com')).toBe(true);
+    expect(deletionConfirmationMatches('', 'jefe@example.com')).toBe(false);
+    expect(deletionConfirmationMatches('otro@example.com', 'jefe@example.com')).toBe(false);
   });
 });

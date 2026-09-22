@@ -1,9 +1,13 @@
 # Solicitud de equipo aprobada por el administrador + correo de invitación real
 
-> **Estado vigente 22/09/2026:** gestión de cuentas y equipos aplicada en remoto
-> (`20260922101345_account_and_membership_management`) y probada con la matriz SQL en
-> `ROLLBACK`. Los pasajes que hablan de «no aplicada» describen el informe local anterior.
-> El correo real sigue pendiente de configurar Resend y el SMTP de Auth.
+> **Estado vigente 22/09/2026 (tarde):** al encargo se suman la **gestión de cuentas y equipos**
+> (§8) y la **administración de plataforma** (§9): entrar en cualquier equipo como editor, nombrar
+> administradores y darse de baja. La gestión de cuentas consta aplicada en remoto
+> (`20260922101345_account_and_membership_management`); las tres migraciones posteriores
+> (`20260925000000`, `20260926000000`, `20260927000000`) están **validadas en estático** y el
+> catálogo remoto **no se ha podido consultar desde esta máquina** (sin token del CLI), así que su
+> estado en remoto se declara **no verificado** en `docs/supabase-estado.md`. El correo real sigue
+> pendiente de configurar el proveedor y el SMTP de Auth.
 
 > Encargo del dueño (22/09/2026): _«para crear un equipo, ¿el admin (yo) tiene forma de aceptar
 > esa solicitud? debería estar restringido a admin(s)»_ y _«¿hay alguna forma de enviar
@@ -117,6 +121,8 @@
   (con guardas y auditoría), salir del equipo y traspasar la propiedad. **No aplicada.** (La marca
   `20260923000000` ya la ocupa `clear_stale_invitation_email_result`; dos ficheros con el mismo
   prefijo son la MISMA migración para el CLI, por eso esta lleva `20260924000000`.)
+- `supabase/migrations/20260925000000_team_deletion.sql` — borrar EQUIPO con confirmación por
+  nombre **comprobada en el servidor** y auditoría propia (`public.team_deletions`). **No aplicada.**
 - `src/app/core/team-management.ts` (+ `.spec.ts`) — reglas puras de permisos y confirmaciones
   (qué acción se ofrece, qué se explica y cuándo la confirmación reforzada está completa).
 - `e2e/fase-gestion-cuentas-equipos.spec.ts` — contrato visible en modo local + comprobación de que
@@ -186,13 +192,22 @@ texto SQL, y es lo que **está pendiente**):
 4. Solicitud → aprobación por el administrador → equipo creado; y dos aprobaciones seguidas
    devuelven el **mismo** equipo.
 
-**Etapa 4 — correo: proveedor y secretos.** Crear la cuenta del proveedor transaccional, verificar
-el dominio remitente (SPF/DKIM/DMARC) y definir los secretos de la función:
+**Etapa 4 — correo: proveedor y secretos.** Crear la cuenta del proveedor transaccional y definir
+los secretos de la función. **Sin dominio propio hay una vía directa**: `EMAIL_PROVIDER=brevo` con
+una **dirección remitente verificada** (Brevo no exige dominio, solo verificar ese correo). Con
+Resend o Postmark sí hace falta un dominio verificado (SPF/DKIM/DMARC).
 
 ```bash
-supabase secrets set EMAIL_PROVIDER=resend EMAIL_API_KEY=… EMAIL_FROM=… \
-  EMAIL_FROM_NAME='CDMPLab' INVITE_LINK_BASE='https://<usuario>.github.io/CDMPLab/'
+# Opción SIN dominio (recomendada para empezar):
+supabase secrets set EMAIL_PROVIDER=brevo EMAIL_API_KEY=TU-CLAVE \
+  EMAIL_FROM=tu-correo-verificado@ejemplo.com EMAIL_FROM_NAME='CDMPLab' \
+  INVITE_LINK_BASE='https://erdeivih.github.io/CDMPLab/'
 ```
+
+El valor de `INVITE_LINK_BASE` de ESTE proyecto es el de arriba: el repositorio es
+`github.com/Erdeivih/CDMPLab`, así que la app publicada vive en
+`https://erdeivih.github.io/CDMPLab/`. Detalle de las tres opciones (Brevo, remitente de pruebas
+de Resend y dominio propio) en `docs/correo-invitaciones.md` §5.1.
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` los inyecta la plataforma en las
 Edge Functions alojadas; **no hay que definirlos a mano** (y la credencial de servicio nunca sale
@@ -208,9 +223,49 @@ sesión con esa cuenta y aceptar la invitación. Después, en la base:
 → `provider_accepted` con identificador del proveedor.
 
 **Etapa 7 — SMTP de Supabase Auth** para confirmación de registro y recuperación de contraseña:
-`docs/smtp-supabase-auth.md` (es otra cosa distinta del correo de invitación).
+`docs/smtp-supabase-auth.md` (es otra cosa distinta del correo de invitación). Sin dominio, la vía
+más rápida es el **SMTP de Brevo** (`smtp-relay.brevo.com`, puerto `587`) con la misma dirección
+remitente verificada. En esa misma ronda conviene **activar la protección contra contraseñas
+filtradas** (_Authentication → Settings → Password strength_), que es el aviso que Supabase sigue
+mostrando: es un interruptor del panel, no necesita dominio ni código.
 
 ## 6. Estado de las puertas en esta ronda (medido, con códigos de salida)
+
+**Ronda de revisión del árbol mezclado (22/09/2026, tarde).** El árbol tenía cambios sin
+confirmar de dos sesiones (la de gestión de cuentas/equipos y la de administración de
+plataforma). Antes de dar nada por bueno se ejecutaron las puertas sobre el árbol completo y
+aparecieron **tres defectos reales**, corregidos aquí:
+
+| Defecto encontrado                                                                                                     | Qué era                                                                                                                                                                                                | Corrección                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `connectDataSource` exige equipo y las pruebas de `store.remote.spec.ts` seguían devolviendo `team: null` (12 en rojo) | Una sesión añadió la guarda («El equipo ya no existe o no tienes acceso.») y las pruebas del otro carril usaban `team: null` de relleno, así que la suite quedaba en rojo                              | Helper `teamDataset()` en la prueba: el valor por defecto es un EQUIPO REAL y el caso «sin equipo» se pide explícitamente (`teamDataset({ team: null })`)                                  |
+| La guarda anterior dejaba al usuario en el LOGIN teniendo sesión válida                                                | `initialize()` metía el fallo de carga del equipo en su `catch` genérico: estado `unauthenticated`, sin explicación y sin camino a «solicitar equipo» si el equipo desaparecía entre las dos consultas | `AccessService.initialize()` vuelve a resolver el acceso **una vez** cuando la resolución era obsoleta (y solo una: la segunda pasada no reintenta). Dos pruebas nuevas lo fijan           |
+| La baja del propio administrador no pedía confirmación reforzada ni explicaba nada                                     | El botón se habilitaba con solo escribir «algo» en el correo, sin decir qué se pierde —al contrario que el borrado de cuenta y de equipo, que sí exigen el texto exacto                                | Regla pura `adminSelfDeletionConsequences()` + `deletionConfirmationMatches` (la MISMA regla que el borrado de cuenta ajeno) y el botón deshabilitado hasta que el correo escrito coincide |
+
+| Puerta                                                                       | Resultado                                                                            |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `npm run test:unit`                                                          | **627 pruebas / 34 ficheros en verde** — exit 0                                      |
+| `npm run validate:migration`                                                 | verde, **141 comprobaciones** (23 nuevas de administración) — exit 0                 |
+| `npm run validate:invite-email`                                              | verde, **45 comprobaciones** — exit 0                                                |
+| `e2e/fase-solicitud-equipo.spec.ts` + `fase-gestion-cuentas-equipos.spec.ts` | 13 pruebas en verde — exit 0 (build de DESARROLLO regenerada antes)                  |
+| **Suite E2E completa** (`playwright.dev.config.ts --workers=1`)              | **884 en verde, 11 omitidas, exit 0** (27,8 min)                                     |
+| `npm run build`                                                              | compila sin avisos de presupuesto — exit 0                                           |
+| `npm run build:pages` + E2E del artefacto de Pages                           | 14 pruebas en verde — exit 0                                                         |
+| `npm run lint` / `format:check` / `typecheck:e2e` / codificación             | sin deuda nueva — exit 0 (`prettier` corrigió 6 ficheros que quedaban sin formatear) |
+| `git diff --check`                                                           | sin errores de espacio — exit 0                                                      |
+
+Las 23 comprobaciones nuevas del validador **se probaron rompiendo la migración a propósito**
+(quitar el `lock table` de la baja y mover la auditoría detrás del borrado): las dos
+comprobaciones correspondientes fallaron, y al restaurar el fichero volvieron a pasar. Una puerta
+que no puede fallar no es una puerta.
+
+**La matriz SQL se ha ampliado** (baja propia con un solo administrador → `last_platform_admin`;
+administrador que además es propietario → conserva el rol `owner` y no puede darse de baja sin
+traspasar, `target_owns_team`). El fichero **parsea** (9 sentencias de nivel superior), pero el
+cuerpo PL/pgSQL **no se ha ejecutado**: eso solo lo puede hacer PostgreSQL, y en esta máquina no
+hay credenciales. Queda declarado como pendiente, no como verde.
+
+Resultados de la ronda ANTERIOR (siguen en pie, y su alcance se declara abajo):
 
 | Puerta                                                                 | Resultado                                                                 |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -267,6 +322,14 @@ corrección.
 - **El estado visual** de las pantallas nuevas no se ha revisado con ojos (el modelo no puede leer
   imágenes): el contrato está medido con E2E (textos, apartados y avisos), pero la revisión
   estética es del dueño.
+- **El catálogo remoto no se ha consultado en esta ronda** (no hay token del CLI de Supabase en
+  esta máquina), así que **no se afirma** que las migraciones `20260925000000`,
+  `20260926000000` y `20260927000000` estén aplicadas: lo que consta es que están validadas en
+  estático, cubiertas por la matriz SQL y (según la sesión que las aplicó, información de segunda
+  mano) registradas en el historial remoto. Ver `docs/supabase-estado.md`.
+- **La matriz SQL no se ha ejecutado** en esta ronda: solo se ha comprobado que parsea sin errores.
+  Los casos nuevos de administración de plataforma (nombrar, baja propia, `last_platform_admin`,
+  `cannot_suspend_platform_admin`) están escritos y **pendientes de ejecutar contra PostgreSQL**.
 
 ## 8. Gestión de cuentas y equipos: qué se puede hacer hoy
 
@@ -276,13 +339,13 @@ corrección.
 > la matriz SQL real con `ROLLBACK`. Todo lo que decide quién puede hacer qué está en el servidor;
 > la interfaz solo evita ofrecer lo que el servidor rechazaría.
 
-| Operación                  | ¿Se puede?                        | Cómo funciona                                                                                                                                                                                                                                             | Confirmación                                                                                                                                               |
-| -------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Eliminar una cuenta**    | **Sí** (solo el administrador)    | RPC `admin_delete_account`: borra el usuario de Auth (perfil y membresías caen por cascada) y deja registro en `public.account_deletions` (sin clave foránea: sobrevive al borrado). Antes se consulta la vista previa `admin_deletion_preview`.          | **Doble**: vista previa con lo que se lleva por delante + **escribir el correo exacto** + diálogo de confirmación. El texto dice que no se puede deshacer. |
-| **Quitar colaboradores**   | **Sí** (el propietario)           | `revoke_team_member` (editor activo → `revoked`) y `cancel_team_invitation` (invitación pendiente). El invitado puede rechazar la suya (`decline_team_invitation`).                                                                                       | Diálogo de confirmación (ya existía).                                                                                                                      |
-| **Salir de un equipo**     | **Sí** (el propio miembro activo) | RPC `leave_team`: la membresía pasa a `revoked` (no se borra: se conserva el histórico) y se revocan sus invitaciones pendientes de ese equipo. El **propietario no puede**: `owner_cannot_leave`.                                                        | Diálogo que enumera lo que se pierde y avisa de que habrá que volver a invitarle.                                                                          |
-| **Traspasar la propiedad** | **Sí** (solo el propietario)      | RPC `transfer_team_ownership`: el destinatario debe ser **editor activo**, con perfil aprobado y **sin equipo propio**; cambia `teams.owner_user_id` y los **dos roles de membresía en la misma transacción**. El número de cuentas del equipo no cambia. | Diálogo con las consecuencias para las dos partes (el actual baja a colaborador y pierde la gestión de miembros).                                          |
-| **Borrar un equipo**       | **No**                            | No existe ninguna operación que borre un equipo (ni RPC ni `DELETE` concedido al cliente). Por eso, para borrar la cuenta de quien POSEE un equipo hay que **traspasarlo primero**: el bloqueo `target_owns_team` lo impide y lo explica.                 | —                                                                                                                                                          |
+| Operación                  | ¿Se puede?                                  | Cómo funciona                                                                                                                                                                                                                                                                                                                                                                                     | Confirmación                                                                                                                                               |
+| -------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Eliminar una cuenta**    | **Sí** (solo el administrador)              | RPC `admin_delete_account`: borra el usuario de Auth (perfil y membresías caen por cascada) y deja registro en `public.account_deletions` (sin clave foránea: sobrevive al borrado). Antes se consulta la vista previa `admin_deletion_preview`.                                                                                                                                                  | **Doble**: vista previa con lo que se lleva por delante + **escribir el correo exacto** + diálogo de confirmación. El texto dice que no se puede deshacer. |
+| **Quitar colaboradores**   | **Sí** (el propietario)                     | `revoke_team_member` (editor activo → `revoked`) y `cancel_team_invitation` (invitación pendiente). El invitado puede rechazar la suya (`decline_team_invitation`).                                                                                                                                                                                                                               | Diálogo de confirmación (ya existía).                                                                                                                      |
+| **Salir de un equipo**     | **Sí** (el propio miembro activo)           | RPC `leave_team`: la membresía pasa a `revoked` (no se borra: se conserva el histórico) y se revocan sus invitaciones pendientes de ese equipo. El **propietario no puede**: `owner_cannot_leave`.                                                                                                                                                                                                | Diálogo que enumera lo que se pierde y avisa de que habrá que volver a invitarle.                                                                          |
+| **Traspasar la propiedad** | **Sí** (solo el propietario)                | RPC `transfer_team_ownership`: el destinatario debe ser **editor activo**, con perfil aprobado y **sin equipo propio**; cambia `teams.owner_user_id` y los **dos roles de membresía en la misma transacción**. El número de cuentas del equipo no cambia.                                                                                                                                         | Diálogo con las consecuencias para las dos partes (el actual baja a colaborador y pierde la gestión de miembros).                                          |
+| **Borrar un equipo**       | **Sí** (el propietario, o el administrador) | RPC `delete_team` (migración `20260925000000`): exige el **nombre EXACTO del equipo escrito en la propia llamada** (lo comprueba el servidor, no la pantalla), bloquea el equipo (`for update`), deja registro en `public.team_deletions` (sin clave foránea) y arrastra por cascada jugadores, carpetas, ejercicios, sesiones, membresías e invitaciones. Antes se mira `team_deletion_preview`. | **Doble**: vista previa con todo lo que se lleva + **escribir el nombre del equipo** + diálogo de confirmación.                                            |
 
 Guardas que **no** dependen de la interfaz (las comprueba el servidor y están en la matriz
 `supabase/tests/entrenolab_rls.sql`):
@@ -292,11 +355,59 @@ Guardas que **no** dependen de la interfaz (las comprueba el servidor y están e
 - traspasar: solo el propietario, solo a miembro **activo** y **aprobado**, y no a quien ya posee
   otro equipo (`new_owner_already_has_team`);
 - salir: solo un miembro **activo** que no sea el propietario;
-- la auditoría de bajas **solo la lee el administrador** y **nadie la escribe desde el cliente**
-  (un `insert` directo falla: sin política de escritura y sin GRANT).
+- borrar el equipo: propietario o administrador, y **el nombre exacto escrito en la llamada**
+  (`team_name_confirmation_mismatch` si no coincide; `not_authorized_for_team_deletion` a un
+  ajeno);
+- las auditorías (bajas de cuenta y equipos eliminados) **solo las lee el administrador** y
+  **nadie las escribe desde el cliente** (un `insert` directo falla: sin política de escritura y
+  sin GRANT).
 
-**Límites restantes**: no se ha probado una carrera real entre dos sesiones ni el borrado de una
-cuenta que posea objetos de Storage (la base tenía cero objetos al verificarla). El rol ejecutor
-sí tiene `DELETE` sobre `auth.users` y la matriz PostgreSQL real pasó con `ROLLBACK`. Si el
-propietario está **solo** y quiere borrar su cuenta, queda bloqueado a propósito: primero debe
-traspasar el equipo a alguien que se registre y acepte, porque no existe borrado de equipos.
+**Sobre «el propietario solo»**: con el borrado de equipo ya **no queda bloqueado**. Ese caso
+—el propietario único que quiere irse— se resuelve así: él mismo **elimina su equipo** (escribiendo
+el nombre) y después el administrador da de baja su cuenta. Antes había que esperar a que otra
+persona aceptara la propiedad.
+
+**Límites restantes**: no se ha probado una carrera real entre dos sesiones (ni el traspaso ni
+dos borrados simultáneos) ni el borrado de una cuenta que posea objetos de Storage (la base tenía
+cero objetos al verificarla). El rol ejecutor sí tiene `DELETE` sobre `auth.users` y la matriz
+PostgreSQL real pasó con `ROLLBACK` **hasta la migración de gestión de cuentas**
+(`20260924000000`). Las tres migraciones posteriores
+(`20260925000000` borrado de equipo, `20260926000000` historial de la solicitud,
+`20260927000000` administración de plataforma) están **validadas en estático** y cubiertas por la
+matriz SQL, pero **el catálogo remoto no se ha podido consultar desde esta máquina** (sin token del
+CLI): qué está aplicado de verdad en remoto queda abierto en `docs/supabase-estado.md`.
+
+## 9. Administración de plataforma (migración `20260927000000`)
+
+> **Añadido el 22/09/2026.** Quien administra la plataforma necesitaba poder hacer su trabajo sin
+> pedir SQL a mano: **nombrar administradores**, **mirar cualquier equipo** y **darse de baja**.
+> Todo lo que decide se comprueba en el servidor contra `private.platform_admins`
+> (`is_platform_admin()`), nunca por correo ni por metadatos del token.
+
+| Operación                           | ¿Se puede?             | Cómo funciona                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Entrar en cualquier equipo**      | Sí, como **editor**    | `private.team_role()` devuelve `editor` al administrador en cualquier equipo que **exista**, sin ocupar plaza de colaborador (el límite de 6 no se toca) y sin poder desbancar al propietario: la propiedad se comprueba **antes** que el permiso de administrador.                                                                                                           |
+| **Nombrar administrador**           | Sí, otro administrador | RPC `admin_grant_platform_admin`: exige ser administrador y que el destino tenga el perfil **aprobado** (`profile_not_approved`), y es **idempotente** (`on conflict do nothing`). La interfaz pide confirmación explicando que esa persona podrá acceder a todos los equipos.                                                                                                |
+| **Ver quién administra**            | Sí, otro administrador | RPC `admin_list_administrators` (lee `private.platform_admins`, tabla que el cliente **no** puede consultar directamente).                                                                                                                                                                                                                                                    |
+| **Darse de baja (perfil + cuenta)** | Sí, uno mismo          | RPC `delete_my_admin_account`: exige escribir **tu correo exacto**, que **quede otro administrador** (`last_platform_admin`) y **no poseer ningún equipo** (`target_owns_team`). Audita en `public.account_deletions` **antes** de borrar la identidad. Las bajas se serializan con `lock table`, así que dos administradores no pueden colarse por el último hueco a la vez. |
+
+Guardas que **no** dependen de la interfaz (están en la migración, exigidas por el validador y
+cubiertas por la matriz SQL):
+
+- **suspender o rechazar a un administrador está prohibido** para cualquier otro administrador
+  (`cannot_suspend_platform_admin`, vía disparador sobre `public.profiles`): evita expulsar a un
+  administrador por la puerta de atrás;
+- la baja **solo** puede borrar la identidad de quien llama (`auth.uid()`); la función **no acepta
+  un id de usuario**, así que no sirve para dar de baja a otro administrador;
+- `EXECUTE` de las tres RPC **revocado a `PUBLIC` y a `anon`** y concedido a `authenticated`
+  (cada una autoriza dentro); `private.platform_admins` sigue **sin acceso de tabla** para el
+  cliente;
+- el panel de administración **no ofrece estas acciones sin que el servidor haya confirmado** que
+  quien mira es administrador (`checkIsPlatformAdmin()`): en modo local, donde no hay verificación
+  posible, el bloque ni se pinta. Antes bastaba con que la consulta de datos no fallara, y esa
+  lista vacía hacía parecer administrador a cualquiera.
+
+**Enlace con la vista previa de bajas**: la baja de una cuenta ajena (`admin_delete_account`) sigue
+prohibiendo borrar a otro administrador (`cannot_delete_platform_admin`); si lo que se quiere es
+que un administrador deje de serlo, la vía es la baja propia de arriba (o quitar la fila de
+`private.platform_admins` con SQL por el propietario del proyecto).

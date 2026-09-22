@@ -231,8 +231,9 @@ export class StoreService {
    * datos del servidor del equipo indicado.
    */
   async connectDataSource(ds: DataSource, teamId: string): Promise<void> {
-    this.dataSource = ds;
     const dataset = await ds.loadTeam(teamId);
+    if (!dataset.team) throw new Error('El equipo ya no existe o no tienes acceso.');
+    this.dataSource = ds;
     this.hydrate(dataset, teamId);
     try {
       localStorage.setItem('entrenolab:remote-mode', '1');

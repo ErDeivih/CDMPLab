@@ -223,9 +223,36 @@ destructivas o de permisos:
   y con registro en `public.account_deletions`);
 - **salir de un equipo** (el propio miembro activo; el propietario no puede, debe traspasarlo);
 - **traspasar la propiedad** (solo el propietario, solo a un colaborador activo, aprobado y sin
-  equipo propio; los dos roles cambian en la misma transacción).
+  equipo propio; los dos roles cambian en la misma transacción);
+- **eliminar un equipo** (`supabase/migrations/20260925000000_team_deletion.sql`): el propietario
+  (o el administrador) escribe el **nombre exacto** del equipo —lo comprueba el servidor— y se
+  borra todo lo suyo, con registro en `public.team_deletions`
+  (`20260926000000_team_deletion_request_history.sql` conserva el historial de la solicitud
+  aprobada cuando su equipo ya no existe). Así el propietario que está solo ya puede irse:
+  elimina su equipo y después el administrador da de baja su cuenta.
 
 Detalles, guardas y limitaciones declaradas: [`docs/FASE-10-solicitud-de-equipo.md`](docs/FASE-10-solicitud-de-equipo.md) §8.
+
+### Administración de plataforma
+
+`supabase/migrations/20260927000000_platform_administration.sql` da al administrador lo que le
+faltaba para trabajar sin SQL a mano, todo decidido en el servidor contra `private.platform_admins`
+(nunca por correo ni por metadatos del token):
+
+- **entra como editor en cualquier equipo** sin ocupar plaza de colaborador, y sin poder desbancar
+  al propietario (la propiedad se comprueba antes que el permiso de administrador);
+- **nombra administradores** (`admin_grant_platform_admin`, solo perfiles aprobados e idempotente) y
+  **ve quién administra** (`admin_list_administrators`);
+- **se da de baja** (`delete_my_admin_account`) escribiendo su correo exacto, y solo si **queda otro
+  administrador** (`last_platform_admin`) y **no posee ningún equipo** (`target_owns_team`); la baja
+  se audita en `public.account_deletions` antes de borrar la identidad y se serializa con
+  `lock table`, así que dos bajas simultáneas no pueden dejar la plataforma sin nadie;
+- **suspender o rechazar a un administrador está prohibido** (disparador
+  `cannot_suspend_platform_admin`): no se expulsa a un administrador por la puerta de atrás.
+
+El panel `/admin` no ofrece ninguna de estas acciones hasta que el **servidor** confirma que quien
+mira es administrador. Estado en remoto: **no verificado desde esta máquina** (sin token del CLI) —
+ver [`docs/supabase-estado.md`](docs/supabase-estado.md).
 
 ### Rechazo de invitaciones
 
@@ -317,21 +344,30 @@ supabase/schema.sql  esquema inicial histórico: DEPRECADO, con guarda que ABORT
 
 ## Estado de las pruebas (números reales)
 
-- **Unitarias (Vitest)**: `npm run test:unit` → **432 pruebas en 27 ficheros**.
-- **E2E (Playwright)**: **97 ficheros** en `e2e/` (73 se ejecutan en la config de desarrollo;
-  el resto son opt-in: Supabase real, Pages y la build de producción). La pasada completa
-  final de la auditoría con `--workers=1`: **767 pruebas, 0 fallos, 30,6 min**.
+- **Unitarias (Vitest)**: `npm run test:unit` → **627 pruebas en 34 ficheros** (medido el
+  22/09/2026 con el árbol de la administración de plataforma).
+- **E2E (Playwright)**: **116 ficheros** en `e2e/`. La pasada completa de la config de
+  desarrollo (`playwright.dev.config.ts --workers=1`, sobre una build de **desarrollo**
+  regenerada antes) el 22/09/2026: **884 pruebas en verde, 11 omitidas, 27,8 min, exit 0**.
+  Las omitidas son las capturas que solo corren con su variable (`CAPTURAS_*`).
+  El resto de configuraciones son opt-in: Supabase real, Pages y la build de producción.
 - **Auditoría de interacción**: `fase-i-interaccion` (doble clic y papelera, ×50 con un
   worker = 600 pruebas) y `fase-i-barra` (barra contextual en 5 vistas × 5 posiciones y
-  sensibilidad al tamaño/número real de botones). Ambas en verde dentro de las 767.
+  sensibilidad al tamaño/número real de botones). Ambas en verde dentro de las 884.
 - **CI en cada push** (`.github/workflows/ci.yml`): `format:check` + `lint` + unitarias +
   `validate:migration` + build de producción + un subconjunto **estable** de E2E
   (14 ficheros: núcleo, persistencia, móvil, accesibilidad, galerías y los `fase-i-*`).
 - **Suite completo de noche** (`.github/workflows/nightly.yml`, 03:00 UTC y a mano):
   el suite entero, para que una rotura fuera del subconjunto no quede escondida.
 - `npm run validate:migration` es **análisis estático**: parsea la sintaxis de las
-  migraciones y audita por texto las propiedades de seguridad del fichero de grants.
-  **No** consulta el catálogo remoto ni comprueba que los GRANT se apliquen.
+  migraciones y audita por texto las propiedades de seguridad de cada migración relevante
+  (**141 comprobaciones** en la última pasada). **No** consulta el catálogo remoto ni
+  comprueba que los GRANT se apliquen.
+- **Ojo con `dist/`**: `playwright.dev.config.ts` sirve la build que haya en
+  `dist/entrenolab/browser`, así que **hay que regenerar la build de desarrollo**
+  (`npx ng build --configuration development`) antes de esa suite si se acaba de hacer
+  `npm run build` (producción) o `build:pages`; si no, las pruebas de la config de desarrollo
+  corren contra otro artefacto y fallan sin motivo.
 
 ## Arquitectura
 

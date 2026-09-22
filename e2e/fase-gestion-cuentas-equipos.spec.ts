@@ -75,11 +75,29 @@ test.describe('Panel de administración — borrar cuentas no se ofrece sin vist
     await expect(page.locator('[data-accion="eliminar-cuenta"]')).toHaveCount(0);
     await expect(page.locator('[data-panel-borrado]')).toHaveCount(0);
     await expect(page.locator('[data-accion="confirmar-borrado"]')).toHaveCount(0);
+    // La baja del PROPIO administrador tampoco: sin ser administrador comprobado por el servidor
+    // (en modo local no hay sesión), el bloque ni se pinta. Ofrecerlo sería prometer algo que la
+    // RPC rechaza (`platform_admin_required`).
+    await expect(page.locator('[data-accion="eliminar-mi-cuenta"]')).toHaveCount(0);
+    await expect(page.locator('[data-consecuencias-baja-admin]')).toHaveCount(0);
+  });
+});
+
+test.describe('Eliminar un equipo — zona peligrosa solo para el propietario con permiso', () => {
+  test('sin ser propietario de un equipo remoto no se ofrece eliminar el equipo', async ({
+    page,
+  }) => {
+    await page.goto('/settings/team/members');
+    // La zona peligrosa vive dentro del bloque de gestión del propietario; en modo local no hay
+    // rol comprobado por el servidor, así que no se pinta nada destructivo.
+    await expect(page.locator('[data-zona-peligrosa]')).toHaveCount(0);
+    await expect(page.locator('[data-accion="abrir-borrado-equipo"]')).toHaveCount(0);
+    await expect(page.locator('[data-accion="confirmar-borrado-equipo"]')).toHaveCount(0);
   });
 });
 
 test.describe('Artefacto publicado — los textos de las acciones nuevas van dentro', () => {
-  test('el bundle contiene las confirmaciones de salir, traspasar y borrar cuenta', () => {
+  test('el bundle contiene las confirmaciones de salir, traspasar, borrar cuenta y borrar equipo', () => {
     const js = bundleJs();
     expect(js, 'no se encontró el bundle de la build').toBeTruthy();
     // OJO: la build escapa los acentos (`\xE1`), así que los fragmentos comprobados son ASCII.
@@ -96,5 +114,16 @@ test.describe('Artefacto publicado — los textos de las acciones nuevas van den
     expect(js).toContain('para confirmar');
     // Y el aviso de que el propietario tiene que traspasar antes de irse o de ser borrado.
     expect(js).toContain('antes la propiedad');
+    // Confirmación de BORRADO DE EQUIPO: se lleva todo, hay que escribir el nombre y avisa de que
+    // la cuenta del propietario sigue existiendo (podrá pedir al administrador que la borre).
+    expect(js).toContain('Eliminar el equipo');
+    expect(js).toContain('Se borrar');
+    expect(js).toContain('jugadores, ejercicios, carpetas, sesiones');
+    expect(js).toContain('para confirmar');
+    // Baja del PROPIO administrador: dice que es definitiva y que la plataforma no puede quedarse
+    // sin ninguna persona administradora (el servidor lo rechaza con `last_platform_admin`).
+    expect(js).toContain('otra persona administradora');
+    expect(js).toContain('traspasar o eliminar los equipos');
+    expect(js).toContain('definitivamente');
   });
 });
