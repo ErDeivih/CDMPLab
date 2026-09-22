@@ -331,14 +331,16 @@ export class AccessService {
     const repo = await this.ensureRepo();
     if (!repo) return { teams: [], members: 0, players: 0, exercises: 0, folders: 0, sessions: 0 };
     const teams = await repo.listAccessibleTeams();
-    const datasets = await Promise.all(teams.map((team) => repo.loadTeam(team.id)));
+    const datasets = await Promise.all(
+      teams.map(async (team) => ({ data: await repo.loadTeam(team.id), members: await repo.listMembers(team.id) })),
+    );
     return {
       teams,
-      members: datasets.reduce((total, data) => total + (data.team ? 1 : 0), 0),
-      players: datasets.reduce((total, data) => total + data.players.length, 0),
-      exercises: datasets.reduce((total, data) => total + data.exercises.length, 0),
-      folders: datasets.reduce((total, data) => total + data.folders.length, 0),
-      sessions: datasets.reduce((total, data) => total + data.sessions.length, 0),
+      members: datasets.reduce((total, item) => total + item.members.length, 0),
+      players: datasets.reduce((total, item) => total + item.data.players.length, 0),
+      exercises: datasets.reduce((total, item) => total + item.data.exercises.length, 0),
+      folders: datasets.reduce((total, item) => total + item.data.folders.length, 0),
+      sessions: datasets.reduce((total, item) => total + item.data.sessions.length, 0),
     };
   }
 
