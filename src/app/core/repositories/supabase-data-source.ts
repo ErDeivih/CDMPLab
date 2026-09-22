@@ -37,6 +37,11 @@ import type {
   TeamRequestStatus,
 } from './data-source';
 import { DataError } from './data-source';
+import {
+  missingDeletionPreview,
+  type AccountDeletionPreview,
+  type DeletionBlocker,
+} from '../team-management';
 import type { Exercise, ExerciseFolder, Player, Session, SessionTask, Team } from '../models';
 import {
   exerciseFromRow,
@@ -103,6 +108,21 @@ const ERROR_MESSAGES: Record<string, string> = {
     'No se pudo crear el equipo: la cuenta que lo solicitó ya no está aprobada.',
   team_creation_failed: 'No se pudo crear el equipo. Inténtalo de nuevo.',
   invalid_email_status: 'El estado de envío del correo no es válido.',
+  // Gestión de cuentas y pertenencia (migración 20260923000000).
+  account_not_found: 'Esa cuenta ya no existe.',
+  cannot_delete_self: 'No puedes borrar tu propia cuenta.',
+  cannot_delete_platform_admin:
+    'Esa cuenta es administradora de la plataforma: no se borra desde aquí.',
+  target_owns_team:
+    'Esa cuenta es propietaria de un equipo. Traspasa antes la propiedad a otra persona.',
+  owner_cannot_leave:
+    'Eres el propietario del equipo: traspasa antes la propiedad a otra persona para poder dejarlo.',
+  not_a_member: 'No consta que seas miembro activo de ese equipo.',
+  already_owner: 'Ya eres el propietario de ese equipo.',
+  new_owner_must_be_active_member:
+    'Solo se puede traspasar el equipo a un colaborador que ya haya aceptado la invitación.',
+  new_owner_not_approved: 'Esa persona todavía no tiene el perfil aprobado.',
+  new_owner_already_has_team: 'Esa persona ya es propietaria de otro equipo.',
   team_not_found: 'No se encontró el equipo.',
   folder_cycle: 'No se puede mover una carpeta dentro de sí misma.',
   team_name_required: 'El nombre del equipo es obligatorio.',
@@ -151,7 +171,11 @@ function errorToDataError(err: unknown, fallbackCode = 'unknown', fallbackMsg?: 
   // significan lo mismo que un `forbidden` genérico, y antes se perdían («No tienes permiso
   // para realizar esta operación» en los tres casos).
   let code = rawCode;
-  const conocido = Object.keys(ERROR_MESSAGES).find((key) => m.includes(key));
+  // Se prefiere la clave MÁS LARGA que aparezca en el mensaje: `new_owner_already_has_team`
+  // CONTIENE `already_has_team`, y el motivo específico es el que el usuario necesita leer.
+  const conocido = Object.keys(ERROR_MESSAGES)
+    .filter((key) => m.includes(key))
+    .sort((a, b) => b.length - a.length)[0];
   if (conocido) code = conocido;
   else if (rawCode === '42501') code = 'forbidden';
   const fallback = fallbackMsg ?? 'Error al comunicarse con el servidor.';
@@ -960,6 +984,70 @@ export class SupabaseRepository implements DataSource {
       p_status: status,
     });
     if (error) throw errorToDataError(error, 'profile_status');
+  }
+
+  /** Qué pasaría si se borrara esta cuenta (bloqueos incluidos). Solo administradores. */
+  async accountDeletionPreview(userId: string): Promise<AccountDeletionPreview> {
+    const { data, error } = await this.client.rpc('admin_deletion_preview', {
+      p_user_id: userId,
+    });
+    if (error) throw errorToDataError(error, 'account_deletion_preview');
+    const raw = (data ?? {}) as Record<string, unknown>;
+    if (raw['found'] !== true) return missingDeletionPreview(userId);
+    const datos = (raw['owned_team_data'] ?? {}) as Record<string, unknown>;
+    const blockers = Array.isArray(raw['blockers'])
+      ? (raw['blockers'] as unknown[]).filter(
+          (b): b is DeletionBlocker => b === 'self' || b === 'platform_admin' || b === 'owns_team',
+        )
+      : [];
+    return {
+      found: true,
+      userId: String(raw['user_id'] ?? userId),
+      displayName: String(raw['display_name'] ?? ''),
+      emailNormalized: String(raw['email_normalized'] ?? ''),
+      status: String(raw['status'] ?? ''),
+      isPlatformAdmin: raw['is_platform_admin'] === true,
+      isSelf: raw['is_self'] === true,
+      ownsTeam: raw['owns_team'] === true,
+      ownedTeamName: raw['owned_team_name'] == null ? null : String(raw['owned_team_name']),
+      ownedTeamData: {
+        players: Number(datos['players'] ?? 0),
+        folders: Number(datos['folders'] ?? 0),
+        exercises: Number(datos['exercises'] ?? 0),
+        sessions: Number(datos['sessions'] ?? 0),
+      },
+      activeMemberships: Number(raw['active_memberships'] ?? 0),
+      pendingInvitations: Number(raw['pending_invitations'] ?? 0),
+      blockers,
+      deletable: raw['deletable'] === true,
+    };
+  }
+
+  /**
+   * BORRA la cuenta (perfil + usuario de Auth). Las guardas están en el servidor; aquí solo se
+   * traduce su respuesta a un error legible en español.
+   */
+  async deleteAccount(userId: string, reason: string | null): Promise<void> {
+    const { error } = await this.client.rpc('admin_delete_account', {
+      p_user_id: userId,
+      p_reason: reason,
+    });
+    if (error) throw errorToDataError(error, 'account_delete');
+  }
+
+  /** El propio miembro activo sale del equipo. */
+  async leaveTeam(teamId: string): Promise<void> {
+    const { error } = await this.client.rpc('leave_team', { p_team_id: teamId });
+    if (error) throw errorToDataError(error, 'team_leave');
+  }
+
+  /** El propietario traspasa el equipo a un colaborador activo. */
+  async transferTeamOwnership(teamId: string, newOwnerUserId: string): Promise<void> {
+    const { error } = await this.client.rpc('transfer_team_ownership', {
+      p_team_id: teamId,
+      p_new_owner_user_id: newOwnerUserId,
+    });
+    if (error) throw errorToDataError(error, 'team_transfer');
   }
 
   // ---------------- Importación local→Supabase ----------------

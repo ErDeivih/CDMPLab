@@ -25,8 +25,12 @@ El cuerpo **siempre** tiene la misma forma, sea cual sea el código HTTP:
 
 - `status` ∈ `provider_accepted`, `send_error`, `not_configured`, `invalid_request`,
   `unauthorized`, `forbidden`, `invitation_not_available`, `email_cooldown`,
-  `email_attempt_limit`, `method_not_allowed`, `server_misconfigured`.
-- `message` es el texto en **español** que la interfaz muestra tal cual.
+  `email_attempt_limit`, `method_not_allowed`.
+  (`server_misconfigured` ya no se devuelve: la falta de `SUPABASE_URL`/clave publicable se une a
+  `not_configured`, y **siempre** antes de abrir el intento y de llamar al proveedor.)
+- `message` es el texto en **español** que la interfaz muestra tal cual. El de `not_configured`
+  dice explícitamente que no se ha intentado ningún envío, que no se ha consumido ningún intento
+  y que el estado del envío **no** ha cambiado.
 - `providerMessageId` solo aparece cuando el proveedor devolvió un identificador.
 
 **Códigos HTTP:** 400 (`invalid_request`), 401 (`unauthorized`) y 405 (`method_not_allowed`)
@@ -74,6 +78,14 @@ Además, el registro va **vinculado al intento**: `prepare_invitation_email` abr
 (`email_attempt_id`) en cada envío y devuelve su `attempt_id`; la RPC del registro exige que
 coincida y responde `stale_email_attempt` (sin escribir nada) si la respuesta corresponde a un
 intento anterior. Así una respuesta lenta no pisa el estado del intento vigente.
+
+### Puerta previa: sin poder registrar, no se envía
+
+Antes de abrir el intento y antes de llamar al proveedor, la función comprueba con
+`resolveSendReadiness(env)` que tiene la **credencial del servidor**, la **URL** y la **clave
+publicable**, y toda la **configuración de correo**. Si falta cualquiera de ellas responde
+`not_configured` sin tocar nada: **cero envíos, cero intentos consumidos y el estado sin cambios**
+(porque `prepare_invitation_email` es quien abre el intento y gasta uno de los 5).
 
 ## 4. Política de reintento (60 s y 5 intentos)
 

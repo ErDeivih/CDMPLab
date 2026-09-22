@@ -6,10 +6,17 @@ import { SupabaseService } from '../../core/supabase.service';
 import { ConfirmService } from '../../core/confirm.service';
 import { AuthCardComponent } from './auth-card.component';
 import type {
+  AccountDeletionPreview,
   ProfileInfo,
   ProfileStatus,
   TeamRequestInfo,
 } from '../../core/repositories/data-source';
+import {
+  canDeleteAccount,
+  deletionBlockerMessage,
+  deletionConfirmationMatches,
+  deletionSummary,
+} from '../../core/team-management';
 
 @Component({
   selector: 'app-admin-access',
@@ -166,6 +173,89 @@ export class AdminAccessComponent {
     await Promise.all([this.load(), this.loadRequests()]);
   }
 
+  // ---- BORRADO de cuentas (destructivo: vista previa + confirmación escribiendo el correo) ----
+  protected readonly borrado = signal<AccountDeletionPreview | null>(null);
+  protected readonly borradoTyped = signal('');
+  protected readonly borradoReason = signal('');
+  protected readonly borradoCargando = signal(false);
+  protected readonly borradoError = signal<string | null>(null);
+
+  protected readonly borradoResumen = computed(() => {
+    const preview = this.borrado();
+    return preview ? deletionSummary(preview) : '';
+  });
+  protected readonly borradoPermitido = computed(() => canDeleteAccount(this.borrado()));
+  protected readonly borradoBloqueos = computed(() =>
+    (this.borrado()?.blockers ?? []).map((b) => deletionBlockerMessage(b)),
+  );
+  /** Confirmación REFORZADA: hay que escribir el correo EXACTO de la cuenta. */
+  protected readonly borradoConfirmado = computed(() =>
+    deletionConfirmationMatches(this.borradoTyped(), this.borrado()?.emailNormalized ?? ''),
+  );
+
+  /** Abre el panel de borrado de una cuenta, con su vista previa ya cargada del servidor. */
+  protected async pedirBorrado(p: ProfileInfo): Promise<void> {
+    this.borrado.set(null);
+    this.borradoTyped.set('');
+    this.borradoReason.set('');
+    this.borradoError.set(null);
+    this.borradoCargando.set(true);
+    try {
+      this.borrado.set(await this.access.accountDeletionPreview(p.userId));
+    } catch (e) {
+      this.borradoError.set(
+        (e as Error)?.message ?? 'No se pudo comprobar si la cuenta se puede borrar.',
+      );
+    } finally {
+      this.borradoCargando.set(false);
+    }
+  }
+
+  protected cancelarBorrado(): void {
+    this.borrado.set(null);
+    this.borradoTyped.set('');
+    this.borradoReason.set('');
+    this.borradoError.set(null);
+  }
+
+  protected onBorradoTyped(evt: Event): void {
+    this.borradoTyped.set((evt.target as HTMLInputElement).value);
+  }
+
+  protected onBorradoReason(evt: Event): void {
+    this.borradoReason.set((evt.target as HTMLInputElement).value);
+  }
+
+  /**
+   * Último paso: diálogo de confirmación ADEMÁS de haber escrito el correo. El servidor vuelve a
+   * comprobar todas las guardas (la interfaz no es la barrera de nada de esto).
+   */
+  protected confirmarBorrado(): void {
+    const preview = this.borrado();
+    if (!preview || !this.borradoConfirmado() || !this.borradoPermitido()) return;
+    const nombre = preview.displayName || preview.emailNormalized;
+    this.confirm.ask({
+      title: 'Eliminar cuenta',
+      message: `¿Eliminar definitivamente la cuenta de ${nombre} (${preview.emailNormalized})? ${this.borradoResumen()} No se puede deshacer.`,
+      confirmLabel: 'Eliminar cuenta',
+      onConfirm: () => {
+        this.busyId.set(preview.userId);
+        this.borradoError.set(null);
+        const motivo = this.borradoReason().trim();
+        this.access
+          .deleteAccount(preview.userId, motivo === '' ? null : motivo)
+          .then(() => {
+            this.cancelarBorrado();
+            return this.load();
+          })
+          .catch((e) =>
+            this.borradoError.set((e as Error)?.message ?? 'No se pudo eliminar la cuenta.'),
+          )
+          .finally(() => this.busyId.set(null));
+      },
+    });
+  }
+
   protected setStatus(p: ProfileInfo, status: ProfileStatus, label: string): void {
     this.confirm.ask({
       title: label,
@@ -197,6 +287,11 @@ export class AdminAccessComponent {
   }
 
   protected busy(id: string): boolean {
+    return this.busyId() === id;
+  }
+
+  /** ¿Está en curso el borrado de esta cuenta? */
+  protected borrando(id: string): boolean {
     return this.busyId() === id;
   }
 

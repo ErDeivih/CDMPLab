@@ -203,6 +203,21 @@ export type TeamRequestsUpdate = {
   revision?: number;
 };
 
+// ---------- account_deletions (auditoría de bajas de cuenta, migración 20260923000000) ----------
+
+/** Registro de una baja de cuenta. NO tiene clave foránea al perfil a propósito: la fila
+ *  sobrevive al borrado del usuario. Solo la lee un administrador de plataforma. */
+export type AccountDeletionsRow = {
+  id: string;
+  deleted_user_id: string;
+  email_normalized: string;
+  display_name: string;
+  status_before: string | null;
+  reason: string | null;
+  deleted_by: string | null;
+  deleted_at: string;
+};
+
 // ---------- players ----------
 
 export type PlayersRow = {
@@ -440,6 +455,12 @@ export interface Database {
         Update: TeamRequestsUpdate;
         Relationships: [];
       };
+      account_deletions: {
+        Row: AccountDeletionsRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       players: {
         Row: PlayersRow;
         Insert: PlayersInsert;
@@ -512,6 +533,17 @@ export interface Database {
       request_team_creation: {
         Args: { p_accent_color?: string; p_name: string };
         Returns: string;
+      };
+      // Gestión de cuentas y pertenencia (migración 20260923000000).
+      admin_deletion_preview: { Args: { p_user_id: string }; Returns: Json };
+      admin_delete_account: {
+        Args: { p_reason?: string | null; p_user_id: string };
+        Returns: Json;
+      };
+      leave_team: { Args: { p_team_id: string }; Returns: undefined };
+      transfer_team_ownership: {
+        Args: { p_new_owner_user_id: string; p_team_id: string };
+        Returns: undefined;
       };
       prepare_invitation_email: {
         Args: { p_invitation_id: string };

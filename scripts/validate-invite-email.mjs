@@ -38,6 +38,8 @@ import {
   redactError,
   renderInviteEmail,
   resolveEmailConfig,
+  resolveSendReadiness,
+  RECORDER_ENV_VAR,
 } from '../supabase/functions/_shared/invite-email.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -57,6 +59,15 @@ const COMPLETE_ENV = {
   INVITE_LINK_BASE: LINK_BASE,
 };
 const LINK_PATH = '/invitations?invitation=' + UUID;
+
+/** Entorno COMPLETO: proveedor, enlace y las tres variables de plataforma (incluida la
+ *  credencial del servidor que registra el resultado). */
+const READY_ENV = {
+  ...COMPLETE_ENV,
+  SUPABASE_URL: 'https://proyecto-ficticio.supabase.co',
+  SUPABASE_ANON_KEY: 'clave-publicable-ficticia',
+  [RECORDER_ENV_VAR]: 'credencial-de-servicio-ficticia',
+};
 
 let failed = 0;
 const fail = (msg) => {
@@ -282,6 +293,82 @@ check('señala EMAIL_REPLY_TO inválido y postmark como proveedor válido', () =
   const postmark = resolveEmailConfig({ ...COMPLETE_ENV, EMAIL_PROVIDER: 'postmark' });
   assert.equal(postmark.ok, true);
   assert.equal(postmark.config.provider, 'postmark');
+});
+
+// -------------------------------------------------------------
+// Puerta de configuración ANTES de abrir intento y de enviar
+// (revisión del dueño, 22/09/2026: sin poder registrar el resultado no se puede enviar)
+// -------------------------------------------------------------
+
+console.log('\nPuerta previa al envío (resolveSendReadiness):');
+
+check('SIN la credencial del servidor → NO está listo (no se envía ni se abre intento)', () => {
+  const sinCredencial = { ...READY_ENV };
+  delete sinCredencial[RECORDER_ENV_VAR];
+  const result = resolveSendReadiness(sinCredencial);
+  assert.equal(result.ok, false, 'sin credencial de servicio debería NO estar listo');
+  assert.ok(
+    result.missing.includes(RECORDER_ENV_VAR),
+    'no señala la credencial que falta como motivo',
+  );
+  // Ni rastro del valor de ninguna credencial en la respuesta.
+  const serializado = JSON.stringify(result);
+  assert.ok(
+    !serializado.includes(READY_ENV[RECORDER_ENV_VAR]),
+    'la respuesta filtra la credencial',
+  );
+  assert.ok(!serializado.includes(FAKE_KEY), 'la respuesta filtra la clave del proveedor');
+});
+
+check('la credencial VACÍA o solo con espacios tampoco vale', () => {
+  for (const vacia of ['', '   ', '\t']) {
+    const result = resolveSendReadiness({ ...READY_ENV, [RECORDER_ENV_VAR]: vacia });
+    assert.equal(result.ok, false, 'aceptó una credencial vacía');
+    assert.ok(result.missing.includes(RECORDER_ENV_VAR), 'no señala la credencial vacía');
+  }
+});
+
+check('SIN URL ni clave publicable → NO está listo (no se podría autorizar a nadie)', () => {
+  const sinPlataforma = { ...READY_ENV };
+  delete sinPlataforma.SUPABASE_URL;
+  delete sinPlataforma.SUPABASE_ANON_KEY;
+  const result = resolveSendReadiness(sinPlataforma);
+  assert.equal(result.ok, false);
+  assert.ok(result.missing.includes('SUPABASE_URL'), 'no señala SUPABASE_URL');
+  assert.ok(
+    result.missing.includes('SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_KEY'),
+    'no señala la ausencia de ambas claves públicas',
+  );
+});
+
+check('la clave publishable sirve si no existe la anon heredada', () => {
+  const conPublishable = { ...READY_ENV, SUPABASE_PUBLISHABLE_KEY: 'clave-publicable-nueva' };
+  delete conPublishable.SUPABASE_ANON_KEY;
+  assert.equal(resolveSendReadiness(conPublishable).ok, true);
+});
+
+check('SIN configuración de correo → NO está listo y nombra lo que falta', () => {
+  const result = resolveSendReadiness({
+    SUPABASE_URL: READY_ENV.SUPABASE_URL,
+    SUPABASE_ANON_KEY: READY_ENV.SUPABASE_ANON_KEY,
+    [RECORDER_ENV_VAR]: READY_ENV[RECORDER_ENV_VAR],
+  });
+  assert.equal(result.ok, false);
+  for (const nombre of ['EMAIL_API_KEY', 'EMAIL_FROM', 'INVITE_LINK_BASE']) {
+    assert.ok(result.missing.includes(nombre), 'no señala ' + nombre);
+  }
+  // Y junta los motivos de las dos familias (correo + plataforma) en una sola lista.
+  const todas = resolveSendReadiness({});
+  assert.ok(todas.missing.includes(RECORDER_ENV_VAR), 'no junta la credencial con lo demás');
+  assert.ok(todas.missing.includes('EMAIL_API_KEY'), 'no junta el correo con lo demás');
+});
+
+check('entorno COMPLETO → listo, con la configuración de correo resuelta', () => {
+  const result = resolveSendReadiness(READY_ENV);
+  assert.equal(result.ok, true, 'un entorno completo debería estar listo');
+  assert.equal(result.config.provider, 'resend');
+  assert.equal(result.config.from, 'no-reply@ejemplo.com');
+  assert.equal(result.config.apiKey, FAKE_KEY);
 });
 
 console.log('\nEnlaces (isAcceptableLinkBase / buildInviteLink):');
@@ -640,9 +727,19 @@ check('usa Deno.env (una variable a la vez) y no lleva ninguna clave literal', (
 check(
   'usa la credencial de servicio solo para registrar el resultado (nunca para autorizar)',
   () => {
+    // La credencial se lee del entorno por su NOMBRE, que viene del módulo compartido
+    // (`RECORDER_ENV_VAR`), no de un literal suelto: así la puerta y la lectura no se separan.
     assert.ok(
-      /Deno\.env\.get\('SUPABASE_SERVICE_ROLE_KEY'\)/.test(fn),
-      'no lee SUPABASE_SERVICE_ROLE_KEY: sin ella no se puede registrar el resultado del proveedor',
+      /Deno\.env\.get\(name\)/.test(fn),
+      'no lee el entorno con Deno.env.get(name) en el bucle de variables',
+    );
+    assert.ok(
+      /\[\s*\.\.\.EMAIL_ENV_VARS,\s*\.\.\.PLATFORM_ENV_VARS,\s*RECORDER_ENV_VAR\s*\]/.test(fn),
+      'no incluye RECORDER_ENV_VAR en las variables que lee del entorno',
+    );
+    assert.ok(
+      /serviceKey = readText\(env\[RECORDER_ENV_VAR\]\)/.test(fn),
+      'no lee la credencial de servicio por su nombre compartido',
     );
     // El cliente del LLAMANTE (el que autoriza en Postgres, el único que puede preparar el envío)
     // se construye con la clave publicable, nunca con la credencial de servicio.
@@ -674,19 +771,59 @@ check(
   },
 );
 
-check('sin credencial de registro no abre intento ni llama al proveedor', () => {
-  const guard = fn.match(/if \(serviceKey === ''\) \{([\s\S]*?)\n  \}/);
-  assert.ok(guard, 'falta el rechazo temprano de SUPABASE_SERVICE_ROLE_KEY ausente');
+// PRUEBA ESPECÍFICA pedida por el dueño: «credencial ausente → cero envíos y cero intentos
+// consumidos». El comportamiento de la puerta se prueba ARRIBA de verdad (importando
+// `resolveSendReadiness`); aquí se comprueba además que la función la usa EN EL ORDEN correcto
+// y que su mensaje no afirma nada que no haya pasado.
+check('credencial ausente → cero envíos y cero intentos consumidos (orden y mensaje)', () => {
+  // 1) El bloque de configuración devuelve el error y TERMINA: no puede seguir hacia el
+  //    intento (prepare) ni hacia el proveedor (fetch) ni hacia el registro.
+  const gate = fn.match(/const readiness = resolveSendReadiness\(env\);([\s\S]*?)\n  \}/);
+  assert.ok(gate, 'no se encuentra la puerta resolveSendReadiness en la función');
+  const bloque = gate[1];
   assert.ok(
-    guard[1].includes("status: 'server_misconfigured'"),
-    'no devuelve error de configuración',
+    bloque.includes("status: 'not_configured'"),
+    'el error de configuración no es not_configured',
   );
-  assert.ok(/return respond\(\{[\s\S]*?\}\);/.test(guard[1]), 'no termina la petición');
-  const guardPosition = fn.indexOf("if (serviceKey === '')");
+  assert.ok(/return respond\(\{/.test(bloque), 'el error de configuración no termina la petición');
+  assert.ok(
+    !/prepare_invitation_email|record_invitation_email_result|await fetch|providerRequest/.test(
+      bloque,
+    ),
+    'el bloque de configuración sigue adelante: abriría intento o enviaría',
+  );
+
+  // 2) Orden en el fichero: la puerta va ANTES de abrir el intento y ANTES de enviar.
+  const gatePosition = fn.indexOf('resolveSendReadiness(env)');
   const preparePosition = fn.indexOf("rpc('prepare_invitation_email'");
   const providerPosition = fn.indexOf('await fetch(request.url');
-  assert.ok(guardPosition < preparePosition, 'el guard llega después de consumir un intento');
-  assert.ok(guardPosition < providerPosition, 'el guard llega después de enviar un correo');
+  assert.ok(
+    gatePosition > 0 && preparePosition > 0 && providerPosition > 0,
+    'no se encuentran los hitos del recorrido',
+  );
+  assert.ok(gatePosition < preparePosition, 'la puerta llega DESPUÉS de abrir el intento');
+  assert.ok(gatePosition < providerPosition, 'la puerta llega DESPUÉS de enviar el correo');
+
+  // 3) El mensaje no puede afirmar que se envió ni que el estado quedó registrado.
+  const msg = fn.match(/notConfigured:\s*'([^']*)'/);
+  assert.ok(msg, 'no se encuentra el mensaje de not_configured');
+  const texto = msg[1].toLowerCase();
+  assert.ok(
+    texto.includes('no se ha intentado ningún envío'),
+    'el mensaje no dice que no hubo ningún envío',
+  );
+  assert.ok(
+    texto.includes('no se ha consumido ningún intento'),
+    'el mensaje no dice que no se consumió ningún intento',
+  );
+  assert.ok(
+    texto.includes('no ha cambiado'),
+    'el mensaje no dice que el estado del envío sigue igual',
+  );
+  assert.ok(
+    !/\bregistrad|\bguardad|\baceptad por el proveedor/.test(texto),
+    'el mensaje afirma que el estado quedó registrado',
+  );
 });
 
 check('la credencial de servicio no se registra en consola ni se devuelve', () => {
@@ -740,19 +877,29 @@ check('llama a las dos RPC por su nombre exacto y con sus parámetros', () => {
 });
 
 check(
-  'comprueba la configuración de correo ANTES de preparar el envío (no consume intento)',
+  'comprueba la configuración (correo + credencial de registro) ANTES de preparar el envío',
   () => {
-    const configuracion = fn.indexOf('resolveEmailConfig(');
+    // CAMBIO DE CONTRATO (22/09/2026): antes se buscaba `resolveEmailConfig(` en la función; ahora
+    // la puerta es una sola (`resolveSendReadiness`) que cubre el correo Y la credencial con la
+    // que se registra el resultado. Si esto se separara otra vez, un envío podría salir sin poder
+    // registrar su resultado.
+    const configuracion = fn.indexOf('resolveSendReadiness(');
     const preparar = fn.indexOf("rpc('prepare_invitation_email'");
-    assert.ok(configuracion > -1, 'no resuelve la configuración de correo');
+    assert.ok(configuracion > -1, 'no resuelve la configuración (resolveSendReadiness)');
     assert.ok(preparar > -1, 'no llama a prepare_invitation_email');
     assert.ok(
       configuracion < preparar,
-      'resuelve la configuración DESPUÉS de preparar: un entorno sin configurar gastaría un intento',
+      'resuelve la configuración DESPUÉS de preparar: gastaría un intento sin poder enviar ni registrar',
     );
     assert.ok(
       fn.includes("'not_configured'"),
       'no devuelve el estado not_configured cuando falta configuración',
+    );
+    // Y no queda ninguna comprobación de configuración SUELTA más adelante (que sería una
+    // segunda puerta capaz de descubrir un problema después de haber enviado ya).
+    assert.ok(
+      !/resolveEmailConfig\(/.test(fn),
+      'la función resuelve la configuración de correo por su cuenta además de la puerta',
     );
   },
 );

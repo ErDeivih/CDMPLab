@@ -621,6 +621,137 @@ try {
     }
   }
 
+  // ---- GESTIÓN de CUENTAS y PERTENENCIA (borrar cuenta, salir, traspasar) ----
+  {
+    // OJO con el nombre: `20260923000000` ya lo ocupa la migración del resultado de correo
+    // obsoleto. Dos ficheros con la MISMA marca de versión son la misma migración para el CLI.
+    const f11 = 'supabase/migrations/20260924000000_account_and_membership_management.sql';
+    if (!fs.existsSync(f11)) {
+      fail('falta la migración de gestión de cuentas y pertenencia');
+    } else {
+      const sqlBruto = fs.readFileSync(f11, 'utf8');
+      const sql = sqlBruto.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+      console.log(`\nGestión de cuentas y pertenencia (${path.basename(f11)}):`);
+
+      // Auditoría que sobrevive al borrado.
+      has(sql, 'create table if not exists public.account_deletions')
+        ? ok('existe el registro de bajas de cuenta')
+        : fail('no se crea public.account_deletions');
+      /deleted_user_id uuid not null,\s*email_normalized/.test(sql)
+        ? ok('la auditoría NO tiene clave foránea al perfil (sobrevive a la cascada)')
+        : fail('la auditoría referencia el perfil: se borraría con él');
+      has(sql, 'alter table public.account_deletions enable row level security') &&
+      has(sql, 'using (private.is_platform_admin())')
+        ? ok('la auditoría solo la lee el administrador de plataforma')
+        : fail('la auditoría no está restringida al administrador');
+      /for\s+(insert|update|delete)\s+to\s+authenticated/i.test(sql)
+        ? fail('hay una política de ESCRITURA directa sobre la auditoría')
+        : ok('la auditoría no se escribe desde el cliente');
+      has(sql, 'revoke all on table public.account_deletions from public, anon, authenticated') &&
+      has(sql, 'grant select on table public.account_deletions to authenticated')
+        ? ok('auditoría: solo SELECT a authenticated')
+        : fail('los permisos de la auditoría no son mínimos');
+
+      // Borrado de cuenta: permiso de administrador y las tres guardas.
+      const guardas = [
+        ['cannot_delete_self', 'no se puede borrar a sí mismo'],
+        ['cannot_delete_platform_admin', 'no se puede borrar a otro administrador'],
+        ['target_owns_team', 'no se puede borrar a quien posee un equipo'],
+      ];
+      for (const [codigo, texto] of guardas) {
+        has(sql, codigo) ? ok(`borrado de cuenta: ${texto}`) : fail(`falta la guarda ${codigo}`);
+      }
+      const auditoriaPos = sql.indexOf('insert into public.account_deletions');
+      const borradoPos = sql.indexOf('delete from auth.users');
+      auditoriaPos > 0 && borradoPos > 0 && auditoriaPos < borradoPos
+        ? ok('borrado de cuenta: la auditoría se escribe ANTES del borrado (misma transacción)')
+        : fail('la auditoría se escribe después del borrado o no se escribe');
+      has(sql, 'from public.profiles where user_id = p_user_id for update')
+        ? ok('borrado de cuenta: bloquea el perfil (sin carreras)')
+        : fail('borrado de cuenta: no bloquea el perfil que va a borrar');
+      has(sqlBruto, 'has_table_privilege(current_user') &&
+      has(sqlBruto, 'CATÁLOGO REMOTO VERIFICADO') &&
+      has(sqlBruto, 'el rol `postgres` tiene DELETE')
+        ? ok('documenta el catálogo remoto y el privilegio de borrado verificados')
+        : fail('no documenta la comprobación del privilegio sobre auth.users');
+
+      // Vista previa: permite explicar antes de decidir.
+      has(sql, 'create or replace function public.admin_deletion_preview(p_user_id uuid)') &&
+      has(sql, "'deletable'") &&
+      has(sql, "'blockers'")
+        ? ok('vista previa: dice qué se borraría y qué lo bloquea')
+        : fail('la vista previa no informa de bloqueos');
+
+      // Salir del equipo.
+      has(sql, 'create or replace function public.leave_team(p_team_id uuid)') &&
+      has(sql, 'owner_cannot_leave') &&
+      has(sql, 'not_a_member')
+        ? ok('salir del equipo: el propietario no puede irse y hay que ser miembro activo')
+        : fail('salir del equipo: faltan las comprobaciones de rol');
+      /set status = 'revoked', accepted_at = null/.test(sql)
+        ? ok('salir del equipo: la membresía se marca revoked (no se borra el histórico)')
+        : fail('salir del equipo: no marca la membresía como revoked');
+      const leaveBody =
+        sql
+          .split('create or replace function public.leave_team(p_team_id uuid)')[1]
+          ?.split('create or replace function public.transfer_team_ownership(')[0] ?? '';
+      const leaveLock = leaveBody.indexOf('from public.teams where id = p_team_id for update');
+      const leaveOwnerCheck = leaveBody.indexOf('owner_cannot_leave');
+      leaveLock >= 0 && leaveOwnerCheck > leaveLock
+        ? ok('salir del equipo: revalida al propietario tras bloquear el equipo')
+        : fail('salir del equipo: comprueba el propietario antes del bloqueo');
+
+      // Traspaso de propiedad.
+      has(sql, 'create or replace function public.transfer_team_ownership(') &&
+      has(sql, 'new_owner_must_be_active_member') &&
+      has(sql, 'new_owner_not_approved') &&
+      has(sql, 'new_owner_already_has_team')
+        ? ok('traspaso: exige miembro activo, aprobado y sin equipo propio')
+        : fail('traspaso: faltan requisitos del nuevo propietario');
+      /from public.teams where id = p_team_id for update/.test(sql)
+        ? ok('traspaso: bloquea el equipo (sin traspasos simultáneos)')
+        : fail('traspaso: no bloquea la fila del equipo');
+      const transferBody =
+        sql
+          .split('create or replace function public.transfer_team_ownership(')[1]
+          ?.split('-- 6)')[0] ?? '';
+      const transferLock = transferBody.indexOf(
+        'from public.teams where id = p_team_id for update',
+      );
+      const transferOwnerCheck = transferBody.indexOf('private.is_team_owner(p_team_id)');
+      transferLock >= 0 && transferOwnerCheck > transferLock
+        ? ok('traspaso: revalida la autorización después del bloqueo')
+        : fail('traspaso: valida la autorización antes del bloqueo');
+      /update public\.teams set owner_user_id = p_new_owner_user_id/.test(sql) &&
+      (sql.match(/update public\.team_members\s+set role = '/g) ?? []).length >= 2
+        ? ok('traspaso: cambia el propietario y los DOS roles en la misma función')
+        : fail('traspaso: no intercambia los dos roles');
+
+      // Permisos de las cuatro RPC nuevas.
+      const rpcGestion = [
+        'public.admin_deletion_preview(uuid)',
+        'public.admin_delete_account(uuid, text)',
+        'public.leave_team(uuid)',
+        'public.transfer_team_ownership(uuid, uuid)',
+      ];
+      rpcGestion.every((f) => has(sql, `revoke execute on function ${f} from public, anon`))
+        ? ok('RPC de gestión: EXECUTE revocado a PUBLIC y anon')
+        : fail('RPC de gestión: falta revocar EXECUTE a PUBLIC/anon');
+      rpcGestion.every((f) => has(sql, `grant execute on function ${f} to authenticated`))
+        ? ok('RPC de gestión: EXECUTE concedido a authenticated (autorizan dentro)')
+        : fail('RPC de gestión: falta el GRANT a authenticated');
+      has(sql, 'user_metadata')
+        ? fail('usa user_metadata para autorizar (prohibido)')
+        : ok('NO usa user_metadata');
+      countTokens(sql, 'security definer') >= 4
+        ? ok('gestión: funciones SECURITY DEFINER')
+        : fail('gestión: falta declarar SECURITY DEFINER');
+      countTokens(sql, "set search_path = ''") >= 4
+        ? ok('gestión: search_path vacío en todas las funciones')
+        : fail('gestión: alguna función sin search_path vacío');
+    }
+  }
+
   if (failed > 0) {
     console.error(`\nVALIDACIÓN ESTÁTICA CON ${failed} PROBLEMA(S).`);
     process.exit(1);

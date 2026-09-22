@@ -21,6 +21,7 @@ import type {
   ProfileInfo,
 } from './repositories/data-source';
 import type { InviteEmailResult } from './invite-email';
+import { missingDeletionPreview, type AccountDeletionPreview } from './team-management';
 import { SupabaseRepository } from './repositories/supabase-data-source';
 
 @Injectable({ providedIn: 'root' })
@@ -274,6 +275,42 @@ export class AccessService {
     const repo = await this.ensureRepo();
     if (!repo) throw new Error('No hay sesión.');
     await repo.setProfileStatus(userId, status);
+  }
+
+  /** Vista previa del borrado de una cuenta: qué se llevaría y qué lo impide. */
+  async accountDeletionPreview(userId: string): Promise<AccountDeletionPreview> {
+    const repo = await this.ensureRepo();
+    if (!repo) return missingDeletionPreview(userId);
+    return repo.accountDeletionPreview(userId);
+  }
+
+  /** BORRA una cuenta (solo administrador; las guardas están en el servidor). */
+  async deleteAccount(userId: string, reason: string | null): Promise<void> {
+    const repo = await this.ensureRepo();
+    if (!repo) throw new Error('No hay sesión.');
+    await repo.deleteAccount(userId, reason);
+    // El perfil borrado ya no puede aparecer en la lista del panel: se recargan los datos.
+    await this.refresh();
+  }
+
+  /**
+   * El propio miembro activo sale del equipo. Después hay que volver a resolver el acceso
+   * (deja de tener equipo al que entrar) para que los guards no lo devuelvan a una pantalla
+   * que ya no le corresponde.
+   */
+  async leaveTeam(teamId: string): Promise<void> {
+    const repo = await this.ensureRepo();
+    if (!repo) throw new Error('Salir de un equipo necesita una sesión iniciada.');
+    await repo.leaveTeam(teamId);
+    await this.refreshAfterMembershipChange();
+  }
+
+  /** Traspaso de la propiedad: el propietario sigue con acceso, pero como editor. */
+  async transferTeamOwnership(newOwnerUserId: string): Promise<void> {
+    const repo = await this.ensureRepo();
+    if (!repo || !repo.teamId) throw new Error('No hay equipo de contexto.');
+    await repo.transferTeamOwnership(repo.teamId, newOwnerUserId);
+    await this.refreshAfterMembershipChange();
   }
 
   /**

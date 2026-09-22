@@ -96,6 +96,8 @@ interface BackendRow {
   team_invitations: Rw[];
   /** Cierre del encargo (22/09/2026): solicitudes de equipo. */
   team_requests: Rw[];
+  /** Auditoría de bajas de cuenta (migración 20260923000000): sin FK al perfil. */
+  account_deletions: Rw[];
   players: Rw[];
   exercise_folders: Rw[];
   exercises: Rw[];
@@ -112,6 +114,7 @@ export class RlsBackend {
     team_members: [],
     team_invitations: [],
     team_requests: [],
+    account_deletions: [],
     players: [],
     exercise_folders: [],
     exercises: [],
@@ -324,6 +327,8 @@ export class RlsBackend {
     // La solicitud la ve quien la presentó y el administrador de plataforma (política
     // `team_requests_select_own_or_admin`). Nadie más.
     if (table === 'team_requests') return row.user_id === uid || this.isPlatformAdmin(uid);
+    // La auditoría de bajas solo la lee el administrador (y nadie la escribe desde el cliente).
+    if (table === 'account_deletions') return this.isPlatformAdmin(uid);
     if (table === 'team_invitations') {
       return (
         this.isTeamOwner(uid, row.team_id as string) ||
@@ -418,6 +423,14 @@ export class RlsBackend {
         return this.rpcPrepareInvitationEmail(a, uid);
       case 'record_invitation_email_result':
         return this.rpcRecordInvitationEmailResult(a, role);
+      case 'leave_team':
+        return this.rpcLeaveTeam(a, uid);
+      case 'transfer_team_ownership':
+        return this.rpcTransferTeamOwnership(a, uid);
+      case 'admin_deletion_preview':
+        return this.rpcAdminDeletionPreview(a, uid);
+      case 'admin_delete_account':
+        return this.rpcAdminDeleteAccount(a, uid);
       case 'invite_team_member':
         return this.rpcInvite(a, uid);
       case 'accept_team_invitation':
@@ -601,8 +614,10 @@ export class RlsBackend {
     return ok(team!.id);
   }
 
-  /** `prepare_invitation_email`: autoriza por propiedad, aplica cooldown y tope y ABRE intento. */
-  private rpcPrepareInvitationEmail(a: Rw, uid: string): RpcResult {
+  /** `prepare_invitation_email`: autoriza por propiedad, aplica cooldown y tope y ABRE intento. */ private rpcPrepareInvitationEmail(
+    a: Rw,
+    uid: string,
+  ): RpcResult {
     if (!uid) return err('42501', 'not_authenticated');
     const inv = this.rows.team_invitations.find((i) => i.id === (a.p_invitation_id as string));
     if (!inv) return err('P0001', 'invitation_not_available');
@@ -661,6 +676,149 @@ export class RlsBackend {
         .slice(0, 300);
     }
     return ok(null);
+  }
+
+  // ---------- Gestión de cuentas y pertenencia (migración 20260923000000) ----------
+
+  /**
+   * `leave_team`: lo decide el propio MIEMBRO ACTIVO. El propietario no puede salir (dejaría el
+   * equipo sin dueño) y hay que ser miembro activo. Mismas consecuencias que una revocación: la
+   * membresía queda `revoked` (no se borra: el histórico se conserva).
+   */
+  private rpcLeaveTeam(a: Rw, uid: string): RpcResult {
+    if (!uid) return err('42501', 'not_authenticated');
+    if (!this.isApproved(uid)) return err('P0001', 'profile_not_approved');
+    const teamId = a.p_team_id as string;
+    const team = this.rows.teams.find((t) => t.id === teamId);
+    if (!team) return err('P0001', 'team_not_found');
+    if (team.owner_user_id === uid) return err('P0001', 'owner_cannot_leave');
+    const membership = this.rows.team_members.find(
+      (m) => m.team_id === teamId && m.user_id === uid && m.status === 'active',
+    );
+    if (!membership) return err('P0001', 'not_a_member');
+    membership.status = 'revoked';
+    membership.accepted_at = null;
+    for (const inv of this.rows.team_invitations) {
+      if (inv.team_id === teamId && inv.invited_user_id === uid && inv.status === 'pending') {
+        inv.status = 'revoked';
+      }
+    }
+    return ok(null);
+  }
+
+  /**
+   * `transfer_team_ownership`: solo el propietario actual, y solo a un EDITOR ACTIVO, aprobado y
+   * sin equipo propio. Intercambio de roles en una transacción (mismo número de cuentas).
+   */
+  private rpcTransferTeamOwnership(a: Rw, uid: string): RpcResult {
+    if (!uid) return err('42501', 'not_authenticated');
+    const teamId = a.p_team_id as string;
+    const nuevo = a.p_new_owner_user_id as string;
+    if (!this.isTeamOwner(uid, teamId)) return err('P0001', 'forbidden: not team owner');
+    if (nuevo === uid) return err('P0001', 'already_owner');
+    const team = this.rows.teams.find((t) => t.id === teamId);
+    if (!team) return err('P0001', 'team_not_found');
+    const objetivo = this.rows.team_members.find(
+      (m) =>
+        m.team_id === teamId && m.user_id === nuevo && m.status === 'active' && m.role === 'editor',
+    );
+    if (!objetivo) return err('P0001', 'new_owner_must_be_active_member');
+    if (!this.isApproved(nuevo)) return err('P0001', 'new_owner_not_approved');
+    if (this.rows.teams.some((t) => t.owner_user_id === nuevo)) {
+      return err('P0001', 'new_owner_already_has_team');
+    }
+    const mio = this.rows.team_members.find((m) => m.team_id === teamId && m.user_id === uid)!;
+    team.owner_user_id = nuevo;
+    objetivo.role = 'owner';
+    objetivo.accepted_at = objetivo.accepted_at ?? nowIso();
+    mio.role = 'editor';
+    mio.status = 'active';
+    mio.accepted_at = mio.accepted_at ?? nowIso();
+    return ok(null);
+  }
+
+  /** `admin_deletion_preview`: qué se llevaría por delante y qué lo bloquea. */
+  private rpcAdminDeletionPreview(a: Rw, uid: string): RpcResult {
+    if (!uid) return err('42501', 'not_authenticated');
+    if (!this.isPlatformAdmin(uid)) return err('42501', 'platform_admin_required');
+    const objetivo = a.p_user_id as string;
+    const prof = this.profileOf(objetivo);
+    if (!prof) return ok({ found: false, user_id: objetivo });
+    const equipo = this.rows.teams.find((t) => t.owner_user_id === objetivo);
+    const blockers: string[] = [];
+    if (equipo) blockers.push('owns_team');
+    if (objetivo === uid) blockers.push('self');
+    if (this.platformAdmins.has(objetivo)) blockers.push('platform_admin');
+    const cuenta = (tabla: 'players' | 'exercise_folders' | 'exercises' | 'sessions'): number =>
+      equipo ? this.rows[tabla].filter((r) => r.team_id === equipo.id).length : 0;
+    return ok({
+      found: true,
+      user_id: prof.user_id,
+      display_name: prof.display_name,
+      email_normalized: prof.email_normalized,
+      status: prof.status,
+      is_platform_admin: this.platformAdmins.has(objetivo),
+      is_self: objetivo === uid,
+      owns_team: Boolean(equipo),
+      owned_team_name: equipo?.name ?? null,
+      owned_team_data: {
+        players: cuenta('players'),
+        folders: cuenta('exercise_folders'),
+        exercises: cuenta('exercises'),
+        sessions: cuenta('sessions'),
+      },
+      active_memberships: this.rows.team_members.filter(
+        (m) => m.user_id === objetivo && m.status === 'active',
+      ).length,
+      pending_invitations: this.rows.team_invitations.filter(
+        (i) => i.invited_user_id === objetivo && i.status === 'pending',
+      ).length,
+      blockers,
+      deletable: blockers.length === 0,
+    });
+  }
+
+  /**
+   * `admin_delete_account`: guardas (no a uno mismo, no a otro administrador, no a quien posee un
+   * equipo), registro en la auditoría ANTES del borrado y borrado en cascada del usuario.
+   */
+  private rpcAdminDeleteAccount(a: Rw, uid: string): RpcResult {
+    if (!uid) return err('42501', 'not_authenticated');
+    if (!this.isPlatformAdmin(uid)) return err('42501', 'platform_admin_required');
+    const objetivo = a.p_user_id as string;
+    const prof = this.profileOf(objetivo);
+    if (!prof) return err('P0001', 'account_not_found');
+    if (objetivo === uid) return err('P0001', 'cannot_delete_self');
+    if (this.platformAdmins.has(objetivo)) return err('P0001', 'cannot_delete_platform_admin');
+    if (this.rows.teams.some((t) => t.owner_user_id === objetivo)) {
+      return err('P0001', 'target_owns_team');
+    }
+    // Auditoría SIN clave foránea: sobrevive al borrado (y va antes, en la misma transacción).
+    this.rows.account_deletions.push({
+      id: uuid(),
+      deleted_user_id: objetivo,
+      email_normalized: prof.email_normalized,
+      display_name: prof.display_name,
+      status_before: prof.status,
+      reason: a.p_reason ?? null,
+      deleted_by: uid,
+      deleted_at: nowIso(),
+    });
+    // Cascada del borrado del usuario de Auth: perfil + membresías; las referencias quedan a NULL.
+    this.rows.profiles = this.rows.profiles.filter((p) => p.user_id !== objetivo);
+    this.rows.team_members = this.rows.team_members.filter((m) => m.user_id !== objetivo);
+    for (const inv of this.rows.team_invitations) {
+      if (inv.invited_user_id === objetivo) inv.invited_user_id = null;
+      if (inv.invited_by === objetivo) inv.invited_by = null;
+    }
+    for (const m of this.rows.team_members) {
+      if (m.invited_by === objetivo) m.invited_by = null;
+    }
+    for (const r of this.rows.team_requests) {
+      if (r.user_id === objetivo) r.user_id = null;
+      if (r.decided_by === objetivo) r.decided_by = null;
+    }
+    return ok({ deleted: true, user_id: objetivo, email_normalized: prof.email_normalized });
   }
 
   private rpcInvite(a: Rw, uid: string): RpcResult {
@@ -974,8 +1132,24 @@ export class RlsBackend {
         return finishWrite(updated);
       }
       // delete
+      // RLS DELETE: las tablas de identidad/membresía NO tienen política de borrado (y
+      // `profiles` tampoco GRANT), así que el cliente solo puede darlas de baja por RPC. Se
+      // modela aquí para poder probar que un borrado directo NO es una vía alternativa.
+      const soloPorRpc: string[] = [
+        'profiles',
+        'teams',
+        'team_members',
+        'team_invitations',
+        'team_requests',
+        'account_deletions',
+      ];
+      if (soloPorRpc.includes(table)) {
+        return err('42501', 'new row violates row-level security policy');
+      }
       const visible = this.selectRows(uid, table);
-      const toDelete = applyFilters(visible);
+      const toDelete = applyFilters(visible).filter((r) =>
+        this.isTeamMember(uid, r.team_id as string),
+      );
       const del = new Set(toDelete.map((r) => r));
       this.rows[table as keyof BackendRow] = this.rows[table as keyof BackendRow].filter(
         (r) => !del.has(r),
@@ -1193,9 +1367,12 @@ function setupJourney() {
 /** Cuenta administradora de plataforma usada en esta matriz (nadie más lo es). */
 const ADMIN = '00000000-0000-0000-0000-0000000000ad';
 
-/** Alta del administrador de plataforma en el backend simulado. */
+/** Alta del administrador de plataforma en el backend simulado (con su perfil, como en remoto). */
 function conAdmin(backend: RlsBackend): void {
   backend.addPlatformAdmin(ADMIN);
+  if (!backend.rows.profiles.some((p) => p.user_id === ADMIN)) {
+    backend.addProfile(ADMIN, 'Admin Plataforma', 'admin@example.com', 'approved');
+  }
 }
 
 /**
@@ -2111,5 +2288,281 @@ describe('T4 multiuser — AccessService (gate al entrar al equipo)', () => {
     expect(target.state).toBe('accept-invitation');
     expect(target.route).toBe('/invitations');
     expect(store.connectDataSource).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// T5 · GESTIÓN de cuentas y pertenencia (migración 20260923000000)
+//     Salir de un equipo, traspasar la propiedad y BORRAR una cuenta.
+//     El backend simulado replica las guardas de las RPC (y la falta de política de
+//     borrado directo sobre las tablas de identidad).
+// =============================================================================
+
+/** Escenario con equipo del propietario y un editor ACTIVO ya dentro. */
+async function equipoConEditorActivo() {
+  const hecho = await fullJourney();
+  return hecho; // { backend, ownerRepo, editorRepo, team, ... }
+}
+
+describe('T5 multiuser — salir de un equipo', () => {
+  it('un EDITOR ACTIVO puede salir: su membresía queda revoked y deja de tener equipo', async () => {
+    const { backend, ownerRepo, editorRepo, team } = await equipoConEditorActivo();
+
+    await editorRepo.leaveTeam(team.id);
+    const fila = backend.rows.team_members.find(
+      (m) => m.team_id === team.id && m.user_id === EDITOR,
+    )!;
+    expect(fila.status).toBe('revoked');
+    expect(fila.accepted_at).toBeNull();
+
+    // Ya no pertenece a ningún equipo: el guard lo llevará a solicitar/invitaciones.
+    const acceso = await editorRepo.resolveAccess();
+    expect(acceso.membership).toBeNull();
+    expect(acceso.ownedTeam).toBeNull();
+
+    // Y el propietario sigue siendo el propietario (no se ha tocado nada más).
+    expect(await ownerRepo.listMembers(team.id)).toContainEqual(
+      expect.objectContaining({ userId: OWNER, role: 'owner' }),
+    );
+  });
+
+  it('el PROPIETARIO no puede salir (dejaría el equipo sin dueño): owner_cannot_leave', async () => {
+    const { backend, ownerRepo, team } = await equipoConEditorActivo();
+
+    await expect(ownerRepo.leaveTeam(team.id)).rejects.toMatchObject({
+      code: 'owner_cannot_leave',
+    });
+    // Sigue siendo miembro activo y propietario.
+    const fila = backend.rows.team_members.find(
+      (m) => m.team_id === team.id && m.user_id === OWNER,
+    )!;
+    expect(fila.status).toBe('active');
+    expect(backend.rows.teams.find((t) => t.id === team.id)!.owner_user_id).toBe(OWNER);
+  });
+
+  it('quien no es miembro activo no puede «salir»: not_a_member', async () => {
+    const { backend, team } = await equipoConEditorActivo();
+    const ajenoRepo = makeRepo(backend, FOREIGN, null);
+
+    await expect(ajenoRepo.leaveTeam(team.id)).rejects.toMatchObject({ code: 'not_a_member' });
+  });
+
+  it('un no aprobado tampoco: profile_not_approved', async () => {
+    const { backend, team } = await equipoConEditorActivo();
+    const pendienteRepo = makeRepo(backend, PENDING, null);
+
+    await expect(pendienteRepo.leaveTeam(team.id)).rejects.toMatchObject({
+      code: 'profile_not_approved',
+    });
+  });
+});
+
+describe('T5 multiuser — traspasar la propiedad del equipo', () => {
+  it('solo el PROPIETARIO puede traspasar: un editor recibe forbidden', async () => {
+    const { editorRepo, team } = await equipoConEditorActivo();
+
+    await expect(editorRepo.transferTeamOwnership(team.id, EDITOR)).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+  });
+
+  it('el traspaso cambia los DOS roles y el propietario, sin añadir ni quitar cuentas', async () => {
+    const { backend, ownerRepo, editorRepo, team } = await equipoConEditorActivo();
+    const cuentasAntes = backend.rows.team_members.filter((m) => m.team_id === team.id).length;
+
+    await ownerRepo.transferTeamOwnership(team.id, EDITOR);
+
+    expect(backend.rows.teams.find((t) => t.id === team.id)!.owner_user_id).toBe(EDITOR);
+    const nuevoOwner = backend.rows.team_members.find(
+      (m) => m.team_id === team.id && m.user_id === EDITOR,
+    )!;
+    const antiguoOwner = backend.rows.team_members.find(
+      (m) => m.team_id === team.id && m.user_id === OWNER,
+    )!;
+    expect(nuevoOwner.role).toBe('owner');
+    expect(nuevoOwner.status).toBe('active');
+    expect(antiguoOwner.role).toBe('editor');
+    expect(antiguoOwner.status).toBe('active');
+    // Mismo número de cuentas en el equipo: se intercambian los papeles, no se crean plazas.
+    expect(backend.rows.team_members.filter((m) => m.team_id === team.id)).toHaveLength(
+      cuentasAntes,
+    );
+
+    // El acceso resuelto de cada uno cambia de rol, no de equipo.
+    const accesoAntiguo = await ownerRepo.resolveAccess();
+    expect(accesoAntiguo.ownedTeam).toBeNull();
+    expect(accesoAntiguo.membership).toEqual({ teamId: team.id, role: 'editor' });
+    const accesoNuevo = await editorRepo.resolveAccess();
+    expect(accesoNuevo.ownedTeam?.id).toBe(team.id);
+
+    // Y el que manda ahora es el nuevo propietario: el antiguo ya no puede revocar a nadie.
+    await expect(ownerRepo.revokeMember(team.id, EDITOR)).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+  });
+
+  it('no se puede traspasar a quien no es miembro activo (ni a un revocado)', async () => {
+    const { ownerRepo, team } = await equipoConEditorActivo();
+
+    // Un usuario aprobado que no está en el equipo.
+    await expect(ownerRepo.transferTeamOwnership(team.id, FOREIGN)).rejects.toMatchObject({
+      code: 'new_owner_must_be_active_member',
+    });
+    // El propietario no puede traspasarse a sí mismo.
+    await expect(ownerRepo.transferTeamOwnership(team.id, OWNER)).rejects.toMatchObject({
+      code: 'already_owner',
+    });
+    // Un miembro revocado (se revoca primero al editor).
+    await ownerRepo.revokeMember(team.id, EDITOR);
+    await expect(ownerRepo.transferTeamOwnership(team.id, EDITOR)).rejects.toMatchObject({
+      code: 'new_owner_must_be_active_member',
+    });
+  });
+
+  it('no se puede traspasar a quien ya posee otro equipo (owner_user_id es único)', async () => {
+    const { backend, ownerRepo, team } = await equipoConEditorActivo();
+    // El extranjero se crea su propio equipo y ENTRA como editor en el equipo del propietario.
+    const extranjero = await pedirYAprobarEquipo(backend, FOREIGN, 'Otro equipo');
+    backend.seedPlayer(extranjero.id, { id: 'px', name: 'X' });
+    const inv = await ownerRepo.inviteMember(team.id, 'foreign@example.com');
+    await makeRepo(backend, FOREIGN, null).acceptInvitation(inv.id);
+
+    await expect(ownerRepo.transferTeamOwnership(team.id, FOREIGN)).rejects.toMatchObject({
+      code: 'new_owner_already_has_team',
+    });
+  });
+
+  it('no se puede traspasar a un perfil NO aprobado', async () => {
+    const { backend, ownerRepo, team } = await equipoConEditorActivo();
+    // El editor entra, y después se suspende su perfil (el administrador puede hacerlo).
+    const fila = backend.rows.profiles.find((p) => p.user_id === EDITOR)!;
+    fila.status = 'suspended';
+
+    await expect(ownerRepo.transferTeamOwnership(team.id, EDITOR)).rejects.toMatchObject({
+      code: 'new_owner_not_approved',
+    });
+  });
+});
+
+describe('T5 multiuser — borrar una cuenta (solo el administrador, con guardas)', () => {
+  it('un usuario normal no puede ni mirar la vista previa ni borrar', async () => {
+    const { backend } = setupJourney();
+    const repo = makeRepo(backend, OWNER, null);
+
+    await expect(repo.accountDeletionPreview(PENDING)).rejects.toMatchObject({
+      code: 'platform_admin_required',
+    });
+    await expect(repo.deleteAccount(PENDING, null)).rejects.toMatchObject({
+      code: 'platform_admin_required',
+    });
+    // Y el perfil sigue ahí.
+    expect(backend.rows.profiles.some((p) => p.user_id === PENDING)).toBe(true);
+  });
+
+  it('la vista previa explica qué se borraría y qué lo bloquea', async () => {
+    const { backend } = setupJourney();
+    conAdmin(backend);
+    const adminRepo = makeRepo(backend, ADMIN, null);
+
+    // Cuenta normal sin equipo: se puede borrar.
+    const normal = await adminRepo.accountDeletionPreview(FOREIGN);
+    expect(normal).toMatchObject({ found: true, deletable: true, blockers: [] });
+    expect(normal.emailNormalized).toBe('foreign@example.com');
+
+    // Cuenta que POSEE un equipo: bloqueada, y con los números de lo que se llevaría.
+    const team = await pedirYAprobarEquipo(backend, OWNER, 'Equipo con datos');
+    backend.seedPlayer(team.id, { id: 'p1', name: 'Uno' });
+    backend.seedExercise(team.id, { id: 'e1', title: 'Ejercicio' });
+    const conEquipo = await adminRepo.accountDeletionPreview(OWNER);
+    expect(conEquipo.deletable).toBe(false);
+    expect(conEquipo.blockers).toContain('owns_team');
+    expect(conEquipo.ownedTeamName).toBe('Equipo con datos');
+    expect(conEquipo.ownedTeamData.players).toBe(1);
+    expect(conEquipo.ownedTeamData.exercises).toBe(1);
+
+    // Su propia cuenta y la de otro administrador también están bloqueadas.
+    expect((await adminRepo.accountDeletionPreview(ADMIN)).blockers).toContain('self');
+    backend.addProfile(
+      '00000000-0000-0000-0000-0000000000ae',
+      'Otro admin',
+      'otro-admin@example.com',
+      'approved',
+    );
+    backend.addPlatformAdmin('00000000-0000-0000-0000-0000000000ae');
+    const otroAdmin = await adminRepo.accountDeletionPreview(
+      '00000000-0000-0000-0000-0000000000ae',
+    );
+    expect(otroAdmin.blockers).toContain('platform_admin');
+    expect(otroAdmin.deletable).toBe(false);
+  });
+
+  it('las guardas del servidor rechazan el borrado (uno mismo, otro admin, con equipo)', async () => {
+    const { backend } = setupJourney();
+    conAdmin(backend);
+    const adminRepo = makeRepo(backend, ADMIN, null);
+    await pedirYAprobarEquipo(backend, OWNER, 'Equipo del propietario');
+    backend.addProfile(
+      '00000000-0000-0000-0000-0000000000ae',
+      'Otro admin',
+      'otro-admin@example.com',
+      'approved',
+    );
+    backend.addPlatformAdmin('00000000-0000-0000-0000-0000000000ae');
+
+    await expect(adminRepo.deleteAccount(ADMIN, null)).rejects.toMatchObject({
+      code: 'cannot_delete_self',
+    });
+    await expect(
+      adminRepo.deleteAccount('00000000-0000-0000-0000-0000000000ae', null),
+    ).rejects.toMatchObject({ code: 'cannot_delete_platform_admin' });
+    await expect(adminRepo.deleteAccount(OWNER, null)).rejects.toMatchObject({
+      code: 'target_owns_team',
+    });
+    // Nadie ha desaparecido.
+    expect(backend.rows.profiles).toHaveLength(7);
+    expect(backend.rows.account_deletions).toHaveLength(0);
+  });
+
+  it('borra la cuenta de verdad (perfil + membresías) y deja el registro de auditoría', async () => {
+    const { backend, team } = await equipoConEditorActivo();
+    conAdmin(backend);
+    const adminRepo = makeRepo(backend, ADMIN, null);
+
+    await adminRepo.deleteAccount(EDITOR, 'Se va del club');
+
+    // El perfil y sus membresías ya no están.
+    expect(backend.rows.profiles.some((p) => p.user_id === EDITOR)).toBe(false);
+    expect(backend.rows.team_members.some((m) => m.user_id === EDITOR)).toBe(false);
+    // El equipo y sus datos siguen intactos (solo se va una persona).
+    expect(backend.rows.teams.some((t) => t.id === team.id)).toBe(true);
+    expect(backend.rows.players.some((p) => p.team_id === team.id)).toBe(true);
+    // Y queda el registro: quién, su correo, el motivo y quién lo hizo.
+    expect(backend.rows.account_deletions).toHaveLength(1);
+    expect(backend.rows.account_deletions[0]).toMatchObject({
+      deleted_user_id: EDITOR,
+      email_normalized: 'editor@example.com',
+      status_before: 'approved',
+      reason: 'Se va del club',
+      deleted_by: ADMIN,
+    });
+  });
+
+  it('el borrado NO es una vía alternativa desde el cliente: `profiles` no se puede borrar por tabla', async () => {
+    const { backend } = setupJourney();
+    conAdmin(backend);
+
+    // El administrador autenticado lo intenta por la vía directa (como haría un navegador
+    // malicioso con PostgREST): la RLS no tiene política de DELETE para `profiles`.
+    const porTabla = await backend.tableQuery('profiles', ADMIN).delete();
+    expect(porTabla.error).not.toBeNull();
+    expect(backend.rows.profiles).toHaveLength(6);
+  });
+
+  it('el cliente no expone ningún método para borrar cuentas sin pasar por la RPC guardada', async () => {
+    const { backend } = setupJourney();
+    const repo = makeRepo(backend, ADMIN, null) as unknown as Record<string, unknown>;
+    for (const nombre of ['purgeAccount', 'deleteProfile', 'removeAccount']) {
+      expect(repo[nombre], `el cliente no debe exponer ${nombre}`).toBeUndefined();
+    }
   });
 });

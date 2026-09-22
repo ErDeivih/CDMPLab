@@ -183,6 +183,56 @@ export function resolveEmailConfig(
 }
 
 // -------------------------------------------------------------
+// ¿Se puede ENVIAR y REGISTRAR? (puerta previa a abrir un intento)
+// -------------------------------------------------------------
+
+/** Credencial del SERVIDOR con la que se registra el resultado del proveedor. La inyecta la
+ *  plataforma en las Edge Functions alojadas; el navegador no la tiene (ni puede tenerla). */
+export const RECORDER_ENV_VAR = 'SUPABASE_SERVICE_ROLE_KEY';
+
+/** Variables de plataforma que la función necesita para hablar con la base de datos. */
+export const PLATFORM_ENV_VARS: string[] = [
+  'SUPABASE_URL',
+  'SUPABASE_ANON_KEY',
+  'SUPABASE_PUBLISHABLE_KEY',
+];
+
+/**
+ * ¿Está el servidor en condiciones de enviar el correo **y de registrar su resultado**?
+ *
+ * POR QUÉ EXISTE ESTA PUERTA (revisión del dueño, 22/09/2026): si se pudiera enviar sin poder
+ * registrar, el correo saldría y la fila se quedaría en `send_pending` —y, peor, el intento ya
+ * estaría consumido— mientras nadie podría saber qué contestó el proveedor. Por eso la
+ * comprobación va **antes** de `prepare_invitation_email` (que es quien abre el intento y gasta
+ * uno de los 5) y **antes** de la llamada al proveedor: si falta algo, no se envía NADA, no se
+ * consume NINGÚN intento y el estado no cambia.
+ *
+ * Devuelve los NOMBRES de lo que falta (nunca los valores) o la configuración ya resuelta.
+ */
+export function resolveSendReadiness(
+  env: Record<string, string | undefined>,
+): { ok: true; config: EmailConfig } | { ok: false; missing: string[] } {
+  const missing: string[] = [];
+
+  // 1) Sin la credencial del servidor no se podría escribir el resultado del proveedor.
+  if (readEnv(env, RECORDER_ENV_VAR) === '') missing.push(RECORDER_ENV_VAR);
+
+  // 2) Sin URL ni clave publicable no hay con qué autenticar al llamante (y sin eso no hay
+  //    autorización del propietario ni, por tanto, envío legítimo).
+  if (readEnv(env, 'SUPABASE_URL') === '') missing.push('SUPABASE_URL');
+  if (readEnv(env, 'SUPABASE_ANON_KEY') === '' && readEnv(env, 'SUPABASE_PUBLISHABLE_KEY') === '') {
+    missing.push('SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_KEY');
+  }
+
+  // 3) Y la configuración del proveedor y del enlace.
+  const email = resolveEmailConfig(env);
+  if (!email.ok) missing.push(...email.missing);
+
+  if (missing.length > 0) return { ok: false, missing };
+  return email;
+}
+
+// -------------------------------------------------------------
 // Enlaces
 // -------------------------------------------------------------
 

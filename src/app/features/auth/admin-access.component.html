@@ -155,6 +155,19 @@
               Reactivar
             </button>
           }
+          <!-- BORRAR la cuenta es lo más destructivo del panel: no se ofrece sobre la propia
+               cuenta (el servidor también lo prohibe) y pide una confirmación reforzada. -->
+          @if (!me(p.userId)) {
+            <button
+              type="button"
+              class="btn btn-ghost btn-danger-text"
+              data-accion="eliminar-cuenta"
+              [disabled]="busy(p.userId)"
+              (click)="pedirBorrado(p)"
+            >
+              Eliminar cuenta
+            </button>
+          }
           @if (me(p.userId) && p.status !== 'suspended' && p.status !== 'rejected') {
             <span class="auth-note" role="status"
               >Tu propia cuenta no se puede rechazar ni suspender.</span
@@ -162,7 +175,69 @@
           }
         </div>
       </div>
+
+      <!-- Vista previa del borrado de ESTA cuenta: qué se llevaría por delante y qué lo impide.
+           Mientras está abierta hay que escribir el correo exacto para habilitar el borrado. -->
+      @if (borrado(); as prev) {
+        @if (prev.userId === p.userId) {
+          <div class="card auth-stack" data-panel-borrado="1">
+            <strong>Eliminar la cuenta de {{ prev.displayName || prev.emailNormalized }}</strong>
+            <span class="auth-note" data-resumen-borrado="1">{{ borradoResumen() }}</span>
+            @for (motivo of borradoBloqueos(); track motivo) {
+              <span class="auth-msg err" role="alert" data-bloqueo-borrado="1">{{ motivo }}</span>
+            }
+            @if (!borradoPermitido() && borradoBloqueos().length === 0) {
+              <span class="auth-msg err" role="alert" data-bloqueo-borrado="1">
+                Esa cuenta ya no existe.
+              </span>
+            }
+            @if (borradoPermitido()) {
+              <label class="field-label" [attr.for]="'borrar-confirmar-' + prev.userId">
+                Escribe {{ prev.emailNormalized }} para confirmar
+              </label>
+              <input
+                class="input"
+                [id]="'borrar-confirmar-' + prev.userId"
+                type="text"
+                autocomplete="off"
+                [value]="borradoTyped()"
+                (input)="onBorradoTyped($event)"
+                placeholder="{{ prev.emailNormalized }}"
+              />
+              <label class="field-label" [attr.for]="'borrar-motivo-' + prev.userId">
+                Motivo (opcional, queda en el registro de bajas)
+              </label>
+              <input
+                class="input"
+                [id]="'borrar-motivo-' + prev.userId"
+                type="text"
+                autocomplete="off"
+                [value]="borradoReason()"
+                (input)="onBorradoReason($event)"
+              />
+            }
+            <div class="admin-actions">
+              <button
+                type="button"
+                class="btn btn-danger-text btn-ghost"
+                data-accion="confirmar-borrado"
+                [disabled]="!borradoPermitido() || !borradoConfirmado() || borrando(prev.userId)"
+                (click)="confirmarBorrado()"
+              >
+                {{ borrando(prev.userId) ? 'Eliminando…' : 'Eliminar cuenta definitivamente' }}
+              </button>
+              <button type="button" class="btn" (click)="cancelarBorrado()">Cancelar</button>
+            </div>
+          </div>
+        }
+      }
     }
+  }
+  @if (borradoCargando()) {
+    <p class="auth-note">Comprobando si la cuenta se puede borrar…</p>
+  }
+  @if (borradoError()) {
+    <p class="auth-msg err" role="alert">{{ borradoError() }}</p>
   }
 
   @if (error()) {

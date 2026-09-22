@@ -50,6 +50,8 @@ declare
   v_provider_id text;
   v_err_len integer;
   v_attempt uuid;
+  v_preview jsonb;
+  v_miembros_antes integer;
   editor_invitation uuid;
   c2_invitation uuid;
   other_invitation uuid;
@@ -599,6 +601,229 @@ begin
   end if;
   if (select count(*) from public.admin_list_team_requests('Equipo c5')) <> 1 then
     raise exception 'FAIL admin request queue after reactivation';
+  end if;
+
+  -- ============================================================
+  -- GESTIÓN DE CUENTAS Y PERTENENCIA (migración 20260923000000)
+  --   · el propietario NO puede salir del equipo; un editor activo SÍ;
+  --   · el traspaso lo hace solo el propietario, solo a un editor ACTIVO, aprobado y sin
+  --     equipo propio, y deja las DOS filas de membresía intercambiadas;
+  --   · borrar una cuenta: solo el administrador, y con guardas (uno mismo, otro
+  --     administrador, quien posee un equipo), dejando registro en `account_deletions`.
+  -- ============================================================
+
+  -- ---- 1. Salir de un equipo -------------------------------------------
+  -- El editor (…0002) fue revocado antes; se vuelve a invitar y a aceptar para tener un editor
+  -- ACTIVO sobre el que probar.
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  select public.invite_team_member(v_team_id, 'rls-editor@test.local') into v_editor_inv;
+  perform set_config('request.jwt.claim.sub', editor_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', editor_id, 'role', 'authenticated')::text, true);
+  perform public.accept_team_invitation(v_editor_inv);
+  if (select status from public.team_members where team_id = v_team_id and user_id = editor_id) <> 'active' then
+    raise exception 'FAIL editor no activo antes de probar la salida';
+  end if;
+
+  -- El PROPIETARIO no puede salir: dejaría el equipo sin dueño.
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  begin
+    perform public.leave_team(v_team_id);
+    raise exception '__unexpected_success_owner_leave__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_owner_leave__' then raise; end if;
+    if position('owner_cannot_leave' in sqlerrm) = 0 then
+      raise exception 'FAIL owner leave error: %', sqlerrm;
+    end if;
+  end;
+
+  -- Alguien que NO es miembro tampoco puede «salir».
+  perform set_config('request.jwt.claim.sub', other_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', other_id, 'role', 'authenticated')::text, true);
+  begin
+    perform public.leave_team(v_team_id);
+    raise exception '__unexpected_success_foreign_leave__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_foreign_leave__' then raise; end if;
+    if position('not_a_member' in sqlerrm) = 0 then
+      raise exception 'FAIL foreign leave error: %', sqlerrm;
+    end if;
+  end;
+
+  -- ---- 2. Traspaso de propiedad ---------------------------------------
+  perform set_config('request.jwt.claim.sub', editor_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', editor_id, 'role', 'authenticated')::text, true);
+  begin
+    perform public.transfer_team_ownership(v_team_id, editor_id);
+    raise exception '__unexpected_success_editor_transfer__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_editor_transfer__' then raise; end if;
+    if position('forbidden' in sqlerrm) = 0 then
+      raise exception 'FAIL editor transfer error: %', sqlerrm;
+    end if;
+  end;
+
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  begin
+    perform public.transfer_team_ownership(v_team_id, other_id);
+    raise exception '__unexpected_success_transfer_non_member__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_transfer_non_member__' then raise; end if;
+    if position('new_owner_must_be_active_member' in sqlerrm) = 0 then
+      raise exception 'FAIL transfer to non-member error: %', sqlerrm;
+    end if;
+  end;
+  -- Y no puede traspasarlo a quien ya posee otro equipo (el ajeno tiene el suyo).
+  perform set_config('request.jwt.claim.sub', editor_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', editor_id, 'role', 'authenticated')::text, true);
+  perform public.leave_team(v_team_id);  -- el editor se va: así se prueba con un revocado
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  begin
+    perform public.transfer_team_ownership(v_team_id, editor_id);
+    raise exception '__unexpected_success_transfer_revoked__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_transfer_revoked__' then raise; end if;
+    if position('new_owner_must_be_active_member' in sqlerrm) = 0 then
+      raise exception 'FAIL transfer to revoked member error: %', sqlerrm;
+    end if;
+  end;
+
+  -- Traspaso BUENO: se vuelve a invitar/activar al editor y se le da la propiedad.
+  select public.invite_team_member(v_team_id, 'rls-editor@test.local') into v_editor_inv;
+  perform set_config('request.jwt.claim.sub', editor_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', editor_id, 'role', 'authenticated')::text, true);
+  perform public.accept_team_invitation(v_editor_inv);
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  -- Cuántas filas de membresía tiene el equipo ANTES del traspaso (para comprobar que el
+  -- traspaso intercambia papeles y no crea ni quita plazas).
+  select count(*) into v_miembros_antes from public.team_members where team_id = v_team_id;
+  perform public.transfer_team_ownership(v_team_id, editor_id);
+  if (select owner_user_id from public.teams where id = v_team_id) <> editor_id then
+    raise exception 'FAIL el traspaso no cambió el propietario';
+  end if;
+  if (select role from public.team_members where team_id = v_team_id and user_id = editor_id) <> 'owner' then
+    raise exception 'FAIL el nuevo propietario no tiene rol owner';
+  end if;
+  if (select role from public.team_members where team_id = v_team_id and user_id = owner_id) <> 'editor'
+     or (select status from public.team_members where team_id = v_team_id and user_id = owner_id) <> 'active' then
+    raise exception 'FAIL el antiguo propietario no quedó como editor activo';
+  end if;
+  if (select count(*) from public.team_members where team_id = v_team_id) <> v_miembros_antes then
+    raise exception 'FAIL el traspaso añadió o quitó filas de membresía';
+  end if;
+  -- Se devuelve la propiedad al propietario original para no alterar el resto de la matriz.
+  perform set_config('request.jwt.claim.sub', editor_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', editor_id, 'role', 'authenticated')::text, true);
+  perform public.transfer_team_ownership(v_team_id, owner_id);
+  if (select owner_user_id from public.teams where id = v_team_id) <> owner_id then
+    raise exception 'FAIL no se pudo devolver la propiedad';
+  end if;
+  -- El bloque de importación posterior comprueba explícitamente un editor REVOCADO.
+  -- El traspaso de ida y vuelta lo dejó activo: restaurar ese estado de prueba.
+  perform public.leave_team(v_team_id);
+  if (select status from public.team_members where team_id = v_team_id and user_id = editor_id) <> 'revoked' then
+    raise exception 'FAIL no se restauró el editor revocado para las pruebas siguientes';
+  end if;
+
+  -- ---- 3. Borrar una cuenta (administrador, con guardas) ---------------
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
+
+  -- Un usuario NO administrador no puede ni mirar la vista previa ni borrar.
+  perform set_config('request.jwt.claim.sub', other_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', other_id, 'role', 'authenticated')::text, true);
+  begin
+    perform public.admin_deletion_preview('10000000-0000-4000-8000-000000000008');
+    raise exception '__unexpected_success_foreign_preview__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_foreign_preview__' then raise; end if;
+    if position('platform_admin_required' in sqlerrm) = 0 then
+      raise exception 'FAIL foreign deletion preview error: %', sqlerrm;
+    end if;
+  end;
+  begin
+    perform public.admin_delete_account('10000000-0000-4000-8000-000000000008', null);
+    raise exception '__unexpected_success_foreign_delete__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_foreign_delete__' then raise; end if;
+    if position('platform_admin_required' in sqlerrm) = 0 then
+      raise exception 'FAIL foreign delete error: %', sqlerrm;
+    end if;
+  end;
+
+  -- Guardas del administrador.
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
+  begin
+    perform public.admin_delete_account(admin_id, null);
+    raise exception '__unexpected_success_delete_self__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_delete_self__' then raise; end if;
+    if position('cannot_delete_self' in sqlerrm) = 0 then
+      raise exception 'FAIL delete self error: %', sqlerrm;
+    end if;
+  end;
+  begin
+    perform public.admin_delete_account(owner_id, null);
+    raise exception '__unexpected_success_delete_owner_team__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_delete_owner_team__' then raise; end if;
+    if position('target_owns_team' in sqlerrm) = 0 then
+      raise exception 'FAIL delete team-owner error: %', sqlerrm;
+    end if;
+  end;
+
+  -- La vista previa del que posee el equipo dice qué se llevaría y que no se puede.
+  v_preview := public.admin_deletion_preview(owner_id);
+  if (v_preview->>'deletable')::boolean then
+    raise exception 'FAIL la vista previa permite borrar a quien posee un equipo';
+  end if;
+  if not (v_preview->'blockers' ? 'owns_team') then
+    raise exception 'FAIL la vista previa no señala owns_team: %', v_preview;
+  end if;
+  if (v_preview->>'owned_team_name') <> 'Equipo RLS (v2)' then
+    raise exception 'FAIL la vista previa no dice el equipo: %', v_preview;
+  end if;
+
+  -- Borrado REAL de una cuenta sin equipo ni datos: la pendiente (…0008, perfil sin aprobar).
+  if not (public.admin_deletion_preview('10000000-0000-4000-8000-000000000008')->>'deletable')::boolean then
+    raise exception 'FAIL la vista previa bloquea una cuenta normal: %',
+      public.admin_deletion_preview('10000000-0000-4000-8000-000000000008');
+  end if;
+  perform public.admin_delete_account('10000000-0000-4000-8000-000000000008', 'Baja de prueba');
+  if exists (select 1 from public.profiles where user_id = '10000000-0000-4000-8000-000000000008') then
+    raise exception 'FAIL el perfil borrado sigue existiendo';
+  end if;
+  if not exists (
+    select 1 from public.account_deletions
+    where deleted_user_id = '10000000-0000-4000-8000-000000000008'
+      and reason = 'Baja de prueba'
+      and deleted_by = admin_id
+  ) then
+    raise exception 'FAIL no quedó registro de la baja';
+  end if;
+  -- Y la auditoría la lee el administrador, no un usuario normal.
+  perform set_config('request.jwt.claim.sub', other_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', other_id, 'role', 'authenticated')::text, true);
+  if (select count(*) from public.account_deletions) <> 0 then
+    raise exception 'FAIL un usuario normal lee la auditoría de bajas';
+  end if;
+  -- Y no puede escribirla directamente (sin política de escritura y sin GRANT).
+  begin
+    insert into public.account_deletions (deleted_user_id, email_normalized)
+    values ('10000000-0000-4000-8000-000000000008', 'falso@test.local');
+    raise exception '__unexpected_success_direct_deletion_insert__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_direct_deletion_insert__' then raise; end if;
+  end;
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
+  if (select count(*) from public.account_deletions) <> 1 then
+    raise exception 'FAIL el insert directo creó una fila de auditoría';
   end if;
 
   -- ============================================================

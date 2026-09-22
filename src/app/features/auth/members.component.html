@@ -19,11 +19,38 @@
       Solo el propietario del equipo puede ver y gestionar los miembros. Si necesitas un cambio,
       pídeselo a quien creó el equipo.
     </p>
+    <!-- El editor SÍ puede salir por su cuenta: es su pertenencia, no un permiso del propietario.
+         La acción es una pérdida de acceso, así que se confirma explicando qué se pierde. -->
+    @if (puedeSalir()) {
+      <div class="card auth-stack" data-accion="salir-equipo">
+        <strong>Salir de este equipo</strong>
+        <span class="auth-note"
+          >Dejarás de ver sus jugadores, ejercicios, pizarras y sesiones.</span
+        >
+        <button
+          type="button"
+          class="btn btn-ghost btn-danger-text"
+          [disabled]="busySalir()"
+          (click)="salir()"
+        >
+          {{ busySalir() ? 'Saliendo…' : 'Salir del equipo' }}
+        </button>
+      </div>
+    }
+    @if (motivoNoSalir(); as motivo) {
+      <p class="auth-note" data-motivo-no-salir="1">{{ motivo }}</p>
+    }
   } @else {
     <div class="auth-row">
       <span style="margin-right: auto">Plazas de colaboradores</span>
       <strong>{{ seatsUsed() }} de {{ seatsLimit }} usadas</strong>
     </div>
+
+    <!-- El propietario que quiera dejar el equipo necesita saber que primero hay que traspasarlo:
+         no puede «salir» y dejar el equipo sin dueño. -->
+    @if (motivoNoSalir(); as motivo) {
+      <p class="auth-note" data-motivo-no-salir="1">{{ motivo }}</p>
+    }
 
     @for (m of members(); track m.userId) {
       <div class="card invite-row">
@@ -32,6 +59,17 @@
           <span class="auth-note">{{ m.role === 'owner' ? 'Propietario' : 'Editor' }}</span>
         </div>
         @if (isOwner() && m.role !== 'owner' && !me(m.userId)) {
+          <!-- Traspasar la propiedad: acción de PERMISOS, así que se confirma con las
+               consecuencias para las dos partes y solo se ofrece a un colaborador activo. -->
+          <button
+            type="button"
+            class="btn btn-ghost"
+            data-accion="traspasar-propiedad"
+            [disabled]="busy(m.userId) || !puedeTraspasarA(m)"
+            (click)="traspasar(m)"
+          >
+            Hacer propietario
+          </button>
           <button
             type="button"
             class="btn btn-ghost btn-danger-text"

@@ -2,8 +2,8 @@
 
 > **Actualización 21/09/2026.** Las RPC y sus permisos ya se probaron en el proyecto real
 > mediante `supabase/tests/entrenolab_rls.sql` (transacción revertida). La Edge Function
-> `invite-team-member` está desplegada con verificación JWT; una petición anónima devolvió
-> HTTP 401. La falta de credencial de registro se rechaza antes de abrir intento o enviar.
+> `invite-team-member` está desplegada (versión 3) con verificación JWT; una petición anónima
+> devolvió HTTP 401. La falta de credencial de registro se rechaza antes de abrir intento o enviar.
 > **No se ha enviado correo real:** faltan proveedor transaccional, dominio y secretos.
 > Las frases posteriores sobre «no aplicada» o «no desplegada» describen la ronda anterior.
 
@@ -157,6 +157,27 @@ identificador propio (`email_attempt_id`, un uuid nuevo en cada envío) y lo dev
 Sin ese vínculo, la respuesta lenta de un envío anterior podía pisar el estado del intento nuevo
 (por ejemplo, dejar en `provider_accepted` un envío que en realidad acababa de fallar).
 
+### Puerta de configuración: no se envía nada si no se puede registrar nada
+
+Si se pudiera enviar sin poder registrar el resultado, el correo saldría y la fila se quedaría en
+`send_pending` —y el intento ya estaría gastado— sin que nadie pudiera saber qué contestó el
+proveedor. Por eso, **antes** de abrir el intento y **antes** de llamar al proveedor, la función
+comprueba con `resolveSendReadiness(env)` (módulo puro, probado de verdad) que tiene:
+
+| Se exige                                                   | Por qué                                                                               |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `SUPABASE_SERVICE_ROLE_KEY`                                | Sin ella no se puede ejecutar `record_invitation_email_result` (revocada al cliente). |
+| `SUPABASE_URL`                                             | Sin URL no hay cliente contra el que autenticar al llamante.                          |
+| `SUPABASE_ANON_KEY` (o la publicable)                      | Sin clave publicable no se puede autenticar al propietario.                           |
+| La configuración de correo (`EMAIL_*`, `INVITE_LINK_BASE`) | Sin ella no hay proveedor ni enlace válido.                                           |
+
+Si falta algo, la función responde `not_configured` con un mensaje que **no afirma nada que no
+haya pasado**: «No se ha intentado ningún envío, no se ha consumido ningún intento y el estado del
+envío NO ha cambiado». Es decir: **cero envíos y cero intentos consumidos**, con el estado de la
+invitación intacto. El caso de «falta URL o clave publicable» se unificó con este estado (antes
+respondía `server_misconfigured`): cualquier configuración incompleta se atiende **antes** de tocar
+la base y de hablar con el proveedor.
+
 ## 4. Política de reintentos: por qué no se duplican invitaciones ni se envían correos ilimitados
 
 Todo el control está **en la base**, que es donde no se puede saltar desde el navegador:
@@ -286,18 +307,14 @@ cuerpo (`ok`, `status`, `message`) el que distingue los estados.
 2. **Verificar el dominio remitente**: publicar SPF, DKIM (y DMARC) y elegir `no-reply@…`.
 3. **Alta de los secretos** con `supabase secrets set …` (valores de ejemplo y comandos exactos
    en el README de la función).
-4. **Enlazar el proyecto y desplegar la función**: `supabase link --project-ref …` y
-   `supabase functions deploy invite-team-member`. _Este repositorio no tiene
-   `supabase/config.toml`_ (no se ha ejecutado `supabase init`), así que el primer despliegue
-   creará ese fichero o exigirá enlazar el proyecto.
-5. **Aplicar la migración `20260922000000_team_creation_requests.sql`** en remoto: crea
-   `email_status`, `email_attempts`, `last_email_at`, `last_email_error`, `provider_message_id`
-   y las dos RPC con sus permisos. **No se ha consultado el catálogo remoto en esta ronda**, así
-   que no se afirma que estén aplicadas.
-6. **Hacer un envío real de prueba** a un buzón propio (no a una persona ajena) y comprobar que
+4. **Hacer un envío real de prueba** a un buzón propio (no a una persona ajena) y comprobar que
    llega, con qué remitente y a qué carpeta.
-7. **Decidir si se añaden webhooks** del proveedor para pasar de «aceptado» a «entregado» o
+5. **Decidir si se añaden webhooks** del proveedor para pasar de «aceptado» a «entregado» o
    «rebotado». Sin ellos, el estado no puede mejorar nunca.
+
+La función y las RPC ya están desplegadas; al guardar secretos nuevos en Supabase Edge Functions
+quedan disponibles sin volver a desplegar el código. La migración de solicitudes y correo se aplicó
+como `20260921193229_team_creation_requests` y se probó contra PostgreSQL real.
 
 ## 9. Qué NO está verificado
 

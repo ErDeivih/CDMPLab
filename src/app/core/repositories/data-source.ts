@@ -19,6 +19,9 @@
 // =============================================================
 
 import type { Exercise, ExerciseFolder, Player, Session, SessionTask, Team } from '../models';
+import type { AccountDeletionPreview } from '../team-management';
+
+export type { AccountDeletionPreview };
 
 export type ProfileStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 export type MemberRole = 'owner' | 'editor';
@@ -265,10 +268,29 @@ export interface DataSource {
   myPendingInvitations(): Promise<TeamInvitationInfo[]>;
   acceptInvitation(invitationId: string): Promise<string>;
 
+  // ---- Pertenencia al equipo (decide el propio miembro) ----
+  /**
+   * El propio MIEMBRO ACTIVO sale del equipo. El propietario no puede: dejaría el equipo sin
+   * dueño y sin nadie que lo gestione (para eso está `transferTeamOwnership`).
+   */
+  leaveTeam(teamId: string): Promise<void>;
+  /**
+   * El PROPIETARIO traspasa el equipo a un colaborador activo. Los dos roles y el
+   * `owner_user_id` cambian en la misma transacción del servidor.
+   */
+  transferTeamOwnership(teamId: string, newOwnerUserId: string): Promise<void>;
+
   // ---- Administración (plataforma) ----
   isPlatformAdmin(): Promise<boolean>;
   listProfiles(search: string): Promise<ProfileInfo[]>;
   setProfileStatus(userId: string, status: ProfileStatus): Promise<void>;
+  /** Qué pasaría si se borrara esta cuenta y qué lo impide. Solo administradores. */
+  accountDeletionPreview(userId: string): Promise<AccountDeletionPreview>;
+  /**
+   * BORRA una cuenta de verdad (perfil + usuario de Auth). Solo administradores, y con guardas
+   * en el servidor: no a sí mismo, no a otro administrador, no a quien posee un equipo.
+   */
+  deleteAccount(userId: string, reason: string | null): Promise<void>;
 
   // ---- Importación local→Supabase (idempotente) ----
   importLocalData(

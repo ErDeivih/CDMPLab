@@ -16,6 +16,14 @@ import {
   storedEmailMessage,
   type StoredEmailStatus,
 } from '../../core/invite-email';
+import {
+  canLeaveTeam,
+  canTransferOwnership,
+  leaveTeamBlockedReason,
+  leaveTeamConsequences,
+  transferBlockedReason,
+  transferConsequences,
+} from '../../core/team-management';
 
 const SEAT_LIMIT = 6;
 
@@ -41,8 +49,13 @@ export class MembersComponent {
   protected readonly success = signal<string | null>(null);
   /** Invitación cuyo envío de correo está en curso (para deshabilitar su botón). */
   protected readonly enviandoId = signal<string | null>(null);
+  /** Salida del equipo en curso. */
+  protected readonly busySalir = signal(false);
 
   protected readonly isOwner = computed(() => this.access.target().role === 'owner');
+  /** Rol propio en el equipo de contexto (para decidir qué acciones se ofrecen). */
+  protected readonly myRole = computed(() => this.access.target().role ?? null);
+  protected readonly myUserId = computed(() => this.supabase.user()?.id ?? null);
   /**
    * `true` solo cuando NO se puede gestionar y eso se debe a la falta de propiedad en un equipo
    * REMOTO. En modo local/desarrollo `isOwner()` también es falso (no hay sesión ni roles), pero
@@ -51,10 +64,110 @@ export class MembersComponent {
   protected readonly sinGestion = computed(() => this.store.isRemote() && !this.isOwner());
   protected readonly seatsLimit = SEAT_LIMIT;
 
+  /** ¿Puede salir del equipo por su cuenta? (El propietario no: debe traspasarlo.) */
+  protected readonly puedeSalir = computed(
+    () => this.store.isRemote() && canLeaveTeam(this.myRole()),
+  );
+  /** Motivo por el que no puede salir, cuando corresponde explicarlo. */
+  protected readonly motivoNoSalir = computed(() =>
+    this.store.isRemote() && this.myRole() === 'owner' ? leaveTeamBlockedReason('owner') : null,
+  );
+
   protected readonly seatsUsed = computed(() => {
     const active = this.members().filter((m) => m.role !== 'owner').length;
     return active + this.invitations().length;
   });
+
+  /** Miembros a los que ESTE usuario puede traspasar la propiedad. */
+  protected puedeTraspasarA(m: TeamMemberInfo): boolean {
+    return canTransferOwnership(
+      this.myRole(),
+      {
+        userId: m.userId,
+        displayName: m.displayName,
+        emailNormalized: m.emailNormalized,
+        role: m.role,
+        status: m.status,
+      },
+      this.myUserId(),
+    );
+  }
+
+  /** Salir del equipo: pérdida de acceso, así que se confirma explicando qué se pierde. */
+  protected salir(): void {
+    const teamName = this.store.activeTeam()?.name ?? 'este equipo';
+    this.confirm.ask({
+      title: 'Salir del equipo',
+      message: `¿Salir de «${teamName}»? ${leaveTeamConsequences()}`,
+      confirmLabel: 'Salir del equipo',
+      onConfirm: () => {
+        this.busySalir.set(true);
+        this.error.set(null);
+        this.success.set(null);
+        this.access
+          .leaveTeam(this.teamId())
+          .then(() => {
+            // Al salir se deja de pertenecer a un equipo: se va a donde el servidor diga que
+            // corresponde AHORA (invitaciones si tiene alguna pendiente, o la pantalla de
+            // solicitud) en vez de fijar una ruta a mano que podría no aplicarle.
+            const destino = this.access.target().route || '/invitations';
+            return this.router.navigate([destino]);
+          })
+          .catch((e) => this.error.set((e as Error)?.message ?? 'No se pudo salir del equipo.'))
+          .finally(() => this.busySalir.set(false));
+      },
+    });
+  }
+
+  /**
+   * Traspaso de propiedad: cambia QUIÉN manda en el equipo, así que la confirmación dice las
+   * consecuencias para las dos partes y el servidor lo hace en una sola transacción.
+   */
+  protected traspasar(m: TeamMemberInfo): void {
+    const nombre = m.displayName || m.emailNormalized;
+    const motivo = transferBlockedReason(
+      this.myRole(),
+      {
+        userId: m.userId,
+        displayName: m.displayName,
+        emailNormalized: m.emailNormalized,
+        role: m.role,
+        status: m.status,
+      },
+      this.myUserId(),
+    );
+    if (motivo) {
+      this.error.set(motivo);
+      return;
+    }
+    this.confirm.ask({
+      title: 'Traspasar la propiedad',
+      message: `¿Dar la propiedad del equipo a ${nombre}? ${transferConsequences(nombre)}`,
+      confirmLabel: 'Traspasar',
+      onConfirm: () => {
+        this.busyId.set(m.userId);
+        this.error.set(null);
+        this.success.set(null);
+        this.access
+          .transferTeamOwnership(m.userId)
+          .then(() => {
+            this.success.set(`${nombre} es ahora el propietario del equipo.`);
+            return this.load();
+          })
+          .catch((e) =>
+            this.error.set((e as Error)?.message ?? 'No se pudo traspasar la propiedad.'),
+          )
+          .finally(() => this.busyId.set(null));
+      },
+    });
+  }
+
+  /** Equipo de contexto (para las RPC de pertenencia). */
+  private teamId(): string {
+    const id = this.access.target().teamId;
+    if (!id) throw new Error('No hay equipo de contexto.');
+    return id;
+  }
 
   async ngOnInit(): Promise<void> {
     await this.load();

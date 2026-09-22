@@ -205,10 +205,27 @@ transacción. Diseño, puertas y pasos manuales: [`docs/FASE-10-solicitud-de-equ
 
 Las invitaciones se crean igual en `public.team_invitations` y ahora además se puede **pedir el
 envío real** desde una Edge Function (`supabase/functions/invite-team-member`), con estados
-distinguibles y reintento. La clave del proveedor es un **secreto del servidor**. El envío real
-sigue **pendiente** (proveedor, credenciales y dominio): ver
-[`docs/correo-invitaciones.md`](docs/correo-invitaciones.md) y, para el correo de Auth,
-[`docs/smtp-supabase-auth.md`](docs/smtp-supabase-auth.md).
+distinguibles y reintento. La clave del proveedor es un **secreto del servidor**, y el registro del
+resultado solo lo puede escribir esa función (con la credencial de servicio: el navegador no puede
+falsificar un «aceptado por el proveedor»). El envío real sigue **pendiente** (proveedor,
+credenciales y dominio): ver [`docs/correo-invitaciones.md`](docs/correo-invitaciones.md) y, para el
+correo de Auth, [`docs/smtp-auth`](docs/smtp-supabase-auth.md).
+
+### Gestión de cuentas y pertenencia
+
+`supabase/migrations/20260924000000_account_and_membership_management.sql` está **aplicada y
+verificada en la base remota** (matriz SQL con `ROLLBACK`). Añade tres operaciones que
+antes no existían, todas decididas en el servidor y con confirmación en la interfaz cuando son
+destructivas o de permisos:
+
+- **eliminar una cuenta** (solo el administrador de plataforma; no a sí mismo, no a otro
+  administrador, no a quien posee un equipo; con vista previa, escribiendo el correo para confirmar
+  y con registro en `public.account_deletions`);
+- **salir de un equipo** (el propio miembro activo; el propietario no puede, debe traspasarlo);
+- **traspasar la propiedad** (solo el propietario, solo a un colaborador activo, aprobado y sin
+  equipo propio; los dos roles cambian en la misma transacción).
+
+Detalles, guardas y limitaciones declaradas: [`docs/FASE-10-solicitud-de-equipo.md`](docs/FASE-10-solicitud-de-equipo.md) §8.
 
 ### Rechazo de invitaciones
 
@@ -267,6 +284,9 @@ completo (equipos, jugadores, carpetas, ejercicios con su `canvas`, sesiones) de
   aprobada: la cuenta no puede crearlo por su cuenta (el intento por RPC o por `INSERT` directo
   se rechaza en el servidor). El solicitante ve el estado (pendiente / rechazado) y puede volver
   a solicitarlo.
+- **El propietario puede traspasar el equipo** a un colaborador activo; **un colaborador puede
+  salir** por su cuenta; y el **administrador puede eliminar una cuenta** con guardas y
+  confirmación reforzada (ver «Gestión de cuentas y pertenencia»).
 - Las invitaciones se **crean** en base de datos y se puede **pedir el envío real** del correo
   desde una función de servidor; la persona invitada debe **registrarse** con ese correo, ser
   **aprobada** por el administrador y después **aceptar** la invitación (el enlace no concede

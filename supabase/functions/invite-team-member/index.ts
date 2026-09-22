@@ -33,13 +33,15 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import {
   EMAIL_ENV_VARS,
+  PLATFORM_ENV_VARS,
+  RECORDER_ENV_VAR,
   buildInviteLink,
   isRetriableHttp,
   mapProviderResponse,
   providerRequest,
   redactError,
   renderInviteEmail,
-  resolveEmailConfig,
+  resolveSendReadiness,
 } from '../_shared/invite-email.ts';
 
 /** CORS: el cliente web vive en otro origen (GitHub Pages). Se permite cualquier origen
@@ -71,7 +73,7 @@ const MESSAGES = {
   sendErrorRetriable:
     'No se pudo enviar el correo porque el proveedor no está disponible. Puedes volver a intentarlo dentro de un momento.',
   notConfigured:
-    'El envío de correos todavía no está configurado en el servidor. La invitación sigue creada: puedes compartir el enlace a mano.',
+    'El envío de correos todavía no está configurado en el servidor. No se ha intentado ningún envío, no se ha consumido ningún intento y el estado del envío NO ha cambiado. La invitación sigue creada: puedes compartir el enlace a mano.',
   serverMisconfigured: 'Falta configuración del servidor para enviar correos.',
   staleAttempt:
     'El resultado que ha llegado corresponde a un intento anterior y se ha ignorado: no cambia el estado del envío actual.',
@@ -270,20 +272,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
   const callerJwt = bearer[1] ?? '';
 
-  const supabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').trim();
-  const anonKey = (
-    Deno.env.get('SUPABASE_ANON_KEY') ??
-    Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ??
-    ''
-  ).trim();
-  if (supabaseUrl === '' || anonKey === '') {
-    logProblem('server_misconfigured');
-    return respond({
-      ok: false,
-      status: 'server_misconfigured',
-      message: MESSAGES.serverMisconfigured,
-    });
+  // ---------- PUERTA DE CONFIGURACIÓN: antes de abrir un intento y antes de enviar ----------
+  // Se comprueba TODO lo necesario para (a) autenticar al llamante, (b) enviar por el proveedor
+  // y (c) REGISTRAR el resultado con la credencial del servidor. Si falta algo, se responde un
+  // error de configuración SIN tocar nada: no se llama a `prepare_invitation_email` (no se abre
+  // intento ni se gasta uno de los 5), no se llama al proveedor (cero envíos) y el estado de la
+  // invitación NO cambia. Antes esta comprobación estaba repartida y una credencial ausente podía
+  // descubrirse DESPUÉS de enviar, dejando un correo en camino que nadie podía registrar.
+  const env: Record<string, string | undefined> = {};
+  for (const name of [...EMAIL_ENV_VARS, ...PLATFORM_ENV_VARS, RECORDER_ENV_VAR]) {
+    env[name] = Deno.env.get(name);
   }
+  const readiness = resolveSendReadiness(env);
+  if (!readiness.ok) {
+    // Los NOMBRES de lo que falta son información de operación, no un secreto.
+    logProblem('not_configured missing=' + readiness.missing.join(','));
+    return respond({ ok: false, status: 'not_configured', message: MESSAGES.notConfigured });
+  }
+  const config = readiness.config;
+
+  const supabaseUrl = readText(env['SUPABASE_URL']);
+  const anonKey = readText(env['SUPABASE_ANON_KEY']) || readText(env['SUPABASE_PUBLISHABLE_KEY']);
+  const serviceKey = readText(env[RECORDER_ENV_VAR]);
 
   // El cliente va con el JWT del llamante: `anon` como clave pública y la sesión del usuario en
   // la cabecera, de modo que las RPC se ejecutan COMO ESE USUARIO. Es el que autoriza al
@@ -298,38 +308,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // es la garantía de que un propietario no puede falsificar un `provider_accepted` con una
   // llamada directa. Esta clave vive SOLO en el servidor (la inyecta la plataforma en las Edge
   // Functions) y nunca se devuelve, ni se registra, ni se usa para autorizar al usuario.
-  const serviceKey = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '').trim();
-  if (serviceKey === '') {
-    // Sin capacidad de registrar el resultado no se debe abrir un intento ni enviar un correo.
-    logProblem('server_misconfigured missing=SUPABASE_SERVICE_ROLE_KEY');
-    return respond({
-      ok: false,
-      status: 'server_misconfigured',
-      message: MESSAGES.serverMisconfigured,
-    });
-  }
   const recorderClient = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  // ---------- Configuración de correo (antes de consumir un intento) ----------
-  // Se leen SOLO las variables del módulo, una a una: no se vuelca todo el entorno en un
-  // objeto, para que la clave de servicio no pueda acabar en un log por accidente.
-  const emailEnv: Record<string, string | undefined> = {};
-  for (const name of EMAIL_ENV_VARS) {
-    emailEnv[name] = Deno.env.get(name);
-  }
-  const resolved = resolveEmailConfig(emailEnv);
-  if (!resolved.ok) {
-    // Los NOMBRES de las variables que faltan son información de operación, no un secreto.
-    logProblem('not_configured missing=' + resolved.missing.join(','));
-    return respond({ ok: false, status: 'not_configured', message: MESSAGES.notConfigured });
-  }
-  const config = resolved.config;
-
   /** Registra el resultado REAL del envío con la credencial de servicio y contra el intento
    *  preparado. Si el registro falla, la fila queda en `send_pending` y se deja constancia
-   *  en el log; la credencial ausente ya se rechazó antes de abrir el intento. */
+   *  en el log; la credencial ausente se rechazó ANTES de abrir el intento. */
   const recordResult = async (
     attemptId: string,
     status: 'provider_accepted' | 'send_error',

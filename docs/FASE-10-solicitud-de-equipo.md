@@ -1,5 +1,10 @@
 # Solicitud de equipo aprobada por el administrador + correo de invitación real
 
+> **Estado vigente 22/09/2026:** gestión de cuentas y equipos aplicada en remoto
+> (`20260922101345_account_and_membership_management`) y probada con la matriz SQL en
+> `ROLLBACK`. Los pasajes que hablan de «no aplicada» describen el informe local anterior.
+> El correo real sigue pendiente de configurar Resend y el SMTP de Auth.
+
 > Encargo del dueño (22/09/2026): _«para crear un equipo, ¿el admin (yo) tiene forma de aceptar
 > esa solicitud? debería estar restringido a admin(s)»_ y _«¿hay alguna forma de enviar
 > correctamente los correos para las invitaciones?»_.
@@ -65,6 +70,7 @@
 | **El resultado del proveedor solo lo registra el servidor** (no el navegador)           | `record_invitation_email_result` con `revoke execute … from public, anon, authenticated` + `grant execute … to service_role`; la Edge Function lo llama con `SUPABASE_SERVICE_ROLE_KEY` | unit `multiuser-flow.spec.ts` («el propietario NO puede falsificar provider_accepted», «un no propietario tampoco», «el cliente no expone ningún método»), validador de migración, puerta del correo | ✅ unit + estático; **PostgreSQL real pendiente** (§7) |
 | Una respuesta **tardía** no sobrescribe el intento nuevo                                | `prepare_invitation_email` abre intento (`email_attempt_id = gen_random_uuid()`) y lo devuelve como `attempt_id`; el registro exige que coincida (`stale_email_attempt`)                | unit «un resultado de un intento ANTIGUO no cambia el estado del intento nuevo», validador (exige el vínculo) y matriz SQL con `set role service_role`                                               | ✅ unit + estático; **PostgreSQL real pendiente** (§7) |
 | Reintento **sin duplicar** invitaciones ni enviar ilimitados                            | Índice único parcial de invitación pendiente + cooldown 60 s + tope de 5 intentos, y el propietario sigue siendo quien pide el envío                                                    | unit `invite-email.spec.ts` (política de reintento), validador de migración                                                                                                                          | ✅ unit + estático                                     |
+| **Sin poder registrar el resultado, no se envía** (revisión del dueño, 22/09/2026)      | `resolveSendReadiness` (módulo puro) comprueba credencial de servidor + URL + clave publicable + configuración de correo **antes** de abrir el intento y de llamar al proveedor         | puerta del correo: 5 pruebas de comportamiento del módulo puro + «credencial ausente → cero envíos y cero intentos consumidos» (orden en el fichero y mensaje que no afirma nada)                    | ✅ comportamiento real (módulo importado) + estático   |
 | No presentar «correo entregado» cuando el proveedor solo aceptó el envío                | `provider_accepted` = «aceptado por el proveedor (entrega no confirmada)»                                                                                                               | unit `invite-email.spec.ts` (el texto NO contiene «entregado»)                                                                                                                                       | ✅ verde                                               |
 | Correo con el nombre del equipo y enlace de **producción** bajo `/CDMPLab/`             | `buildInviteLink(linkBase, link_path)`; `INVITE_LINK_BASE` parametrizado                                                                                                                | puerta del correo (acepta `/CDMPLab/`, rechaza localhost), unit del cliente (`invitationLink` con base de Pages)                                                                                     | ✅ estático + unit                                     |
 | Escapar el texto introducido por usuarios                                               | `escapeHtml` en asunto y HTML del correo                                                                                                                                                | puerta del correo (prueba con `<img src=x onerror=…>`)                                                                                                                                               | ✅ verde                                               |
@@ -106,6 +112,15 @@
 - `src/app/features/auth/invitations.component.*` — `?invitation=…` con aviso honesto.
 - `src/app/features/roster/roster.component.*` — en modo remoto ya no crea equipos; ofrece la
   importación de datos locales (que antes vivía en la pantalla de alta).
+
+- `supabase/migrations/20260924000000_account_and_membership_management.sql` — borrar cuenta
+  (con guardas y auditoría), salir del equipo y traspasar la propiedad. **No aplicada.** (La marca
+  `20260923000000` ya la ocupa `clear_stale_invitation_email_result`; dos ficheros con el mismo
+  prefijo son la MISMA migración para el CLI, por eso esta lleva `20260924000000`.)
+- `src/app/core/team-management.ts` (+ `.spec.ts`) — reglas puras de permisos y confirmaciones
+  (qué acción se ofrece, qué se explica y cuándo la confirmación reforzada está completa).
+- `e2e/fase-gestion-cuentas-equipos.spec.ts` — contrato visible en modo local + comprobación de que
+  los textos de las confirmaciones están dentro del artefacto que se publica.
 
 **Correo (función de servidor)** — ver `docs/correo-invitaciones.md`: módulo puro, Edge Function,
 `README.md` de la función y `scripts/validate-invite-email.mjs`.
@@ -197,21 +212,29 @@ sesión con esa cuenta y aceptar la invitación. Después, en la base:
 
 ## 6. Estado de las puertas en esta ronda (medido, con códigos de salida)
 
-| Puerta                                                           | Resultado                                                                 |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `npm run test:unit`                                              | **585 pruebas / 33 ficheros en verde** (antes de esta fase: 545) — exit 0 |
-| `npm run validate:migration`                                     | verde, con las comprobaciones nuevas del registro del correo — exit 0     |
-| `npm run validate:invite-email`                                  | verde, **36 comprobaciones** — exit 0                                     |
-| `e2e/fase-solicitud-equipo.spec.ts` (nueva, dirigida)            | 7 pruebas en verde — exit 0                                               |
-| E2E dirigidas de los flujos tocados (smoke local + multiusuario) | 42 pruebas en verde — exit 0                                              |
-| **Suite E2E completa** (`playwright.dev.config.ts --workers=1`)  | **878 en verde, 11 omitidas, exit 0** (33,8 min)                          |
-| `npm run lint` / `format:check` / `typecheck:e2e` / codificación | sin deuda nueva — exit 0                                                  |
-| `npm run build`                                                  | compila sin avisos de presupuesto — exit 0                                |
-| `npm run build:pages` + E2E del artefacto de Pages               | build exit 0; **14 pruebas** en verde — exit 0                            |
-| `git diff --check`                                               | sin errores de espacio — exit 0                                           |
+| Puerta                                                                 | Resultado                                                                 |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `npm run test:unit`                                                    | **612 pruebas / 34 ficheros en verde** (antes de esta fase: 545) — exit 0 |
+| `npm run validate:migration`                                           | verde, con las 22 comprobaciones de la migración de gestión — exit 0      |
+| `npm run validate:invite-email`                                        | verde, **42 comprobaciones** — exit 0                                     |
+| `e2e/fase-solicitud-equipo.spec.ts` (dirigida)                         | 7 pruebas en verde — exit 0                                               |
+| `e2e/fase-gestion-cuentas-equipos.spec.ts` (nueva, dirigida)           | 5 pruebas en verde — exit 0                                               |
+| E2E dirigidas del conjunto (las dos anteriores + smoke + multiusuario) | 47 pruebas en verde — exit 0                                              |
+| **Suite E2E completa** (`playwright.dev.config.ts --workers=1`)        | **883 en verde, 11 omitidas, exit 0** (28,8 min)                          |
+| `npm run lint` / `format:check` / `typecheck:e2e` / codificación       | sin deuda nueva — exit 0                                                  |
+| `npm run build`                                                        | compila sin avisos de presupuesto — exit 0                                |
+| `npm run build:pages` + E2E del artefacto de Pages                     | build exit 0; **14 pruebas** en verde — exit 0                            |
+| `git diff --check`                                                     | sin errores de espacio — exit 0                                           |
 
 Las 11 omitidas de la suite completa son las capturas que solo corren con su variable
 (`CAPTURAS_*`): en esta ronda no se han pedido para no reescribir galerías ajenas al encargo.
+
+**Alcance de estos números (honestidad).** La suite completa se ejecutó **antes** de los dos
+últimos retoques de la pantalla de miembros (navegar al destino que decide el servidor al salir de
+un equipo, y mostrar al propietario el motivo por el que no puede salir): son cambios de
+comportamiento de esa pantalla, así que se repitieron las pruebas **dirigidas** (47 en verde) y los
+builds con el árbol final. Ninguna otra spec toca esa pantalla, así que el resultado de la suite
+completa sigue siendo representativo del resto de la aplicación.
 
 **Alcance de estos números (honestidad).** La suite E2E completa se ejecutó **antes** de la
 corrección del registro del correo. Esa corrección no tocó **ni una línea de código de la
@@ -234,12 +257,46 @@ corrección.
   credenciales ni dominio verificado. La entrega, los rebotes y el spam solo los puede confirmar
   una prueba con el proveedor y el buzón: eso sigue pendiente.
 - **`SUPABASE_SERVICE_ROLE_KEY` no se ha probado con un envío real.** Si falta, la función
-  responde `server_misconfigured` antes de abrir el intento o contactar al proveedor; la puerta
-  local comprueba ese orden. El arranque y la puerta JWT de la función desplegada sí se probaron
-  con una petición sin autorización (HTTP 401).
+  responde `not_configured` **antes** de abrir el intento y de contactar al proveedor (el
+  comportamiento del módulo puro está probado importándolo de verdad, y el orden de la llamada
+  está comprobado de forma estática): cero envíos y cero intentos consumidos. Lo que no se ha
+  ejecutado es la función en Deno con esa variable ausente.
 - **La suite E2E real de Supabase** (`e2e/supabase-real.spec.ts`, opt-in por variables de
   entorno) se ha **actualizado** al flujo nuevo (solicitar + aprobar) pero **no se ha ejecutado**
   en esta ronda: no hay credenciales en el entorno.
 - **El estado visual** de las pantallas nuevas no se ha revisado con ojos (el modelo no puede leer
   imágenes): el contrato está medido con E2E (textos, apartados y avisos), pero la revisión
   estética es del dueño.
+
+## 8. Gestión de cuentas y equipos: qué se puede hacer hoy
+
+> **Actualizado el 22/09/2026.** Las tres operaciones ya están implementadas y la migración
+> `20260924000000_account_and_membership_management.sql` se aplicó en remoto como
+> `20260922101345_account_and_membership_management`. Se verificó el catálogo previo y pasó
+> la matriz SQL real con `ROLLBACK`. Todo lo que decide quién puede hacer qué está en el servidor;
+> la interfaz solo evita ofrecer lo que el servidor rechazaría.
+
+| Operación                  | ¿Se puede?                        | Cómo funciona                                                                                                                                                                                                                                             | Confirmación                                                                                                                                               |
+| -------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Eliminar una cuenta**    | **Sí** (solo el administrador)    | RPC `admin_delete_account`: borra el usuario de Auth (perfil y membresías caen por cascada) y deja registro en `public.account_deletions` (sin clave foránea: sobrevive al borrado). Antes se consulta la vista previa `admin_deletion_preview`.          | **Doble**: vista previa con lo que se lleva por delante + **escribir el correo exacto** + diálogo de confirmación. El texto dice que no se puede deshacer. |
+| **Quitar colaboradores**   | **Sí** (el propietario)           | `revoke_team_member` (editor activo → `revoked`) y `cancel_team_invitation` (invitación pendiente). El invitado puede rechazar la suya (`decline_team_invitation`).                                                                                       | Diálogo de confirmación (ya existía).                                                                                                                      |
+| **Salir de un equipo**     | **Sí** (el propio miembro activo) | RPC `leave_team`: la membresía pasa a `revoked` (no se borra: se conserva el histórico) y se revocan sus invitaciones pendientes de ese equipo. El **propietario no puede**: `owner_cannot_leave`.                                                        | Diálogo que enumera lo que se pierde y avisa de que habrá que volver a invitarle.                                                                          |
+| **Traspasar la propiedad** | **Sí** (solo el propietario)      | RPC `transfer_team_ownership`: el destinatario debe ser **editor activo**, con perfil aprobado y **sin equipo propio**; cambia `teams.owner_user_id` y los **dos roles de membresía en la misma transacción**. El número de cuentas del equipo no cambia. | Diálogo con las consecuencias para las dos partes (el actual baja a colaborador y pierde la gestión de miembros).                                          |
+| **Borrar un equipo**       | **No**                            | No existe ninguna operación que borre un equipo (ni RPC ni `DELETE` concedido al cliente). Por eso, para borrar la cuenta de quien POSEE un equipo hay que **traspasarlo primero**: el bloqueo `target_owns_team` lo impide y lo explica.                 | —                                                                                                                                                          |
+
+Guardas que **no** dependen de la interfaz (las comprueba el servidor y están en la matriz
+`supabase/tests/entrenolab_rls.sql`):
+
+- borrar: no a **uno mismo** (`cannot_delete_self`), no a otro **administrador**
+  (`cannot_delete_platform_admin`), no a quien **posee un equipo** (`target_owns_team`);
+- traspasar: solo el propietario, solo a miembro **activo** y **aprobado**, y no a quien ya posee
+  otro equipo (`new_owner_already_has_team`);
+- salir: solo un miembro **activo** que no sea el propietario;
+- la auditoría de bajas **solo la lee el administrador** y **nadie la escribe desde el cliente**
+  (un `insert` directo falla: sin política de escritura y sin GRANT).
+
+**Límites restantes**: no se ha probado una carrera real entre dos sesiones ni el borrado de una
+cuenta que posea objetos de Storage (la base tenía cero objetos al verificarla). El rol ejecutor
+sí tiene `DELETE` sobre `auth.users` y la matriz PostgreSQL real pasó con `ROLLBACK`. Si el
+propietario está **solo** y quiere borrar su cuenta, queda bloqueado a propósito: primero debe
+traspasar el equipo a alguien que se registre y acepte, porque no existe borrado de equipos.

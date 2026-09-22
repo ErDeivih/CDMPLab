@@ -1,5 +1,24 @@
 # CDMPLab — Estado de las migraciones: lo documentado y lo NO verificado
 
+> **Actualización verificada el 22/09/2026 — gestión de cuentas y pertenencia APLICADA.**
+> `supabase/migrations/20260924000000_account_and_membership_management.sql` (borrar cuenta con
+> auditoría, salir de un equipo y traspasar la propiedad) se aplicó en remoto como
+> `20260922101345_account_and_membership_management`. La matriz SQL real pasó dentro de una
+> transacción con `ROLLBACK`: borrado de una cuenta ficticia, permisos, salida y traspaso; no
+> quedaron usuarios ni registros de auditoría de prueba. Antes de aplicar se verificó que el rol
+> `postgres` tiene `DELETE` sobre `auth.users`, que las RPC y tabla eran nuevas y que
+> `profiles.user_id` usa `ON DELETE CASCADE`. La concurrencia de dos sesiones no se ejecutó.
+> Dos notas de mantenimiento:
+>
+> - la marca de versión es `20260924000000` porque `20260923000000` ya la ocupa
+>   `clear_stale_invitation_email_result`; **dos ficheros con el mismo prefijo son la misma
+>   migración para el CLI**;
+> - el borrado de cuenta usa `delete from auth.users` dentro de una función `SECURITY DEFINER`;
+>   Supabase advierte que un usuario con objetos de Storage no se puede borrar. Este proyecto tenía
+>   cero objetos al verificarlo, pero el caso debe tratarse si se incorpora Storage en el futuro.
+>
+> Detalles y guardas en `docs/FASE-10-solicitud-de-equipo.md` §8.
+
 > **Actualización 21/09/2026, posterior al texto histórico siguiente.** Se contrastó el
 > catálogo del proyecto EntrenoLab y se aplicaron las migraciones remotas
 > `20260921193229_team_creation_requests` y
@@ -12,7 +31,7 @@
 > como descripción vigente del estado remoto. El envío real de correo sigue pendiente de
 > proveedor y dominio.
 
-> **Añadido el 22/09/2026 — migración NUEVA sin aplicar y sin verificar contra el catálogo.**
+> **Nota histórica de la ronda previa — sustituida por las actualizaciones anteriores.**
 > El cierre del encargo «solicitud de equipo aprobada por el administrador + correo de invitación»
 > añade `supabase/migrations/20260922000000_team_creation_requests.sql`. Su estado es:
 >
