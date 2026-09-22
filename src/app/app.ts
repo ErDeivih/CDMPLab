@@ -275,6 +275,14 @@ export class App {
     () => this.navItems().find((i) => i.href === '/settings/team/members') ?? null,
   );
 
+  /** El acceso está protegido además por AdminGuard; se ofrece a propietarios para que el
+   * administrador de plataforma encuentre el panel sin tener que memorizar `/admin`. */
+  protected readonly administracionItem = computed<NavItem | null>(() =>
+    this.access.target().role === 'editor'
+      ? null
+      : { label: 'Administración', href: '/admin', icon: 'admin_panel_settings' },
+  );
+
   // ---------- Menú de cuenta (escritorio: bajo la barra lateral; móvil: «Más») ----------
 
   /** Control que abrió el menú: al cerrarlo el foco vuelve ahí (requisito de accesibilidad). */

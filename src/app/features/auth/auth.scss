@@ -169,6 +169,40 @@
   }
 }
 
+@media (max-width: 600px) {
+  .invite-form {
+    flex-wrap: wrap;
+
+    .input {
+      flex: 1 1 100%;
+    }
+
+    .btn {
+      flex: 1 1 auto;
+    }
+  }
+
+  .invite-row {
+    align-items: stretch;
+    flex-direction: column;
+
+    .invite-main {
+      width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .admin-actions {
+      width: 100%;
+      flex-wrap: wrap;
+
+      .btn {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+    }
+  }
+}
+
 .inline-off {
   color: var(--danger);
 }
