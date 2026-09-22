@@ -259,6 +259,17 @@ export class StoreService {
     }
   }
 
+  /** Actualiza en memoria el equipo activo después de una edición remota. */
+  updateTeam(team: Team): void {
+    this._teams.update((teams) => {
+      const index = teams.findIndex((item) => item.id === team.id);
+      if (index < 0) return teams;
+      const next = teams.slice();
+      next[index] = team;
+      return next;
+    });
+  }
+
   private hydrate(
     dataset: {
       team: Team | null;

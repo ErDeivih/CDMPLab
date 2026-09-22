@@ -391,6 +391,24 @@ export class AccessService {
     await this.refreshAfterMembershipChange();
   }
 
+  /** Cambia el nombre del equipo; la autorización real la aplica RLS en Supabase. */
+  async renameTeam(name: string): Promise<void> {
+    const repo = await this.ensureRepo();
+    const team = this.store.activeTeam();
+    if (!repo || !repo.teamId || !team) throw new Error('No hay equipo de contexto.');
+    const trimmed = name.trim();
+    if (trimmed.length < 2 || trimmed.length > 80) {
+      throw new Error('El nombre del equipo debe tener entre 2 y 80 caracteres.');
+    }
+    const updated = await repo.renameTeam(repo.teamId, trimmed, team.accentColor);
+    this.store.updateTeam(updated);
+    this._resolution.update((resolution) =>
+      resolution?.ownedTeam?.id === updated.id
+        ? { ...resolution, ownedTeam: updated }
+        : resolution,
+    );
+  }
+
   /** Qué se borraría con el equipo de contexto (propietario o administrador). */
   async teamDeletionPreview(): Promise<TeamDeletionPreview> {
     const repo = await this.ensureRepo();

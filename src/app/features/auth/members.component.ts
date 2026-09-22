@@ -52,6 +52,8 @@ export class MembersComponent {
   protected readonly busyId = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly success = signal<string | null>(null);
+  protected readonly teamName = signal('');
+  protected readonly renamingTeam = signal(false);
   /** Invitación cuyo envío de correo está en curso (para deshabilitar su botón). */
   protected readonly enviandoId = signal<string | null>(null);
   /** Salida del equipo en curso. */
@@ -260,7 +262,32 @@ export class MembersComponent {
   }
 
   async ngOnInit(): Promise<void> {
+    this.teamName.set(this.store.activeTeam()?.name ?? '');
     await this.load();
+  }
+
+  protected onTeamNameInput(evt: Event): void {
+    this.teamName.set((evt.target as HTMLInputElement).value);
+  }
+
+  protected async renameCurrentTeam(): Promise<void> {
+    const name = this.teamName().trim();
+    if (name.length < 2 || name.length > 80) {
+      this.error.set('El nombre debe tener entre 2 y 80 caracteres.');
+      return;
+    }
+    this.renamingTeam.set(true);
+    this.error.set(null);
+    this.success.set(null);
+    try {
+      await this.access.renameTeam(name);
+      this.teamName.set(this.store.activeTeam()?.name ?? name);
+      this.success.set('Nombre del equipo actualizado.');
+    } catch (e) {
+      this.error.set((e as Error)?.message ?? 'No se pudo cambiar el nombre del equipo.');
+    } finally {
+      this.renamingTeam.set(false);
+    }
   }
 
   async load(): Promise<void> {

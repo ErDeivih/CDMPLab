@@ -83,6 +83,31 @@
     }
 
     @if (isOwner()) {
+      <div class="auth-stack" data-seccion="nombre-equipo">
+        <strong>Nombre del equipo</strong>
+        <span class="auth-note">Corrige aquí cualquier error de escritura. El cambio se aplica a todo el equipo.</span>
+        <div class="invite-form">
+          <label class="sr-only" for="team-name">Nombre del equipo</label>
+          <input
+            id="team-name"
+            type="text"
+            class="input"
+            maxlength="80"
+            [value]="teamName()"
+            (input)="onTeamNameInput($event)"
+            autocomplete="organization"
+          />
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="renamingTeam() || teamName().trim().length < 2"
+            (click)="renameCurrentTeam()"
+          >
+            {{ renamingTeam() ? 'Guardando…' : 'Guardar nombre' }}
+          </button>
+        </div>
+      </div>
+
       @for (inv of invitations(); track inv.id) {
         <div class="card invite-row" [attr.data-invitacion]="inv.emailStatus">
           <div class="invite-main">
