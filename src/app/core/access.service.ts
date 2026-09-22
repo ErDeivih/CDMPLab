@@ -29,6 +29,15 @@ import {
 } from './team-management';
 import { SupabaseRepository } from './repositories/supabase-data-source';
 
+export interface AdminOverview {
+  teams: import('./models').Team[];
+  members: number;
+  players: number;
+  exercises: number;
+  folders: number;
+  sessions: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AccessService {
   private readonly supabase = inject(SupabaseService);
@@ -315,6 +324,22 @@ export class AccessService {
   async listAccessibleTeams(): Promise<import('./models').Team[]> {
     const repo = await this.ensureRepo();
     return repo ? repo.listAccessibleTeams() : [];
+  }
+
+  /** Resumen global para el panel de administración, calculado desde los equipos autorizados. */
+  async adminOverview(): Promise<AdminOverview> {
+    const repo = await this.ensureRepo();
+    if (!repo) return { teams: [], members: 0, players: 0, exercises: 0, folders: 0, sessions: 0 };
+    const teams = await repo.listAccessibleTeams();
+    const datasets = await Promise.all(teams.map((team) => repo.loadTeam(team.id)));
+    return {
+      teams,
+      members: datasets.reduce((total, data) => total + (data.team ? 1 : 0), 0),
+      players: datasets.reduce((total, data) => total + data.players.length, 0),
+      exercises: datasets.reduce((total, data) => total + data.exercises.length, 0),
+      folders: datasets.reduce((total, data) => total + data.folders.length, 0),
+      sessions: datasets.reduce((total, data) => total + data.sessions.length, 0),
+    };
   }
 
   async openAdminTeam(teamId: string): Promise<void> {

@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import type { Team } from '../../core/models';
 import { AccessService } from '../../core/access.service';
+import type { AdminOverview } from '../../core/access.service';
 import { SupabaseService } from '../../core/supabase.service';
 import { ConfirmService } from '../../core/confirm.service';
 import { AuthCardComponent } from './auth-card.component';
@@ -38,6 +39,14 @@ export class AdminAccessComponent {
   protected readonly error = signal<string | null>(null);
   protected readonly administrators = signal<string[]>([]);
   protected readonly teams = signal<Team[]>([]);
+  protected readonly overview = signal<AdminOverview>({
+    teams: [],
+    members: 0,
+    players: 0,
+    exercises: 0,
+    folders: 0,
+    sessions: 0,
+  });
   protected readonly selfEmail = signal('');
   /**
    * ¿El SERVIDOR ha confirmado que soy administrador? (`checkIsPlatformAdmin` → RPC
@@ -58,12 +67,13 @@ export class AdminAccessComponent {
     try {
       // El permiso se comprueba CONTRA EL SERVIDOR antes de ofrecer nada (ver `adminReady`).
       const esAdmin = await this.access.checkIsPlatformAdmin();
-      const [admins, teams] = await Promise.all([
+      const [admins, overview] = await Promise.all([
         this.access.listAdministrators(),
-        this.access.listAccessibleTeams(),
+        this.access.adminOverview(),
       ]);
       this.administrators.set(admins);
-      this.teams.set(teams);
+      this.overview.set(overview);
+      this.teams.set(overview.teams);
       this.adminReady.set(esAdmin);
     } catch (e) {
       this.error.set((e as Error).message);

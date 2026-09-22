@@ -1,4 +1,5 @@
 <app-auth-card
+  class="admin-page"
   [title]="'Panel de administración'"
   [subtitle]="'Gestión de accesos de la plataforma'"
 >
@@ -19,6 +20,17 @@
     />
     <button type="button" class="btn" (click)="refreshAll()">Buscar</button>
   </div>
+
+  @if (adminReady()) {
+    <section class="admin-overview" aria-label="Resumen global">
+      <div class="admin-stat"><strong>{{ overview().teams.length }}</strong><span>Equipos</span></div>
+      <div class="admin-stat"><strong>{{ overview().members }}</strong><span>Propietarios</span></div>
+      <div class="admin-stat"><strong>{{ overview().players }}</strong><span>Jugadores</span></div>
+      <div class="admin-stat"><strong>{{ overview().exercises }}</strong><span>Ejercicios</span></div>
+      <div class="admin-stat"><strong>{{ overview().folders }}</strong><span>Carpetas</span></div>
+      <div class="admin-stat"><strong>{{ overview().sessions }}</strong><span>Sesiones</span></div>
+    </section>
+  }
 
   @if (adminReady()) {
     <h2 class="auth-note" style="font-weight: 700; margin-top: 18px">Todos los equipos</h2>
