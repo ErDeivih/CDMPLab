@@ -140,7 +140,9 @@ for (const [label, viewport] of [
       const problems = collectProblems(page);
 
       await page.goto('/team');
-      await page.waitForURL('**/auth/login');
+      await page.waitForURL(
+        (url) => url.pathname.endsWith('/auth/login') && url.searchParams.get('returnUrl') === '/team',
+      );
       await expect(page.locator('#login-email')).toBeVisible();
 
       await expectProductionMode(page);
@@ -155,7 +157,9 @@ for (const [label, viewport] of [
       const problems = collectProblems(page);
 
       await page.goto('/board');
-      await page.waitForURL('**/auth/login');
+      await page.waitForURL(
+        (url) => url.pathname.endsWith('/auth/login') && url.searchParams.get('returnUrl') === '/board',
+      );
       await expect(page.locator('#login-email')).toBeVisible();
 
       await expectProductionMode(page);
