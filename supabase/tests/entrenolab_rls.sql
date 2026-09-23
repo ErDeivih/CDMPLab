@@ -800,7 +800,34 @@ begin
     raise exception 'FAIL la vista previa bloquea una cuenta normal: %',
       public.admin_deletion_preview('10000000-0000-4000-8000-000000000008');
   end if;
+  -- CONSISTENCIA (migración 20260923154020): esa cuenta tiene una invitación PENDIENTE, y la vista
+  -- previa promete que «se cancelarán». Antes la función borraba el usuario sin tocar la invitación:
+  -- la clave foránea es ON DELETE SET NULL, así que quedaba PENDIENTE y HUÉRFANA — ocupando plaza,
+  -- bloqueando reinvitar a ese correo y siendo aceptable por quien registrara ese correo después.
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  perform public.invite_team_member(v_team_id, 'rls-pending@test.local');
+  if (select count(*) from public.team_invitations
+       where team_id = v_team_id and email_normalized = 'rls-pending@test.local' and status = 'pending') <> 1 then
+    raise exception 'FAIL no se creó la invitación pendiente de la cuenta que se va a borrar';
+  end if;
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
+  -- La vista previa CUENTA esa invitación pendiente: es exactamente lo que promete al administrador
+  -- («se cancelarán N invitaciones pendientes suyas»), así que el borrado tiene que cumplirlo.
+  if (public.admin_deletion_preview('10000000-0000-4000-8000-000000000008')->>'pending_invitations')::integer <> 1 then
+    raise exception 'FAIL la vista previa no cuenta la invitación pendiente de la cuenta: %',
+      public.admin_deletion_preview('10000000-0000-4000-8000-000000000008');
+  end if;
   perform public.admin_delete_account('10000000-0000-4000-8000-000000000008', 'Baja de prueba');
+  if exists (select 1 from public.team_invitations
+              where team_id = v_team_id and email_normalized = 'rls-pending@test.local' and status = 'pending') then
+    raise exception 'FAIL la invitación pendiente de la cuenta borrada sigue VIVA (ocupa plaza y bloquea reinvitar)';
+  end if;
+  if not exists (select 1 from public.team_invitations
+                  where team_id = v_team_id and email_normalized = 'rls-pending@test.local' and status = 'revoked') then
+    raise exception 'FAIL la invitación pendiente no quedó revocada al borrar la cuenta';
+  end if;
   if exists (select 1 from public.profiles where user_id = '10000000-0000-4000-8000-000000000008') then
     raise exception 'FAIL el perfil borrado sigue existiendo';
   end if;
@@ -1247,6 +1274,41 @@ begin
   end if;
   if exists(select 1 from public.admin_team_overview() where team_id = v_borrar_team) then
     raise exception 'FAIL el resumen global incluye un equipo ya borrado';
+  end if;
+  -- CONSISTENCIA (migración 20260923154046): «Invitaciones pendientes» del resumen tiene que usar
+  -- el MISMO criterio que el límite de plazas del servidor (`enforce_collaborator_limit`): pendiente
+  -- Y no caducada; las caducadas se cuentan aparte. Se comprueba contra la propia tabla (el
+  -- administrador puede leer invitaciones por `team_invitations_select_admin`) en vez de escribir
+  -- una caducidad a mano: así la prueba mide el criterio, no un apaño.
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  perform public.invite_team_member(v_team_id, 'rls-vigente@test.local');
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
+  if exists (
+    select 1
+      from public.admin_team_overview() o
+     where o.team_id = v_team_id
+       and (
+         o.invitations_pending <> (
+           select count(*) from public.team_invitations i
+            where i.team_id = v_team_id and i.status = 'pending' and i.expires_at > now()
+         )
+         or o.invitations_expired_pending <> (
+           select count(*) from public.team_invitations i
+            where i.team_id = v_team_id and i.status = 'pending' and i.expires_at <= now()
+         )
+       )
+  ) then
+    raise exception 'FAIL el resumen no cuenta las invitaciones con el criterio del límite de plazas: %',
+      (select o.invitations_pending || '/' || o.invitations_expired_pending
+         from public.admin_team_overview() o where o.team_id = v_team_id);
+  end if;
+  if not exists (
+    select 1 from public.admin_team_overview() o
+     where o.team_id = v_team_id and o.invitations_pending >= 1
+  ) then
+    raise exception 'FAIL el resumen no cuenta ninguna invitación pendiente en un equipo que tiene una';
   end if;
   perform set_config('request.jwt.claim.sub', v_import_editor::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', v_import_editor, 'role', 'authenticated')::text, true);

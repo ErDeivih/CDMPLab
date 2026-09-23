@@ -617,6 +617,9 @@ export interface Database {
           folders: number;
           exercises: number;
           sessions: number;
+          // Añadida por la migración 20260923154046. Se declara OPCIONAL a propósito: la
+          // aplicación tiene que seguir funcionando mientras esa migración no esté aplicada.
+          invitations_expired_pending?: number;
         }>;
       };
       list_team_members: {

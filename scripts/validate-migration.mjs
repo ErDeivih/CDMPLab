@@ -1086,6 +1086,148 @@ try {
     }
   }
 
+  // ---- CONSISTENCIA: el resumen separa pendientes VIGENTES de CADUCADAS ----
+  {
+    const f17 = 'supabase/migrations/20260923154046_admin_overview_pending_invitations.sql';
+    if (!fs.existsSync(f17)) {
+      fail('falta la migración que separa invitaciones pendientes de caducadas en el resumen');
+    } else {
+      const sqlBruto = fs.readFileSync(f17, 'utf8');
+      const sql = sqlBruto.replace(/--[^\n]*/g, ' ');
+      console.log(`\nResumen: pendientes frente a caducadas (${path.basename(f17)}):`);
+
+      // El contador tiene que usar el MISMO criterio que el límite de plazas del servidor
+      // (`private.enforce_collaborator_limit`): pendiente Y no caducada. Sin esto, el panel decía
+      // «N invitaciones» contando caducadas que no ocupan plaza.
+      /i\.status = 'pending' and i\.expires_at > now\(\)/.test(sql)
+        ? ok('las PENDIENTES que cuenta son las vigentes (mismo criterio que el límite de plazas)')
+        : fail(
+            'el recuento de pendientes no excluye las caducadas: el número no sirve para saber si hay plazas',
+          );
+      /i\.status = 'pending' and i\.expires_at <= now\(\)/.test(sql) &&
+      has(sql, 'invitations_expired_pending integer')
+        ? ok('las CADUCADAS se cuentan aparte (bloquean reinvitar, pero no ocupan plaza)')
+        : fail('no se cuentan aparte las invitaciones caducadas');
+
+      // AÑADIR UNA COLUMNA AL `returns table` ES CAMBIAR EL TIPO DE RETORNO: PostgreSQL rechaza el
+      // `create or replace` con «cannot change return type of existing function». Hace falta un
+      // `drop function` antes (misma trampa que en `private.list_team_members`).
+      /drop function if exists public\.admin_team_overview\(\)/.test(sql)
+        ? ok(
+            'borra la función antes de recrearla (el retorno cambia: `create or replace` fallaría)',
+          )
+        : fail('cambia el tipo de retorno sin `drop function`: PostgreSQL lo rechazará');
+
+      // Las columnas antiguas deben seguir ahí: el cliente las lee por nombre.
+      const columnas = [
+        'team_id',
+        'name',
+        'accent_color',
+        'owner_user_id',
+        'owner_email',
+        'created_at',
+        'updated_at',
+        'members_active',
+        'members_revoked',
+        'members_pending',
+        'invitations_pending',
+        'players_active',
+        'players_inactive',
+        'folders',
+        'exercises',
+        'sessions',
+      ];
+      columnas.every((c) => has(sql, c))
+        ? ok('mantiene las 16 columnas anteriores (el cliente no se rompe)')
+        : fail('se pierde alguna columna del retorno que el cliente ya lee');
+      has(sql, "raise exception 'platform_admin_required'") &&
+      /if not private\.is_platform_admin\(\) then/.test(sql)
+        ? ok('sigue exigiendo ser administrador de plataforma')
+        : fail('la nueva versión no comprueba quién llama');
+      has(sql, 'security definer') && /set\s+search_path\s*=\s*''/.test(sql)
+        ? ok('DEFINER con search_path vacío')
+        : fail('falta DEFINER o search_path vacío');
+      has(sql, 'revoke all on function public.admin_team_overview() from public, anon') &&
+      has(sql, 'grant execute on function public.admin_team_overview() to authenticated')
+        ? ok('vuelve a conceder los permisos tras el `drop` (solo authenticated)')
+        : fail('tras el `drop` no se vuelven a conceder los permisos');
+      has(sqlBruto, 'COMPROBACIÓN PREVIA AL DESPLIEGUE')
+        ? ok(
+            'documenta la comprobación previa (incluida la dependencia que haría fallar el `drop`)',
+          )
+        : fail('no documenta la comprobación previa antes de aplicarla');
+      /d\.refclassid\s*=\s*'pg_proc'::regclass[\s\S]*d\.refobjid\s*=\s*'public\.admin_team_overview\(\)'::regprocedure/.test(
+        sqlBruto,
+      ) && !/join\s+pg_proc\s+p\s+on\s+p\.oid\s*=\s*d\.objid/i.test(sqlBruto)
+        ? ok(
+            'el preflight consulta objetos que dependen de la función, no dependencias de la función',
+          )
+        : fail('el preflight de dependencias apunta en la dirección equivocada');
+    }
+  }
+
+  // ---- CONSISTENCIA: borrar una cuenta CANCELA sus invitaciones pendientes ----
+  {
+    const f18 = 'supabase/migrations/20260923154020_admin_delete_revokes_invitations.sql';
+    if (!fs.existsSync(f18)) {
+      fail('falta la migración que hace que borrar una cuenta cancele sus invitaciones pendientes');
+    } else {
+      const sqlBruto = fs.readFileSync(f18, 'utf8');
+      const sql = sqlBruto.replace(/--[^\n]*/g, ' ');
+      console.log(`\nBorrado de cuenta: invitaciones pendientes (${path.basename(f18)}):`);
+
+      // La vista previa promete «se cancelarán N invitaciones pendientes suyas»: la función tiene
+      // que cumplirlo. La clave foránea es ON DELETE SET NULL, así que sin este UPDATE las
+      // invitaciones quedan huérfanas y PENDIENTES (ocupan plaza y bloquean reinvitar).
+      /update public\.team_invitations\s+set status = 'revoked'\s+where invited_user_id = p_user_id\s+and status = 'pending'/.test(
+        sql,
+      )
+        ? ok('revoca las invitaciones pendientes del usuario (lo que promete la vista previa)')
+        : fail(
+            'borra la cuenta sin cancelar sus invitaciones pendientes: quedarían huérfanas y vivas',
+          );
+
+      const posRevocar = sql.indexOf("set status = 'revoked'");
+      const posBorrar = sql.indexOf('delete from auth.users');
+      posRevocar > 0 && posBorrar > 0 && posRevocar < posBorrar
+        ? ok('las revoca ANTES de borrar la identidad (después ya no se pueden identificar)')
+        : fail('revoca las invitaciones después del borrado o no las revoca');
+
+      const posAuditoria = sql.indexOf('insert into public.account_deletions');
+      posAuditoria > 0 && posAuditoria < posBorrar
+        ? ok('la auditoría sigue escribiéndose antes del borrado')
+        : fail('la auditoría del borrado se pierde o se escribe tarde');
+
+      // Las guardas de siempre no pueden desaparecer al reescribir la función.
+      const guardas = [
+        'cannot_delete_self',
+        'cannot_delete_platform_admin',
+        'target_owns_team',
+        'platform_admin_required',
+        'account_not_found',
+      ];
+      guardas.every((g) => has(sql, g))
+        ? ok('conserva todas las guardas (self, administrador, propietario, permisos, no existe)')
+        : fail('la reescritura pierde alguna guarda del borrado de cuentas');
+      /from public\.profiles where user_id = p_user_id for update/.test(sql)
+        ? ok('sigue bloqueando el perfil (sin borrados simultáneos)')
+        : fail('no bloquea el perfil antes de borrar');
+      has(sql, 'security definer') && /set\s+search_path\s*=\s*''/.test(sql)
+        ? ok('DEFINER con search_path vacío')
+        : fail('falta DEFINER o search_path vacío');
+      has(
+        sql,
+        'revoke all on function public.admin_delete_account(uuid, text) from public, anon',
+      ) &&
+      has(sql, 'grant execute on function public.admin_delete_account(uuid, text) to authenticated')
+        ? ok('permisos: revocado a PUBLIC/anon, concedido a authenticated')
+        : fail('permisos mal puestos en admin_delete_account');
+      has(sqlBruto, 'COMPROBACIÓN PREVIA AL DESPLIEGUE')
+        ? ok('documenta la comprobación previa al despliegue')
+        : fail('no documenta la comprobación previa antes de aplicarla');
+    }
+  }
+
   if (failed > 0) {
     console.error(`\nVALIDACIÓN ESTÁTICA CON ${failed} PROBLEMA(S).`);
     process.exit(1);

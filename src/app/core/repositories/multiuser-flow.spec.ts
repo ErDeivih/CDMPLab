@@ -818,6 +818,13 @@ export class RlsBackend {
     // Cascada del borrado del usuario de Auth: perfil + membresías; las referencias quedan a NULL.
     this.rows.profiles = this.rows.profiles.filter((p) => p.user_id !== objetivo);
     this.rows.team_members = this.rows.team_members.filter((m) => m.user_id !== objetivo);
+    // CONTRATO ACTUALIZADO (migración 20260923154020): las invitaciones PENDIENTES del usuario se
+    // REVOCAN antes de borrar (la vista previa promete «se cancelarán»). Sin esto quedarían
+    // huérfanas: seguían ocupando plaza, bloqueaban reinvitar a ese correo y serían aceptables por
+    // quien registrara ese correo después.
+    for (const inv of this.rows.team_invitations) {
+      if (inv.invited_user_id === objetivo && inv.status === 'pending') inv.status = 'revoked';
+    }
     for (const inv of this.rows.team_invitations) {
       if (inv.invited_user_id === objetivo) inv.invited_user_id = null;
       if (inv.invited_by === objetivo) inv.invited_by = null;
@@ -1079,7 +1086,19 @@ export class RlsBackend {
         ),
         invitations_pending: cuenta(
           this.rows.team_invitations,
-          (i) => i.team_id === teamId && i.status === 'pending',
+          (i) =>
+            i.team_id === teamId &&
+            i.status === 'pending' &&
+            Date.parse(String(i.expires_at)) > Date.now(),
+        ),
+        // CONTRATO ACTUALIZADO (migración 20260923154046): las caducadas se cuentan APARTE, porque
+        // no ocupan plaza pero sí bloquean volver a invitar a ese correo.
+        invitations_expired_pending: cuenta(
+          this.rows.team_invitations,
+          (i) =>
+            i.team_id === teamId &&
+            i.status === 'pending' &&
+            Date.parse(String(i.expires_at)) <= Date.now(),
         ),
         players_active: cuenta(this.rows.players, (p) => p.team_id === teamId && p.active === true),
         players_inactive: cuenta(
@@ -2988,4 +3007,50 @@ describe('T6 multiuser — panel central: miembros de cualquier equipo y resumen
       code: 'platform_admin_required',
     });
   });
+
+  // CONSISTENCIA (migración 20260923154046): «Invitaciones pendientes» tiene que significar lo
+  // mismo en el panel, en el contador de plazas del servidor y en la pantalla de Miembros.
+  it('el resumen NO cuenta como pendiente una invitación caducada (la cuenta aparte)', async () => {
+    const { backend, team } = await equipoConEditorActivo();
+    conAdmin(backend);
+    const adminRepo = makeRepo(backend, ADMIN, null);
+    const ownerRepo = makeRepo(backend, OWNER, null);
+
+    // Una invitación VIGENTE y otra ya CADUCADA en el mismo equipo.
+    const vigente = await ownerRepo.inviteMember(team.id, 'vigente@example.com');
+    const caducada = await ownerRepo.inviteMember(team.id, 'caducada@example.com');
+    const filaCaducada = backend.rows.team_invitations.find((i) => i.id === caducada.id)!;
+    filaCaducada.expires_at = new Date(Date.now() - 60_000).toISOString();
+
+    const fila = (await adminRepo.adminTeamOverview())[0];
+    expect(fila.invitationsPending, 'solo la vigente espera respuesta').toBe(1);
+    expect(fila.invitationsExpiredPending, 'la caducada se cuenta aparte').toBe(1);
+
+    // Y el límite de plazas del servidor aplica el MISMO criterio: cancelar la caducada no libera
+    // una plaza, porque nunca la ocupó.
+    const asientosAntes = await usedSeats(backend, team.id);
+    await ownerRepo.cancelInvitation(caducada.id);
+    const asientosDespues = await usedSeats(backend, team.id);
+    expect(asientosDespues, 'una caducada no ocupaba plaza').toBe(asientosAntes);
+    // La vigente sí: cancelarla libera una.
+    await ownerRepo.cancelInvitation(vigente.id);
+    expect(await usedSeats(backend, team.id)).toBe(asientosAntes - 1);
+  });
 });
+
+/**
+ * Plazas ocupadas según el criterio del SERVIDOR (`private.enforce_collaborator_limit`): editores
+ * activos + invitaciones pendientes NO caducadas.
+ */
+async function usedSeats(backend: RlsBackend, teamId: string): Promise<number> {
+  const ahora = Date.now();
+  return (
+    backend.rows.team_members.filter(
+      (m) => m.team_id === teamId && m.status === 'active' && m.role !== 'owner',
+    ).length +
+    backend.rows.team_invitations.filter(
+      (i) =>
+        i.team_id === teamId && i.status === 'pending' && Date.parse(String(i.expires_at)) > ahora,
+    ).length
+  );
+}

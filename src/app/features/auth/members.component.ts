@@ -412,9 +412,15 @@ export class MembersComponent {
   }
 
   protected cancel(inv: TeamInvitationInfo): void {
+    // Para una invitación CADUCADA se dice tal cual: el propietario tiene que entender que no ocupa
+    // plaza pero que debe cancelarla para poder volver a invitar a ese correo (el índice único la
+    // sigue considerando pendiente).
+    const detalle = this.caducada(inv)
+      ? ' Está caducada: no ocupa plaza, pero mientras siga pendiente no puedes invitar otra vez a este correo.'
+      : '';
     this.confirm.ask({
       title: 'Cancelar invitación',
-      message: `¿Cancelar la invitación a ${inv.emailNormalized}?`,
+      message: `¿Cancelar la invitación a ${inv.emailNormalized}?${detalle}`,
       confirmLabel: 'Cancelar invitación',
       onConfirm: () => {
         this.busyId.set(inv.id);

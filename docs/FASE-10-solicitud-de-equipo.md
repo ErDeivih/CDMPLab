@@ -490,3 +490,80 @@ así que el aviso genérico no demuestra por sí solo un bypass. Hay que revisar
 la protección de contraseñas desde Auth cuando el plan lo permita. El asesor de rendimiento reporta
 índices no usados y políticas SELECT permisivas superpuestas; se registran como observaciones, no se
 eliminan índices ni se cambian políticas sin medir y revisar su impacto.
+
+## 11. Auditoría de «información que no se corresponde con lo que hace el servidor» (23/09/2026)
+
+> Encargo del dueño: _«verifica la app y si todos los flujos son consistentes, que no induzcan a
+> falsos»_.
+
+Se revisaron todas las superficies que muestran un número o un estado derivado de invitaciones y
+membresías, comparando **lo que dice la pantalla** con **lo que hace el servidor**. Dos
+inconsistencias reales se corrigieron y las migraciones se aplicaron y verificaron en Supabase el
+23/09/2026:
+
+| Inconsistencia encontrada                                                                                                               | Por qué inducía a falso                                                                                                                                                                                                                                                                                                                                                                            | Corrección                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **El resumen del panel contaba como «pendientes» las invitaciones CADUCADAS** (`20260923154046_admin_overview_pending_invitations.sql`) | El panel decía «N invitaciones» sumando caducadas, pero el servidor NO las cuenta para el límite de plazas (`status='pending' AND expires_at > now()`) y la pantalla de Miembros tampoco. Servía para nada: el número no permitía saber si quedaban plazas.                                                                                                                                        | `invitations_pending` = solo vigentes (mismo criterio que el límite) y columna nueva `invitations_expired_pending` para las caducadas, con aviso en el panel. El cliente lee la columna como opcional (`?? 0`), así que funciona aunque no esté aplicada |
+| **Borrar una cuenta NO cancelaba sus invitaciones pendientes** (`20260923154020_admin_delete_revokes_invitations.sql`)                  | La vista previa prometía «se cancelarán N invitación(es) pendiente(s) suya(s)», pero la clave foránea es `ON DELETE SET NULL`: al borrar el usuario la invitación quedaba **pendiente y huérfana**, y una invitación así **ocupa plaza** mientras no caduque, **bloquea para siempre reinvitar** a ese correo (índice único parcial) y **sería aceptable por quien registrara ese correo después** | La función revoca las pendientes del usuario dentro de la misma transacción, antes de borrar la identidad (igual que ya hacían `leave_team` y `revoke_team_member`), y devuelve cuántas canceló. La auditoría sigue escribiéndose primero                |
+
+**Un error propio, detectado por el validador que escribí antes.** La primera versión de la migración
+del resumen añadía una columna al `returns table` con un `create or replace`: PostgreSQL lo rechaza
+(«cannot change return type of existing function») — exactamente la trampa que el propio validador
+vigila en `private.list_team_members`. Corregido con `drop function if exists` antes del `create`
+(dentro de la misma transacción) y **el validador ahora vigila esa condición** para que no vuelva a
+colarse.
+
+**Verificación local.** El validador tiene **17 comprobaciones nuevas** (171 en total) y se probaron
+**rompiendo las migraciones a propósito**: quitar el filtro de caducidad, quitar el `drop function`
+y cambiar el `status='revoked'` por `'pending'` hicieron fallar las comprobaciones correspondientes
+(4 fallos) y, al restaurar, volvieron a verde. En el backend simulado (unitarias) se comprueba además
+que el contador de plazas, el resumen y la cancelación usan el mismo criterio.
+
+**Aplicación y verificación remotas (23/09/2026).** Se aplicaron ambas migraciones mediante MCP
+Supabase. Los ficheros locales ya usan exactamente las versiones registradas:
+`20260923154020_admin_delete_revokes_invitations.sql` y
+`20260923154046_admin_overview_pending_invitations.sql`. Una futura sincronización por versión no
+intentará aplicarlas otra vez.
+Tras aplicarlas, el catálogo confirma que `admin_team_overview()` devuelve 17 columnas (incluida
+`invitations_expired_pending`), sigue siendo `SECURITY DEFINER` con `search_path` vacío, no es
+ejecutable por `anon` y sí por `authenticated` y `service_role` (este último por los permisos por
+defecto del proyecto). La función de borrado conserva esos mismos permisos observados.
+
+La matriz completa `supabase/tests/entrenolab_rls.sql` se ejecutó contra PostgreSQL remoto. La
+ejecución terminó sin error y su último bloque `DO` contiene la aserción
+`all_remote_rls_rpc_tests_passed`; el `ROLLBACK` final se completó. Las consultas posteriores dieron
+**0 usuarios fixture, 0 equipos fixture y 0 invitaciones fixture**. El canal MCP no devuelve los
+`NOTICE` de PostgreSQL, por lo que el éxito se registra como ejecución sin error más el control de
+residuos, no como captura literal de ese `NOTICE`. No se probaron carreras concurrentes entre
+sesiones.
+
+**Lo que se revisó y SÍ era consistente** (para que quede constancia de lo comprobado, no solo de lo
+arreglado): el contador de plazas de Miembros excluye las caducadas y coincide con
+`enforce_collaborator_limit`; el aviso de invitación pendiente del menú y la pantalla `/invitations`
+usan la RPC `my_team_invitations()`, que también filtra por caducidad y por eso no ofrecen nada que
+el servidor vaya a rechazar; una invitación caducada se puede **cancelar** (`cancel_team_invitation`
+solo exige `status='pending'`, no la fecha), así que el propietario nunca se queda sin salida; y
+`revoke_team_member` ya revocaba las invitaciones pendientes del miembro, de modo que un revocado no
+puede volver por una invitación vieja.
+
+### Preflight remoto (MCP Supabase, proyecto `vgwfjkhvzprsoixpzruq`, 23/09/2026)
+
+Antes de tocar el esquema consulté PostgreSQL 17.6. El resultado relevante fue:
+
+| Objeto/condición                                         | Resultado remoto observado                                                                                                               |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `public.admin_delete_account(uuid,text)`                 | existe; `SECURITY DEFINER`; `search_path` vacío; `anon=false`, `authenticated=true`, `service_role=true`                                 |
+| `public.admin_team_overview()`                           | existe; retorno previo con 16 columnas; `SECURITY DEFINER`; `search_path` vacío; `anon=false`, `authenticated=true`, `service_role=true` |
+| Dependencias registradas de `admin_team_overview()`      | **0 filas**; puede recrearse sin `CASCADE`                                                                                               |
+| FK `team_invitations.invited_user_id`                    | `FOREIGN KEY (invited_user_id) REFERENCES profiles(user_id) ON DELETE SET NULL`                                                          |
+| Invitaciones pendientes huérfanas / caducadas / vigentes | **0 / 0 / 0** al consultar; no hace falta limpiar datos preexistentes                                                                    |
+| Última migración remota registrada antes de este cambio  | `20260923091218 platform_admin_overview`                                                                                                 |
+
+Después del preflight se aplicaron `20260923154020 admin_delete_revokes_invitations` y
+`20260923154046 admin_overview_pending_invitations`.
+
+La ACL observada incluye `service_role`: los privilegios por defecto de PostgreSQL del proyecto dan
+`EXECUTE` a ese rol para funciones de `public`. Por eso el preflight distingue `anon=false` de los
+dos roles de confianza que sí tienen permiso; no afirma erróneamente «solo authenticated». La
+consulta de dependencias se corrigió para filtrar `pg_depend.refclassid/refobjid` (objetos que
+**dependen de la función**), no para listar las dependencias de la función misma.

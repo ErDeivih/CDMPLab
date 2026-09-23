@@ -1013,6 +1013,9 @@ export class SupabaseRepository implements DataSource {
       membersRevoked: Number(r.members_revoked ?? 0),
       membersPending: Number(r.members_pending ?? 0),
       invitationsPending: Number(r.invitations_pending ?? 0),
+      // Columna nueva de la migración 20260923154046: si un servidor anterior no la devuelve, vale 0
+      // y el panel simplemente no muestra el aviso de caducadas (no se inventa ningún número).
+      invitationsExpiredPending: Number(r.invitations_expired_pending ?? 0),
       playersActive: Number(r.players_active ?? 0),
       playersInactive: Number(r.players_inactive ?? 0),
       folders: Number(r.folders ?? 0),

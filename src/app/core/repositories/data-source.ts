@@ -135,7 +135,19 @@ export interface AdminTeamOverview {
   membersActive: number;
   membersRevoked: number;
   membersPending: number;
+  /**
+   * Invitaciones pendientes que SÍ esperan respuesta (`expires_at > now()`): las mismas que cuentan
+   * para el límite de plazas del servidor y para el contador de la pantalla de Miembros.
+   */
   invitationsPending: number;
+  /**
+   * Invitaciones pendientes ya CADUCADAS. No ocupan plaza, pero bloquean volver a invitar a ese
+   * correo (índice único parcial) hasta que alguien las cancele, así que el panel las muestra
+   * aparte en vez de sumarlas a las pendientes. Vale `0` mientras el servidor no devuelva la
+   * columna (migración `20260923154046`): la aplicación funciona con servidores previos, solo sin ese
+   * aviso.
+   */
+  invitationsExpiredPending: number;
   playersActive: number;
   playersInactive: number;
   folders: number;

@@ -49,6 +49,7 @@ export class AdminAccessComponent {
       membersRevoked: 0,
       membersPending: 0,
       invitationsPending: 0,
+      invitationsExpiredPending: 0,
       playersActive: 0,
       playersInactive: 0,
       folders: 0,

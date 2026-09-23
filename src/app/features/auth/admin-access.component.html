@@ -59,31 +59,40 @@
         ><span>Equipos</span>
       </div>
       <div class="admin-stat">
-        <strong>{{ overview().totals.membersActive }}</strong><span>Miembros activos</span>
+        <strong>{{ overview().totals.membersActive }}</strong
+        ><span>Miembros activos</span>
       </div>
       <div class="admin-stat">
-        <strong>{{ overview().totals.membersPending }}</strong><span>Miembros pendientes</span>
+        <strong>{{ overview().totals.membersPending }}</strong
+        ><span>Miembros pendientes</span>
       </div>
       <div class="admin-stat">
-        <strong>{{ overview().totals.membersRevoked }}</strong><span>Miembros revocados</span>
+        <strong>{{ overview().totals.membersRevoked }}</strong
+        ><span>Miembros revocados</span>
       </div>
       <div class="admin-stat">
-        <strong>{{ overview().totals.invitationsPending }}</strong><span>Invitaciones</span>
+        <strong>{{ overview().totals.invitationsPending }}</strong
+        ><span>Invitaciones</span>
       </div>
       <div class="admin-stat">
-        <strong>{{ overview().totals.playersActive }}</strong><span>Jugadores activos</span>
+        <strong>{{ overview().totals.playersActive }}</strong
+        ><span>Jugadores activos</span>
       </div>
       <div class="admin-stat">
-        <strong>{{ overview().totals.playersInactive }}</strong><span>Jugadores inactivos</span>
+        <strong>{{ overview().totals.playersInactive }}</strong
+        ><span>Jugadores inactivos</span>
       </div>
       <div class="admin-stat">
-        <strong>{{ overview().totals.exercises }}</strong><span>Ejercicios</span>
+        <strong>{{ overview().totals.exercises }}</strong
+        ><span>Ejercicios</span>
       </div>
       <div class="admin-stat">
-        <strong>{{ overview().totals.folders }}</strong><span>Carpetas</span>
+        <strong>{{ overview().totals.folders }}</strong
+        ><span>Carpetas</span>
       </div>
       <div class="admin-stat">
-        <strong>{{ overview().totals.sessions }}</strong><span>Sesiones</span>
+        <strong>{{ overview().totals.sessions }}</strong
+        ><span>Sesiones</span>
       </div>
     </section>
     <p class="auth-note" data-nota-resumen="1">
@@ -91,6 +100,21 @@
       equipo para mostrarlo. Los miembros revocados y los jugadores inactivos se conservan (son
       histórico) y no se cuentan aquí.
     </p>
+    @if (overview().totals.invitationsExpiredPending > 0) {
+      <!-- Una invitación CADUCADA no ocupa plaza, pero BLOQUEA volver a invitar a ese correo por el
+           índice único. Se cuenta aparte para que «Invitaciones» signifique lo mismo aquí que en
+           Miembros y que en el límite del servidor. -->
+      <p class="auth-msg err" role="status" data-invitaciones-caducadas="1">
+        Hay {{ overview().totals.invitationsExpiredPending }}
+        {{
+          overview().totals.invitationsExpiredPending === 1
+            ? 'invitación caducada'
+            : 'invitaciones caducadas'
+        }}
+        sin cancelar: no ocupan plaza, pero bloquean volver a invitar a esos correos. El propietario
+        del equipo puede cancelarlas desde Miembros.
+      </p>
+    }
   }
 
   @if (adminReady()) {

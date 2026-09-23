@@ -1,46 +1,62 @@
 # CDMPLab — Estado remoto de Supabase (actualizado 23/09/2026)
 
-> **Estado actual contrastado con el proyecto remoto `vgwfjkhvzprsoixpzruq`:** se aplicó
+> **Estado actual contrastado con el proyecto remoto `vgwfjkhvzprsoixpzruq`:** se aplicaron
 > `20260923091218_platform_admin_overview.sql` (registro remoto `version=20260923091218,
-name=platform_admin_overview`); el catálogo confirmó ausencia previa de la RPC y
+name=platform_admin_overview`), `20260923154020_admin_delete_revokes_invitations.sql` y
+> `20260923154046_admin_overview_pending_invitations.sql`, ambas registradas en remoto con la misma
+> versión y nombre.
+> El catálogo confirmó ausencia previa de la RPC y
 > existencia de las columnas/tablas requeridas. Después se verificó la función `SECURITY DEFINER`,
 > `STABLE`, `search_path` vacío, permiso de ejecución solo para `authenticated` (no para `anon`), y
-> una llamada permitida al admin real y rechazada a usuario no admin. La matriz completa
+> una llamada permitida al admin real y rechazada a usuario no admin. `admin_team_overview()` devuelve
+> ahora 17 columnas, con invitaciones vigentes y caducadas separadas. La ACL observada es
+> `postgres=X/postgres, service_role=X/postgres, authenticated=X/postgres`; `anon` no tiene
+> `EXECUTE` (el permiso de `service_role` viene de los privilegios por defecto de PostgreSQL en
+> `public`). La matriz completa
 > `supabase/tests/entrenolab_rls.sql` también pasó contra PostgreSQL remoto en una transacción con
-> `ROLLBACK`; la consulta posterior confirmó que no quedaron usuarios fixture.
+> `ROLLBACK`; las consultas posteriores confirmaron que no quedaron usuarios, equipos ni
+> invitaciones fixture (0/0/0).
 >
 > Los párrafos de fechas anteriores que siguen debajo son **bitácora histórica** y describen el
 > estado conocido en esas rondas; no sustituyen esta verificación actual.
 
 > **Bitácora añadida el 23/09/2026 — migraciones relacionadas con este encargo.**
-> El repositorio tiene hoy **23 ficheros** en `supabase/migrations/`; la tabla enumera las cinco
+> El repositorio tiene hoy **25 ficheros** en `supabase/migrations/`; la tabla enumera las siete
 > migraciones relacionadas, no su orden cronológico de aplicación:
 >
-> | Fichero local                                      | Qué hace                                                                                                        |
-> | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-> | `20260925000000_team_deletion.sql`                 | borrar un equipo (propietario o administrador), con el **nombre exacto** comprobado en el servidor y auditoría  |
-> | `20260926000000_team_deletion_request_history.sql` | conservar el historial de una solicitud aprobada cuando su equipo se borra (`created_team_id` → NULL)           |
-> | `20260927000000_platform_administration.sql`       | administrador de plataforma: entra como editor en cualquier equipo, listar/nombrar administradores, baja propia |
-> | `20260928000000_platform_admin_team_members.sql`   | el administrador ve los **miembros de cualquier equipo** (antes esa función era solo del propietario)           |
-> | `20260923091218_platform_admin_overview.sql`       | **resumen global del panel**: recuentos de todos los equipos en UNA consulta, sin descargar su contenido        |
+> | Fichero local                                           | Qué hace                                                                                                        |
+> | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+> | `20260925000000_team_deletion.sql`                      | borrar un equipo (propietario o administrador), con el **nombre exacto** comprobado en el servidor y auditoría  |
+> | `20260926000000_team_deletion_request_history.sql`      | conservar el historial de una solicitud aprobada cuando su equipo se borra (`created_team_id` → NULL)           |
+> | `20260927000000_platform_administration.sql`            | administrador de plataforma: entra como editor en cualquier equipo, listar/nombrar administradores, baja propia |
+> | `20260928000000_platform_admin_team_members.sql`        | el administrador ve los **miembros de cualquier equipo** (antes esa función era solo del propietario)           |
+> | `20260923091218_platform_admin_overview.sql`            | **resumen global del panel**: recuentos de todos los equipos en UNA consulta, sin descargar su contenido        |
+> | `20260923154046_admin_overview_pending_invitations.sql` | separa invitaciones **vigentes** de **caducadas** (aplicada en remoto con la misma versión)                     |
+> | `20260923154020_admin_delete_revokes_invitations.sql`   | borrar cuenta **cancela sus invitaciones pendientes** (aplicada en remoto con la misma versión)                 |
+>
+> Las dos últimas ya están **aplicadas y verificadas**; sus versiones asignadas por MCP se indican
+> en la tabla. Véase `docs/FASE-10-solicitud-de-equipo.md` §11 para el preflight y el postflight.
 >
 > **Lo verificado en esta ronda, desde esta máquina:**
 >
-> - `npm run validate:migration` verde con **154 comprobaciones**, de ellas **23 nuevas** para la
->   migración de administración y **13 nuevas** para las dos últimas (autorización dentro de la RPC,
->   permisos de `EXECUTE`, `DEFINER` con `search_path` vacío, recuentos acotados por equipo, estados
->   reales del esquema y que la redefinición de `private.list_team_members` **conserva el mismo tipo
->   de retorno** —si no, PostgreSQL la rechaza—).
+> - `npm run validate:migration` verde con **171 comprobaciones**: **23** de la migración de
+>   administración, **13** de miembros/resumen (autorización dentro de la RPC, `EXECUTE`, `DEFINER`
+>   con `search_path` vacío, recuentos acotados por equipo, estados reales del esquema y que la
+>   redefinición de `private.list_team_members` **conserva el mismo tipo de retorno** —si no,
+>   PostgreSQL la rechaza—) y **16** de los dos arreglos de consistencia (pendientes frente a
+>   caducadas; borrado de cuenta que cancela invitaciones).
 >   Esas comprobaciones **se probaron rompiendo las migraciones a propósito**: una mutación en el
->   recuento de jugadores activos y otra que añadía una columna al retorno hicieron fallar las
->   comprobaciones correspondientes, y al restaurar los ficheros volvieron a pasar. Una de ellas
->   **destapó que el check era más débil de lo que decía** (bastaba con que `pl.active` apareciera en
->   el fichero, aunque fuera en el recuento de inactivos) y se endureció;
-> - la matriz `supabase/tests/entrenolab_rls.sql` **incluye** casos para las cinco (alta y baja de
+>   recuento de jugadores activos, otra que añadía una columna al retorno, otra que quitaba el filtro
+>   de caducidad, otra que quitaba el `drop function` y otra que dejaba de revocar invitaciones
+>   hicieron fallar las comprobaciones correspondientes, y al restaurar los ficheros volvieron a
+>   pasar. Una de ellas **destapó que el check era más débil de lo que decía** (bastaba con que
+>   `pl.active` apareciera en el fichero, aunque fuera en el recuento de inactivos) y se endureció;
+> - la matriz `supabase/tests/entrenolab_rls.sql` **incluye** casos para las siete (alta y baja de
 >   administrador, `last_platform_admin`, `cannot_suspend_platform_admin`, correo de confirmación,
 >   `target_owns_team`, borrado de equipo con nombre exacto y auditoría, miembros de cualquier equipo
->   para el administrador y resumen global —incluido que NO aparezca un equipo ya borrado—) y
->   **parsea** sin errores (9 sentencias de nivel superior).
+>   para el administrador, resumen global —incluido que NO aparezca un equipo ya borrado y que el
+>   recuento de invitaciones use el criterio del límite de plazas— y el borrado de cuenta que revoca
+>   su invitación pendiente) y **parsea** sin errores (10 sentencias de nivel superior).
 >
 > **Estado histórico (antes de la consulta remota del 23/09):** el catálogo del proyecto remoto **no se había podido consultar**
 > desde esta máquina —`npx supabase projects list` responde _«Access token not provided»_ y no hay

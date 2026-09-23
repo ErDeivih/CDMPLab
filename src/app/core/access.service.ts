@@ -39,7 +39,10 @@ export interface AdminOverview {
     membersActive: number;
     membersRevoked: number;
     membersPending: number;
+    /** Pendientes que SÍ esperan respuesta (y ocupan plaza, igual que el límite del servidor). */
     invitationsPending: number;
+    /** Pendientes ya caducadas: no ocupan plaza, pero bloquean reinvitar a ese correo. */
+    invitationsExpiredPending: number;
     playersActive: number;
     playersInactive: number;
     folders: number;
@@ -402,6 +405,7 @@ export class AccessService {
         membersRevoked: 0,
         membersPending: 0,
         invitationsPending: 0,
+        invitationsExpiredPending: 0,
         playersActive: 0,
         playersInactive: 0,
         folders: 0,
@@ -420,6 +424,7 @@ export class AccessService {
         membersRevoked: sumar(equipos, (e) => e.membersRevoked),
         membersPending: sumar(equipos, (e) => e.membersPending),
         invitationsPending: sumar(equipos, (e) => e.invitationsPending),
+        invitationsExpiredPending: sumar(equipos, (e) => e.invitationsExpiredPending),
         playersActive: sumar(equipos, (e) => e.playersActive),
         playersInactive: sumar(equipos, (e) => e.playersInactive),
         folders: sumar(equipos, (e) => e.folders),
