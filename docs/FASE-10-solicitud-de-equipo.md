@@ -546,6 +546,64 @@ solo exige `status='pending'`, no la fecha), así que el propietario nunca se qu
 `revoke_team_member` ya revocaba las invitaciones pendientes del miembro, de modo que un revocado no
 puede volver por una invitación vieja.
 
+### Trampa de orden al alinear los nombres locales con los remotos (23/09/2026)
+
+Las dos migraciones de arriba se aplicaron en remoto y, para que una futura `supabase db push` no
+las reejecutara, sus ficheros locales se renombraron con la versión exacta que Supabase registró:
+`20260923154020` y `20260923154046`. Eso resolvió el problema que pretendía resolver, **y creó otro
+que el informe de esa ronda no recogía**:
+
+- la migración que hace que borrar una cuenta cancele sus invitaciones (`20260923154020`) quedó
+  ordenada **antes** de `20260924000000_account_and_membership_management.sql`, que es la que
+  **crea** `public.admin_delete_account`;
+- el CLI aplica por orden de nombre y `create or replace` deja ganar al **último**, así que en un
+  despliegue limpio la definición final sería la antigua: **el arreglo desaparecería**;
+- y desaparecería **en silencio**: el cuerpo de una función `plpgsql` no resuelve tablas al crearse,
+  así que la migración temprana no falla aunque `public.account_deletions` —la tabla que esa función
+  usa— todavía no exista. Un despliegue desde cero habría dado «todo aplicado» y una función SIN el
+  arreglo.
+
+Comprobado con un recuento objetivo: de las **13 funciones** que este repositorio define en más de
+una migración, **12** siguen el patrón normal (definición base + arreglo posterior, y gana el
+posterior) y **`admin_delete_account` era la única invertida**.
+
+Corrección: `supabase/migrations/20260930000000_reassert_admin_delete_revokes_invitations.sql`
+(reafirma el mismo comportamiento después de la migración base; su versión local ordena la última en
+un despliegue limpio). Se aplicó en remoto mediante MCP, que la registró como
+`20260923164706 reassert_admin_delete_revokes_invitations`. El comportamiento remoto ya era el
+correcto; la ejecución reafirmó la definición y el postflight volvió a confirmar que revoca las
+invitaciones pendientes. El fichero antiguo `20260923154020` se conserva porque el remoto lo tiene
+registrado; borrarlo dejaría un registro huérfano y perdería la traza de lo aplicado.
+
+La versión local (`20260930000000`) se mantiene posterior a `20260924000000` para que la definición
+ganadora sea la corregida en instalaciones nuevas. MCP asignó a la aplicación remota una versión
+anterior (`20260923164706`); no se renombra el fichero local a esa versión porque eso volvería a
+invertir el orden. La función usa `create or replace` con la misma firma y permisos, así que una
+reaplicación por diferencia de versiones es idempotente. Antes de una futura sincronización con CLI,
+revisar/reconciliar esta diferencia del historial; no cambiar el prefijo local sin comprobar de
+nuevo el orden completo.
+
+**El validador ahora cierra esa puerta.** Dos comprobaciones nuevas, ambas probadas rompiendo el
+escenario a propósito:
+
+1. **Orden de definición**: para cada función cuyas propiedades inspecciona, el fichero inspeccionado
+   tiene que ser el **último** que la define. Se verificó apuntando la vigilancia al fichero que no
+   gana: el validador lo rechaza con «un despliegue limpio se quedaría con … y NO con el fichero
+   inspeccionado: las comprobaciones de arriba estarían vigilando código muerto». (La primera versión
+   del check daba un **falso positivo en Windows** porque comparaba `\` con `/`: corregido.)
+2. **Políticas sobre `private.platform_admins`, en TODAS las migraciones**: antes solo se miraba el
+   fichero de administración, así que una política añadida en cualquier otra migración pasaba
+   desapercibida. La única admisible es la que deniega todo (`using (false)` + `with check (false)`),
+   que es la de `20260922130000_platform_admins_rls_policy.sql`; y se sigue exigiendo que ninguna
+   migración conceda acceso de tabla a esa tabla.
+
+También se corrigieron **dos imprecisiones mías** que la revisión anterior detectó: la consulta de
+preflight del resumen buscaba dependencias en la dirección equivocada (`pg_depend` se unía por
+`objid` —«de qué depende la función»— en vez de por `refobjid` —«quién depende de ella», que es lo
+que impide un `drop`), y el comentario «solo `authenticated`» era falso: `service_role` también puede
+ejecutar las RPC (privilegios por defecto de PostgreSQL en `public`), lo cual es correcto —es la
+credencial del servidor— pero no era lo que decía el comentario.
+
 ### Preflight remoto (MCP Supabase, proyecto `vgwfjkhvzprsoixpzruq`, 23/09/2026)
 
 Antes de tocar el esquema consulté PostgreSQL 17.6. El resultado relevante fue:
@@ -559,8 +617,18 @@ Antes de tocar el esquema consulté PostgreSQL 17.6. El resultado relevante fue:
 | Invitaciones pendientes huérfanas / caducadas / vigentes | **0 / 0 / 0** al consultar; no hace falta limpiar datos preexistentes                                                                    |
 | Última migración remota registrada antes de este cambio  | `20260923091218 platform_admin_overview`                                                                                                 |
 
-Después del preflight se aplicaron `20260923154020 admin_delete_revokes_invitations` y
-`20260923154046 admin_overview_pending_invitations`.
+Después del preflight se aplicaron `20260923154020 admin_delete_revokes_invitations`,
+`20260923154046 admin_overview_pending_invitations` y `20260923164706
+reassert_admin_delete_revokes_invitations`.
+
+**Postflight de la migración de orden.** `supabase_list_migrations` confirma el nuevo registro
+`20260923164706`; el catálogo sigue mostrando `admin_delete_account(uuid,text)` como `SECURITY
+DEFINER`, con `search_path` vacío, `anon=false`, `authenticated=true`, `service_role=true`, y el
+cuerpo contiene la revocación de invitaciones pendientes. Se volvió a ejecutar la matriz completa
+`supabase/tests/entrenolab_rls.sql`; terminó sin error y el `ROLLBACK` dejó **0 usuarios fixture,
+0 equipos fixture y 0 invitaciones fixture**. El validador local detecta ahora **176 comprobaciones**,
+incluidas la última definición de cada RPC vigilada y las políticas de `private.platform_admins`
+en el conjunto completo de migraciones.
 
 La ACL observada incluye `service_role`: los privilegios por defecto de PostgreSQL del proyecto dan
 `EXECUTE` a ese rol para funciones de `public`. Por eso el preflight distingue `anon=false` de los

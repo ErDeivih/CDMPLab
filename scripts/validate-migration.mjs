@@ -71,6 +71,28 @@ const fail = (msg) => {
 };
 const ok = (msg) => console.log('  ✓ ' + msg);
 
+/**
+ * Funciones cuyas propiedades inspecciona este validador, con el fichero que se inspecciona.
+ *
+ * El bloque de orden comprueba que ese fichero sea el ÚLTIMO que define la función: si no, un
+ * despliegue limpio se quedaría con otra definición y todas las comprobaciones estarían vigilando
+ * código muerto (pasó con `admin_delete_account` el 23/09/2026).
+ */
+const VIGILADAS = [
+  {
+    fn: 'public.admin_team_overview()',
+    fichero: 'supabase/migrations/20260923154046_admin_overview_pending_invitations.sql',
+  },
+  {
+    fn: 'public.admin_delete_account(p_user_id uuid, p_reason text default null)',
+    fichero: 'supabase/migrations/20260930000000_reassert_admin_delete_revokes_invitations.sql',
+  },
+  {
+    fn: 'private.list_team_members(p_team_id uuid)',
+    fichero: 'supabase/migrations/20260928000000_platform_admin_team_members.sql',
+  },
+];
+
 /** Búsqueda de fragmentos en el contenido (independiente de mayúsculas/espacios). */
 const norm = (s) => String(s).replace(/\s+/g, ' ').toLowerCase();
 function has(content, frag) {
@@ -1168,7 +1190,11 @@ try {
 
   // ---- CONSISTENCIA: borrar una cuenta CANCELA sus invitaciones pendientes ----
   {
-    const f18 = 'supabase/migrations/20260923154020_admin_delete_revokes_invitations.sql';
+    // Se inspecciona el fichero que GANA en un despliegue limpio (ver el bloque de orden, más
+    // abajo). El arreglo está también en `20260923154020_admin_delete_revokes_invitations.sql`
+    // —aplicado en remoto—, pero ese fichero ordena ANTES de la migración que crea la función, así
+    // que sus propiedades no son las que quedan tras un despliegue desde cero.
+    const f18 = 'supabase/migrations/20260930000000_reassert_admin_delete_revokes_invitations.sql';
     if (!fs.existsSync(f18)) {
       fail('falta la migración que hace que borrar una cuenta cancele sus invitaciones pendientes');
     } else {
@@ -1225,6 +1251,111 @@ try {
       has(sqlBruto, 'COMPROBACIÓN PREVIA AL DESPLIEGUE')
         ? ok('documenta la comprobación previa al despliegue')
         : fail('no documenta la comprobación previa antes de aplicarla');
+    }
+  }
+
+  // ---- ORDEN DE LAS MIGRACIONES: ¿el fichero inspeccionado es el que GANA? ----
+  // POR QUÉ EXISTE (23/09/2026): el arreglo de `admin_delete_account` vivía en un fichero que, tras
+  // renombrarlo para que su versión coincidiera con la registrada en remoto, quedó ordenado ANTES de
+  // la migración que CREA esa función. El CLI aplica por orden de nombre y `create or replace` deja
+  // ganar al ÚLTIMO, así que en un despliegue limpio la definición final era la vieja: **el arreglo
+  // desaparecía**. Y en silencio, porque el cuerpo de una función `plpgsql` no resuelve tablas al
+  // crearse (la migración temprana no falla aunque la tabla que usa aún no exista).
+  //
+  // Esta comprobación cierra esa puerta: para cada función cuyas propiedades se inspeccionan más
+  // arriba, el fichero inspeccionado tiene que ser el ÚLTIMO que la define. Si alguien vuelve a
+  // reordenar una migración, esto se pone en rojo en vez de dar el visto bueno.
+  {
+    console.log('\nOrden de definición de las funciones vigiladas:');
+    const nombresDefinidos = (texto) => {
+      const limpio = texto.replace(/--[^\n]*/g, ' ');
+      const nombres = [];
+      const re =
+        /create\s+(?:or\s+replace\s+)?function\s+((?:public|private)\.[a-z_]+)\s*\(([^)]*)\)/gi;
+      let m;
+      while ((m = re.exec(limpio))) {
+        nombres.push(m[1] + '(' + m[2].replace(/\s+/g, ' ').trim() + ')');
+      }
+      return nombres;
+    };
+
+    const todosLosFicheros = fs
+      .readdirSync('supabase/migrations')
+      .filter((n) => n.endsWith('.sql'))
+      .sort()
+      // Rutas con `/` siempre: `path.join` usa `\` en Windows y la comparación con `VIGILADAS`
+      // fallaba por el separador, no por el orden (falso positivo detectado al probarlo).
+      .map((n) => `supabase/migrations/${n}`);
+
+    const porFuncion = new Map();
+    for (const f of todosLosFicheros) {
+      for (const nombre of nombresDefinidos(fs.readFileSync(f, 'utf8'))) {
+        if (!porFuncion.has(nombre)) porFuncion.set(nombre, []);
+        porFuncion.get(nombre).push(f);
+      }
+    }
+
+    for (const v of VIGILADAS) {
+      const donde = porFuncion.get(v.fn) ?? [];
+      if (!fs.existsSync(v.fichero)) {
+        fail(`no existe el fichero que el validador inspecciona para ${v.fn}`);
+        continue;
+      }
+      if (donde.length === 0) {
+        fail(`no se encuentra ninguna definición de ${v.fn}`);
+        continue;
+      }
+      const ganador = donde[donde.length - 1];
+      ganador === v.fichero
+        ? ok(`${v.fn}: el fichero inspeccionado es el ÚLTIMO que la define`)
+        : fail(
+            `${v.fn}: un despliegue limpio se quedaría con ${path.basename(ganador)} y NO con el fichero inspeccionado (${path.basename(v.fichero)}): las comprobaciones de arriba estarían vigilando código muerto`,
+          );
+    }
+  }
+
+  // ---- POLÍTICAS sobre la tabla privada de administradores (EN TODAS las migraciones) ----
+  // La comprobación del bloque de administración solo miraba SU fichero, así que una política añadida
+  // en cualquier otra migración pasaba desapercibida. Aquí se revisan todas: la única política
+  // admisible es la de denegar todo (`using (false)`), porque el acceso legítimo lo dan las RPC
+  // SECURITY DEFINER (que consultan la tabla como propietario).
+  {
+    console.log('\nPolíticas sobre private.platform_admins (todas las migraciones):');
+    const problemas = [];
+    const politicas = [];
+    for (const f of fs
+      .readdirSync('supabase/migrations')
+      .filter((n) => n.endsWith('.sql'))
+      .sort()) {
+      const ruta = path.join('supabase/migrations', f);
+      const sql = fs.readFileSync(ruta, 'utf8').replace(/--[^\n]*/g, ' ');
+      const re = /create\s+policy\s+([a-z_]+)[\s\S]{0,400}?on\s+private\.platform_admins/gi;
+      let m;
+      while ((m = re.exec(sql))) {
+        const cuerpo = sql.slice(m.index, m.index + 500);
+        politicas.push(`${f}:${m[1]}`);
+        if (
+          !/using\s*\(\s*false\s*\)/.test(cuerpo) ||
+          !/with\s+check\s*\(\s*false\s*\)/.test(cuerpo)
+        ) {
+          problemas.push(
+            `${f}:${m[1]} no deniega todo (se espera using(false) y with check(false))`,
+          );
+        }
+      }
+      if (/grant[^;]*private\.platform_admins[^;]*to\s+(anon|authenticated|public)/i.test(sql)) {
+        problemas.push(`${f} concede acceso de tabla a private.platform_admins`);
+      }
+    }
+    if (problemas.length > 0) {
+      problemas.forEach(fail);
+    } else {
+      ok(
+        politicas.length === 0
+          ? 'ninguna migración abre políticas sobre private.platform_admins'
+          : `${politicas.length} política(s) y todas deniegan todo (${politicas.join(', ')})`,
+      );
+      ok('ninguna migración concede acceso de tabla a private.platform_admins');
     }
   }
 

@@ -3,8 +3,11 @@
 > **Estado actual contrastado con el proyecto remoto `vgwfjkhvzprsoixpzruq`:** se aplicaron
 > `20260923091218_platform_admin_overview.sql` (registro remoto `version=20260923091218,
 name=platform_admin_overview`), `20260923154020_admin_delete_revokes_invitations.sql` y
-> `20260923154046_admin_overview_pending_invitations.sql`, ambas registradas en remoto con la misma
-> versión y nombre.
+> `20260923154046_admin_overview_pending_invitations.sql` y
+> `20260930000000_reassert_admin_delete_revokes_invitations.sql` (la última quedó registrada en
+> remoto como `version=20260923164706, name=reassert_admin_delete_revokes_invitations`; se conserva
+> el prefijo local `20260930000000` para que sea posterior a la definición base en un despliegue
+> limpio).
 > El catálogo confirmó ausencia previa de la RPC y
 > existencia de las columnas/tablas requeridas. Después se verificó la función `SECURITY DEFINER`,
 > `STABLE`, `search_path` vacío, permiso de ejecución para `authenticated` y `service_role` (no para
@@ -22,25 +25,43 @@ name=platform_admin_overview`), `20260923154020_admin_delete_revokes_invitations
 > estado conocido en esas rondas; no sustituyen esta verificación actual.
 
 > **Bitácora añadida el 23/09/2026 — migraciones relacionadas con este encargo.**
-> El repositorio tiene hoy **25 ficheros** en `supabase/migrations/`; la tabla enumera las siete
+> El repositorio tiene hoy **26 ficheros** en `supabase/migrations/`; la tabla enumera las nueve
 > migraciones relacionadas, no su orden cronológico de aplicación:
 >
-> | Fichero local                                           | Qué hace                                                                                                        |
-> | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-> | `20260925000000_team_deletion.sql`                      | borrar un equipo (propietario o administrador), con el **nombre exacto** comprobado en el servidor y auditoría  |
-> | `20260926000000_team_deletion_request_history.sql`      | conservar el historial de una solicitud aprobada cuando su equipo se borra (`created_team_id` → NULL)           |
-> | `20260927000000_platform_administration.sql`            | administrador de plataforma: entra como editor en cualquier equipo, listar/nombrar administradores, baja propia |
-> | `20260928000000_platform_admin_team_members.sql`        | el administrador ve los **miembros de cualquier equipo** (antes esa función era solo del propietario)           |
-> | `20260923091218_platform_admin_overview.sql`            | **resumen global del panel**: recuentos de todos los equipos en UNA consulta, sin descargar su contenido        |
-> | `20260923154046_admin_overview_pending_invitations.sql` | separa invitaciones **vigentes** de **caducadas** (aplicada en remoto con la misma versión)                     |
-> | `20260923154020_admin_delete_revokes_invitations.sql`   | borrar cuenta **cancela sus invitaciones pendientes** (aplicada en remoto con la misma versión)                 |
+> | Fichero local                                                  | Qué hace                                                                                                        |
+> | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+> | `20260925000000_team_deletion.sql`                             | borrar un equipo (propietario o administrador), con el **nombre exacto** comprobado en el servidor y auditoría  |
+> | `20260926000000_team_deletion_request_history.sql`             | conservar el historial de una solicitud aprobada cuando su equipo se borra (`created_team_id` → NULL)           |
+> | `20260927000000_platform_administration.sql`                   | administrador de plataforma: entra como editor en cualquier equipo, listar/nombrar administradores, baja propia |
+> | `20260928000000_platform_admin_team_members.sql`               | el administrador ve los **miembros de cualquier equipo** (antes esa función era solo del propietario)           |
+> | `20260923091218_platform_admin_overview.sql`                   | **resumen global del panel**: recuentos de todos los equipos en UNA consulta, sin descargar su contenido        |
+> | `20260923154046_admin_overview_pending_invitations.sql`        | separa invitaciones **vigentes** de **caducadas** (aplicada en remoto con la misma versión)                     |
+> | `20260923154020_admin_delete_revokes_invitations.sql`          | borrar cuenta **cancela sus invitaciones pendientes** (aplicada en remoto con la misma versión)                 |
+> | `20260930000000_reassert_admin_delete_revokes_invitations.sql` | reafirma el arreglo como última definición en despliegues limpios; aplicada en remoto como `20260923164706`     |
 >
-> Las dos últimas ya están **aplicadas y verificadas**; sus versiones asignadas por MCP se indican
-> en la tabla. Véase `docs/FASE-10-solicitud-de-equipo.md` §11 para el preflight y el postflight.
+> **Trampa de orden detectada al alinear los nombres (23/09/2026).** Renombrar
+> `20260923154020_admin_delete_revokes_invitations.sql` para que su versión coincidiera con la
+> registrada en remoto tuvo un efecto que el informe no recogía: ese fichero pasó a ordenar **antes**
+> de `20260924000000_account_and_membership_management.sql`, que es la migración que **crea**
+> `public.admin_delete_account`. Como el CLI aplica por orden de nombre y `create or replace` deja
+> ganar al último, en un **despliegue limpio** (proyecto nuevo, `db push` desde cero) la definición
+> final sería la vieja y **el arreglo desaparecería en silencio** — en silencio de verdad: el cuerpo
+> de una función `plpgsql` no resuelve tablas al crearse, así que la migración temprana no falla
+> aunque `public.account_deletions`, que esa función usa, todavía no exista. De las 13 funciones que
+> este repositorio define en más de una migración, **12 siguen el patrón normal** (base + arreglo
+> posterior) y `admin_delete_account` era la única invertida. Se resuelve con
+> `20260930000000_reassert_admin_delete_revokes_invitations.sql` (mismo cuerpo, versión que ordena la
+> última; aplicada en remoto bajo el registro `20260923164706`) y el validador ahora **vigila esa condición**: comprueba que el fichero cuyas propiedades
+> inspecciona es el ÚLTIMO que define la función, para que ninguna comprobación vuelva a dar el visto
+> bueno sobre código muerto.
+>
+> Las tres migraciones de consistencia/orden están **aplicadas y verificadas**; la versión remota y
+> el prefijo local especial de la última se explican en la tabla y en
+> `docs/FASE-10-solicitud-de-equipo.md` §11.
 >
 > **Lo verificado en esta ronda, desde esta máquina:**
 >
-> - `npm run validate:migration` verde con **171 comprobaciones**: **23** de la migración de
+> - `npm run validate:migration` verde con **176 comprobaciones**: **23** de la migración de
 >   administración, **13** de miembros/resumen (autorización dentro de la RPC, `EXECUTE`, `DEFINER`
 >   con `search_path` vacío, recuentos acotados por equipo, estados reales del esquema y que la
 >   redefinición de `private.list_team_members` **conserva el mismo tipo de retorno** —si no,
