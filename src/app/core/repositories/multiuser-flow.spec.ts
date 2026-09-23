@@ -1955,7 +1955,7 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
     });
   });
 
-  it('una invitación caducada no aparece como pendiente ni ocupa una plaza visual', async () => {
+  it('una invitación caducada se mantiene visible para cancelarla, pero no ocupa plaza', async () => {
     const { backend } = setupJourney();
     const repo = makeRepo(backend, OWNER, null);
     const team = await pedirYAprobarEquipo(backend, OWNER, 'Primer');
@@ -1963,7 +1963,14 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
     const row = backend.rows.team_invitations.find((i) => i.id === invitation.id)!;
     row.expires_at = '2000-01-01T00:00:00.000Z';
 
-    expect(await repo.listTeamInvitations(team.id)).toEqual([]);
+    expect(await repo.listTeamInvitations(team.id)).toEqual([
+      expect.objectContaining({
+        id: invitation.id,
+        emailNormalized: 'caducado@example.com',
+        status: 'pending',
+        expiresAt: '2000-01-01T00:00:00.000Z',
+      }),
+    ]);
     await expect(repo.inviteMember(team.id, 'vigente@example.com')).resolves.toMatchObject({
       status: 'pending',
     });

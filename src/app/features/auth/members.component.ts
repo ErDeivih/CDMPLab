@@ -82,8 +82,17 @@ export class MembersComponent {
 
   protected readonly seatsUsed = computed(() => {
     const active = this.members().filter((m) => m.role !== 'owner').length;
-    return active + this.invitations().length;
+    const now = Date.now();
+    const currentInvitations = this.invitations().filter(
+      (invitation) => Date.parse(invitation.expiresAt) > now,
+    ).length;
+    return active + currentInvitations;
   });
+
+  /** Invitaciones vencidas bloquean re-invitar por el índice único, pero no consumen plaza. */
+  protected caducada(invitation: TeamInvitationInfo): boolean {
+    return Date.parse(invitation.expiresAt) <= Date.now();
+  }
 
   /** Miembros a los que ESTE usuario puede traspasar la propiedad. */
   protected puedeTraspasarA(m: TeamMemberInfo): boolean {

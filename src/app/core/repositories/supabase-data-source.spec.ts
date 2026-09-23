@@ -1142,4 +1142,28 @@ describe('SupabaseRepository.updatePlayer — un parche PARCIAL no borra lo que 
       message: expect.stringContaining('rangos'),
     });
   });
+
+  it('la invitación pendiente duplicada se explica como tal, no como «ya existe otro registro»', async () => {
+    // CASO REAL (23/09/2026): al volver a invitar a quien ya tuvo una invitación CADUCADA, el
+    // índice parcial `team_invitations_pending_unique` la sigue considerando «pendiente» y el
+    // INSERT falla… pero como NO ocupa plaza, el límite de colaboradores no avisa de nada. El
+    // mensaje crudo de PostgreSQL («duplicate key value violates unique constraint
+    // "team_invitations_pending_unique"») llegaba al usuario como «Ya existe otro registro con
+    // esos mismos datos.», que no dice QUÉ hacer. Ahora se traduce al motivo real.
+    const { client } = makeClient({
+      rpc: async () => ({
+        data: null,
+        error: {
+          code: '23505',
+          message:
+            'duplicate key value violates unique constraint "team_invitations_pending_unique"',
+        },
+      }),
+    });
+    const repo = new SupabaseRepository(client, 'u-1', 'team-1');
+    await expect(repo.inviteMember('team-1', 'alguien@example.com')).rejects.toMatchObject({
+      code: 'duplicate_invitation',
+      message: expect.stringContaining('Cancela esa invitación'),
+    });
+  });
 });

@@ -140,7 +140,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   folder_cycle: 'No se puede mover una carpeta dentro de sí misma.',
   team_name_required: 'El nombre del equipo es obligatorio.',
   invalid_accent_color: 'El color del equipo no es válido.',
-  duplicate_invitation: 'Ya existe una invitación pendiente para este correo en este equipo.',
+  duplicate_invitation:
+    'Ya existe una invitación pendiente para este correo en este equipo. Cancela esa invitación antes de crear otra (aunque figure caducada: mientras siga pendiente, bloquea una nueva).',
   not_team_owner: 'Solo el propietario puede gestionar los colaboradores.',
   revision_conflict:
     'La sesión fue modificada por otra persona. Recarga para ver la versión más reciente o guarda una copia de la tuya.',
@@ -191,6 +192,14 @@ function errorToDataError(err: unknown, fallbackCode = 'unknown', fallbackMsg?: 
     .sort((a, b) => b.length - a.length)[0];
   if (conocido) code = conocido;
   else if (rawCode === '42501') code = 'forbidden';
+  // RESTRICCIONES ÚNICAS de PostgreSQL: el mensaje NO nombra un error de la aplicación, nombra el
+  // ÍNDICE (`duplicate key value violates unique constraint "team_invitations_pending_unique"`), así
+  // que sin esta traducción el usuario recibía «Ya existe otro registro con esos mismos datos.» y no
+  // podía saber que el problema es una invitación pendiente ANTERIOR que hay que cancelar. Es
+  // exactamente el caso real de un equipo que quiere volver a invitar a quien ya tuvo una invitación
+  // caducada: cuenta como «ya existe» para el índice parcial, pero NO ocupa plaza, así que el
+  // límite de colaboradores no avisa de nada.
+  else if (m.includes('team_invitations_pending_unique')) code = 'duplicate_invitation';
   const fallback = fallbackMsg ?? 'Error al comunicarse con el servidor.';
   return new DataError(code, messageFor(code, fallback));
 }
@@ -873,15 +882,16 @@ export class SupabaseRepository implements DataSource {
   }
 
   private async listInvitations(teamId: string): Promise<TeamInvitationInfo[]> {
-    // El servidor solo cuenta pendientes NO caducadas para el límite. La pantalla debe
-    // aplicar el mismo criterio; así una invitación vencida no ocupa una plaza aparente.
-    // Tras filtrar en el servidor, como máximo quedan seis filas y no hace falta paginar.
+    // Devolvemos también las pendientes CADUCADAS: aunque no ocupan plaza, el índice único las
+    // conserva como status='pending' y bloquean volver a invitar al mismo correo. El propietario
+    // debe poder encontrarlas en Miembros y cancelarlas. La interfaz las etiqueta y las excluye
+    // del contador de plazas; solo ofrece Cancelar, no enviar ni copiar un enlace ya vencido.
     const { data, error } = await this.client
       .from('team_invitations')
       .select('*')
       .eq('team_id', teamId)
       .eq('status', 'pending')
-      .gt('expires_at', new Date().toISOString());
+      .order('created_at', { ascending: false });
     if (error) throw errorToDataError(error, 'invitation_list');
     const team = await this.loadTeamRow(teamId);
     return (data ?? []).map((r) => invitationFromRow(r, team?.name ?? ''));
