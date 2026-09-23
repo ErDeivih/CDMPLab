@@ -7,7 +7,8 @@ name=platform_admin_overview`), `20260923154020_admin_delete_revokes_invitations
 > versión y nombre.
 > El catálogo confirmó ausencia previa de la RPC y
 > existencia de las columnas/tablas requeridas. Después se verificó la función `SECURITY DEFINER`,
-> `STABLE`, `search_path` vacío, permiso de ejecución solo para `authenticated` (no para `anon`), y
+> `STABLE`, `search_path` vacío, permiso de ejecución para `authenticated` y `service_role` (no para
+> `anon`), y
 > una llamada permitida al admin real y rechazada a usuario no admin. `admin_team_overview()` devuelve
 > ahora 17 columnas, con invitaciones vigentes y caducadas separadas. La ACL observada es
 > `postgres=X/postgres, service_role=X/postgres, authenticated=X/postgres`; `anon` no tiene
