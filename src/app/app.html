@@ -168,6 +168,17 @@
       }
 
       <div class="cuenta-acciones" id="cuenta-mas">
+        @if (invitacionesItem(); as invitaciones) {
+          <a
+            class="cuenta-accion cuenta-accion-pendiente"
+            data-accion="ver-invitaciones"
+            [routerLink]="invitaciones.href"
+            (click)="cerrarCuenta()"
+          >
+            <span class="msi" aria-hidden="true">{{ invitaciones.icon }}</span>
+            <span>{{ invitaciones.label }}</span>
+          </a>
+        }
         @if (miembrosItem(); as miembros) {
           <a class="cuenta-accion" [routerLink]="miembros.href" (click)="cerrarCuenta()">
             <span class="msi" aria-hidden="true">{{ miembros.icon }}</span>

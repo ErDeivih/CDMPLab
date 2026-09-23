@@ -14,7 +14,13 @@
 // =============================================================
 
 import { Injectable, InjectionToken, inject } from '@angular/core';
-import { CanActivate, Router, UrlTree } from '@angular/router';
+import {
+  ActivatedRouteSnapshot,
+  CanActivate,
+  Router,
+  RouterStateSnapshot,
+  UrlTree,
+} from '@angular/router';
 import { SupabaseService } from './supabase.service';
 import { AccessService } from './access.service';
 
@@ -44,6 +50,22 @@ function isLockedOut(supabase: SupabaseService, forceLocal: boolean): boolean {
 }
 
 /**
+ * Ruta de login conservando A DÓNDE iba el usuario.
+ *
+ * POR QUÉ: el enlace del correo de invitación es `/invitations?invitation=<uuid>`. Si quien lo
+ * pulsa no tiene sesión, antes se le mandaba a `/auth/login` a secas y el destino se perdía: tras
+ * iniciar sesión aterrizaba en el destino genérico de su estado (su equipo) y no volvía nunca a su
+ * invitación, que quedaba invisible. Solo se acepta una ruta INTERNA (`/…`, nunca `//host` ni una
+ * URL absoluta) para no convertir el login en un redirector abierto.
+ */
+export function loginTree(router: Router, state?: RouterStateSnapshot): UrlTree {
+  const url = state?.url ?? '';
+  const esRutaInterna = url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/auth/');
+  if (!esRutaInterna) return router.createUrlTree(['/auth/login']);
+  return router.createUrlTree(['/auth/login'], { queryParams: { returnUrl: url } });
+}
+
+/**
  * Exige sesión iniciada. En producción `disabled` redirige a /auth/login
  * (nunca deja pasar); en desarrollo `disabled` deja pasar (modo local).
  */
@@ -52,16 +74,19 @@ export class AuthGuard implements CanActivate {
   private readonly forceLocal = inject(FORCE_LOCAL_MODE);
   constructor(
     private readonly supabase: SupabaseService,
-    private readonly router: Router
+    private readonly router: Router,
   ) {}
 
-  async canActivate(): Promise<boolean | UrlTree> {
+  async canActivate(
+    _route?: ActivatedRouteSnapshot,
+    state?: RouterStateSnapshot,
+  ): Promise<boolean | UrlTree> {
     await this.supabase.ensureResolved();
     const status = this.supabase.status();
     if (status === 'authenticated') return true;
     if (isLocalMode(this.supabase, this.forceLocal)) return true;
-    // Unauthenticated, o disabled en producción → login.
-    return this.router.createUrlTree(['/auth/login']);
+    // Unauthenticated, o disabled en producción → login (conservando el destino, ver `loginTree`).
+    return loginTree(this.router, state);
   }
 }
 
@@ -81,7 +106,7 @@ export class ApprovedGuard implements CanActivate {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly access: AccessService,
-    private readonly router: Router
+    private readonly router: Router,
   ) {}
 
   async canActivate(): Promise<boolean | UrlTree> {
@@ -89,7 +114,8 @@ export class ApprovedGuard implements CanActivate {
     const status = this.supabase.status();
     if (status === 'authenticated' && this.access.isReady()) return true;
     if (isLocalMode(this.supabase, this.forceLocal) && !this.supabase.user()) return true;
-    if (isLockedOut(this.supabase, this.forceLocal)) return this.router.createUrlTree(['/auth/login']);
+    if (isLockedOut(this.supabase, this.forceLocal))
+      return this.router.createUrlTree(['/auth/login']);
     if (status !== 'authenticated') return this.router.createUrlTree(['/auth/login']);
 
     // Sesión autenticada pero sin perfil aprobado/equipo: dirigir por estado.
@@ -110,7 +136,7 @@ export class AdminGuard implements CanActivate {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly access: AccessService,
-    private readonly router: Router
+    private readonly router: Router,
   ) {}
 
   async canActivate(): Promise<boolean | UrlTree> {

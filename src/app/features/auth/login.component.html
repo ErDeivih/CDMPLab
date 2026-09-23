@@ -1,6 +1,21 @@
 <app-auth-card [title]="'Iniciar sesión'" [subtitle]="'Accede con tu correo y contraseña'">
   @if (message(); as msg) {
-    <p class="auth-msg" [class.ok]="msg.kind === 'ok'" [class.err]="msg.kind === 'err'" role="status">{{ msg.text }}</p>
+    <p
+      class="auth-msg"
+      [class.ok]="msg.kind === 'ok'"
+      [class.err]="msg.kind === 'err'"
+      role="status"
+    >
+      {{ msg.text }}
+    </p>
+  }
+
+  <!-- Aviso honesto: si el usuario llegó desde un enlace (p. ej. una invitación), se le dice que
+       al entrar volverá ahí. Sin esto, entrar «no hacía lo que parecía» y la invitación se perdía. -->
+  @if (returnUrl()) {
+    <p class="auth-note" data-aviso-destino="1">
+      Cuando entres, volverás a la página desde la que viniste.
+    </p>
   }
 
   <form [formGroup]="form" (ngSubmit)="submit()">
@@ -17,8 +32,11 @@
         />
         @if (emailInvalid()) {
           <div id="login-email-hint" class="auth-note">
-            @if (form.controls.email.hasError('required')) { El correo es obligatorio. }
-            @else { Introduce un correo válido. }
+            @if (form.controls.email.hasError('required')) {
+              El correo es obligatorio.
+            } @else {
+              Introduce un correo válido.
+            }
           </div>
         }
       </div>
@@ -35,8 +53,11 @@
         />
         @if (passwordInvalid()) {
           <div id="login-password-hint" class="auth-note">
-            @if (form.controls.password.hasError('required')) { La contraseña es obligatoria. }
-            @else { Mínimo 8 caracteres. }
+            @if (form.controls.password.hasError('required')) {
+              La contraseña es obligatoria.
+            } @else {
+              Mínimo 8 caracteres.
+            }
           </div>
         }
       </div>
@@ -51,7 +72,9 @@
 
   <div class="auth-stack">
     <div class="auth-row">
-      <a class="auth-link" routerLink="/auth/register">¿Aún no tienes cuenta? Regístrate</a>
+      <a class="auth-link" [routerLink]="['/auth/register']" [queryParams]="registroParams"
+        >¿Aún no tienes cuenta? Regístrate</a
+      >
     </div>
     <div class="auth-row">
       <a class="auth-link" routerLink="/auth/forgot-password">¿Olvidaste tu contraseña?</a>

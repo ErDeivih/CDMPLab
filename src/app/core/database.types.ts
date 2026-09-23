@@ -597,6 +597,28 @@ export interface Database {
       admin_list_administrators: { Args: never; Returns: Array<{ user_id: string }> };
       admin_grant_platform_admin: { Args: { p_user_id: string }; Returns: undefined };
       delete_my_admin_account: { Args: { p_confirm_email: string }; Returns: undefined };
+      // Resumen global del panel (migración 20260923091218): SOLO recuentos y metadatos.
+      admin_team_overview: {
+        Args: never;
+        Returns: Array<{
+          team_id: string;
+          name: string;
+          accent_color: string;
+          owner_user_id: string;
+          owner_email: string;
+          created_at: string;
+          updated_at: string;
+          members_active: number;
+          members_revoked: number;
+          members_pending: number;
+          invitations_pending: number;
+          players_active: number;
+          players_inactive: number;
+          folders: number;
+          exercises: number;
+          sessions: number;
+        }>;
+      };
       list_team_members: {
         Args: { p_team_id: string };
         Returns: Array<{

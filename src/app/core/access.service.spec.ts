@@ -41,4 +41,25 @@ describe('AccessService invitations', () => {
     await expect(service.listInvitations()).resolves.toEqual([invitation]);
     expect(repo.myPendingInvitations).toHaveBeenCalledOnce();
   });
+
+  it('borra un permiso de admin en memoria si falla la recomprobación al servidor', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        AccessService,
+        { provide: SupabaseService, useValue: {} },
+        { provide: StoreService, useValue: {} },
+      ],
+    });
+    const service = TestBed.inject(AccessService);
+    const repo = { teamId: null, isPlatformAdmin: vi.fn().mockRejectedValue(new Error('offline')) };
+    const state = service as unknown as {
+      _repo: typeof repo;
+      _platformAdmin: { set(value: boolean): void };
+    };
+    state._repo = repo;
+    state._platformAdmin.set(true);
+
+    await expect(service.checkIsPlatformAdmin()).resolves.toBe(false);
+    expect(service.platformAdmin()).toBe(false);
+  });
 });

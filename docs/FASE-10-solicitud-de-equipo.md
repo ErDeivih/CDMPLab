@@ -411,3 +411,82 @@ cubiertas por la matriz SQL):
 prohibiendo borrar a otro administrador (`cannot_delete_platform_admin`); si lo que se quiere es
 que un administrador deje de serlo, la vía es la baja propia de arriba (o quitar la fila de
 `private.platform_admins` con SQL por el propietario del proyecto).
+
+## 10. Auditoría de los flujos y panel central (23/09/2026)
+
+> Pregunta del dueño: _«¿cómo funcionan invitaciones, crear cuentas, etc.? ¿es consistente todos los
+> flujos posibles? estudia y arregla todo detenidamente»_, más el aviso de que no encontraba el
+> panel de administración y que no había ninguna vista centralizada con estadísticas.
+
+Se recorrieron los flujos completos (registro → aprobación → invitación → correo → aceptación →
+pertenencia → propiedad → bajas) buscando contradicciones entre lo que la pantalla ofrece y lo que
+el servidor acepta. **Cinco agujeros reales**, corregidos:
+
+| Agujero encontrado                                                  | Por qué pasaba                                                                                                                                                                                                                                                                                        | Corrección y prueba                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`/invitations` no estaba en ninguna navegación**                  | La pantalla solo se alcanzaba por el redirect de `decideAccess`, que únicamente la usa cuando el perfil está aprobado **sin equipo**. Quien ya pertenecía a un equipo —o quien cerraba el aviso— no tenía forma de ver ni aceptar su invitación, aunque el propietario ya la hubiera creado y enviado | `AccessService.pendingInvitations` + entrada destacada en el menú de cuenta mientras el servidor diga que hay alguna pendiente (`data-accion="ver-invitaciones"`). 4 pruebas en `app.spec.ts`                                                                                      |
+| **El enlace del correo perdía el destino al pasar por el login**    | `AuthGuard` mandaba a `/auth/login` **sin** conservar la URL: quien pulsaba el enlace sin sesión iniciaba sesión y aterrizaba en su equipo, no en su invitación (y el aviso del enlace señalado se perdía)                                                                                            | `loginTree()` añade `?returnUrl=` y el login vuelve ahí, aceptando **solo** rutas internas (`//host` y URL absolutas rechazadas: el login no puede ser un redirector abierto). 2 pruebas en el guard y 5 en `login.component.spec.ts` (probadas rompiendo el contrato a propósito) |
+| **«Administración» se ofrecía a cualquier propietario de equipo**   | La condición era «no ser colaborador», así que un propietario normal veía el enlace y el `AdminGuard` lo devolvía a `/team`: un enlace que solo podía acabar en rechazo                                                                                                                               | El enlace se ofrece solo si el **servidor** confirmó `is_platform_admin()` (una consulta por arranque, en `AccessService.platformAdmin`). 2 pruebas nuevas + 1 E2E en el artefacto                                                                                                 |
+| **El registro perdía el destino del enlace de invitación**          | `register` navegaba siempre a `/auth/verify-email` y de ahí a `/team` sin arrastrar `?returnUrl=`: quien **no tenía cuenta** (el caso normal de una invitación) sí podía acabar fuera de contexto                                                                                                     | El destino viaja login → registro → confirmación → login (`siguienteDestino`, `loginParams`). Además el login avisa «volverás a la página desde la que viniste» solo cuando hay destino guardado                                                                                   |
+| **Cambiar de equipo dejaba la pantalla de Miembros desincronizada** | `teamName` y la lista se cargan una sola vez en `ngOnInit`; con el conmutador del menú de cuenta, «Guardar nombre» habría renombrado el equipo **nuevo** con el nombre del **viejo**                                                                                                                  | **Analizado y DESCARTADO** (ver abajo): el caso no es alcanzable y el primer intento de arreglo rompió la pantalla. Se deja el código como estaba, sin mecanismo defensivo                                                                                                         |
+
+**El panel abre con la cola de trabajo.** El dueño no encontraba dónde aprobar cuentas: ahora lo
+primero del panel es «lo que espera una decisión tuya» (cuentas pendientes de aprobación y
+solicitudes de equipo pendientes) con enlaces a cada apartado. Es pura interfaz: los dos números ya
+estaban cargados.
+
+**Una corrección que NO se quedó (y por qué se documenta).** El quinto punto de la tabla —la pantalla
+de Miembros desincronizada al cambiar de equipo— se intentó arreglar con un `effect` sobre
+`store.activeTeam()`, y **el E2E completo lo cazó**: `effect()` dentro de `ngOnInit` lanza
+**NG0203** («effect() can only be used within an injection context») y `/settings/team/members`
+dejaba de pintarse entera (3 pruebas en rojo: el smoke local y las capturas multiusuario). Al
+analizarlo de nuevo, el caso **no es alcanzable**: en modo remoto `hydrate` deja UN solo equipo en el
+store, así que el conmutador ni se muestra; y en modo local la pantalla no ofrece el bloque de
+renombrado porque no hay rol de propietario. Se retiró el cambio (el fichero quedó idéntico a HEAD) en
+vez de mantener un mecanismo defensivo roto. La prueba que lo cazó se queda como está: es la que
+demuestra que la suite completa sirve para algo más que para dar el visto bueno.
+
+**Panel central con estadísticas** — `supabase/migrations/20260923091218_platform_admin_overview.sql`
+(aplicada y comprobada en el proyecto remoto `vgwfjkhvzprsoixpzruq` el 23/09/2026, registrada allí como
+`version=20260923091218, name=platform_admin_overview`): una sola consulta agregada
+(`public.admin_team_overview()`, solo administrador) devuelve por equipo el propietario, las fechas y
+los recuentos de miembros activos / revocados / pendientes, invitaciones pendientes, jugadores
+activos e inactivos, carpetas, ejercicios y sesiones. El panel pinta el total y una tabla por
+equipo con botón para entrar.
+
+Motivo del cambio de fondo: el resumen anterior se calculaba **en el navegador** descargando el
+dataset completo de cada equipo (`loadTeam` + `listMembers` por equipo) para contar filas — con N
+equipos, N × todo el contenido en cada visita al panel. Además la tarjeta decía «Propietarios»
+mientras contaba **miembros**: se corrigió la etiqueta, que era sencillamente falsa.
+
+**Verificación remota y matriz SQL (23/09/2026).** Antes de aplicarla, el catálogo confirmó que
+`public.admin_team_overview()` no existía, y que estaban presentes todas las columnas usadas por la
+función (`teams.owner_user_id/created_at/updated_at/accent_color`, estados de miembros e
+invitaciones, `players.active`) y las tablas/índices de recuento. La migración se aplicó mediante el
+canal de migraciones de Supabase. Después se verificó `prosecdef = true`, `proconfig` con
+`search_path = ''`, `STABLE`, `EXECUTE` denegado a `anon` y concedido a `authenticated`; además, la
+RPC rechazó al usuario no administrador y devolvió el equipo Juvenil B y sus recuentos al admin
+real. El recuento actual observado fue: 1 equipo, 1 miembro activo, 4 ejercicios, 0 sesiones; los
+demás contadores se muestran en la tabla del panel.
+
+La matriz completa `supabase/tests/entrenolab_rls.sql` se ejecutó contra el PostgreSQL remoto dentro
+de una transacción que termina en `ROLLBACK` y **pasó**. Dos aserciones se hicieron robustas para
+datos reales preexistentes: el test de auditoría acota por el usuario sintético, y el caso de
+«último administrador» elimina los otros administradores solo dentro de la transacción aislada.
+Comprobación posterior: no quedaron usuarios fixture; el administrador real y los datos previos
+siguen intactos.
+
+**Pendiente operativo de invitaciones.** La cuenta `davidpv2001@gmail.com` está aprobada, pero la
+invitación a Juvenil B aparece actualmente como `revoked`, sin una fila de membresía. El informe
+anterior que la describía como pendiente ya no refleja el estado del servidor. Para darle acceso,
+el propietario debe emitir una invitación nueva desde Miembros y la persona debe aceptarla. No se
+ha enviado un correo nuevo durante esta auditoría.
+
+**Pendiente de configuración de seguridad.** El asesor remoto sigue avisando que la protección
+contra contraseñas filtradas está desactivada en Auth. También lista funciones `SECURITY DEFINER`
+ejecutables por `authenticated`; esto incluye RPCs protegidas deliberadamente por autorización
+interna (por ejemplo, `admin_team_overview` comprueba `private.is_platform_admin()` antes de leer),
+así que el aviso genérico no demuestra por sí solo un bypass. Hay que revisar cada función y activar
+la protección de contraseñas desde Auth cuando el plan lo permita. El asesor de rendimiento reporta
+índices no usados y políticas SELECT permisivas superpuestas; se registran como observaciones, no se
+eliminan índices ni se cambian políticas sin medir y revisar su impacto.

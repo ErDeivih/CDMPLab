@@ -275,12 +275,32 @@ export class App {
     () => this.navItems().find((i) => i.href === '/settings/team/members') ?? null,
   );
 
-  /** El acceso está protegido además por AdminGuard; se ofrece a propietarios para que el
-   * administrador de plataforma encuentre el panel sin tener que memorizar `/admin`. */
+  /**
+   * Invitaciones PENDIENTES. No estaba en la navegación: la pantalla `/invitations` solo se
+   * alcanzaba por el redirect de `decideAccess` (perfil aprobado SIN equipo), así que quien ya
+   * pertenecía a un equipo —o quien cerraba el aviso— no tenía manera de ver que le habían
+   * invitado, ni de aceptar. Se ofrece mientras el servidor diga que hay alguna pendiente.
+   */
+  protected readonly invitacionesItem = computed<NavItem | null>(() => {
+    const pendientes = this.access.pendingInvitations().length;
+    if (pendientes === 0) return null;
+    return {
+      label: pendientes === 1 ? 'Invitación pendiente' : `Invitaciones pendientes (${pendientes})`,
+      href: '/invitations',
+      icon: 'mail',
+    };
+  });
+
+  /**
+   * El acceso está protegido además por AdminGuard. Se ofrece SOLO si el servidor ha confirmado
+   * que esta cuenta administra la plataforma: antes bastaba con no ser colaborador, así que
+   * cualquier propietario de equipo veía «Administración» y al pulsarlo el guard lo devolvía a
+   * `/team` (un enlace que solo podía acabar en rechazo).
+   */
   protected readonly administracionItem = computed<NavItem | null>(() =>
-    this.access.target().role === 'editor'
-      ? null
-      : { label: 'Administración', href: '/admin', icon: 'admin_panel_settings' },
+    this.access.platformAdmin()
+      ? { label: 'Administración', href: '/admin', icon: 'admin_panel_settings' }
+      : null,
   );
 
   // ---------- Menú de cuenta (escritorio: bajo la barra lateral; móvil: «Más») ----------

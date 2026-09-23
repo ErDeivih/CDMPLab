@@ -28,6 +28,11 @@ update public.profiles set status = 'suspended'
 where user_id = '10000000-0000-4000-8000-000000000009';
 insert into private.platform_admins(user_id)
 values ('10000000-0000-4000-8000-000000000010');
+-- Aislar la prueba de "último administrador": el proyecto real ya puede tener otros admins. Esta
+-- eliminación solo existe dentro de la transacción del test, que termina en ROLLBACK, y permite
+-- comprobar el caso de exactamente uno sin depender de cuántos administradores reales haya.
+delete from private.platform_admins
+where user_id <> '10000000-0000-4000-8000-000000000010';
 
 set local role authenticated;
 
@@ -823,8 +828,11 @@ begin
   end;
   perform set_config('request.jwt.claim.sub', admin_id::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
-  if (select count(*) from public.account_deletions) <> 1 then
-    raise exception 'FAIL el insert directo creó una fila de auditoría';
+  -- La tabla puede tener auditorías reales previas en producción: acotar el contrato al usuario de
+  -- prueba borrado arriba, o el test confunde historial legítimo con el INSERT que intenta bloquear.
+  if (select count(*) from public.account_deletions
+      where deleted_user_id = '10000000-0000-4000-8000-000000000008') <> 1 then
+    raise exception 'FAIL el insert directo creó una fila de auditoría para la cuenta de prueba';
   end if;
 
   -- ============================================================
@@ -1195,6 +1203,16 @@ begin
     raise exception '__unexpected_promotion__';
   exception when insufficient_privilege then null;
   end;
+  -- Tampoco puede ni mirar el resumen global: es la consulta que cuenta TODOS los equipos.
+  begin
+    perform 1 from public.admin_team_overview();
+    raise exception '__unexpected_success_foreign_overview__';
+  exception when others then
+    if sqlerrm = '__unexpected_success_foreign_overview__' then raise; end if;
+    if position('platform_admin_required' in sqlerrm) = 0 then
+      raise exception 'FAIL foreign overview error: %', sqlerrm;
+    end if;
+  end;
   perform set_config('request.jwt.claim.sub', admin_id::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', admin_id, 'role', 'authenticated')::text, true);
   perform public.admin_grant_platform_admin(v_import_editor);
@@ -1214,6 +1232,22 @@ begin
   end;
   if private.team_role(v_team_id) <> 'editor' then raise exception 'FAIL global team access'; end if;
   if not exists(select 1 from public.exercises where team_id=v_team_id) then raise exception 'FAIL admin cannot read team exercises'; end if;
+  -- El administrador ve los MIEMBROS de un equipo que no es suyo (migración 20260928000000). Antes
+  -- esta función era solo del propietario, así que el panel global no podía mostrar miembros.
+  if (select count(*) from public.list_team_members(v_team_id)) < 1 then
+    raise exception 'FAIL el administrador no ve los miembros del equipo';
+  end if;
+  -- Y el resumen global (migración 20260923091218) devuelve UN recuento por equipo, coherente con
+  -- lo que hay dentro. Es la consulta que sostiene el panel: si contara mal, el panel mentiría.
+  if not exists(select 1 from public.admin_team_overview() where team_id = v_team_id and members_active >= 1) then
+    raise exception 'FAIL el resumen global no cuenta los miembros del equipo';
+  end if;
+  if not exists(select 1 from public.admin_team_overview() where team_id = v_team_id and exercises >= 1) then
+    raise exception 'FAIL el resumen global no cuenta los ejercicios del equipo';
+  end if;
+  if exists(select 1 from public.admin_team_overview() where team_id = v_borrar_team) then
+    raise exception 'FAIL el resumen global incluye un equipo ya borrado';
+  end if;
   perform set_config('request.jwt.claim.sub', v_import_editor::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', v_import_editor, 'role', 'authenticated')::text, true);
   begin

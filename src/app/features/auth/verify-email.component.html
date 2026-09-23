@@ -1,11 +1,18 @@
 <app-auth-card [title]="'Confirma tu correo'" [subtitle]="'Casi está'">
   <p class="auth-note">
-    Hemos enviado un correo de confirmación{{ email() ? ' a ' + email() : '' }}. Abre el enlace para activar tu
-    cuenta y poder entrar.
+    Hemos enviado un correo de confirmación{{ email() ? ' a ' + email() : '' }}. Abre el enlace para
+    activar tu cuenta y poder entrar.
   </p>
 
   @if (message(); as msg) {
-    <p class="auth-msg" [class.ok]="msg.kind === 'ok'" [class.err]="msg.kind === 'err'" role="status">{{ msg.text }}</p>
+    <p
+      class="auth-msg"
+      [class.ok]="msg.kind === 'ok'"
+      [class.err]="msg.kind === 'err'"
+      role="status"
+    >
+      {{ msg.text }}
+    </p>
   }
 
   @if (email()) {
@@ -17,6 +24,8 @@
   }
 
   <div class="auth-row">
-    <a class="auth-link" routerLink="/auth/login">Volver a iniciar sesión</a>
+    <a class="auth-link" routerLink="/auth/login" [queryParams]="loginParams">
+      Volver a iniciar sesión
+    </a>
   </div>
 </app-auth-card>

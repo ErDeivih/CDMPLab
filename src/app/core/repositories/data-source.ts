@@ -118,6 +118,31 @@ export interface AccessResolution {
   teamRequest: TeamRequestInfo | null;
 }
 
+/**
+ * Una fila del resumen global del panel de administración (`admin_team_overview`).
+ *
+ * SON SOLO RECUENTOS Y METADATOS: el servidor no devuelve ni un ejercicio, ni un jugador, ni una
+ * sesión. Así el panel puede mostrar el estado de todos los equipos sin descargar su contenido.
+ */
+export interface AdminTeamOverview {
+  teamId: string;
+  name: string;
+  accentColor: string;
+  ownerUserId: string;
+  ownerEmail: string;
+  createdAt: string;
+  updatedAt: string;
+  membersActive: number;
+  membersRevoked: number;
+  membersPending: number;
+  invitationsPending: number;
+  playersActive: number;
+  playersInactive: number;
+  folders: number;
+  exercises: number;
+  sessions: number;
+}
+
 /** Error de la capa de datos con código de app y mensaje legible. */
 export class DataError extends Error {
   readonly code: string;
@@ -291,6 +316,12 @@ export interface DataSource {
   isPlatformAdmin(): Promise<boolean>;
   listProfiles(search: string): Promise<ProfileInfo[]>;
   setProfileStatus(userId: string, status: ProfileStatus): Promise<void>;
+  /**
+   * Resumen de TODOS los equipos (recuentos, propietario y fechas) para el panel central. Lo
+   * calcula el SERVIDOR en una sola consulta agregada: antes el panel descargaba el contenido
+   * completo de cada equipo solo para contar filas. Solo administradores de plataforma.
+   */
+  adminTeamOverview(): Promise<AdminTeamOverview[]>;
   /** Qué pasaría si se borrara esta cuenta y qué lo impide. Solo administradores. */
   accountDeletionPreview(userId: string): Promise<AccountDeletionPreview>;
   /**

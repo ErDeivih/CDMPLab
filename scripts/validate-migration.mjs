@@ -969,6 +969,123 @@ try {
     }
   }
 
+  // ---- MIEMBROS de cualquier equipo para el administrador (lectura global acotada) ----
+  {
+    const f15 = 'supabase/migrations/20260928000000_platform_admin_team_members.sql';
+    if (!fs.existsSync(f15)) {
+      fail('falta la migración que permite al administrador ver los miembros de cualquier equipo');
+    } else {
+      const sql = fs.readFileSync(f15, 'utf8').replace(/--[^\n]*/g, ' ');
+      console.log(`\nMiembros de cualquier equipo para el administrador (${path.basename(f15)}):`);
+
+      // La autorización NO puede quedar en «cualquiera que llame»: el permiso nuevo es el de
+      // administrador de plataforma, y el propietario conserva el suyo.
+      /private\.is_team_owner\(p_team_id\)\s+or\s+private\.is_platform_admin\(\)/.test(sql)
+        ? ok('solo el propietario del equipo o un administrador de plataforma')
+        : fail('la lectura de miembros no exige propietario ni administrador');
+      /raise exception 'forbidden/.test(sql)
+        ? ok('un editor normal sigue recibiendo «forbidden»')
+        : fail('no se rechaza a quien no es propietario ni administrador');
+
+      // Es una REDEFINICIÓN de una función existente: el tipo de retorno NO puede cambiar (Postgres
+      // lo rechazaría con «cannot change return type»). Se comprueba contra la migración original.
+      const original = fs
+        .readFileSync('supabase/migrations/20260827000005_entrenolab_rpc.sql', 'utf8')
+        .replace(/--[^\n]*/g, ' ');
+      const columnas = (texto) => {
+        const cuerpo = texto.split('create or replace function private.list_team_members')[1] ?? '';
+        const bloque = cuerpo.split('language plpgsql')[0] ?? '';
+        return (bloque.match(/^\s*[a-z_]+\s+(uuid|text|timestamptz),?\s*$/gm) ?? [])
+          .map((l) => l.trim().replace(/,$/, ''))
+          .join(',');
+      };
+      const colsAntes = columnas(original);
+      const colsAhora = columnas(sql);
+      colsAntes !== '' && colsAntes === colsAhora
+        ? ok('mantiene EXACTAMENTE el mismo tipo de retorno (la redefinición es válida)')
+        : fail(
+            `cambia el tipo de retorno de private.list_team_members (antes: ${colsAntes} / ahora: ${colsAhora}): PostgreSQL lo rechazaría`,
+          );
+
+      has(sql, 'security definer') && has(sql, "search_path = ''")
+        ? ok('DEFINER con search_path vacío (la función lee perfiles de otros)')
+        : fail('falta DEFINER o search_path vacío');
+      has(sql, 'revoke execute on function private.list_team_members(uuid) from public, anon') &&
+      has(sql, 'grant execute on function private.list_team_members(uuid) to authenticated')
+        ? ok('EXECUTE: revocado a PUBLIC/anon, concedido a authenticated (autoriza dentro)')
+        : fail('permisos de EXECUTE mal puestos en private.list_team_members');
+    }
+  }
+
+  // ---- RESUMEN GLOBAL del panel: recuentos calculados en el servidor ----
+  {
+    const f16 = 'supabase/migrations/20260923091218_platform_admin_overview.sql';
+    if (!fs.existsSync(f16)) {
+      fail('falta la migración del resumen global del panel de administración');
+    } else {
+      const sqlBruto = fs.readFileSync(f16, 'utf8');
+      const sql = sqlBruto.replace(/--[^\n]*/g, ' ');
+      console.log(`\nResumen global del panel (${path.basename(f16)}):`);
+
+      has(sql, 'create or replace function public.admin_team_overview()')
+        ? ok('existe la RPC del resumen global')
+        : fail('no se crea public.admin_team_overview()');
+      has(sql, "raise exception 'platform_admin_required'") &&
+      /if not private\.is_platform_admin\(\) then/.test(sql)
+        ? ok('solo el administrador de plataforma puede pedir el resumen')
+        : fail('el resumen global no comprueba quién llama');
+      has(sql, 'security definer') && /set\s+search_path\s*=\s*''/.test(sql)
+        ? ok('DEFINER con search_path vacío')
+        : fail('falta DEFINER o search_path vacío');
+      has(sql, 'revoke all on function public.admin_team_overview() from public, anon') &&
+      has(sql, 'grant execute on function public.admin_team_overview() to authenticated')
+        ? ok('EXECUTE: revocado a PUBLIC/anon, concedido a authenticated')
+        : fail('permisos de EXECUTE mal puestos en admin_team_overview');
+
+      // El resumen son RECUENTOS: si devolviera contenido, el panel volvería a bajarse los datos de
+      // todos los equipos (justo lo que esta migración evita) y filtraría más de lo necesario.
+      const devuelveContenido =
+        /\b(exercises|players|sessions|exercise_folders|session_exercises)\s*\.\s*(canvas_data|title|notes|description|explanation|elements|thumbnail)\b/.test(
+          sql,
+        );
+      devuelveContenido
+        ? fail('el resumen devuelve CONTENIDO de los equipos (no solo recuentos)')
+        : ok('devuelve solo recuentos y metadatos, ningún contenido');
+      // Cada recuento tiene que estar acotado por equipo: sin `where … team_id = t.id` se contarían
+      // las filas de TODA la plataforma y el número mostrado sería falso.
+      const recuentos = (sql.match(/\(\s*select count\(\*\)[^)]*\)/g) ?? []).length;
+      const acotados = (sql.match(/team_id\s*=\s*t\.id/g) ?? []).length;
+      recuentos > 0 && acotados >= recuentos
+        ? ok(`los ${recuentos} recuentos están acotados al equipo (sin contar filas ajenas)`)
+        : fail(
+            `hay recuentos sin acotar por equipo (${recuentos} recuentos / ${acotados} filtros)`,
+          );
+      // Los estados que cuenta deben ser los reales del esquema, y los pares activo/inactivo tienen
+      // que estar SEPARADOS: comprobar solo que la palabra `pl.active` aparece en el fichero no
+      // detectaba que el recuento de activos se hubiera dejado sin filtrar (lo comprobó una
+      // mutación: quitar `and pl.active` del recuento de activos pasaba la comprobación anterior).
+      const cuentaJugadoresActivos = /where pl\.team_id = t\.id and pl\.active\)\s*::integer/.test(
+        sql,
+      );
+      const cuentaJugadoresInactivos =
+        /where pl\.team_id = t\.id and not pl\.active\)\s*::integer/.test(sql);
+      has(sql, "m.status = 'active'") &&
+      has(sql, "m.status = 'revoked'") &&
+      has(sql, "m.status = 'pending_approval'") &&
+      has(sql, "i.status = 'pending'") &&
+      cuentaJugadoresActivos &&
+      cuentaJugadoresInactivos
+        ? ok('cuenta los estados reales (activo/revocado/pendiente) y separa activos de inactivos')
+        : fail(
+            'cuenta estados que no existen en el esquema o mezcla jugadores activos e inactivos',
+          );
+      // La verificación previa obligatoria antes de aplicar (regla del proyecto).
+      has(sqlBruto, 'COMPROBACIÓN PREVIA AL DESPLIEGUE') && has(sqlBruto, 'has_function_privilege')
+        ? ok('documenta la comprobación previa del catálogo remoto')
+        : fail('no documenta la comprobación previa antes de aplicarla');
+    }
+  }
+
   if (failed > 0) {
     console.error(`\nVALIDACIÓN ESTÁTICA CON ${failed} PROBLEMA(S).`);
     process.exit(1);

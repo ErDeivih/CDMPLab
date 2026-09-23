@@ -13,6 +13,7 @@ import { StoreService } from './store.service';
 import { decideAccess, type AccessState, type AccessTarget } from './access';
 import type {
   AccessResolution,
+  AdminTeamOverview as AdminTeamOverviewRow,
   DataSource,
   TeamInvitationInfo,
   TeamMemberInfo,
@@ -30,12 +31,29 @@ import {
 import { SupabaseRepository } from './repositories/supabase-data-source';
 
 export interface AdminOverview {
-  teams: import('./models').Team[];
-  members: number;
-  players: number;
-  exercises: number;
-  folders: number;
-  sessions: number;
+  /** Una fila por equipo, tal como las devuelve el servidor (recuentos y metadatos). */
+  equipos: AdminTeamOverviewRow[];
+  /** Suma de todos los equipos, para las tarjetas del resumen. */
+  totals: {
+    teams: number;
+    membersActive: number;
+    membersRevoked: number;
+    membersPending: number;
+    invitationsPending: number;
+    playersActive: number;
+    playersInactive: number;
+    folders: number;
+    exercises: number;
+    sessions: number;
+  };
+}
+
+/** Suma un campo numérico de todas las filas. */
+function sumar(
+  filas: AdminTeamOverviewRow[],
+  campo: (fila: AdminTeamOverviewRow) => number,
+): number {
+  return filas.reduce((total, fila) => total + campo(fila), 0);
 }
 
 @Injectable({ providedIn: 'root' })
@@ -54,6 +72,26 @@ export class AccessService {
   readonly isResolving = computed(() => this._state() === 'resolving');
   /** Solicitud de equipo del usuario (null si no ha solicitado nada). */
   readonly teamRequest = computed(() => this._resolution()?.teamRequest ?? null);
+
+  /**
+   * Invitaciones PENDIENTES de la última resolución. La pantalla `/invitations` no estaba en
+   * ninguna navegación: quien ya pertenecía a un equipo (o quien cerraba el aviso) no tenía
+   * forma de volver a ver su invitación, aunque el propietario ya la hubiera enviado. La
+   * navegación usa esto para ofrecer el enlace y contar cuántas quedan.
+   */
+  readonly pendingInvitations = computed(() => this._resolution()?.pendingInvitations ?? []);
+
+  /**
+   * ¿El SERVIDOR ha confirmado que esta cuenta administra la plataforma?
+   *
+   * Se resuelve UNA vez por arranque (una consulta barata a `is_platform_admin`) porque la
+   * navegación necesita saberlo: antes el enlace «Administración» se ofrecía a cualquier
+   * propietario de equipo y el `AdminGuard` lo devolvía a `/team` — un enlace que solo podía
+   * acabar en rechazo. La barrera sigue siendo el servidor; esto evita OFRECER lo que va a
+   * rechazar.
+   */
+  private readonly _platformAdmin = signal(false);
+  readonly platformAdmin = this._platformAdmin.asReadonly();
 
   /** Devuelve el repositorio activo (o null en modo local). */
   get activeDataSource(): DataSource | null {
@@ -86,13 +124,21 @@ export class AccessService {
   /**
    * Verifica si el usuario es administrador de plataforma mediante la RPC real.
    * Retorna false si no hay sesión o el check falla; NUNCA decide por correo.
+   * Deja el resultado en `platformAdmin` para que la navegación y el panel no se contradigan.
    */
   async checkIsPlatformAdmin(): Promise<boolean> {
     const repo = await this.ensureRepo();
-    if (!repo) return false;
+    if (!repo) {
+      this._platformAdmin.set(false);
+      return false;
+    }
     try {
-      return await repo.isPlatformAdmin();
+      const esAdmin = await repo.isPlatformAdmin();
+      this._platformAdmin.set(esAdmin);
+      return esAdmin;
     } catch {
+      // Un resultado positivo anterior no puede sobrevivir a una recomprobación fallida.
+      this._platformAdmin.set(false);
       return false;
     }
   }
@@ -113,6 +159,7 @@ export class AccessService {
     if (status !== 'authenticated') {
       this._state.set(status === 'disabled' ? 'disabled' : 'unauthenticated');
       this._resolution.set(null);
+      this._platformAdmin.set(false);
       this.store.resetToLocal();
       return;
     }
@@ -121,11 +168,20 @@ export class AccessService {
     if (!client || !userId) {
       this._state.set('unauthenticated');
       this._resolution.set(null);
+      this._platformAdmin.set(false);
       this.store.resetToLocal();
       return;
     }
     try {
       const repo = new SupabaseRepository(client, userId, null);
+      // Una consulta barata por arranque: la navegación necesita saber si ofrecer
+      // «Administración» SIN ofrecer un enlace que el AdminGuard va a rechazar (ver
+      // `platformAdmin`). Un fallo aquí NO bloquea el arranque: se queda en `false`.
+      try {
+        this._platformAdmin.set(await repo.isPlatformAdmin());
+      } catch {
+        this._platformAdmin.set(false);
+      }
       const res = await repo.resolveAccess();
       this._resolution.set(res);
       const target = decideAccess(res);
@@ -160,6 +216,7 @@ export class AccessService {
       console.error('[AccessService] no se pudo resolver el acceso', err);
       this._state.set('unauthenticated');
       this._resolution.set(null);
+      this._platformAdmin.set(false);
       this.store.resetToLocal();
     }
   }
@@ -326,21 +383,49 @@ export class AccessService {
     return repo ? repo.listAccessibleTeams() : [];
   }
 
-  /** Resumen global para el panel de administración, calculado desde los equipos autorizados. */
+  /**
+   * Resumen global del panel de administración.
+   *
+   * CAMBIO DE CONTRATO (23/09/2026): antes se calculaba en el NAVEGADOR descargando el dataset
+   * completo de cada equipo (`loadTeam` + `listMembers` por equipo) solo para contar filas: con N
+   * equipos eso es N × todo el contenido, en cada visita al panel. Ahora lo calcula el servidor en
+   * UNA consulta agregada (`admin_team_overview`), que además devuelve recuentos que el cliente no
+   * podía deducir (invitaciones pendientes, jugadores inactivos, miembros revocados) y el correo
+   * del propietario, sin traer ni un ejercicio ni una sesión.
+   */
   async adminOverview(): Promise<AdminOverview> {
+    const vacio: AdminOverview = {
+      equipos: [],
+      totals: {
+        teams: 0,
+        membersActive: 0,
+        membersRevoked: 0,
+        membersPending: 0,
+        invitationsPending: 0,
+        playersActive: 0,
+        playersInactive: 0,
+        folders: 0,
+        exercises: 0,
+        sessions: 0,
+      },
+    };
     const repo = await this.ensureRepo();
-    if (!repo) return { teams: [], members: 0, players: 0, exercises: 0, folders: 0, sessions: 0 };
-    const teams = await repo.listAccessibleTeams();
-    const datasets = await Promise.all(
-      teams.map(async (team) => ({ data: await repo.loadTeam(team.id), members: await repo.listMembers(team.id) })),
-    );
+    if (!repo) return vacio;
+    const equipos = await repo.adminTeamOverview();
     return {
-      teams,
-      members: datasets.reduce((total, item) => total + item.members.length, 0),
-      players: datasets.reduce((total, item) => total + item.data.players.length, 0),
-      exercises: datasets.reduce((total, item) => total + item.data.exercises.length, 0),
-      folders: datasets.reduce((total, item) => total + item.data.folders.length, 0),
-      sessions: datasets.reduce((total, item) => total + item.data.sessions.length, 0),
+      equipos,
+      totals: {
+        teams: equipos.length,
+        membersActive: sumar(equipos, (e) => e.membersActive),
+        membersRevoked: sumar(equipos, (e) => e.membersRevoked),
+        membersPending: sumar(equipos, (e) => e.membersPending),
+        invitationsPending: sumar(equipos, (e) => e.invitationsPending),
+        playersActive: sumar(equipos, (e) => e.playersActive),
+        playersInactive: sumar(equipos, (e) => e.playersInactive),
+        folders: sumar(equipos, (e) => e.folders),
+        exercises: sumar(equipos, (e) => e.exercises),
+        sessions: sumar(equipos, (e) => e.sessions),
+      },
     };
   }
 
@@ -430,9 +515,7 @@ export class AccessService {
     const updated = await repo.renameTeam(repo.teamId, trimmed, team.accentColor);
     this.store.updateTeam(updated);
     this._resolution.update((resolution) =>
-      resolution?.ownedTeam?.id === updated.id
-        ? { ...resolution, ownedTeam: updated }
-        : resolution,
+      resolution?.ownedTeam?.id === updated.id ? { ...resolution, ownedTeam: updated } : resolution,
     );
   }
 
@@ -474,6 +557,9 @@ export class AccessService {
     this._resolution.set(null);
     this._state.set('unauthenticated');
     this._initPromise = null;
+    // El permiso de administrador es de la SESIÓN: al cerrarla no puede sobrevivir en memoria
+    // (si no, el siguiente usuario vería el enlace «Administración» sin serlo).
+    this._platformAdmin.set(false);
     this.store.resetToLocal();
   }
 }

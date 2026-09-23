@@ -1,37 +1,61 @@
-# CDMPLab — Estado de las migraciones: lo documentado y lo NO verificado
+# CDMPLab — Estado remoto de Supabase (actualizado 23/09/2026)
 
-> **Añadido el 22/09/2026 (tarde) — TRES migraciones nuevas, y qué está verificado de cada una.**
-> El repositorio tiene hoy **20 ficheros** en `supabase/migrations/`. Los tres últimos del encargo
-> son:
+> **Estado actual contrastado con el proyecto remoto `vgwfjkhvzprsoixpzruq`:** se aplicó
+> `20260923091218_platform_admin_overview.sql` (registro remoto `version=20260923091218,
+name=platform_admin_overview`); el catálogo confirmó ausencia previa de la RPC y
+> existencia de las columnas/tablas requeridas. Después se verificó la función `SECURITY DEFINER`,
+> `STABLE`, `search_path` vacío, permiso de ejecución solo para `authenticated` (no para `anon`), y
+> una llamada permitida al admin real y rechazada a usuario no admin. La matriz completa
+> `supabase/tests/entrenolab_rls.sql` también pasó contra PostgreSQL remoto en una transacción con
+> `ROLLBACK`; la consulta posterior confirmó que no quedaron usuarios fixture.
+>
+> Los párrafos de fechas anteriores que siguen debajo son **bitácora histórica** y describen el
+> estado conocido en esas rondas; no sustituyen esta verificación actual.
+
+> **Bitácora añadida el 23/09/2026 — migraciones relacionadas con este encargo.**
+> El repositorio tiene hoy **23 ficheros** en `supabase/migrations/`; la tabla enumera las cinco
+> migraciones relacionadas, no su orden cronológico de aplicación:
 >
 > | Fichero local                                      | Qué hace                                                                                                        |
 > | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 > | `20260925000000_team_deletion.sql`                 | borrar un equipo (propietario o administrador), con el **nombre exacto** comprobado en el servidor y auditoría  |
 > | `20260926000000_team_deletion_request_history.sql` | conservar el historial de una solicitud aprobada cuando su equipo se borra (`created_team_id` → NULL)           |
 > | `20260927000000_platform_administration.sql`       | administrador de plataforma: entra como editor en cualquier equipo, listar/nombrar administradores, baja propia |
+> | `20260928000000_platform_admin_team_members.sql`   | el administrador ve los **miembros de cualquier equipo** (antes esa función era solo del propietario)           |
+> | `20260923091218_platform_admin_overview.sql`       | **resumen global del panel**: recuentos de todos los equipos en UNA consulta, sin descargar su contenido        |
 >
 > **Lo verificado en esta ronda, desde esta máquina:**
 >
-> - `npm run validate:migration` verde con **141 comprobaciones**, **23 de ellas nuevas** para la
->   migración de administración (permisos, guardas, auditoría antes del borrado, `lock table` de la
->   baja, disparador que impide suspender a un administrador, `DEFINER` con `search_path` vacío).
->   Esas 23 comprobaciones **se probaron rompiendo la migración a propósito** (quitar el `lock
-table` y mover la auditoría detrás del borrado): fallaron las dos que les correspondían, y al
->   restaurar el fichero volvieron a pasar;
-> - la matriz `supabase/tests/entrenolab_rls.sql` **incluye** casos para las tres (alta y baja de
+> - `npm run validate:migration` verde con **154 comprobaciones**, de ellas **23 nuevas** para la
+>   migración de administración y **13 nuevas** para las dos últimas (autorización dentro de la RPC,
+>   permisos de `EXECUTE`, `DEFINER` con `search_path` vacío, recuentos acotados por equipo, estados
+>   reales del esquema y que la redefinición de `private.list_team_members` **conserva el mismo tipo
+>   de retorno** —si no, PostgreSQL la rechaza—).
+>   Esas comprobaciones **se probaron rompiendo las migraciones a propósito**: una mutación en el
+>   recuento de jugadores activos y otra que añadía una columna al retorno hicieron fallar las
+>   comprobaciones correspondientes, y al restaurar los ficheros volvieron a pasar. Una de ellas
+>   **destapó que el check era más débil de lo que decía** (bastaba con que `pl.active` apareciera en
+>   el fichero, aunque fuera en el recuento de inactivos) y se endureció;
+> - la matriz `supabase/tests/entrenolab_rls.sql` **incluye** casos para las cinco (alta y baja de
 >   administrador, `last_platform_admin`, `cannot_suspend_platform_admin`, correo de confirmación,
->   `target_owns_team`, borrado de equipo con nombre exacto y auditoría) y **parsea** sin errores.
+>   `target_owns_team`, borrado de equipo con nombre exacto y auditoría, miembros de cualquier equipo
+>   para el administrador y resumen global —incluido que NO aparezca un equipo ya borrado—) y
+>   **parsea** sin errores (9 sentencias de nivel superior).
 >
-> **Lo NO verificado, y por qué:** el catálogo del proyecto remoto **no se ha podido consultar**
+> **Estado histórico (antes de la consulta remota del 23/09):** el catálogo del proyecto remoto **no se había podido consultar**
 > desde esta máquina —`npx supabase projects list` responde _«Access token not provided»_ y no hay
 > `SUPABASE_ACCESS_TOKEN`, ni `~/.supabase/access-token`, ni `config.toml`, ni `.env`—, así que
 > este documento **no afirma** qué migraciones están aplicadas en remoto, ni que su contenido
-> coincida con el local. La sesión que aplicó `20260925000000` y `20260926000000` dejó constancia
+> coincida con el local. La sesión que aplicó las cuatro primeras dejó constancia
 > de haberlo hecho; eso es **información de segunda mano** y aquí queda marcado como tal: para
 > cerrarlo hace falta ejecutar
 > `select version, name from supabase_migrations.schema_migrations order by version;` con un token
 > temporal (y revocarlo después). La **matriz SQL tampoco se ha ejecutado** en esta ronda: solo se
-> ha comprobado que parsea.
+> se había comprobado que parseaba. El resumen global llevaba entonces el nombre local provisional
+> `20260929000000` y aún no se había aplicado;
+> el estado presente figura en la nota actual al principio del documento. El despliegue por MCP
+> registró la migración como `20260923091218`, por lo que el nombre local del fichero se ha alineado
+> exactamente con esa versión para que una futura `supabase db push` no la reaplique.
 
 > **Añadido el 22/09/2026 — borrado de EQUIPO: NUEVA, sin aplicar y sin verificar.**
 > `supabase/migrations/20260925000000_team_deletion.sql` (borrar un equipo con confirmación por

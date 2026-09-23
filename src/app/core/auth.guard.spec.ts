@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Router, UrlTree, provideRouter } from '@angular/router';
+import { Router, RouterStateSnapshot, UrlTree, provideRouter } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SupabaseService } from './supabase.service';
 import { AuthGuard, ApprovedGuard, AdminGuard, FORCE_LOCAL_MODE } from './auth.guard';
@@ -84,6 +84,29 @@ describe('AuthGuard', () => {
     expect(res).toBeInstanceOf(UrlTree);
     expect((res as UrlTree).toString()).toBe('/auth/login');
     expect(router).toBeTruthy();
+  });
+
+  // CONTRATO NUEVO (23/09/2026): el login conserva A DÓNDE iba el usuario. El enlace del correo de
+  // invitación es `/invitations?invitation=<uuid>`; sin esto, quien no tenía sesión perdía el
+  // destino al pasar por el login y su invitación quedaba invisible.
+  it('conserva el destino en `?returnUrl=` al mandar al login', async () => {
+    setup(mockSupabase('unauthenticated'), mockAccess());
+    const guard = TestBed.inject(AuthGuard);
+    const res = await guard.canActivate(undefined, {
+      url: '/invitations?invitation=abc',
+    } as unknown as RouterStateSnapshot);
+    expect((res as UrlTree).toString()).toBe(
+      '/auth/login?returnUrl=%2Finvitations%3Finvitation%3Dabc',
+    );
+  });
+
+  it('NO deja que el login sea un redirector abierto (nada de URL absolutas ni //host)', async () => {
+    setup(mockSupabase('unauthenticated'), mockAccess());
+    const guard = TestBed.inject(AuthGuard);
+    for (const url of ['https://mal.example/x', '//mal.example/x', '/auth/register']) {
+      const res = await guard.canActivate(undefined, { url } as unknown as RouterStateSnapshot);
+      expect((res as UrlTree).toString(), url).toBe('/auth/login');
+    }
   });
 });
 

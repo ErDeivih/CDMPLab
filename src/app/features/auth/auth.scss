@@ -14,9 +14,110 @@ app-auth-card.admin-page .auth {
 
 .admin-overview {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin: 4px 0 8px;
+}
+
+/* Cola de trabajo del administrador: lo primero que se ve al abrir el panel. */
+.admin-pendientes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.admin-pendiente {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.admin-pendiente strong {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.admin-pendiente span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .admin-pendientes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Tabla del resumen global: en pantallas estrechas se desplaza en horizontal (con un ancho mínimo
+   propio) en vez de aplastar las columnas hasta cortar el texto. */
+.admin-tabla-scroll {
+  margin-top: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.admin-tabla {
+  width: 100%;
+  min-width: 1000px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-tabla th,
+.admin-tabla td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.admin-tabla thead th {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.admin-tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-tabla tbody tr:hover {
+  background: var(--surface-2);
+}
+
+.admin-tabla .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-color {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.admin-email {
+  color: var(--text-muted);
+}
+
+.admin-nota {
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .admin-stat {

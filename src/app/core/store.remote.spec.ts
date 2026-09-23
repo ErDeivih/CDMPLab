@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StoreService } from './store.service';
 import type {
   AccessResolution,
+  AdminTeamOverview,
   DataSource,
   ImportCounts,
   ProfileInfo,
@@ -80,6 +81,7 @@ function makeFake(overrides?: Partial<DataSource>): DataSource {
     isPlatformAdmin: vi.fn<() => Promise<boolean>>(),
     listProfiles: vi.fn<() => Promise<ProfileInfo[]>>(),
     setProfileStatus: vi.fn<() => Promise<void>>(),
+    adminTeamOverview: vi.fn<() => Promise<AdminTeamOverview[]>>(),
     importLocalData: vi.fn<() => Promise<ImportCounts>>(),
   };
   return { ...base, ...overrides } as DataSource;

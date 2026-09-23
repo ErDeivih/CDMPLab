@@ -80,6 +80,35 @@ test.describe('Panel de administración — borrar cuentas no se ofrece sin vist
     // RPC rechaza (`platform_admin_required`).
     await expect(page.locator('[data-accion="eliminar-mi-cuenta"]')).toHaveCount(0);
     await expect(page.locator('[data-consecuencias-baja-admin]')).toHaveCount(0);
+    // Y el resumen global (equipos, miembros, ejercicios…) tampoco: lo calcula el servidor con
+    // `admin_team_overview()`, que exige ser administrador de plataforma.
+    await expect(page.locator('[data-resumen-global]')).toHaveCount(0);
+    await expect(page.locator('[data-tabla-equipos]')).toHaveCount(0);
+  });
+});
+
+/**
+ * NAVEGACIÓN: no se ofrece lo que el servidor va a rechazar.
+ *
+ * Dos defectos reales que estas comprobaciones fijan (auditoría de flujos del 23/09/2026):
+ *   · «Administración» se ofrecía a cualquier propietario de equipo y el AdminGuard lo devolvía a
+ *     `/team`. Ahora solo aparece si el SERVIDOR confirmó `is_platform_admin()`: en modo local, sin
+ *     sesión, no hay confirmación posible y el enlace no debe existir.
+ *   · La invitación pendiente no estaba en ninguna navegación: quien ya tenía equipo no podía ver
+ *     ni aceptar la suya. Ahora aparece cuando el servidor dice que hay alguna pendiente.
+ */
+test.describe('Navegación — nada que el servidor vaya a rechazar', () => {
+  test('sin sesión no se ofrece «Administración» ni una invitación pendiente', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/team');
+
+    // El menú de cuenta es el mismo en escritorio y en móvil: se abre como lo haría el usuario.
+    await page.locator('.cuenta-btn').click();
+    const panel = page.locator('.cuenta-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('Ajustes');
+    await expect(panel.locator('a[href="/admin"]')).toHaveCount(0);
+    await expect(panel.locator('[data-accion="ver-invitaciones"]')).toHaveCount(0);
   });
 });
 

@@ -16,6 +16,20 @@ export class VerifyEmailComponent {
   protected readonly resending = signal(false);
   protected readonly message = signal<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
+  /**
+   * Destino que se arrastra desde el registro/login (`?returnUrl=`), si es una ruta INTERNA: al
+   * volver a iniciar sesión, el usuario no pierde dónde iba (p. ej. la invitación del correo).
+   */
+  protected readonly returnUrl = ((): string | null => {
+    const raw = this.route.snapshot.queryParamMap.get('returnUrl') ?? '';
+    if (!raw.startsWith('/') || raw.startsWith('//')) return null;
+    if (raw.startsWith('/auth/')) return null;
+    return raw;
+  })();
+
+  /** Parámetros del enlace «Volver a iniciar sesión» (conserva el destino si lo hay). */
+  protected readonly loginParams = this.returnUrl ? { returnUrl: this.returnUrl } : {};
+
   constructor() {
     this.email.set(this.route.snapshot.queryParamMap.get('email') ?? '');
   }
@@ -29,6 +43,9 @@ export class VerifyEmailComponent {
     this.resending.set(true);
     const res = await this.supabase.resendConfirmation(email);
     this.resending.set(false);
-    this.message.set({ kind: res.ok ? 'ok' : 'err', text: res.message ?? 'No se pudo reenviar el correo.' });
+    this.message.set({
+      kind: res.ok ? 'ok' : 'err',
+      text: res.message ?? 'No se pudo reenviar el correo.',
+    });
   }
 }

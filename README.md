@@ -248,11 +248,36 @@ faltaba para trabajar sin SQL a mano, todo decidido en el servidor contra `priva
   se audita en `public.account_deletions` antes de borrar la identidad y se serializa con
   `lock table`, así que dos bajas simultáneas no pueden dejar la plataforma sin nadie;
 - **suspender o rechazar a un administrador está prohibido** (disparador
-  `cannot_suspend_platform_admin`): no se expulsa a un administrador por la puerta de atrás.
+  `cannot_suspend_platform_admin`): no se expulsa a un administrador por la puerta de atrás;
+- **ve los miembros de cualquier equipo** (`20260928000000_platform_admin_team_members.sql`): la
+  función que lista miembros era solo del propietario, así que el panel global no podía mostrarlos;
+- **tiene un resumen global** (`20260923091218_platform_admin_overview.sql`): una sola consulta
+  agregada (`admin_team_overview`) devuelve, por equipo, el propietario, las fechas y los recuentos
+  de miembros activos/revocados/pendientes, invitaciones pendientes, jugadores activos e inactivos,
+  carpetas, ejercicios y sesiones — **sin descargar el contenido de ningún equipo**. Antes el panel
+  bajaba el dataset completo de cada equipo solo para contar filas, y la tarjeta decía
+  «Propietarios» mientras contaba miembros.
 
 El panel `/admin` no ofrece ninguna de estas acciones hasta que el **servidor** confirma que quien
-mira es administrador. Estado en remoto: **no verificado desde esta máquina** (sin token del CLI) —
-ver [`docs/supabase-estado.md`](docs/supabase-estado.md).
+mira es administrador, y el enlace del menú tampoco se muestra sin esa confirmación (antes lo veía
+cualquier propietario de equipo y el guard lo devolvía a `/team`). Estado en remoto: **no verificado
+desde esta máquina** (sin token del CLI) — ver [`docs/supabase-estado.md`](docs/supabase-estado.md).
+
+### Invitaciones: cómo se recorre el flujo completo
+
+1. El **propietario** invita por correo desde **Miembros** (la invitación se crea en la base) y
+   pulsa **Enviar por correo** (Edge Function `invite-team-member`).
+2. La persona **se registra con ese mismo correo**; su cuenta queda **pendiente de aprobación**.
+3. Un **administrador de plataforma** la aprueba en **Cuenta → Administración → Cuentas**.
+4. La persona abre el enlace del correo —o entra en **Cuenta → Invitación pendiente**— y **acepta**.
+   El enlace **no concede acceso por sí solo**: el servidor comprueba identidad, correo confirmado y
+   que el perfil esté aprobado.
+5. A partir de ahí aparece como miembro del equipo.
+
+La entrada **Invitación pendiente** y el `?returnUrl=` del login existen porque faltaban (auditoría
+de flujos del 23/09/2026): `/invitations` no estaba en **ninguna** navegación —así que quien ya
+pertenecía a un equipo no podía ver ni aceptar la suya— y el enlace del correo perdía el destino al
+pasar por el login. Detalle en [`docs/FASE-10-solicitud-de-equipo.md`](docs/FASE-10-solicitud-de-equipo.md) §10.
 
 ### Rechazo de invitaciones
 
@@ -344,16 +369,16 @@ supabase/schema.sql  esquema inicial histórico: DEPRECADO, con guarda que ABORT
 
 ## Estado de las pruebas (números reales)
 
-- **Unitarias (Vitest)**: `npm run test:unit` → **627 pruebas en 34 ficheros** (medido el
-  22/09/2026 con el árbol de la administración de plataforma).
+- **Unitarias (Vitest)**: `npm run test:unit` → **642 pruebas en 35 ficheros** (medido el
+  23/09/2026 con el árbol de la administración de plataforma y la auditoría de flujos).
 - **E2E (Playwright)**: **116 ficheros** en `e2e/`. La pasada completa de la config de
   desarrollo (`playwright.dev.config.ts --workers=1`, sobre una build de **desarrollo**
-  regenerada antes) el 22/09/2026: **884 pruebas en verde, 11 omitidas, 27,8 min, exit 0**.
+  regenerada antes) el 23/09/2026: **885 pruebas en verde, 11 omitidas, 28,6 min, exit 0**.
   Las omitidas son las capturas que solo corren con su variable (`CAPTURAS_*`).
   El resto de configuraciones son opt-in: Supabase real, Pages y la build de producción.
 - **Auditoría de interacción**: `fase-i-interaccion` (doble clic y papelera, ×50 con un
   worker = 600 pruebas) y `fase-i-barra` (barra contextual en 5 vistas × 5 posiciones y
-  sensibilidad al tamaño/número real de botones). Ambas en verde dentro de las 884.
+  sensibilidad al tamaño/número real de botones). Ambas en verde dentro de las 885.
 - **CI en cada push** (`.github/workflows/ci.yml`): `format:check` + `lint` + unitarias +
   `validate:migration` + build de producción + un subconjunto **estable** de E2E
   (14 ficheros: núcleo, persistencia, móvil, accesibilidad, galerías y los `fase-i-*`).
@@ -361,13 +386,16 @@ supabase/schema.sql  esquema inicial histórico: DEPRECADO, con guarda que ABORT
   el suite entero, para que una rotura fuera del subconjunto no quede escondida.
 - `npm run validate:migration` es **análisis estático**: parsea la sintaxis de las
   migraciones y audita por texto las propiedades de seguridad de cada migración relevante
-  (**141 comprobaciones** en la última pasada). **No** consulta el catálogo remoto ni
+  (**154 comprobaciones** en la última pasada). **No** consulta el catálogo remoto ni
   comprueba que los GRANT se apliquen.
 - **Ojo con `dist/`**: `playwright.dev.config.ts` sirve la build que haya en
   `dist/entrenolab/browser`, así que **hay que regenerar la build de desarrollo**
   (`npx ng build --configuration development`) antes de esa suite si se acaba de hacer
   `npm run build` (producción) o `build:pages`; si no, las pruebas de la config de desarrollo
-  corren contra otro artefacto y fallan sin motivo.
+  corren contra otro artefacto y fallan sin motivo. (Ya pasó: 7 fallos falsos por eso.)
+- **No corras otras herramientas pesadas mientras corre el E2E completo**: con `--workers=1` y
+  la máquina saturada (eslint, `ng test`, builds en paralelo) aparecen fallos por tiempo de
+  espera que no son del código. También pasó y quedó documentado.
 
 ## Arquitectura
 

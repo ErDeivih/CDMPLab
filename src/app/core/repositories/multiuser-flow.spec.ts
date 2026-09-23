@@ -448,6 +448,8 @@ export class RlsBackend {
         return this.rpcMyInvitations(uid);
       case 'list_team_members':
         return this.rpcListMembers(a, uid);
+      case 'admin_team_overview':
+        return this.rpcAdminTeamOverview(uid);
       case 'revoke_team_member':
         return this.rpcRevoke(a, uid);
       case 'cancel_team_invitation':
@@ -1020,7 +1022,12 @@ export class RlsBackend {
 
   private rpcListMembers(a: Rw, uid: string): RpcResult {
     const teamId = a.p_team_id as string;
-    if (!this.isTeamOwner(uid, teamId)) return err('P0001', 'forbidden: not team owner');
+    // CONTRATO ACTUALIZADO (migración 20260928000000): el propietario conserva su acceso y el
+    // ADMINISTRADOR de plataforma puede ver los miembros de cualquier equipo desde el panel
+    // global. Un editor normal sigue recibiendo «forbidden».
+    if (!this.isTeamOwner(uid, teamId) && !this.isPlatformAdmin(uid)) {
+      return err('P0001', 'forbidden: not team owner');
+    }
     const rows = this.rows.team_members
       .filter((m) => m.team_id === teamId)
       .map((m) => {
@@ -1035,6 +1042,55 @@ export class RlsBackend {
           invited_by: m.invited_by ?? null,
         };
       });
+    return ok(rows);
+  }
+
+  /**
+   * `admin_team_overview()` (migración 20260923091218): recuentos de TODOS los equipos, en una
+   * sola llamada y solo para el administrador de plataforma. Devuelve RECUENTOS y metadatos, nunca
+   * el contenido de un equipo.
+   */
+  private rpcAdminTeamOverview(uid: string): RpcResult {
+    if (!uid) return err('42501', 'not_authenticated');
+    if (!this.isPlatformAdmin(uid)) return err('42501', 'platform_admin_required');
+    const cuenta = (filas: Rw[], coincide: (f: Rw) => boolean) => filas.filter(coincide).length;
+    const rows = this.rows.teams.map((t) => {
+      const teamId = t.id as string;
+      const perfilDueno = this.rows.profiles.find((p) => p.user_id === t.owner_user_id);
+      return {
+        team_id: teamId,
+        name: t.name,
+        accent_color: t.accent_color,
+        owner_user_id: t.owner_user_id,
+        owner_email: perfilDueno?.email_normalized ?? '',
+        created_at: t.created_at,
+        updated_at: t.updated_at,
+        members_active: cuenta(
+          this.rows.team_members,
+          (m) => m.team_id === teamId && m.status === 'active',
+        ),
+        members_revoked: cuenta(
+          this.rows.team_members,
+          (m) => m.team_id === teamId && m.status === 'revoked',
+        ),
+        members_pending: cuenta(
+          this.rows.team_members,
+          (m) => m.team_id === teamId && m.status === 'pending_approval',
+        ),
+        invitations_pending: cuenta(
+          this.rows.team_invitations,
+          (i) => i.team_id === teamId && i.status === 'pending',
+        ),
+        players_active: cuenta(this.rows.players, (p) => p.team_id === teamId && p.active === true),
+        players_inactive: cuenta(
+          this.rows.players,
+          (p) => p.team_id === teamId && p.active !== true,
+        ),
+        folders: cuenta(this.rows.exercise_folders, (f) => f.team_id === teamId),
+        exercises: cuenta(this.rows.exercises, (e) => e.team_id === teamId),
+        sessions: cuenta(this.rows.sessions, (s) => s.team_id === teamId),
+      };
+    });
     return ok(rows);
   }
 
@@ -2838,5 +2894,91 @@ describe('T5 multiuser — eliminar un equipo', () => {
       .tableQuery('team_deletions', OWNER)
       .insert({ deleted_team_id: team.id, team_name: team.name });
     expect(porTabla.error).not.toBeNull();
+  });
+});
+
+// =============================================================================
+// T6 · PANEL CENTRAL DE ADMINISTRACIÓN (migraciones 20260928000000 y 20260923091218)
+//     · El administrador ve los MIEMBROS de cualquier equipo (antes solo el propietario).
+//     · El resumen global lo calcula el SERVIDOR en una consulta: recuentos de todos los equipos.
+//     · Ni un editor normal ni un curioso sin sesión pueden pedir nada de esto.
+// =============================================================================
+
+describe('T6 multiuser — panel central: miembros de cualquier equipo y resumen global', () => {
+  it('el administrador ve los miembros de un equipo que NO es suyo; un editor no', async () => {
+    const { backend, team } = await equipoConEditorActivo();
+    conAdmin(backend);
+    const adminRepo = makeRepo(backend, ADMIN, null);
+    const editorRepo = makeRepo(backend, EDITOR, null);
+
+    const miembros = await adminRepo.listMembers(team.id);
+    expect(miembros.map((m) => m.emailNormalized).sort()).toEqual(
+      ['editor@example.com', 'owner@example.com'].sort(),
+    );
+
+    // El editor sigue SIN poder listarlos: la lectura global es solo del administrador. El servidor
+    // lanza `forbidden: not team owner` y el repositorio lo traduce al código de app `forbidden`.
+    await expect(editorRepo.listMembers(team.id)).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+  });
+
+  it('el resumen global devuelve los recuentos de cada equipo y NO su contenido', async () => {
+    const { backend, team } = await equipoConEditorActivo();
+    conAdmin(backend);
+    const adminRepo = makeRepo(backend, ADMIN, null);
+
+    const filas = await adminRepo.adminTeamOverview();
+    expect(filas).toHaveLength(1);
+    const fila = filas[0];
+    expect(fila).toMatchObject({
+      teamId: team.id,
+      name: team.name,
+      ownerEmail: 'owner@example.com',
+      // El propietario y el editor activo: 2 miembros activos.
+      membersActive: 2,
+      invitationsPending: 0,
+      folders: 1,
+      exercises: 1,
+      sessions: 1,
+    });
+    // El jugador es de verdad (lo sembró `fullJourney`): los recuentos no son inventados.
+    expect(fila.playersActive).toBeGreaterThan(0);
+    // Y son RECUENTOS: el objeto no arrastra ni un ejercicio ni una sesión.
+    expect(Object.keys(fila)).not.toContain('exercises_data');
+    expect(JSON.stringify(fila)).not.toContain('Rondos');
+  });
+
+  it('el resumen cuenta los estados por separado (activos, revocados, inactivos, invitaciones)', async () => {
+    const { backend, team, editorRepo } = await equipoConEditorActivo();
+    conAdmin(backend);
+    const adminRepo = makeRepo(backend, ADMIN, null);
+
+    // El editor sale del equipo (pasa a `revoked`) y se le invita OTRA vez (invitación pendiente).
+    await editorRepo.leaveTeam(team.id);
+    await makeRepo(backend, OWNER, null).inviteMember(team.id, 'editor@example.com');
+    backend.seedPlayer(team.id, {
+      id: 'p-inactivo',
+      name: 'Jugador antiguo',
+      number: 15,
+      position: 'DF',
+      color: '#1a73e8',
+      active: false,
+    });
+
+    const fila = (await adminRepo.adminTeamOverview())[0];
+    expect(fila.membersActive).toBe(1); // solo el propietario
+    expect(fila.membersRevoked).toBe(1); // el editor que se fue (histórico, no se borra)
+    expect(fila.invitationsPending).toBe(1);
+    expect(fila.playersInactive).toBe(1);
+    expect(fila.playersActive).toBeGreaterThanOrEqual(1);
+  });
+
+  it('sin ser administrador de plataforma el resumen global se rechaza', async () => {
+    const { ownerRepo } = await equipoConEditorActivo();
+    // El PROPIETARIO del equipo no es administrador de plataforma.
+    await expect(ownerRepo.adminTeamOverview()).rejects.toMatchObject({
+      code: 'platform_admin_required',
+    });
   });
 });

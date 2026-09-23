@@ -42,6 +42,20 @@ async function expectProductionMode(page: Page): Promise<void> {
   expect(mode, 'la build servida NO es de producción').toBe('production');
 }
 
+/**
+ * Espera a aterrizar en el login Y comprueba el destino que el guard ha conservado.
+ *
+ * CAMBIO DE CONTRATO (23/09/2026): el guard ya no manda a `/auth/login` «pelado», sino con
+ * `?returnUrl=<lo que el usuario pedía>` — así el enlace de una invitación no pierde su contexto al
+ * pasar por el login. Un `waitForURL` con glob terminaba en `/auth/login` y dejaba de casar (lo
+ * cazó esta misma suite), así que se comprueba la RUTA y, además, el destino: la comprobación queda
+ * MÁS fuerte que antes, no más laxa.
+ */
+async function expectLoginConDestino(page: Page, destino: string): Promise<void> {
+  await page.waitForURL((url) => url.pathname.endsWith(`${BASE}/auth/login`));
+  expect(new URL(page.url()).searchParams.get('returnUrl'), 'destino conservado').toBe(destino);
+}
+
 /** Registrar problemas reales de la app (excluye hosts externos benignos). */
 function collectProblems(page: Page): string[] {
   const problems: string[] = [];
@@ -166,8 +180,8 @@ for (const [label, viewport] of [
       const problems = collectProblems(page);
 
       await page.goto(`${BASE}/`);
-      // La ruta raíz redirige ('' → 'team' → guard ApprovedGuard → /auth/login).
-      await page.waitForURL('**' + BASE + '/auth/login');
+      // La ruta raíz redirige ('' → 'team' → guard ApprovedGuard → /auth/login con el destino).
+      await expectLoginConDestino(page, '/team');
       await expect(page.locator('#login-email')).toBeVisible();
       await expectProductionMode(page);
       await expectAppAssetsOk(page);
@@ -219,7 +233,7 @@ for (const [label, viewport] of [
       const problems = collectProblems(page);
 
       await page.goto(`${BASE}/board`);
-      await page.waitForURL('**' + BASE + '/auth/login');
+      await expectLoginConDestino(page, '/board');
       await expect(page.locator('#login-email')).toBeVisible();
       await expectProductionMode(page);
       await expectAppAssetsOk(page);

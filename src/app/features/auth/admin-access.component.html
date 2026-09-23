@@ -8,6 +8,37 @@
     panel.
   </p>
 
+  <!-- LO PRIMERO: lo que espera una DECISIÓN tuya. El dueño no encontraba dónde aprobar cuentas y
+       tenía que deducirlo del listado; ahora el panel abre con la cola de trabajo. -->
+  @if (adminReady()) {
+    <section
+      class="admin-pendientes"
+      aria-label="Pendiente de tu decisión"
+      data-pendientes-admin="1"
+    >
+      <div class="admin-pendiente">
+        <strong data-pendiente="cuentas">{{ pendientesCount() }}</strong>
+        <span>
+          {{
+            pendientesCount() === 1 ? 'cuenta esperando aprobación' : 'cuentas esperando aprobación'
+          }}
+        </span>
+        <a class="auth-link" href="#cuentas">Ver cuentas</a>
+      </div>
+      <div class="admin-pendiente">
+        <strong data-pendiente="solicitudes">{{ pendingRequests().length }}</strong>
+        <span>
+          {{
+            pendingRequests().length === 1
+              ? 'solicitud de equipo esperando'
+              : 'solicitudes de equipo esperando'
+          }}
+        </span>
+        <a class="auth-link" href="#solicitudes-equipo">Ver solicitudes</a>
+      </div>
+    </section>
+  }
+
   <div class="invite-form">
     <input
       type="search"
@@ -22,14 +53,44 @@
   </div>
 
   @if (adminReady()) {
-    <section class="admin-overview" aria-label="Resumen global">
-      <div class="admin-stat"><strong>{{ overview().teams.length }}</strong><span>Equipos</span></div>
-      <div class="admin-stat"><strong>{{ overview().members }}</strong><span>Propietarios</span></div>
-      <div class="admin-stat"><strong>{{ overview().players }}</strong><span>Jugadores</span></div>
-      <div class="admin-stat"><strong>{{ overview().exercises }}</strong><span>Ejercicios</span></div>
-      <div class="admin-stat"><strong>{{ overview().folders }}</strong><span>Carpetas</span></div>
-      <div class="admin-stat"><strong>{{ overview().sessions }}</strong><span>Sesiones</span></div>
+    <section class="admin-overview" aria-label="Resumen global" data-resumen-global="1">
+      <div class="admin-stat">
+        <strong>{{ overview().totals.teams }}</strong
+        ><span>Equipos</span>
+      </div>
+      <div class="admin-stat">
+        <strong>{{ overview().totals.membersActive }}</strong><span>Miembros activos</span>
+      </div>
+      <div class="admin-stat">
+        <strong>{{ overview().totals.membersPending }}</strong><span>Miembros pendientes</span>
+      </div>
+      <div class="admin-stat">
+        <strong>{{ overview().totals.membersRevoked }}</strong><span>Miembros revocados</span>
+      </div>
+      <div class="admin-stat">
+        <strong>{{ overview().totals.invitationsPending }}</strong><span>Invitaciones</span>
+      </div>
+      <div class="admin-stat">
+        <strong>{{ overview().totals.playersActive }}</strong><span>Jugadores activos</span>
+      </div>
+      <div class="admin-stat">
+        <strong>{{ overview().totals.playersInactive }}</strong><span>Jugadores inactivos</span>
+      </div>
+      <div class="admin-stat">
+        <strong>{{ overview().totals.exercises }}</strong><span>Ejercicios</span>
+      </div>
+      <div class="admin-stat">
+        <strong>{{ overview().totals.folders }}</strong><span>Carpetas</span>
+      </div>
+      <div class="admin-stat">
+        <strong>{{ overview().totals.sessions }}</strong><span>Sesiones</span>
+      </div>
     </section>
+    <p class="auth-note" data-nota-resumen="1">
+      Recuento de todos los equipos, contado por el servidor: no se descarga el contenido de cada
+      equipo para mostrarlo. Los miembros revocados y los jugadores inactivos se conservan (son
+      histórico) y no se cuentan aquí.
+    </p>
   }
 
   @if (adminReady()) {
@@ -37,16 +98,74 @@
     <p class="auth-note">
       Entra en cualquier equipo para revisar y editar su biblioteca, plantilla y sesiones.
     </p>
-    @for (team of teams(); track team.id) {
-      <div class="card invite-row">
-        <strong>{{ team.name }}</strong>
-        <button class="btn" type="button" [disabled]="busyId() !== null" (click)="openTeam(team)">
-          Abrir equipo
-        </button>
+    @if (overview().equipos.length === 0) {
+      <p class="auth-note" data-sin-equipos="1">Todavía no hay equipos.</p>
+    } @else {
+      <!-- Tabla de equipos: se desplaza en horizontal en pantallas estrechas en vez de aplastar
+           las columnas (el panel se usa también desde el móvil). -->
+      <div class="admin-tabla-scroll">
+        <table class="admin-tabla" data-tabla-equipos="1">
+          <caption class="sr-only">
+            Equipos de la plataforma con su propietario y sus recuentos
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Equipo</th>
+              <th scope="col">Propietario</th>
+              <th scope="col" class="num">Miembros</th>
+              <th scope="col" class="num">Pend.</th>
+              <th scope="col" class="num">Revoc.</th>
+              <th scope="col" class="num">Invit.</th>
+              <th scope="col" class="num">Jugadores</th>
+              <th scope="col" class="num">Ejerc.</th>
+              <th scope="col" class="num">Carp.</th>
+              <th scope="col" class="num">Ses.</th>
+              <th scope="col">Actualizado</th>
+              <th scope="col"><span class="sr-only">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (equipo of overview().equipos; track equipo.teamId) {
+              <tr [attr.data-equipo]="equipo.teamId">
+                <td>
+                  <span
+                    class="admin-color"
+                    [style.background]="equipo.accentColor"
+                    aria-hidden="true"
+                  ></span>
+                  <strong>{{ equipo.name }}</strong>
+                </td>
+                <td class="admin-email">{{ equipo.ownerEmail || '—' }}</td>
+                <td class="num">{{ equipo.membersActive }}</td>
+                <td class="num">{{ equipo.membersPending }}</td>
+                <td class="num">{{ equipo.membersRevoked }}</td>
+                <td class="num">{{ equipo.invitationsPending }}</td>
+                <td class="num">
+                  {{ equipo.playersActive }}
+                  @if (equipo.playersInactive > 0) {
+                    <span class="admin-nota">(+{{ equipo.playersInactive }} inactivos)</span>
+                  }
+                </td>
+                <td class="num">{{ equipo.exercises }}</td>
+                <td class="num">{{ equipo.folders }}</td>
+                <td class="num">{{ equipo.sessions }}</td>
+                <td>{{ fecha(equipo.updatedAt) }}</td>
+                <td>
+                  <button
+                    class="btn"
+                    type="button"
+                    [attr.data-accion]="'abrir-equipo-' + equipo.teamId"
+                    [disabled]="busyId() !== null"
+                    (click)="openTeam(equipo.teamId)"
+                  >
+                    Abrir equipo
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
       </div>
-    }
-    @if (teams().length === 0) {
-      <p class="auth-note">Todavía no hay equipos.</p>
     }
   }
 
@@ -56,7 +175,12 @@
        aprueba un equipo. Al aprobar, el equipo lo crea el servidor en la misma
        transacción y queda como propietario quien lo solicitó.
        ============================================================ -->
-  <h2 class="auth-note" style="font-weight: 700; margin-top: 18px" data-apartado="equipos">
+  <h2
+    class="auth-note"
+    style="font-weight: 700; margin-top: 18px"
+    id="solicitudes-equipo"
+    data-apartado="equipos"
+  >
     Solicitudes de equipo
   </h2>
   @if (requestsLoading()) {
@@ -125,7 +249,12 @@
     <p class="auth-msg err" role="alert">{{ requestsError() }}</p>
   }
 
-  <h2 class="auth-note" style="font-weight: 700; margin-top: 18px" data-apartado="cuentas">
+  <h2
+    class="auth-note"
+    style="font-weight: 700; margin-top: 18px"
+    id="cuentas"
+    data-apartado="cuentas"
+  >
     Cuentas
   </h2>
   @if (loading()) {

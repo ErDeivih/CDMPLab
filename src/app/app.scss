@@ -321,6 +321,24 @@
   }
 }
 
+/**
+ * Invitación pendiente: es lo único de este menú que pide una DECISIÓN del usuario, así que se
+ * destaca en vez de confundirse con los enlaces de siempre (antes ni siquiera existía y la
+ * invitación podía quedarse invisible para quien ya tenía equipo).
+ */
+.cuenta-accion-pendiente {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+
+  .msi {
+    color: var(--accent);
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+}
+
 .content {
   flex: 1;
   overflow: auto;

@@ -24,6 +24,7 @@ import type {
 } from '../database.types';
 import type {
   AccessResolution,
+  AdminTeamOverview,
   DataSource,
   ImportCounts,
   ImportTypeCounts,
@@ -981,6 +982,33 @@ export class SupabaseRepository implements DataSource {
     const { data, error } = await this.client.rpc('admin_list_administrators');
     if (error) throw errorToDataError(error, 'admin_list');
     return (data ?? []).map((r) => r.user_id);
+  }
+
+  /**
+   * Resumen de TODOS los equipos para el panel central: una sola consulta agregada en el servidor
+   * (solo administradores de plataforma; el servidor lanza `platform_admin_required` si no lo eres).
+   */
+  async adminTeamOverview(): Promise<AdminTeamOverview[]> {
+    const { data, error } = await this.client.rpc('admin_team_overview');
+    if (error) throw errorToDataError(error, 'admin_overview');
+    return (data ?? []).map((r) => ({
+      teamId: r.team_id,
+      name: r.name,
+      accentColor: r.accent_color,
+      ownerUserId: r.owner_user_id,
+      ownerEmail: r.owner_email,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+      membersActive: Number(r.members_active ?? 0),
+      membersRevoked: Number(r.members_revoked ?? 0),
+      membersPending: Number(r.members_pending ?? 0),
+      invitationsPending: Number(r.invitations_pending ?? 0),
+      playersActive: Number(r.players_active ?? 0),
+      playersInactive: Number(r.players_inactive ?? 0),
+      folders: Number(r.folders ?? 0),
+      exercises: Number(r.exercises ?? 0),
+      sessions: Number(r.sessions ?? 0),
+    }));
   }
 
   async grantAdministrator(userId: string): Promise<void> {

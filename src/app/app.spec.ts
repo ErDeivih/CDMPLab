@@ -39,8 +39,16 @@ describe('App', () => {
  */
 /**
  * Monta la app con un rol de acceso dado (el rol lo resuelve el servidor; aquí se sustituye).
+ *
+ * CAMBIO DE CONTRATO (23/09/2026): el componente consulta TAMBIÉN `pendingInvitations` y
+ * `platformAdmin` para decidir qué ofrece la navegación (enlace a la invitación pendiente y
+ * «Administración» solo con permiso confirmado por el servidor). El doble tiene que reflejar el
+ * contrato real: si faltan esas señales, la app revienta al pintarse.
  */
-async function montar(role: 'owner' | 'editor' | null): Promise<ComponentFixture<App>> {
+async function montar(
+  role: 'owner' | 'editor' | null,
+  opciones: { invitacionesPendientes?: number; plataformaAdmin?: boolean } = {},
+): Promise<ComponentFixture<App>> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [App, RouterModule.forRoot([])],
@@ -49,6 +57,12 @@ async function montar(role: 'owner' | 'editor' | null): Promise<ComponentFixture
         provide: AccessService,
         useValue: {
           target: signal({ role, state: 'ready', route: '/team', teamId: 't1' }),
+          pendingInvitations: signal(
+            Array.from({ length: opciones.invitacionesPendientes ?? 0 }, (_, i) => ({
+              id: `inv-${i}`,
+            })),
+          ),
+          platformAdmin: signal(opciones.plataformaAdmin ?? false),
           clear: async () => undefined,
         },
       },
@@ -100,6 +114,56 @@ describe('App — permisos de «Miembros» (propietario vs colaborador)', () => 
     const fixture = await montar(null);
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.nav-escritorio')?.textContent ?? '').toContain('Miembros');
+  });
+});
+
+/**
+ * «Administración» y las INVITACIONES en la navegación.
+ *
+ * Los dos defectos que fijan estas pruebas (encontrados al auditar los flujos el 23/09/2026):
+ *   · «Administración» se ofrecía a CUALQUIER propietario de equipo (bastaba con no ser
+ *     colaborador) y el `AdminGuard` lo devolvía a `/team`: un enlace que solo podía acabar en
+ *     rechazo. Ahora se ofrece solo si el SERVIDOR confirmó `is_platform_admin()`.
+ *   · `/invitations` no estaba en ninguna navegación: quien ya pertenecía a un equipo no tenía
+ *     forma de ver ni aceptar su invitación, que el propietario ya había creado (y podía haber
+ *     enviado por correo).
+ */
+describe('App — «Administración» solo con permiso y la invitación pendiente siempre visible', () => {
+  function panelCuenta(fixture: ComponentFixture<App>): HTMLElement {
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.cuenta-btn')!.click();
+    fixture.detectChanges();
+    return (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('.cuenta-panel')!;
+  }
+
+  it('un propietario que NO es administrador de plataforma no ve «Administración»', async () => {
+    const fixture = await montar('owner', { plataformaAdmin: false });
+    const panel = panelCuenta(fixture);
+    expect(panel.querySelector('a[href="/admin"]')).toBeNull();
+    // Lo que sí puede usar sigue ahí: no se le quita nada de más.
+    expect(panel.textContent ?? '').toContain('Ajustes');
+  });
+
+  it('el administrador de plataforma SÍ ve «Administración»', async () => {
+    const fixture = await montar('owner', { plataformaAdmin: true });
+    const panel = panelCuenta(fixture);
+    expect(panel.querySelector('a[href="/admin"]')).toBeTruthy();
+  });
+
+  it('con una invitación pendiente se ofrece el enlace, aunque ya tenga equipo', async () => {
+    // El caso real: perfil aprobado CON equipo y una invitación de OTRO equipo. `decideAccess`
+    // manda a `/team`, así que sin esta entrada la invitación era invisible.
+    const fixture = await montar('owner', { invitacionesPendientes: 1 });
+    const panel = panelCuenta(fixture);
+    const enlace = panel.querySelector<HTMLAnchorElement>('a[href="/invitations"]');
+    expect(enlace, 'el enlace a la invitación pendiente existe').toBeTruthy();
+    expect(enlace!.textContent ?? '').toContain('Invitación pendiente');
+    expect(fixture.nativeElement.querySelector('[data-accion="ver-invitaciones"]')).toBeTruthy();
+  });
+
+  it('sin invitaciones pendientes no se ofrece nada de más', async () => {
+    const fixture = await montar('owner', { invitacionesPendientes: 0 });
+    const panel = panelCuenta(fixture);
+    expect(panel.querySelector('a[href="/invitations"]')).toBeNull();
   });
 });
 

@@ -1,7 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import type { Team } from '../../core/models';
 import { AccessService } from '../../core/access.service';
 import type { AdminOverview } from '../../core/access.service';
 import { SupabaseService } from '../../core/supabase.service';
@@ -38,14 +37,24 @@ export class AdminAccessComponent {
   protected readonly busyId = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly administrators = signal<string[]>([]);
-  protected readonly teams = signal<Team[]>([]);
+  /**
+   * Resumen de TODOS los equipos. Lo devuelve el SERVIDOR ya contado (`admin_team_overview`):
+   * antes el panel descargaba el contenido completo de cada equipo solo para contar filas.
+   */
   protected readonly overview = signal<AdminOverview>({
-    teams: [],
-    members: 0,
-    players: 0,
-    exercises: 0,
-    folders: 0,
-    sessions: 0,
+    equipos: [],
+    totals: {
+      teams: 0,
+      membersActive: 0,
+      membersRevoked: 0,
+      membersPending: 0,
+      invitationsPending: 0,
+      playersActive: 0,
+      playersInactive: 0,
+      folders: 0,
+      exercises: 0,
+      sessions: 0,
+    },
   });
   protected readonly selfEmail = signal('');
   /**
@@ -73,7 +82,6 @@ export class AdminAccessComponent {
       ]);
       this.administrators.set(admins);
       this.overview.set(overview);
-      this.teams.set(overview.teams);
       this.adminReady.set(esAdmin);
     } catch (e) {
       this.error.set((e as Error).message);
@@ -96,10 +104,11 @@ export class AdminAccessComponent {
     });
   }
 
-  protected async openTeam(team: Team): Promise<void> {
-    this.busyId.set(team.id);
+  /** Entra en un equipo (como editor) desde su fila del resumen global. */
+  protected async openTeam(teamId: string): Promise<void> {
+    this.busyId.set(teamId);
     try {
-      await this.access.openAdminTeam(team.id);
+      await this.access.openAdminTeam(teamId);
       await this.router.navigate(['/library']);
     } catch (e) {
       this.error.set((e as Error).message);
@@ -149,6 +158,14 @@ export class AdminAccessComponent {
   protected readonly pending = computed(() =>
     this.profiles().filter((p) => p.status === 'pending'),
   );
+
+  /**
+   * Cuántas cuentas esperan aprobación. Es el número de la cola de trabajo del administrador y se
+   * muestra arriba del panel: el dueño tuvo que deducir dónde se aprobaba, así que ahora lo primero
+   * que se ve es lo que le espera.
+   */
+  protected readonly pendientesCount = computed(() => this.pending().length);
+
   protected readonly approved = computed(() =>
     this.profiles().filter((p) => p.status === 'approved'),
   );
