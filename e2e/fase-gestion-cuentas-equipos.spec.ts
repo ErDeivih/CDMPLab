@@ -46,6 +46,16 @@ test.describe('Miembros del equipo — las acciones de permisos no se ofrecen a 
       await page.goto('/settings/team/members');
 
       await expect(page.locator('.auth-title')).toHaveText('Miembros del equipo');
+      if (etiqueta === 'móvil') {
+        const width = await page
+          .locator('.auth')
+          .evaluate((element) => element.getBoundingClientRect().width);
+        expect(width).toBeGreaterThan(300);
+        expect(width).toBeLessThanOrEqual(viewport.width);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+          viewport.width,
+        );
+      }
       // Ni traspasar la propiedad ni invitar: son del propietario.
       await expect(page.locator('[data-accion="traspasar-propiedad"]')).toHaveCount(0);
       await expect(page.locator('#invite-email')).toHaveCount(0);

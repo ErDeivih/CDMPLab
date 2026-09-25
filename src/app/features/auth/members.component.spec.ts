@@ -7,6 +7,70 @@ import { SupabaseService } from '../../core/supabase.service';
 import { MembersComponent } from './members.component';
 
 describe('MembersComponent — invitaciones caducadas', () => {
+  it('mantiene visible el fallo de correo tras recargar y oculta el detalle técnico', async () => {
+    const providerError =
+      'We have detected you are using an unrecognised IP address 2a05:d012:fca:9508::1';
+    const invitation = {
+      id: 'inv-1',
+      teamId: 'team-1',
+      teamName: 'Juvenil B',
+      emailNormalized: 'colaborador@example.com',
+      invitedUserId: null,
+      status: 'pending',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      emailStatus: 'send_error',
+      emailAttempts: 1,
+      lastEmailAt: null,
+      lastEmailError: providerError,
+    };
+    const access = {
+      target: vi.fn(() => ({ role: 'owner', teamId: 'team-1' })),
+      platformAdmin: vi.fn(() => false),
+      listMembers: vi.fn().mockResolvedValue([]),
+      listTeamInvitations: vi.fn().mockResolvedValue([invitation]),
+      sendInvitationEmail: vi.fn().mockResolvedValue({
+        ok: false,
+        status: 'send_error',
+        message: 'No se pudo enviar el correo.',
+      }),
+    };
+    TestBed.configureTestingModule({
+      imports: [MembersComponent],
+      providers: [
+        { provide: AccessService, useValue: access },
+        {
+          provide: StoreService,
+          useValue: {
+            isRemote: () => true,
+            activeTeam: () => ({ id: 'team-1', name: 'Juvenil B', accentColor: '#c8102e' }),
+          },
+        },
+        { provide: SupabaseService, useValue: { user: () => ({ id: 'owner-1' }) } },
+        { provide: ConfirmService, useValue: { ask: vi.fn() } },
+      ],
+    });
+    const fixture = TestBed.createComponent(MembersComponent);
+    fixture.detectChanges();
+    await fixture.componentInstance.load();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector(
+      '[data-invitacion="send_error"]',
+    ) as HTMLElement;
+    expect(row.textContent).toContain('IP no autorizada');
+    expect(row.textContent?.match(/IP no autorizada/g)).toHaveLength(1);
+    expect(row.querySelector('details')?.open).toBe(false);
+    (row.querySelector('button') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(access.sendInvitationEmail).toHaveBeenCalledWith('inv-1');
+    expect(fixture.nativeElement.querySelector('.auth-msg.err')?.textContent).toContain(
+      'IP no autorizada',
+    );
+  });
+
   it('las deja cancelar, no ofrece enviar/copiar y no las cuenta como plaza', async () => {
     const invitacion = {
       id: 'inv-expired',

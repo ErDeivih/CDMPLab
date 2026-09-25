@@ -92,6 +92,23 @@ describe('invite-email — estados del envío (nunca «entregado»)', () => {
     expect(storedEmailMessage('send_error', null)).toContain('Puedes reintentarlo');
   });
 
+  it('resume el bloqueo de IP de Brevo sin repetir una dirección cambiante en la tarjeta', () => {
+    const providerError =
+      'We have detected you are using an unrecognised IP address 2a05:d012:fca:9508::1. Visit https://app.brevo.com/security/authorised_ips';
+    const stored = storedEmailMessage('send_error', providerError);
+    const immediate = inviteEmailMessage({
+      ok: false,
+      status: 'send_error',
+      message: providerError,
+    });
+    for (const message of [stored, immediate]) {
+      expect(message).toContain('IP no autorizada');
+      expect(message).toContain('copiar el enlace');
+      expect(message).not.toContain('2a05');
+      expect(message).not.toContain('https://');
+    }
+  });
+
   it('reconoce solo los cuatro estados reales', () => {
     expect(isStoredEmailStatus('created')).toBe(true);
     expect(isStoredEmailStatus('delivered')).toBe(false);

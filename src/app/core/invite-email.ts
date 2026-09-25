@@ -52,6 +52,20 @@ export const STORED_EMAIL_LABEL: Record<StoredEmailStatus, string> = {
   send_error: 'Error de envío',
 };
 
+/** Brevo puede bloquear una IP de salida desconocida aunque la clave API sea válida. */
+function blockedProviderIp(error: string | null): boolean {
+  return /(?:unrecognised|unrecognized|unauthorized) ip address/i.test(error ?? '');
+}
+
+function sendErrorMessage(error: string | null): string {
+  if (blockedProviderIp(error)) {
+    return 'Brevo ha bloqueado el envío por una IP no autorizada. La invitación sigue activa: puedes copiar el enlace. Hay que revisar la seguridad de Brevo antes de reenviar.';
+  }
+  return error
+    ? `No se pudo enviar el correo: ${error}`
+    : 'No se pudo enviar el correo. Puedes reintentarlo.';
+}
+
 /** ¿El estado guardado es uno de los conocidos? (defensa ante datos antiguos). */
 export function isStoredEmailStatus(value: string | null | undefined): value is StoredEmailStatus {
   return (
@@ -65,9 +79,7 @@ export function isStoredEmailStatus(value: string | null | undefined): value is 
 /** Mensaje en español para el propietario, a partir del estado guardado. */
 export function storedEmailMessage(status: StoredEmailStatus, error: string | null): string {
   if (status === 'send_error') {
-    return error
-      ? `No se pudo enviar el correo: ${error}`
-      : 'No se pudo enviar el correo. Puedes reintentarlo.';
+    return sendErrorMessage(error);
   }
   if (status === 'provider_accepted') {
     // Honestidad: el proveedor aceptó el envío; NO consta que se haya entregado.
@@ -165,9 +177,7 @@ export function inviteEmailMessage(result: InviteEmailResult): string {
     case 'provider_accepted':
       return 'El proveedor de correo ha aceptado el envío. Eso no confirma todavía la entrega.';
     case 'send_error':
-      return result.message
-        ? `No se pudo enviar el correo: ${result.message}`
-        : 'No se pudo enviar el correo. Puedes reintentarlo.';
+      return sendErrorMessage(result.message);
     case 'not_configured':
       return 'El envío de correo todavía no está configurado en el servidor. La invitación sigue creada y podrás enviarla cuando se configure.';
     case 'invalid_request':

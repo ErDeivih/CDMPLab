@@ -14,6 +14,7 @@ import {
   invitationLink,
   retryWaitSeconds,
   storedEmailMessage,
+  inviteEmailMessage,
   type StoredEmailStatus,
 } from '../../core/invite-email';
 import {
@@ -34,6 +35,7 @@ const SEAT_LIMIT = 6;
 
 @Component({
   selector: 'app-members',
+  host: { class: 'members-page' },
   templateUrl: './members.component.html',
   imports: [FormsModule, AuthCardComponent],
 })
@@ -364,13 +366,19 @@ export class MembersComponent {
 
   private async enviarCorreo(inv: TeamInvitationInfo, email: string): Promise<void> {
     const result = await this.access.sendInvitationEmail(inv.id);
-    if (result.ok) {
-      this.success.set(`${email}: ${result.message}`);
-    } else {
-      // Nada de «correo enviado» cuando no lo está: el texto viene del estado real.
-      this.error.set(`${email}: ${result.message}`);
-    }
+    // La recarga borra `error`; hacerla antes de mostrar el resultado para no ocultar un fallo.
     await this.load();
+    if (result.ok) {
+      this.success.set(`${email}: ${inviteEmailMessage(result)}`);
+    } else {
+      // La función no devuelve el detalle técnico del proveedor; queda en la invitación.
+      const updated = this.invitations().find((current) => current.id === inv.id);
+      const message =
+        result.status === 'send_error' && updated?.emailStatus === 'send_error'
+          ? storedEmailMessage('send_error', updated.lastEmailError)
+          : inviteEmailMessage(result);
+      this.error.set(`${email}: ${message}`);
+    }
   }
 
   /** Etiqueta del estado del correo (nunca promete entrega). */

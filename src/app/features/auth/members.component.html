@@ -1,5 +1,5 @@
 <app-auth-card [title]="'Miembros del equipo'" [subtitle]="'Invita y gestiona colaboradores'">
-  <p class="auth-note">
+  <p class="auth-note members-intro">
     {{
       isOwner()
         ? 'Invita hasta ' + seatsLimit + ' colaboradores (activos + invitaciones pendientes).'
@@ -8,6 +8,13 @@
           : 'Solo el propietario puede invitarte o revocarte el acceso.'
     }}
   </p>
+
+  @if (success()) {
+    <p class="auth-msg ok" role="status">{{ success() }}</p>
+  }
+  @if (error()) {
+    <p class="auth-msg err" role="alert">{{ error() }}</p>
+  }
 
   @if (loading()) {
     <p class="auth-note">Cargando miembros…</p>
@@ -44,8 +51,8 @@
     }
   } @else {
     @if (isOwner()) {
-      <div class="auth-row">
-        <span style="margin-right: auto">Plazas de colaboradores</span>
+      <div class="auth-row members-capacity">
+        <span>Plazas de colaboradores</span>
         <strong>{{ seatsUsed() }} de {{ seatsLimit }} usadas</strong>
       </div>
     }
@@ -56,6 +63,9 @@
       <p class="auth-note" data-motivo-no-salir="1">{{ motivo }}</p>
     }
 
+    @if (members().length > 0) {
+      <h2 class="members-section-title">Personas del equipo</h2>
+    }
     @for (m of members(); track m.userId) {
       <div class="card invite-row">
         <div class="invite-main">
@@ -87,7 +97,7 @@
     }
 
     @if (isOwner()) {
-      <div class="auth-stack" data-seccion="nombre-equipo">
+      <div class="auth-stack members-section" data-seccion="nombre-equipo">
         <strong>Nombre del equipo</strong>
         <span class="auth-note"
           >Corrige aquí cualquier error de escritura. El cambio se aplica a todo el equipo.</span
@@ -114,6 +124,9 @@
         </div>
       </div>
 
+      @if (invitations().length > 0) {
+        <h2 class="members-section-title">Invitaciones pendientes</h2>
+      }
       @for (inv of invitations(); track inv.id) {
         <div
           class="card invite-row"
@@ -145,7 +158,10 @@
                 }
               </span>
               @if (inv.emailStatus === 'send_error' && inv.lastEmailError) {
-                <span class="auth-note" role="status">{{ inv.lastEmailError }}</span>
+                <details class="invite-error-detail">
+                  <summary>Detalles técnicos del error</summary>
+                  <p>{{ inv.lastEmailError }}</p>
+                </details>
               }
               @if (esperaReintento(inv) > 0) {
                 <span class="auth-note">
@@ -199,7 +215,7 @@
     }
 
     @if (isOwner()) {
-      <div class="auth-stack">
+      <div class="auth-stack members-section">
         <label class="field-label" for="invite-email">Invitar por correo</label>
         <div class="invite-form">
           <input
@@ -224,11 +240,9 @@
              que la función de servidor y el proveedor estén configurados. Se dice lo que ha
              pasado de verdad, sin prometer un correo que quizá no salga. -->
         <p class="invite-note">
-          Se crea una invitación pendiente y se intenta enviar el correo de invitación. Si el envío
-          no está configurado o falla, la invitación sigue creada y puedes reintentarlo desde la
-          lista de arriba. Si la persona aún no tiene cuenta, debe registrarse en CDMPLab con ese
-          mismo correo. La aprobación de la cuenta se hace desde el menú Cuenta → Administración;
-          después la persona podrá aceptar esta invitación.
+          La invitación se crea aunque falle el correo. Puedes copiar su enlace desde la lista.
+          Quien lo abra debe usar este mismo correo; si aún no tiene cuenta, tendrá que registrarse
+          y esperar la aprobación de Administración.
         </p>
       </div>
 
@@ -236,7 +250,7 @@
            jugadores, ejercicios, carpetas, sesiones, membresías e invitaciones), así que exige
            ver la vista previa, ESCRIBIR EL NOMBRE EXACTO (el servidor lo vuelve a comprobar) y
            pasar por el diálogo de confirmación. -->
-      <div class="auth-stack" data-zona-peligrosa="1">
+      <div class="auth-stack members-danger" data-zona-peligrosa="1">
         <strong>Eliminar este equipo</strong>
         <span class="auth-note">
           Se borrarán para siempre los jugadores, ejercicios, carpetas, sesiones, colaboradores e
@@ -307,13 +321,6 @@
         }
       </div>
     }
-  }
-
-  @if (success()) {
-    <p class="auth-msg ok">{{ success() }}</p>
-  }
-  @if (error()) {
-    <p class="auth-msg err" role="alert">{{ error() }}</p>
   }
 
   <div class="auth-actions">
