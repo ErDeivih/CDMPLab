@@ -322,7 +322,7 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/herramientas-colocadas.png` });
   });
 
-  test('materiales-colocados-1: materiales distribuidos (1/2), alguno rotado ±90°', async ({
+  test('materiales-colocados-1: materiales distribuidos (1/2), pértiga erguida', async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -339,9 +339,8 @@ test.describe('CIERRE — galería visual de funcionalidad (revisión final)', (
     await placeMaterial(page, 'Pica', 0.7, 0.3);
     await placeMaterial(page, 'Maniquí individual', 0.14, 0.46, 0);
     await placeMaterial(page, 'Miniportería', 0.3, 0.46);
-    // Rotado +90° para demostrar que un material puede girar.
+    // La pértiga permanece erguida: el contrato antiguo permitía tumbarla.
     await placeMaterial(page, 'Pértiga / poste', 0.5, 0.46);
-    await rotateSelected(page, 0.5, 0.46, 'right');
 
     await expect(page.locator('.field-count')).toHaveText('10');
     await page.waitForTimeout(250);
@@ -627,7 +626,7 @@ todo se coloca/dibuja/rota/añade desde la UI.
 | Captura | Qué muestra |
 |---|---|
 | \`herramientas-colocadas.png\` | Línea, flecha, flecha doble, curva izquierda/derecha, zigzag, mano alzada, rectángulo, elipse y texto real, en varios colores. |
-| \`materiales-colocados-1.png\` | Materiales (1/2) distribuidos con espacio; pértiga rotada +90°. |
+| \`materiales-colocados-1.png\` | Materiales (1/2) distribuidos con espacio; pértiga erguida. |
 | \`materiales-colocados-2.png\` | Materiales (2/2) distribuidos con espacio; marcador rotado -90°. |
 | \`interaccion-seleccion.png\` | Rectángulo con asas de redimensión, línea con extremos, curva con extremos+C1, material seleccionado sin resize y menú contextual. |
 | \`jugador-vertical-legible.png\` | Jugador en campo vertical con nombre y dorsal legibles de izquierda a derecha. |

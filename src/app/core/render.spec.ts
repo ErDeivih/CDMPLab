@@ -1178,7 +1178,7 @@ describe('render', () => {
     expect(hitTestElement({ x: 0.5, y: 0.5 - 0.12 }, [pole])).toBeNull();
   });
 
-  it('hit-test respeta la rotación de un material estrecho (pértiga a 90°)', () => {
+  it('hit-test de una pértiga antigua con rot=90 respeta su nuevo dibujo vertical', () => {
     const pole: CanvasElement = {
       id: 'p',
       t: 'pole',
@@ -1188,11 +1188,10 @@ describe('render', () => {
       asset: '/assets/tactical/pole.png',
       rot: 90,
     };
-    // Tras rotar 90°, el poste queda horizontal: un punto a la derecha del centro,
-    // en el espacio local, cae dentro de la caja del poste.
-    expect(hitTestElement({ x: 0.5 + 0.06, y: 0.5 }, [pole])).toBe('p');
-    // Perpendicular al poste ahora (arriba/abajo en pantalla) → fuera de la caja.
-    expect(hitTestElement({ x: 0.5, y: 0.5 - 0.09 }, [pole])).toBeNull();
+    // El contrato anterior permitía tumbar el poste. El dueño ahora exige que permanezca de pie:
+    // la rotación antigua se ignora tanto en el render como en la selección.
+    expect(hitTestElement({ x: 0.5, y: 0.5 - 0.06 }, [pole])).toBe('p');
+    expect(hitTestElement({ x: 0.5 + 0.09, y: 0.5 }, [pole])).toBeNull();
   });
 
   it('en VERTICAL la caja táctil del material derecho va girada como su dibujo (no perpendicular)', () => {
@@ -1590,7 +1589,7 @@ describe('Fase 3/4 — trazo táctico fino y tamaño inicial reducido', () => {
     expect(freehand).toContain(`stroke-width="${DEFAULT_STROKE_WIDTH}"`);
   });
 
-  it('el contorno de rect/elipse/zona es ~0.3 (la mitad del antiguo 0.6)', () => {
+  it('el contorno nuevo de rect/elipse/zona es 0.2', () => {
     for (const t of ['rect', 'ellipse', 'zone'] as const) {
       const el: CanvasElement = { id: 's', t, x: 0.2, y: 0.2, w: 0.3, h: 0.2, c: '#ffffff' };
       const svg = renderBoardSvg('full', [el], {});
@@ -1598,13 +1597,13 @@ describe('Fase 3/4 — trazo táctico fino y tamaño inicial reducido', () => {
     }
   });
 
-  it('la punta de flecha es proporcional al grosor (0.8 → 2.8, default 0.4 → 1.4)', () => {
+  it('la punta de flecha es proporcional al grosor (0.8 → 2.8, default 0.2 → 0.7)', () => {
     expect(arrowHeadSize(0.8)).toBeCloseTo(2.8, 6);
     expect(arrowHeadSize(DEFAULT_STROKE_WIDTH)).toBeCloseTo(
       DEFAULT_STROKE_WIDTH * ARROW_HEAD_FACTOR,
       6,
     );
-    expect(arrowHeadSize(DEFAULT_STROKE_WIDTH)).toBeCloseTo(1.4, 6);
+    expect(arrowHeadSize(DEFAULT_STROKE_WIDTH)).toBeCloseTo(0.7, 6);
     // Una flecha horizontal: la punta (polygon) usa size = dx_entre punta y base / cos(0.5).
     const headSize = (svg: string): number => {
       const m = /<polygon points="([^"]+)"/.exec(svg);
@@ -1748,6 +1747,14 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
     }
   });
 
+  it('un zigzag corto conserva al menos cuatro tramos y el discontinuo prioriza tinta', () => {
+    const short = svgZigzag(0.49, 0.5, 0.51, 0.5, '#ffffff', false, 0.2, 'solid', g);
+    const path = /<path d="([^"]+)"/.exec(short)!;
+    expect((path[1].match(/L /g) ?? []).length).toBeGreaterThanOrEqual(4);
+    const dashed = svgZigzag(0.2, 0.3, 0.8, 0.3, '#ffffff', false, 0.2, 'dashed', g);
+    expect(dashed).toContain('stroke-dasharray="2.4,0.7"');
+  });
+
   it('el zigzag NUEVO (Fase 6) tiene ~el doble de picos que el anterior para una longitud representativa', () => {
     // Longitud representativa: 0.2..0.8 horizontal → len = 0.6*92 ≈ 55.2 px.
     const svg = svgZigzag(0.2, 0.3, 0.8, 0.3, '#111111', false, DEFAULT_STROKE_WIDTH, 'solid', g);
@@ -1843,6 +1850,26 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       { id: 'l1', t: 'ladder', x: 0.7, y: 0.5 },
       { id: 'p1', t: 'pica', x: 0.4, y: 0.6 },
     ];
+
+    it('cono, pica y maniquí ignoran la rotación antigua del objeto', () => {
+      for (const t of ['cone', 'pole', 'pica', 'mannequin', 'mannequin_row'] as const) {
+        const el: CanvasElement = { id: t, t, x: 0.5, y: 0.5, rot: 90 };
+        const horizontal = renderBoardSvg('full', [el], { orientation: 'horizontal' });
+        expect(horizontal, `${t} no debe quedar tumbado`).not.toContain('rotate(90 ');
+        const vertical = renderBoardSvg('full', [el], { orientation: 'vertical' });
+        const grupo = (vertical.match(new RegExp(`<g [^>]*data-el-type="${t}"[^>]*>`)) ?? [''])[0];
+        expect(grupo, `${t} se endereza también con el campo vertical`).toMatch(/rotate\(-90 /);
+      }
+      const pngAntiguo: CanvasElement = {
+        id: 'cono-png',
+        t: 'cone',
+        x: 0.5,
+        y: 0.5,
+        rot: 270,
+        asset: 'assets/tactic/cone-red.png',
+      };
+      expect(renderBoardSvg('full', [pngAntiguo], {})).not.toContain('rotate(270 ');
+    });
 
     it('en campo vertical cada material se contrarrota -90° sobre su punto', () => {
       const svg = renderBoardSvg('full', materiales, { orientation: 'vertical' });
@@ -1997,9 +2024,10 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       const blancos = rects.filter((r) => /fill="#ffffff"/.test(r.relleno));
       expect(blancos.length, 'larguero y dos postes').toBe(3);
       for (const r of blancos)
-        expect(Math.min(r.w, r.h) / fondoRed!.w, 'marco fino respecto a la anchura').toBeLessThanOrEqual(
-          0.06,
-        );
+        expect(
+          Math.min(r.w, r.h) / fondoRed!.w,
+          'marco fino respecto a la anchura',
+        ).toBeLessThanOrEqual(0.06);
     });
 
     it('la caja táctil de la portería coincide con el marco REGLAMENTARIO', () => {
@@ -2016,11 +2044,14 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       const dibujo = goalBoxUnits('full');
       // La caja se devuelve NORMALIZADA (0..1): para compararla con la geometría hay que volver a
       // unidades multiplicando por el rect del campo.
-      expect(
-        conCampo.hw * 2 * R.w,
-        'ancho de la caja = ancho reglamentario',
-      ).toBeCloseTo(dibujo.w, 5);
-      expect(conCampo.hh * 2 * R.h, 'alto de la caja = alto reglamentario').toBeCloseTo(dibujo.h, 5);
+      expect(conCampo.hw * 2 * R.w, 'ancho de la caja = ancho reglamentario').toBeCloseTo(
+        dibujo.w,
+        5,
+      );
+      expect(conCampo.hh * 2 * R.h, 'alto de la caja = alto reglamentario').toBeCloseTo(
+        dibujo.h,
+        5,
+      );
       // Y en fútbol sala la caja (y el dibujo) son más pequeños.
       const enFutsal = materialHitHalfExtents(porteria, R, 1, sinMinimo, false, 'futsal');
       expect(enFutsal.hw * 2 * R.w, 'portería de fútbol sala más estrecha').toBeLessThan(

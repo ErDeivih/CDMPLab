@@ -60,6 +60,8 @@ export class MembersComponent {
   protected readonly busySalir = signal(false);
 
   protected readonly isOwner = computed(() => this.access.target().role === 'owner');
+  protected readonly platformAdmin = this.access.platformAdmin;
+  protected readonly canViewMembers = computed(() => this.isOwner() || this.platformAdmin());
   /** Rol propio en el equipo de contexto (para decidir qué acciones se ofrecen). */
   protected readonly myRole = computed(() => this.access.target().role ?? null);
   protected readonly myUserId = computed(() => this.supabase.user()?.id ?? null);
@@ -68,12 +70,12 @@ export class MembersComponent {
    * REMOTO. En modo local/desarrollo `isOwner()` también es falso (no hay sesión ni roles), pero
    * ahí el usuario es el dueño de sus datos: ocultarle la pantalla la dejaba vacía.
    */
-  protected readonly sinGestion = computed(() => this.store.isRemote() && !this.isOwner());
+  protected readonly sinGestion = computed(() => this.store.isRemote() && !this.canViewMembers());
   protected readonly seatsLimit = SEAT_LIMIT;
 
   /** ¿Puede salir del equipo por su cuenta? (El propietario no: debe traspasarlo.) */
   protected readonly puedeSalir = computed(
-    () => this.store.isRemote() && canLeaveTeam(this.myRole()),
+    () => this.store.isRemote() && !this.platformAdmin() && canLeaveTeam(this.myRole()),
   );
   /** Motivo por el que no puede salir, cuando corresponde explicarlo. */
   protected readonly motivoNoSalir = computed(() =>
@@ -303,13 +305,13 @@ export class MembersComponent {
     this.loading.set(true);
     this.error.set(null);
     try {
-      if (this.isOwner()) {
+      if (this.canViewMembers()) {
         const current = await this.access.listMembers();
-        const invites = await this.access.listTeamInvitations();
         this.members.set(current);
-        this.invitations.set(invites);
+        this.invitations.set(this.isOwner() ? await this.access.listTeamInvitations() : []);
       } else {
-        // Un editor NO gestiona miembros (RPC solo para propietario): vista de solo lectura.
+        // Un editor normal no consulta ni gestiona miembros. Un administrador de plataforma
+        // sí puede consultar la lista, pero no recibe acciones de propietario.
         this.members.set([]);
         this.invitations.set([]);
       }

@@ -24,6 +24,7 @@ describe('MembersComponent — invitaciones caducadas', () => {
     };
     const access = {
       target: vi.fn(() => ({ role: 'owner', teamId: 'team-1' })),
+      platformAdmin: vi.fn(() => false),
       listMembers: vi.fn().mockResolvedValue([]),
       listTeamInvitations: vi.fn().mockResolvedValue([invitacion]),
     };
@@ -57,5 +58,50 @@ describe('MembersComponent — invitaciones caducadas', () => {
     expect(row.querySelector('button')?.textContent).toContain('Cancelar');
     expect(row.textContent).not.toContain('Copiar enlace');
     expect(row.textContent).not.toContain('Enviar por correo');
+  });
+
+  it('el administrador de plataforma consulta otro equipo sin recibir acciones de propietario', async () => {
+    const access = {
+      target: vi.fn(() => ({ role: 'editor', teamId: 'team-2' })),
+      platformAdmin: vi.fn(() => true),
+      listMembers: vi.fn().mockResolvedValue([
+        {
+          userId: 'owner-2',
+          displayName: 'Mario',
+          emailNormalized: 'owner@example.com',
+          role: 'owner',
+          status: 'active',
+          acceptedAt: null,
+          invitedBy: null,
+        },
+      ]),
+      listTeamInvitations: vi.fn(),
+    };
+    TestBed.configureTestingModule({
+      imports: [MembersComponent],
+      providers: [
+        { provide: AccessService, useValue: access },
+        {
+          provide: StoreService,
+          useValue: {
+            isRemote: () => true,
+            activeTeam: () => ({ id: 'team-2', name: 'Otro', accentColor: '#3056d3' }),
+          },
+        },
+        { provide: SupabaseService, useValue: { user: () => ({ id: 'admin' }) } },
+        { provide: ConfirmService, useValue: { ask: vi.fn() } },
+      ],
+    });
+    const fixture = TestBed.createComponent(MembersComponent);
+    fixture.detectChanges();
+    await fixture.componentInstance.load();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Mario');
+    expect(fixture.nativeElement.textContent).toContain('Vista de consulta');
+    expect(fixture.nativeElement.querySelector('#invite-email')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-accion="traspasar-propiedad"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-accion="salir-equipo"]')).toBeNull();
+    expect(access.listTeamInvitations).not.toHaveBeenCalled();
   });
 });

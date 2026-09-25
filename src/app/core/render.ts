@@ -109,6 +109,15 @@ const HORIZONTAL: Geometry = {
  *  materiales, de modo que añadir un material nuevo lo incluye sin tocar el render. */
 const UPRIGHT_MATERIAL_TYPES: ReadonlySet<string> = new Set(CANONICAL_MATERIALS.map((c) => c.id));
 
+/** Materiales cuyo dibujo debe mantener la base abajo incluso si un documento antiguo trae rot. */
+export const FIXED_UPRIGHT_TYPES: ReadonlySet<string> = new Set([
+  'cone',
+  'pole',
+  'pica',
+  'mannequin',
+  'mannequin_row',
+]);
+
 /**
  * Rect canónico del contenido (largo→X, ancho→Y). Campo + elementos + asas se
  * dibujan SIEMPRE en este espacio y, en vertical, se rotan.
@@ -133,17 +142,16 @@ export const DEFAULT_TEXT_W = 0.3;
 export const DEFAULT_TEXT_H = 0.14;
 
 // =============================================================
-// FASE 3 — grosor de trazo de las herramientas TÁCTICAS de dibujo.
-// El dueño quiere la mitad del grosor anterior:
-//   - líneas/flechas/curvas/zigzag/mano alzada: 0.8 → 0.4
-//   - contornos de rect/elipse/zona: 0.6 → 0.3
+// Grosor de trazo de las herramientas TÁCTICAS de dibujo.
+//   - líneas/flechas/curvas/zigzag/mano alzada: 0.2 por defecto.
+//   - contornos de rect/elipse/zona: 0.2 por defecto.
 // Estos SON los valores por defecto del MODELO (no CSS): el elemento nuevo
 // nace con `strokeWidth` (o cae al default aquí), se persiste, se exporta y
 // aparece en las miniaturas. `FIELD_LINE_WIDTH` (0.3) NO se toca: es el campo.
 // =============================================================
-export const DEFAULT_STROKE_WIDTH = 0.4;
-/** Contorno por defecto de rect/elipse/zona (antes 0.6). */
-export const DEFAULT_SHAPE_STROKE = 0.3;
+export const DEFAULT_STROKE_WIDTH = 0.2;
+/** Contorno por defecto de rect/elipse/zona. */
+export const DEFAULT_SHAPE_STROKE = 0.2;
 /** Mínimo EDITABLE del grosor de trazo (nunca 0 ni negativo). */
 export const MIN_STROKE_WIDTH = 0.1;
 /** Máximo editable habitual del grosor de trazo (coherente con el inspector). */
@@ -616,8 +624,9 @@ export function hitTestElement(
   for (let i = elements.length - 1; i >= 0; i--) {
     const el = elements[i];
     // Rotación: prueba en el espacio local del elemento (punto rotado por -rot alrededor de su centro).
-    const c = el.rot ? elementCenter(el) : null;
-    const lp = el.rot && c ? rotatePoint(p, c, -el.rot) : p;
+    const visualRot = FIXED_UPRIGHT_TYPES.has(el.t) ? 0 : (el.rot ?? 0);
+    const c = visualRot ? elementCenter(el) : null;
+    const lp = visualRot && c ? rotatePoint(p, c, -visualRot) : p;
     if (
       el.t === 'player' ||
       el.t === 'ball' ||
@@ -796,6 +805,9 @@ function elStr(
   // (FASE 3 del encargo de materiales) y aquí es donde se decide qué se dibuja.
   field: FieldType = 'full',
 ): string {
+  // La rotación histórica se conserva en el documento para compatibilidad, pero estos materiales
+  // tienen un arriba físico: el cono apoya su base y picas/maniquíes permanecen de pie.
+  if (FIXED_UPRIGHT_TYPES.has(el.t) && el.rot) el = { ...el, rot: 0 };
   const gx = (nx: number) => px(nx, r);
   const gy = (ny: number) => py(ny, r);
   // Material en PNG: se renderiza como imagen. El `size` escala la caja (5.2×size)
@@ -1399,7 +1411,7 @@ function svgLine(
   const c = sel ? '#2563eb' : color;
   const dash =
     lineStyle === 'dashed'
-      ? ' stroke-dasharray="2,1.3"'
+      ? ' stroke-dasharray="2.4,0.7"'
       : lineStyle === 'dotted'
         ? ' stroke-dasharray="0.6,1.4"'
         : '';
@@ -1439,10 +1451,10 @@ export function svgZigzag(
   // reducida a la mitad de antes, para que resulte legible y no exagerado. Sigue
   // escalando con la longitud (trazos cortos reducen picos y amplitud).
   const amp = Math.min(1.5, len * 0.04);
-  const n = Math.max(2, Math.min(16, Math.round(len / 3)));
+  const n = Math.max(4, Math.min(32, Math.ceil(len / 1.8)));
   const dash =
     lineStyle === 'dashed'
-      ? ' stroke-dasharray="2,1.3"'
+      ? ' stroke-dasharray="2.4,0.7"'
       : lineStyle === 'dotted'
         ? ' stroke-dasharray="0.6,1.4"'
         : '';

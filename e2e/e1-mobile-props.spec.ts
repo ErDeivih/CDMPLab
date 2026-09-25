@@ -341,7 +341,7 @@ test.describe('E1 — el panel Propiedades NO bloquea el movimiento en móvil (�
   test.use({ hasTouch: true });
 
   for (const [W, H] of MOBILE) {
-    test(`a ${W}×${H}: colocar/seleccionar/mover/rotar NO abre Propiedades; solo el botón la abre y la X mantiene la selección`, async ({
+    test(`a ${W}×${H}: colocar/seleccionar/mover NO abre Propiedades; el cono queda erguido y solo el botón abre el panel`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: W, height: H });
@@ -420,27 +420,22 @@ test.describe('E1 — el panel Propiedades NO bloquea el movimiento en móvil (�
         });
       }
 
-      // ---- 4. Rotar con el MENÚ CONTEXTUAL (panel CERRADO) → cambia `rot` a ±90° ----
-      // Tras arrastrar el material por último, el cono es el elemento seleccionado: el menú
-      // se abre con pulsación larga (Fase 3) y el panel sigue cerrado.
+      // ---- 4. El cono mantiene su orientación con el panel cerrado ----
+      // El contrato anterior lo tumbaba ±90°; ahora el menú no ofrece ese giro.
       const coneNow = await objectScreen(page, CONE);
       await longPress(page, coneNow.x, coneNow.y);
       await expect(page.locator('.studio-panel')).toHaveCount(0);
       await expect(page.locator('.context-bar')).toBeVisible();
       const rotBefore = await firstRot(page);
-      const expected = ((((rotBefore % 360) + 360) % 360) + 90) % 360;
-      await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
-      // FASE G: observable — la rotación se espera con expect.poll (no un wait fijo).
-      await expect.poll(() => firstRot(page), { timeout: 5000 }).toBeCloseTo(expected, 0);
-      await expect(page.locator('.studio-panel')).toHaveCount(0); // rotar NO abre
-      const rotAfter = await firstRot(page);
-      expect(rotAfter, '[rotate] la rotación gira a +90° desde la barra de contexto').toBeCloseTo(
-        expected,
+      await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(
         0,
       );
+      await expect(page.locator('.studio-panel')).toHaveCount(0);
+      const rotAfter = await firstRot(page);
+      expect(rotAfter).toBe(rotBefore);
       if (W === 390 && H === 844) {
         await page.screenshot({
-          path: `${SHOTS}/movil-manija-rotacion-visible.png`,
+          path: `${SHOTS}/movil-cono-erguido.png`,
           fullPage: false,
         });
       }

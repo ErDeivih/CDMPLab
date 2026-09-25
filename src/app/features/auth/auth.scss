@@ -221,6 +221,14 @@ app-auth-card.admin-page .auth {
   }
 }
 
+.admin-jump {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
 .auth-note {
   font-size: 13px;
   color: var(--text-muted);

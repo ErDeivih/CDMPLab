@@ -296,7 +296,18 @@ export function isRetiredMaterial(id: string): boolean {
 
 /** Variantes de color admitidas por el Chino (recoloreable). Se usa un ÚNICO recurso
  *  SVG vectorial con 5+ colores; no se crean imágenes rasterizadas. */
-export const CHINO_COLORS = ['#2c7be5', '#f6c945', '#e74c3c', '#e8edf2', '#a855f7', '#22c55e'];
+export const CHINO_COLORS = [
+  '#2c7be5',
+  '#f6c945',
+  '#e74c3c',
+  '#e8edf2',
+  '#a855f7',
+  '#22c55e',
+  '#f97316',
+  '#ec4899',
+  '#111111',
+  '#06b6d4',
+];
 
 /** SVG vectorial ORIGINAL del Chino (FASE 8B), transparente y recoloreable.
  *

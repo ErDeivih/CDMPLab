@@ -352,7 +352,7 @@ export class StoreService {
       /* por defecto no hay rollback */
     },
     onDone?: (value: T) => void,
-  ): void {
+  ): Promise<{ ok: true; value: T } | { ok: false }> {
     // Cada operación remota recibe una GENERACIÓN. Una respuesta que llegue cuando ya ha
     // empezado otra operación es TARDÍA: no puede ofrecer reintento, porque el estado que
     // había antes de ella ya lo ha podido cambiar la operación nueva.
@@ -361,10 +361,11 @@ export class StoreService {
     this._canRetry.set(false);
     this.beginWrite();
     optimistic();
-    persist()
+    return persist()
       .then((value) => {
         onDone?.(value);
         this.endWrite();
+        return { ok: true as const, value };
       })
       .catch((err) => {
         rollback();
@@ -378,6 +379,7 @@ export class StoreService {
           this._canRetry.set(true);
         }
         this.endWrite(err);
+        return { ok: false as const };
       });
   }
 
@@ -627,7 +629,7 @@ export class StoreService {
     return this._exercises().filter((e) => e.teamId === teamId);
   }
 
-  saveExercise(ex: Exercise, opts?: { recreateIfMissing?: boolean }): void {
+  saveExercise(ex: Exercise, opts?: { recreateIfMissing?: boolean }): Promise<boolean> {
     const ds = this.dataSource;
     if (!ds) {
       this._exercises.update((list) => {
@@ -636,12 +638,12 @@ export class StoreService {
         save(this.key(KEY_EXERCISES), next);
         return next;
       });
-      return;
+      return Promise.resolve(true);
     }
     const existing = this._exercises().find((e) => e.id === ex.id);
     const expectedRevision = existing?.revision;
     const base = existing ? { ...existing, ...ex } : ex;
-    this.applyRemote(
+    return this.applyRemote(
       () => {
         this._exercises.update((list) => {
           const idx = list.findIndex((e) => e.id === ex.id);
@@ -669,7 +671,7 @@ export class StoreService {
             : list.map((e) => (e.id === ex.id ? res.exercise : e));
         });
       },
-    );
+    ).then((result) => result.ok && !result.value.conflict);
   }
 
   /**

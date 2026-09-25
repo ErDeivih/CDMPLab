@@ -9,7 +9,7 @@ import fs from 'node:fs';
 //  1. `.topbar` no existe en el DOM.
 //  2. No quedan 56 px vacíos arriba (el contenido empieza en el primer píxel útil).
 //  3. Escritorio: el menú de cuenta abre y contiene equipo, Ajustes y Miembros cuando toca.
-//  4. Móvil: cuatro destinos principales + «Más» (exactamente cinco entradas).
+//  4. Móvil: tres destinos principales + «Más» (exactamente cuatro entradas).
 //  5. Miembros se ofrece dentro de «Más»/cuenta (en modo local el rol se desconoce: se muestra).
 //  7. El selector de equipos sigue funcionando desde el menú y cierra el menú al cambiar.
 //  8. Ajustes abre desde el menú nuevo.
@@ -370,18 +370,19 @@ test.describe('Fase shell+móvil — barra superior eliminada y cuenta reubicada
     expect(await boton.evaluate((el) => el === document.activeElement)).toBe(true);
   });
 
-  test('4-5. móvil: cuatro destinos + «Más», y Miembros vive dentro de «Más»', async ({ page }) => {
+  test('4-5. móvil: tres destinos + «Más», y Miembros vive dentro de «Más»', async ({ page }) => {
     await page.setViewportSize(VIEWPORTS.movilV);
     await seed(page);
     await page.goto('/team');
 
     const nav = page.locator('.nav-movil');
     await expect(nav).toBeVisible();
-    // Cuatro enlaces + el botón «Más» = cinco entradas, y ninguna es Miembros.
-    await expect(nav.locator('a.nav-item')).toHaveCount(4);
+    // Tres enlaces + el botón «Más» = cuatro entradas, y ninguna es Miembros ni Pizarra.
+    await expect(nav.locator('a.nav-item')).toHaveCount(3);
     await expect(nav.locator('.nav-mas')).toHaveCount(1);
-    await expect(nav.locator('.nav-item')).toHaveCount(5);
+    await expect(nav.locator('.nav-item')).toHaveCount(4);
     await expect(nav.locator('.nav-item', { hasText: 'Miembros' })).toHaveCount(0);
+    await expect(nav.locator('.nav-item', { hasText: 'Pizarra' })).toHaveCount(0);
 
     await nav.locator('.nav-mas').click();
     const panel = page.locator('.cuenta-panel');

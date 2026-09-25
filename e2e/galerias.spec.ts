@@ -321,7 +321,7 @@ test.describe('Galerías sin nombres en el campo', () => {
     await seed(page);
     await openBoard(page);
     const host = (await page.locator('.board-host').boundingBox())!;
-    // Cono seleccionado con asas y ±90°.
+    // Cono seleccionado; su arriba físico impide girarlo ±90°.
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
@@ -330,10 +330,10 @@ test.describe('Galerías sin nombres en el campo', () => {
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
     // Fase 3: pulsación larga sobre el cono abre la barra de contexto (el clic derecho fue retirado).
     await longPress(page, p[0], p[1]);
-    await page.waitForTimeout(150);
-    await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
-    await page.waitForTimeout(120);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/galeria-transf-cono-90.png` });
+    await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/galeria-transf-cono-erguido.png` });
     // Curva con control.
     await useTool(page, 'Curva derecha', 'Dibujo');
     await drawShape(page, [0.4, 0.3], [0.65, 0.55]);

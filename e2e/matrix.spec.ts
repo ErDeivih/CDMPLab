@@ -262,7 +262,7 @@ async function singleEl(page: Page): Promise<CanvasElement> {
 
 interface Caps {
   movable: boolean;
-  rotatable: boolean; // se arrastra la MANIJA de rotación, no un input
+  rotatable: boolean; // barra de contexto; los materiales con arriba físico no giran
   resizable: boolean; // se arrastra un ASA (cajas) o el Tamaño (materiales)
   colorable: boolean; // el inspector cambia `c` de verdad
   editableEndpoints: boolean; // se arrastra x1/x2/c1
@@ -282,7 +282,8 @@ interface Family {
   caps: Caps;
 }
 
-// `rotatable` es TRUE en todas: la rotación se aplica desde la BARRA DE CONTEXTO
+// `rotatable` es FALSE para cono, poste y maniquí: siempre deben verse erguidos.
+// En el resto la rotación se aplica desde la BARRA DE CONTEXTO
 // (±90°, un paso exacto) — DECISIÓN DEL DUEÑO (Fase 6): la antigua manija de
 // rotación continua fue retirada. `resizable` TRUE en cajas (asas) y materiales
 // (Tamaño); los jugadores no tienen control de tamaño.
@@ -290,11 +291,11 @@ interface Family {
 const FAMILIES: Family[] = [
   { name: 'player', tool: 'Jugador propio', category: 'Jugadores', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'player', tool: 'Jugador rival', category: 'Jugadores', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'cone', tool: 'Cono', category: 'Material', draw: false, assetKind: 'cone_red', variantKind: 'cone_yellow', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
+  { name: 'cone', tool: 'Cono', category: 'Material', draw: false, assetKind: 'cone_red', variantKind: 'cone_yellow', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
   { name: 'ball', tool: 'Balón', category: 'Material', draw: false, assetKind: 'ball_football', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'mannequin', tool: 'Maniquí individual', category: 'Material', draw: false, assetKind: 'mannequin', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'mannequin', tool: 'Maniquí individual', category: 'Material', draw: false, assetKind: 'mannequin', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'minigoal', tool: 'Miniportería', category: 'Material', draw: false, assetKind: 'minigoal', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'pole', tool: 'Pértiga / poste', category: 'Material', draw: false, assetKind: 'pole', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'pole', tool: 'Pértiga / poste', category: 'Material', draw: false, assetKind: 'pole', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'marker', tool: 'BOSU', category: 'Material', draw: false, assetKind: 'disc', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'hurdle', tool: 'Valla', category: 'Material', draw: false, assetKind: 'hurdle', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'ring', tool: 'Aro', category: 'Material', draw: false, assetKind: 'ring', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
@@ -305,9 +306,9 @@ const FAMILIES: Family[] = [
   { name: 'vball', tool: 'Fitball', category: 'Material', draw: false, assetKind: 'vball', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'peto', tool: 'Peto', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'chaleco', tool: 'Chaleco lastrado', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'pica', tool: 'Pica', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'pica', tool: 'Pica', category: 'Material', draw: false, caps: { movable: true, rotatable: false, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'goal', tool: 'Portería grande', category: 'Material', draw: false, assetKind: 'goal', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'mannequin_row', tool: 'Barrera de maniquíes', category: 'Material', draw: false, assetKind: 'mannequin_row', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  { name: 'mannequin_row', tool: 'Barrera de maniquíes', category: 'Material', draw: false, assetKind: 'mannequin_row', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'dumbbell', tool: 'Mancuerna / pesa', category: 'Material', draw: false, assetKind: 'dumbbell', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'rect', tool: 'Rectángulo', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: true, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'ellipse', tool: 'Círculo / elipse', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: true, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
@@ -611,9 +612,8 @@ test('barra de contexto: Girar +90° rota el elemento a un múltiplo de 90 y un 
   expect((await singleEl(page)).rot).toBeCloseTo(rotA, 0);
 });
 
-// Rotación de un MATERIAL (puntual) por la barra ±90° — representativa del tipo punto/material.
-// DECISIÓN DEL DUEÑO: la manija continua fue retirada → la rotación es ±90° desde la barra.
-test('barra de contexto: Girar +90° de un material (cono) cambia rot a 90 en el modelo', async ({ page }) => {
+// Contrato anterior: el cono podía tumbarse. Ahora permanece erguido y no ofrece giro.
+test('barra de contexto: el cono no ofrece rotación y conserva su posición erguida', async ({ page }) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -629,11 +629,8 @@ test('barra de contexto: Girar +90° de un material (cono) cambia rot a 90 en el
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
   const [cX, cY] = normToScreen(0.5, 0.5, (await page.locator('.board-host').boundingBox())!);
   await longPress(page, cX, cY);
-  await rotateViaBar(page, 90);
-  await save(page);
-  const after = await singleEl(page);
-  expect(typeof after.rot).toBe('number');
-  expect(after.rot).toBeCloseTo(90, 0);
+  await expect(page.locator('.context-bar')).toBeVisible();
+  await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
 });
 
 // Rotación de una LÍNEA por la barra ±90°.
@@ -719,10 +716,9 @@ test('redimensión con asa: arrastrar br de una elipse cambia w/h', async ({ pag
   expect(after.h).toBeCloseTo(0.42, 1);
 });
 
-// Objeto ESTREcho y rotado: tras girar, sigue seleccionable desde su centro y se mueve
-// (el hit-test debe respetar la rotación; pértiga/pica son finos verticalmente).
-// DECISIÓN DEL DUEÑO: la rotación se hace con la barra ±90° (no arrastrando la manija).
-test('objeto estrecho/rotado (pica girada con ±90°): se re-selecciona desde su centro y se mueve', async ({ page }) => {
+// La pica tiene un arriba físico; se mantiene estrecha y erguida pero sigue siendo seleccionable
+// desde su centro y se puede mover sin una caja táctil desproporcionada.
+test('pica erguida: se re-selecciona desde su centro y se mueve', async ({ page }) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -732,22 +728,20 @@ test('objeto estrecho/rotado (pica girada con ±90°): se re-selecciona desde su
   await save(page);
   const created = await singleEl(page);
 
-  // Girarla +90° con la barra de contexto.
+  // El contrato antiguo permitía tumbarla +90°; esa acción ya no aparece.
   await reopen(page);
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
   await longPress(page, ...normToScreen(...elCenter(created), (await page.locator('.board-host').boundingBox())!));
-  await rotateViaBar(page, 90);
-  await save(page);
-  expect((await singleEl(page)).rot).toBeCloseTo(90, 0);
+  await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
 
-  // Volver a abrir y SELECCIONAR el objeto ya rotado desde su centro (hit-test con rotación).
-  await reopen(page);
+  // Seleccionar el objeto erguido desde su centro.
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
-  const [cx, cy] = elCenter(created); // el centro no cambia al rotar alrededor de él
+  const [cx, cy] = elCenter(created);
   await page.mouse.click(...normToScreen(cx, cy, box), { button: 'right' });
   await expect(page.locator('.inspector')).toBeVisible();
 
-  // Y MOVERLO con el arrastre (tras la rotación).
+  // Y moverlo con el arrastre.
   const [sx, sy] = normToScreen(cx, cy, box);
   await page.mouse.move(sx, sy);
   await page.mouse.down();
@@ -1024,6 +1018,10 @@ for (const fam of FAMILIES) {
       // La antigua manija de rotación continua ya NO debe existir (decisión del dueño).
       expect(await page.locator('.rot-handle').count(), 'sin manija de rotación continua').toBe(0);
       expect(await page.locator('.rot-line').count(), 'sin línea de conexión de rotación').toBe(0);
+    } else if (['cone', 'pole', 'pica', 'mannequin', 'mannequin_row'].includes(fam.name)) {
+      await longPress(page, ...normToScreen(cx, cy, (await page.locator('.board-host').boundingBox())!));
+      await expect(page.locator('.context-bar')).toBeVisible();
+      await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
     }
     // 2) REDIMENSIÓN real: cajas → arrastrar asa br; materiales → input Tamaño.
     if (c.resizable) {

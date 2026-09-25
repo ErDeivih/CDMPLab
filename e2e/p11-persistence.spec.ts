@@ -379,7 +379,7 @@ async function createFamily(page: Page, fam: FamilySpec): Promise<void> {
 
 test.describe('Fase 11 — round-trip de modelo y persistencia por familia', () => {
   for (const fam of FAMILIES) {
-    test(`familia «${fam.name}»: crear→mover→redimensionar→±90°→duplicar→guardar→salir→reabrir preserva el modelo`, async ({
+    test(`familia «${fam.name}»: crear→mover→redimensionar→duplicar→guardar→salir→reabrir preserva el modelo`, async ({
       page,
     }) => {
       await seed(page);
@@ -417,16 +417,23 @@ test.describe('Fase 11 — round-trip de modelo y persistencia por familia', () 
       }
 
       // --- Rotar ±90° (barra de contexto) ---
+      // Contrato nuevo del dueño: un cono debe permanecer físicamente erguido.
+      // El contrato anterior exigía girarlo; era incorrecto para este material.
       await reopen(page);
       await selectAt(page, b2);
-      await rotateViaBar(page, 90, b2);
-      await undoRedoStays(page, '1');
-      await save(page);
-      const b3 = (await savedElements(page))[0];
-      expect(b3.rot).toBeCloseTo(90, 0);
+      let b3 = b2;
+      if (fam.name === 'cone') {
+        await expect(page.locator('[aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
+      } else {
+        await rotateViaBar(page, 90, b2);
+        await undoRedoStays(page, '1');
+        await save(page);
+        b3 = (await savedElements(page))[0];
+        expect(b3.rot).toBeCloseTo(90, 0);
+      }
 
       // --- Duplicar (un solo Ctrl+D) ---
-      await reopen(page);
+      if (fam.name !== 'cone') await reopen(page);
       await selectAt(page, b3);
       await page.keyboard.press('Control+d');
       await expect(page.locator('.field-count')).toHaveText('2');
@@ -481,8 +488,9 @@ test.describe('Fase 11 — round-trip de modelo y persistencia por familia', () 
       .locator('.swatch')
       .nth(2);
     await colSwatch.click();
+    // El inspector tiene ahora dos deslizadores: opacidad del trazo y del relleno.
     const op = page
-      .locator('.studio-panel .inspector .field', { hasText: 'Opacidad' })
+      .locator('.studio-panel .inspector .field', { hasText: 'Opacidad —' })
       .locator('input[type="range"]');
     await op.fill('0.6');
     await op.dispatchEvent('change');

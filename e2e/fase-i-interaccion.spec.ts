@@ -27,15 +27,8 @@ import {
 } from './board-helpers';
 import { longPress, toggleFillScreen } from './gesture-helpers';
 
-/** Botones que debe ofrecer el menú contextual del elemento. */
-const CTX_BUTTONS = [
-  'Girar 45° a la izquierda',
-  'Girar 45° a la derecha',
-  'Girar 90° a la izquierda',
-  'Girar 90° a la derecha',
-  'Duplicar',
-  'Eliminar',
-];
+/** El cono sigue ofreciendo acciones, pero no puede tumbarse. */
+const CTX_BUTTONS = ['Duplicar', 'Eliminar'];
 
 /** Zoom actual del lienzo (para el escenario con zoom). */
 async function zoom(page: Page): Promise<number> {
@@ -210,6 +203,9 @@ test.describe('AUDITORÍA — doble clic sobre el mismo objeto', () => {
           `ofrece ${label}`,
         ).toBeVisible();
       }
+      await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(
+        0,
+      );
       await expect(page.locator('.field-count'), 'el doble clic no duplica ni borra').toHaveText(
         '1',
       );

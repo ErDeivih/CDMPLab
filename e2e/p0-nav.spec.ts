@@ -14,12 +14,13 @@ async function seed(page: Page): Promise<void> {
   });
 }
 
-// CONTRATO ACTUALIZADO (fase shell+móvil): la barra inferior tiene CUATRO destinos + «Más», y
+// CONTRATO ACTUALIZADO: la pizarra se abre desde Biblioteca, no desde la barra inferior; quedan
+// TRES destinos + «Más», y
 // «Miembros» vive DENTRO de «Más» (requisito explícito del encargo). Antes eran cinco enlaces con
 // Miembros en la barra; el quinto label de la barra es ahora «Más» y Miembros se comprueba en la
 // hoja (ver el test siguiente). El contrato anterior dejó de ser válido porque la barra superior y
 // su reparto de destinos cambiaron a propósito.
-const NAV_LABELS = ['Plantilla', 'Pizarra', 'Biblioteca', 'Sesiones', 'Más'];
+const NAV_LABELS = ['Plantilla', 'Biblioteca', 'Sesiones', 'Más'];
 
 for (const [W, H] of [
   [360, 800],

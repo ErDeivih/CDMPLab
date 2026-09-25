@@ -9,14 +9,26 @@
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
-import { seedBoard, openBoard, hostBox, fitMode, fieldCount, normToScreen, showCategory } from './board-helpers';
+import {
+  seedBoard,
+  openBoard,
+  hostBox,
+  fitMode,
+  fieldCount,
+  normToScreen,
+  showCategory,
+} from './board-helpers';
 
 const OUT = 'docs/screenshots/fase-h';
 fs.mkdirSync(OUT, { recursive: true });
 
 /** Arma una herramienta de Dibujo (abre el panel), fija el estilo de trazo si procede y
  *  CIERRA el panel para no tapar el campo al dibujar. */
-async function armDraw(page: Page, title: string, style?: 'Trazo continuo' | 'Trazo discontinuo'): Promise<void> {
+async function armDraw(
+  page: Page,
+  title: string,
+  style?: 'Trazo continuo' | 'Trazo discontinuo',
+): Promise<void> {
   await showCategory(page, 'Dibujo');
   await page.locator(`.rail-btn[title="${title}"]`).click();
   if (style) await page.locator(`.tools-caption .chip[aria-label="${style}"]`).click();
@@ -38,10 +50,30 @@ async function drawAt(page: Page, from: [number, number], to: [number, number]):
 const g = (page: Page, type: string) => page.locator(`.board-canvas svg g[data-el-type="${type}"]`);
 
 test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
+  test('el relleno tiene una barra al 15% y se guarda el valor elegido', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await seedBoard(page);
+    await openBoard(page);
+    await showCategory(page, 'Dibujo');
+    await page.locator('.rail-btn[title="Rectángulo"]').click();
+    const slider = page.locator('#tool-fill-opacity');
+    await expect(slider).toHaveValue('0.15');
+    await expect(page.locator('.tools-caption')).not.toContainText('Auto');
+    await slider.evaluate((el: HTMLInputElement) => {
+      el.value = '0.4';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const close = page.locator('.side-panel-left .panel-close');
+    if (await close.isVisible()) await close.click();
+    await drawAt(page, [0.2, 0.2], [0.5, 0.5]);
+    await expect(g(page, 'rect')).toHaveAttribute('data-fill-opacity', '0.4');
+  });
+
   test('línea continua y discontinua: tipo y trazo discontinuo', async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 768 });
-    await seedBoard(page); await openBoard(page);
+    await seedBoard(page);
+    await openBoard(page);
 
     await armDraw(page, 'Línea', 'Trazo continuo');
     await drawAt(page, [0.2, 0.2], [0.5, 0.2]);
@@ -53,8 +85,12 @@ test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
 
     await expect(g(page, 'line')).toHaveCount(2);
     // Una línea es continua (sin stroke-dasharray) y la otra discontinua (con dasharray).
-    await expect(page.locator('.board-canvas svg g[data-el-type="line"] line[stroke-dasharray]')).toHaveCount(1);
-    const dashes = await page.locator('.board-canvas svg g[data-el-type="line"] line').evaluateAll((els) => els.map((e) => e.getAttribute('stroke-dasharray')));
+    await expect(
+      page.locator('.board-canvas svg g[data-el-type="line"] line[stroke-dasharray]'),
+    ).toHaveCount(1);
+    const dashes = await page
+      .locator('.board-canvas svg g[data-el-type="line"] line')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('stroke-dasharray')));
     expect(dashes.filter((d) => !d).length, 'una sin discontinuo').toBe(1);
     expect(dashes.filter((d) => d).length, 'una con discontinuo').toBe(1);
   });
@@ -62,7 +98,8 @@ test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
   test('flecha continua/discontinua y flecha doble: puntas correctas', async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 768 });
-    await seedBoard(page); await openBoard(page);
+    await seedBoard(page);
+    await openBoard(page);
 
     await armDraw(page, 'Flecha (movimiento)', 'Trazo continuo');
     await drawAt(page, [0.2, 0.2], [0.5, 0.2]);
@@ -76,18 +113,26 @@ test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
     await expect(g(page, 'doubleArrow')).toHaveCount(1);
     // Cada flecha simple tiene UNA punta (1 polígono).
     for (let i = 0; i < 2; i++) {
-      await expect(g(page, 'arrow').nth(i).locator('polygon'), 'flecha simple: una punta').toHaveCount(1);
+      await expect(
+        g(page, 'arrow').nth(i).locator('polygon'),
+        'flecha simple: una punta',
+      ).toHaveCount(1);
     }
     // Trazo discontinuo presente en UNA de las flechas simples.
-    await expect(page.locator('.board-canvas svg g[data-el-type="arrow"] line[stroke-dasharray]')).toHaveCount(1);
+    await expect(
+      page.locator('.board-canvas svg g[data-el-type="arrow"] line[stroke-dasharray]'),
+    ).toHaveCount(1);
     // La flecha doble tiene DOS puntas (2 polígonos).
-    await expect(g(page, 'doubleArrow').locator('polygon'), 'flecha doble: dos puntas').toHaveCount(2);
+    await expect(g(page, 'doubleArrow').locator('polygon'), 'flecha doble: dos puntas').toHaveCount(
+      2,
+    );
   });
 
   test('curvas izquierda y derecha son DISTINTAS; zigzag compacto con punta', async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 768 });
-    await seedBoard(page); await openBoard(page);
+    await seedBoard(page);
+    await openBoard(page);
 
     await armDraw(page, 'Curva izquierda');
     await drawAt(page, [0.2, 0.2], [0.5, 0.4]);
@@ -98,7 +143,9 @@ test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(3);
 
     await expect(g(page, 'curve')).toHaveCount(2);
-    const ds = await g(page, 'curve').locator('path').evaluateAll((els) => els.map((e) => e.getAttribute('d')));
+    const ds = await g(page, 'curve')
+      .locator('path')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('d')));
     expect(ds.length).toBe(2);
     expect(ds[0], 'la curva es una Bézier (Q)').toContain('Q');
     expect(ds[0], 'las dos curvas se doblan en sentidos distintos').not.toBe(ds[1]);
@@ -113,7 +160,8 @@ test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
   test('rectángulo, elipse, mano alzada y texto: tipos y contenido', async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 768 });
-    await seedBoard(page); await openBoard(page);
+    await seedBoard(page);
+    await openBoard(page);
 
     await armDraw(page, 'Rectángulo');
     await drawAt(page, [0.2, 0.2], [0.4, 0.4]);
@@ -123,7 +171,8 @@ test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
     await drawAt(page, [0.2, 0.6], [0.5, 0.8]);
     // Texto: se coloca con un clic y se escribe en el inspector.
     await armDraw(page, 'Texto');
-    const host = await hostBox(page); const fit = await fitMode(page);
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
     const pt = normToScreen(0.75, 0.7, host, fit);
     await page.mouse.click(pt.x, pt.y);
     const ta = page.locator('.studio-panel .inspector textarea');
@@ -144,7 +193,8 @@ test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
   test('color seleccionado se aplica al trazo (data-color)', async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 768 });
-    await seedBoard(page); await openBoard(page);
+    await seedBoard(page);
+    await openBoard(page);
     await showCategory(page, 'Dibujo');
     await page.locator('.rail-btn[title="Línea"]').click();
     // Elegir ROJO en la paleta de la herramienta (caption).
@@ -158,16 +208,21 @@ test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
   test('preview visible DESDE pointerdown hasta pointerup', async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 768 });
-    await seedBoard(page); await openBoard(page);
+    await seedBoard(page);
+    await openBoard(page);
     await armDraw(page, 'Línea');
-    const host = await hostBox(page); const fit = await fitMode(page);
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
     const a = normToScreen(0.25, 0.4, host, fit);
     const b = normToScreen(0.65, 0.6, host, fit);
     await page.mouse.move(a.x, a.y);
     await page.mouse.down();
     await page.mouse.move(b.x, b.y, { steps: 6 });
     // ANTES de soltar: hay preview en el SVG y todavía NO hay elemento definitivo.
-    await expect(page.locator('.board-canvas svg .board-preview'), 'preview visible antes de soltar').not.toHaveCount(0);
+    await expect(
+      page.locator('.board-canvas svg .board-preview'),
+      'preview visible antes de soltar',
+    ).not.toHaveCount(0);
     expect(await fieldCount(page), 'el documento no cambia hasta el pointerup').toBe(0);
     await page.mouse.up();
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
@@ -176,21 +231,34 @@ test.describe('FASE H — los 12 dibujos, con atributos verificados', () => {
   test('captura escritorio-dibujos.png: los 12 dibujos EN EL CAMPO', async ({ page }) => {
     test.setTimeout(180_000);
     await page.setViewportSize({ width: 1366, height: 768 });
-    await seedBoard(page); await openBoard(page);
+    await seedBoard(page);
+    await openBoard(page);
 
-    await armDraw(page, 'Línea', 'Trazo continuo'); await drawAt(page, [0.12, 0.12], [0.32, 0.12]);
-    await armDraw(page, 'Línea', 'Trazo discontinuo'); await drawAt(page, [0.12, 0.2], [0.32, 0.2]);
-    await armDraw(page, 'Flecha (movimiento)', 'Trazo continuo'); await drawAt(page, [0.42, 0.12], [0.62, 0.12]);
-    await armDraw(page, 'Flecha (movimiento)', 'Trazo discontinuo'); await drawAt(page, [0.42, 0.2], [0.62, 0.2]);
-    await armDraw(page, 'Flecha doble sentido'); await drawAt(page, [0.72, 0.12], [0.92, 0.12]);
-    await armDraw(page, 'Curva izquierda'); await drawAt(page, [0.12, 0.35], [0.32, 0.45]);
-    await armDraw(page, 'Curva derecha'); await drawAt(page, [0.42, 0.35], [0.62, 0.45]);
-    await armDraw(page, 'Conducción (zigzag)'); await drawAt(page, [0.72, 0.35], [0.92, 0.45]);
-    await armDraw(page, 'Rectángulo'); await drawAt(page, [0.12, 0.6], [0.28, 0.8]);
-    await armDraw(page, 'Círculo / elipse'); await drawAt(page, [0.36, 0.6], [0.52, 0.8]);
-    await armDraw(page, 'Dibujo a mano alzada'); await drawAt(page, [0.6, 0.72], [0.78, 0.62]);
+    await armDraw(page, 'Línea', 'Trazo continuo');
+    await drawAt(page, [0.12, 0.12], [0.32, 0.12]);
+    await armDraw(page, 'Línea', 'Trazo discontinuo');
+    await drawAt(page, [0.12, 0.2], [0.32, 0.2]);
+    await armDraw(page, 'Flecha (movimiento)', 'Trazo continuo');
+    await drawAt(page, [0.42, 0.12], [0.62, 0.12]);
+    await armDraw(page, 'Flecha (movimiento)', 'Trazo discontinuo');
+    await drawAt(page, [0.42, 0.2], [0.62, 0.2]);
+    await armDraw(page, 'Flecha doble sentido');
+    await drawAt(page, [0.72, 0.12], [0.92, 0.12]);
+    await armDraw(page, 'Curva izquierda');
+    await drawAt(page, [0.12, 0.35], [0.32, 0.45]);
+    await armDraw(page, 'Curva derecha');
+    await drawAt(page, [0.42, 0.35], [0.62, 0.45]);
+    await armDraw(page, 'Conducción (zigzag)');
+    await drawAt(page, [0.72, 0.35], [0.92, 0.45]);
+    await armDraw(page, 'Rectángulo');
+    await drawAt(page, [0.12, 0.6], [0.28, 0.8]);
+    await armDraw(page, 'Círculo / elipse');
+    await drawAt(page, [0.36, 0.6], [0.52, 0.8]);
+    await armDraw(page, 'Dibujo a mano alzada');
+    await drawAt(page, [0.6, 0.72], [0.78, 0.62]);
     await armDraw(page, 'Texto');
-    const host = await hostBox(page); const fit = await fitMode(page);
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
     const pt = normToScreen(0.62, 0.88, host, fit);
     await page.mouse.click(pt.x, pt.y);
     const ta = page.locator('.studio-panel .inspector textarea');

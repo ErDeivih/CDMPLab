@@ -1512,6 +1512,24 @@ select {
   }
 }
 
+// El muestrario ampliado no debe tapar la esquina inferior del campo. En escritorio
+// el lienzo comienza a la derecha del raíl compacto; las muestras se recorren en
+// horizontal con ratón, rueda/trackpad o dedo, manteniendo todas las opciones.
+.tools-caption-color > .tools-caption-title {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tools-caption-color > .swatches {
+  flex-wrap: nowrap;
+  max-width: 112px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-top: 0;
+  scrollbar-width: thin;
+}
+
 @media (max-width: 700px), (max-height: 480px) and (max-width: 1000px) {
   // En compacto el grupo mide 54 px (sin leyenda) + 8 de margen: la reserva de los paneles baja.
   .studio {

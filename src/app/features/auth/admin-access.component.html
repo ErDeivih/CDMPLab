@@ -4,8 +4,9 @@
   [subtitle]="'Gestión de accesos de la plataforma'"
 >
   <p class="auth-note">
-    Busca y gestiona los perfiles. Solo los administradores de plataforma pueden acceder a este
-    panel.
+    Las cuentas aprobadas pueden pedir un equipo, pero solo un administrador de plataforma puede
+    autorizar su creación. Ser propietario de un equipo no da acceso a este panel. Busca cuentas,
+    revisa solicitudes y entra en cualquier equipo desde aquí.
   </p>
 
   <!-- LO PRIMERO: lo que espera una DECISIÓN tuya. El dueño no encontraba dónde aprobar cuentas y
@@ -23,7 +24,9 @@
             pendientesCount() === 1 ? 'cuenta esperando aprobación' : 'cuentas esperando aprobación'
           }}
         </span>
-        <a class="auth-link" href="#cuentas">Ver cuentas</a>
+        <button type="button" class="auth-link admin-jump" (click)="goToSection('cuentas')">
+          Ver cuentas
+        </button>
       </div>
       <div class="admin-pendiente">
         <strong data-pendiente="solicitudes">{{ pendingRequests().length }}</strong>
@@ -34,7 +37,13 @@
               : 'solicitudes de equipo esperando'
           }}
         </span>
-        <a class="auth-link" href="#solicitudes-equipo">Ver solicitudes</a>
+        <button
+          type="button"
+          class="auth-link admin-jump"
+          (click)="goToSection('solicitudes-equipo')"
+        >
+          Ver solicitudes
+        </button>
       </div>
     </section>
   }
@@ -52,7 +61,11 @@
     <button type="button" class="btn" (click)="refreshAll()">Buscar</button>
   </div>
 
-  @if (adminReady()) {
+  @if (adminError()) {
+    <p class="auth-msg err" role="alert">{{ adminError() }}</p>
+  }
+
+  @if (adminReady() && overviewLoaded()) {
     <section class="admin-overview" aria-label="Resumen global" data-resumen-global="1">
       <div class="admin-stat">
         <strong>{{ overview().totals.teams }}</strong
@@ -117,7 +130,7 @@
     }
   }
 
-  @if (adminReady()) {
+  @if (adminReady() && overviewLoaded()) {
     <h2 class="auth-note" style="font-weight: 700; margin-top: 18px">Todos los equipos</h2>
     <p class="auth-note">
       Entra en cualquier equipo para revisar y editar su biblioteca, plantilla y sesiones.
@@ -203,6 +216,7 @@
     class="auth-note"
     style="font-weight: 700; margin-top: 18px"
     id="solicitudes-equipo"
+    tabindex="-1"
     data-apartado="equipos"
   >
     Solicitudes de equipo
@@ -277,6 +291,7 @@
     class="auth-note"
     style="font-weight: 700; margin-top: 18px"
     id="cuentas"
+    tabindex="-1"
     data-apartado="cuentas"
   >
     Cuentas
@@ -303,7 +318,9 @@
           </span>
         </div>
         <div class="admin-actions">
-          @if (adminReady() && !isAdmin(p.userId) && p.status === 'approved') {
+          @if (
+            adminReady() && administratorsLoaded() && !isAdmin(p.userId) && p.status === 'approved'
+          ) {
             <button type="button" class="btn" [disabled]="busy(p.userId)" (click)="promote(p)">
               Nombrar administrador
             </button>

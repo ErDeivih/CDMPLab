@@ -24,6 +24,16 @@ const EXACT: Record<string, string> = {
   '#b8860b': 'amarillo',
   '#111111': 'negro',
   '#f4f4f4': 'gris claro',
+  // Tonos adicionales de dibujo: nombres distintos de las muestras originales para
+  // que cada botón se pueda identificar por voz y por lector de pantalla.
+  '#facc15': 'amarillo vivo',
+  '#f97316': 'naranja vivo',
+  '#ef4444': 'rojo vivo',
+  '#22c55e': 'verde vivo',
+  '#06b6d4': 'turquesa',
+  '#a855f7': 'violeta claro',
+  '#ec4899': 'rosa fuerte',
+  '#d1d5db': 'gris medio',
   '#c8102e': 'rojo',
   // Césped (4 tonos distinguibles por lector de pantalla).
   '#31834a': 'verde medio',

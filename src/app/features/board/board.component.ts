@@ -66,6 +66,7 @@ import {
   screenPxToNormTolerance,
   DEFAULT_ELEMENT_COLOR,
   COLORABLE_ELEMENT_TYPES,
+  FIXED_UPRIGHT_TYPES,
 } from '../../core/render';
 import { colorName, colorNamePlural } from '../../core/color-name';
 import { generateThumbnail } from '../../core/canvas-export';
@@ -306,6 +307,14 @@ export const PALETTE = [
   '#b8860b',
   '#111111',
   '#f4f4f4',
+  '#facc15',
+  '#f97316',
+  '#ef4444',
+  '#22c55e',
+  '#06b6d4',
+  '#a855f7',
+  '#ec4899',
+  '#d1d5db',
   '#ffffff',
 ];
 
@@ -1311,13 +1320,13 @@ export class BoardComponent {
   protected readonly shapeFill = signal(true);
   /** Color del RELLENO de figuras (rect/elipse/zona). null → se deriva del perímetro. */
   protected readonly fillColor = signal<string | null>(null);
-  /** Opacidad del relleno (0..1) de figuras. undefined → default 0.16. */
-  protected readonly fillOpacity = signal<number | undefined>(undefined);
+  /** Opacidad del relleno (0..1) de figuras. */
+  protected readonly fillOpacity = signal<number>(0.15);
   protected setFillColor(c: string): void {
     this.fillColor.set(c);
   }
-  protected setFillOpacity(o: number | undefined): void {
-    this.fillOpacity.set(o);
+  protected setFillOpacity(o: number): void {
+    this.fillOpacity.set(Math.max(0, Math.min(1, o)));
   }
   /** Color activo de las herramientas de dibujo (el de la herramienta actual).
    *  Por defecto es BLANCO (`DEFAULT_ELEMENT_COLOR`): es el color con el que el campo
@@ -3565,9 +3574,8 @@ export class BoardComponent {
   protected setSelFillColor(c: string): void {
     this.editSelected({ fillColor: c });
   }
-  protected setSelFillOpacity(o: number | undefined): void {
-    // Auto (undefined) → elimina la opacidad explícita para usar el default 0.16.
-    this.editSelected({ fillOpacity: o });
+  protected setSelFillOpacity(o: number): void {
+    this.editSelected({ fillOpacity: Math.max(0, Math.min(1, o)) });
   }
 
   protected setSelArrowStyle(style: 'solid' | 'dashed'): void {
@@ -3674,11 +3682,16 @@ export class BoardComponent {
    *  historial. Se usa desde la barra de contexto (botones ±90°). */
   protected rotateSelected(deg: 90 | -90 | 45 | -45): void {
     const el = this.selectedElement();
-    if (!el || el.locked) return;
+    if (!el || el.locked || FIXED_UPRIGHT_TYPES.has(el.t)) return;
     // BLOQUE D2: se admite ±45° además de ±90°. `normalizeRotation` normaliza a [0,360)
     // (un giro de -45 queda en 315, -90 en 270, etc.), de modo que el PNG y el modelo
     // reabierto coinciden con lo que el usuario ve (rotación exacta, no acumulación).
     this.editSelected({ rot: normalizeRotation((el.rot ?? 0) + deg) });
+  }
+
+  protected canRotateSelected(): boolean {
+    const el = this.selectedElement();
+    return !!el && !el.locked && !FIXED_UPRIGHT_TYPES.has(el.t);
   }
 
   private selCenter(el: CanvasElement): { x: number; y: number } {
@@ -3799,6 +3812,7 @@ export class BoardComponent {
   }
 
   protected async saveToExercise(navigate = true): Promise<boolean> {
+    if (this.saving()) return false;
     this.saving.set(true);
     this.saved.set(false);
     // A5: guardar SIN título queda BLOQUEADO. Se avisa, se abre Propiedades, se enfoca el
@@ -3834,6 +3848,7 @@ export class BoardComponent {
       thumbnail = null; // la miniatura no debe bloquear el guardado
     }
     try {
+      let persisted: boolean;
       if (this.editExerciseId) {
         const existing = this.store.exercises().find((e) => e.id === this.editExerciseId);
         if (!existing) {
@@ -3843,7 +3858,7 @@ export class BoardComponent {
           this.saving.set(false);
           return false; // no navegar, no limpiar dirty
         }
-        this.store.saveExercise({
+        persisted = await this.store.saveExercise({
           ...existing,
           title: t,
           description: this.metaDescription(),
@@ -3883,7 +3898,14 @@ export class BoardComponent {
           thumbnail,
           savedAt: new Date().toISOString(),
         };
-        this.store.saveExercise(ex);
+        persisted = await this.store.saveExercise(ex);
+      }
+      if (!persisted) {
+        this.notify(
+          'No se confirmó el guardado en tu cuenta. Revisa el aviso y vuelve a intentarlo.',
+        );
+        this.saving.set(false);
+        return false;
       }
     } catch (err) {
       // No abandonar ni limpiar el estado sucio si falla la persistencia.
@@ -5279,7 +5301,7 @@ export class BoardComponent {
       const col = this.drawColor();
       // Fase 10: relleno del mismo color que el perímetro.
       const fillColor = col;
-      const fillOpacity = this.fillOpacity() ?? 0.16;
+      const fillOpacity = this.fillOpacity();
       const fill = this.shapeFill() ? this.withAlpha(fillColor, fillOpacity) : 'none';
       const stroke = col;
       return t === 'ellipse'
@@ -5306,7 +5328,7 @@ export class BoardComponent {
     const ay1 = y1 * g.h + g.y;
     const ax2 = x2 * g.w + g.x;
     const ay2 = y2 * g.h + g.y;
-    const dash = lineStyle === 'dashed' ? ' stroke-dasharray="2,1.3"' : '';
+    const dash = lineStyle === 'dashed' ? ' stroke-dasharray="2.4,0.7"' : '';
     let s = `<line x1="${ax1}" y1="${ay1}" x2="${ax2}" y2="${ay2}" stroke="${color}" stroke-width="${width}"${dash}/>`;
     const size = arrowHeadSize(width);
     if (arrow === 'end' || arrow === 'both') {

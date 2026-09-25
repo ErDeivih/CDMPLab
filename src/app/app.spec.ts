@@ -23,7 +23,7 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('CDMPLab');
     expect(compiled.textContent).toContain('Plantilla');
-    expect(compiled.textContent).toContain('Pizarra');
+    expect(compiled.querySelector('nav')?.textContent).not.toContain('Pizarra');
   });
 });
 

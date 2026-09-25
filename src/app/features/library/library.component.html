@@ -465,8 +465,14 @@
           </div>
           <div class="modal-foot">
             <button class="btn" (click)="closeEditor()">Cancelar</button>
-            <button class="btn" (click)="design()"><span class="msi">edit</span> Diseñar</button>
-            <button class="btn btn-primary" [disabled]="!form().title.trim()" (click)="save()">
+            <button class="btn" [disabled]="saving()" (click)="design()">
+              <span class="msi">edit</span> Diseñar
+            </button>
+            <button
+              class="btn btn-primary"
+              [disabled]="saving() || !form().title.trim()"
+              (click)="save()"
+            >
               Guardar
             </button>
           </div>

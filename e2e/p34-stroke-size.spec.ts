@@ -17,7 +17,11 @@ import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import type { CanvasDocument, CanvasElement } from '../src/app/core/models';
-import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO, materialBaseSize } from '../src/app/core/tactic-assets';
+import {
+  TACTICAL_SIZE,
+  MATERIAL_SIZE_RATIO,
+  materialBaseSize,
+} from '../src/app/core/tactic-assets';
 import { fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 import { MATERIAL_BOX } from '../src/app/core/render';
 
@@ -37,7 +41,10 @@ function normToScreen(nx: number, ny: number, box: Box): [number, number] {
   const s = Math.min(box.width / 100, box.height / 80);
   const offX = (box.width - 100 * s) / 2;
   const offY = (box.height - 80 * s) / 2;
-  return [box.x + offX + (nx * RECT_CANON.w + RECT_CANON.x) * s, box.y + offY + (ny * RECT_CANON.h + RECT_CANON.y) * s];
+  return [
+    box.x + offX + (nx * RECT_CANON.w + RECT_CANON.x) * s,
+    box.y + offY + (ny * RECT_CANON.h + RECT_CANON.y) * s,
+  ];
 }
 
 async function seed(page: Page): Promise<void> {
@@ -55,12 +62,20 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
   await ensureFitMode(page);
 }
 
 async function ensureFitMode(page: Page): Promise<void> {
-  const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
+  const fill = await page
+    .locator('.board-host')
+    .evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
     await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
@@ -94,7 +109,12 @@ async function dragDraw(page: Page, from: [number, number], to: [number, number]
   await page.mouse.up();
 }
 
-async function draw(page: Page, title: string, from: [number, number], to: [number, number]): Promise<void> {
+async function draw(
+  page: Page,
+  title: string,
+  from: [number, number],
+  to: [number, number],
+): Promise<void> {
   await useDrawTool(page, title);
   await dragDraw(page, from, to);
   await deselect(page, await hostBox(page));
@@ -135,7 +155,13 @@ async function reopen(page: Page): Promise<void> {
   await page.locator('[title="Diseñar en pizarra"]').first().click();
   await page.waitForURL('**/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
 }
 
 function canvasDoc(page: Page): Promise<CanvasDocument> {
@@ -146,7 +172,13 @@ function canvasDoc(page: Page): Promise<CanvasDocument> {
 }
 
 /** Encuentra el rectángulo dibujado por sus coordenadas SOLO (no el borde del campo). */
-function findDrawnRectStruct(svg: string, ex: number, ey: number, ew: number, eh: number): { strokeWidth: number } | null {
+function findDrawnRectStruct(
+  svg: string,
+  ex: number,
+  ey: number,
+  ew: number,
+  eh: number,
+): { strokeWidth: number } | null {
   const re = /<rect\b[^>]*>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(svg))) {
@@ -158,7 +190,12 @@ function findDrawnRectStruct(svg: string, ex: number, ey: number, ew: number, eh
     const sw = parseFloat(tag.match(/\bstroke-width="([^"]+)"/)?.[1] ?? 'NaN');
     if (![x, y, width, height, sw].every(Number.isFinite)) continue;
     // Coincidencia por posición y tamaño (tolerancia por decimales de coma flotante).
-    if (Math.abs(x - ex) < 0.3 && Math.abs(y - ey) < 0.3 && Math.abs(width - ew) < 0.3 && Math.abs(height - eh) < 0.3) {
+    if (
+      Math.abs(x - ex) < 0.3 &&
+      Math.abs(y - ey) < 0.3 &&
+      Math.abs(width - ew) < 0.3 &&
+      Math.abs(height - eh) < 0.3
+    ) {
       return { strokeWidth: sw };
     }
   }
@@ -168,7 +205,7 @@ function findDrawnRectStruct(svg: string, ex: number, ey: number, ew: number, eh
 test.setTimeout(120_000);
 
 test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
-  test('dibujo: el trazo por defecto es ~mitad (0.4) y el contorno del rect ~0.3', async ({ page }) => {
+  test('dibujo: trazo y contorno nuevos 0.2; las líneas del campo siguen en 0.3', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
@@ -176,18 +213,18 @@ test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
     // Línea.
     await draw(page, 'Línea', [0.2, 0.3], [0.5, 0.3]);
     let svg = await boardSvg(page);
-    expect(svg).toContain('stroke-width="0.4"'); // línea (0.4) ≠ campo (0.3)
+    expect(svg).toContain('stroke-width="0.2"'); // petición actual: línea 0.2 ≠ campo 0.3
 
-    // Flecha: 0.4 + punta (polygon).
+    // Flecha: 0.2 + punta (polygon).
     await draw(page, 'Flecha (movimiento)', [0.2, 0.5], [0.5, 0.5]);
     svg = await boardSvg(page);
-    expect(svg).toContain('stroke-width="0.4"');
+    expect(svg).toContain('stroke-width="0.2"');
     expect(svg).toContain('<polygon');
 
     // Mano alzada.
     await draw(page, 'Dibujo a mano alzada', [0.2, 0.7], [0.5, 0.75]);
     svg = await boardSvg(page);
-    expect(svg).toContain('stroke-width="0.4"');
+    expect(svg).toContain('stroke-width="0.2"');
 
     // Rectángulo grande (para identificarlo frente a las marcas del campo).
     await draw(page, 'Rectángulo', [0.1, 0.1], [0.9, 0.9]);
@@ -200,7 +237,7 @@ test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
     const eh = (0.9 - 0.1) * RECT_CANON.h;
     const rect = findDrawnRectStruct(svg, ex, ey, ew, eh);
     expect(rect, 'el rectángulo dibujado está en el SVG').not.toBeNull();
-    expect(rect!.strokeWidth).toBeCloseTo(0.3, 5); // contorno reducido a ~mitad (0.6 → 0.3)
+    expect(rect!.strokeWidth).toBeCloseTo(0.2, 5);
 
     await page.waitForTimeout(250);
     await page.screenshot({ path: `${SHOTS}/01-trazo-fino.png` });
@@ -209,7 +246,9 @@ test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
     expect(svg).toContain('stroke-width="0.3"');
   });
 
-  test('tamaño inicial: cono base 0.60 y jugador con scale(0.60) (Decisión del dueño, Fase 3)', async ({ page }) => {
+  test('tamaño inicial: cono base 0.60 y jugador con scale(0.60) (Decisión del dueño, Fase 3)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
@@ -241,22 +280,62 @@ test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
       const now = new Date().toISOString();
       const team = { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now };
       const ex = {
-        id: 'old', teamId: 't1', folderId: null, title: 'Antiguo', description: '', explanation: '',
-        category: 'Técnica', objectives: [], materials: [], durationMinutes: 0, minPlayers: null, maxPlayers: null,
-        loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null,
+        id: 'old',
+        teamId: 't1',
+        folderId: null,
+        title: 'Antiguo',
+        description: '',
+        explanation: '',
+        category: 'Técnica',
+        objectives: [],
+        materials: [],
+        durationMinutes: 0,
+        minPlayers: null,
+        maxPlayers: null,
+        loadMode: 'fixed',
+        seriesCount: null,
+        repetitionsCount: null,
+        workSeconds: null,
+        restSeconds: null,
         isTemplate: false,
         canvas: {
-          version: 2, schemaVersion: 3, field: 'full',
-          frames: [{
-            duration: 1000,
-            elements: [
-              { id: 'c', t: 'cone', x: 0.3, y: 0.5, size: 1.0, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' },
-              { id: 't', t: 'text', x: 0.5, y: 0.3, v: 'Hola', size: 3, w: 0.3, h: 0.14, autoH: false },
-            ],
-          }],
-          orientation: 'horizontal', grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a',
+          version: 2,
+          schemaVersion: 3,
+          field: 'full',
+          frames: [
+            {
+              duration: 1000,
+              elements: [
+                {
+                  id: 'c',
+                  t: 'cone',
+                  x: 0.3,
+                  y: 0.5,
+                  size: 1.0,
+                  assetKind: 'cone_red',
+                  asset: '/assets/tactical/cone-red.png',
+                },
+                {
+                  id: 't',
+                  t: 'text',
+                  x: 0.5,
+                  y: 0.3,
+                  v: 'Hola',
+                  size: 3,
+                  w: 0.3,
+                  h: 0.14,
+                  autoH: false,
+                },
+              ],
+            },
+          ],
+          orientation: 'horizontal',
+          grass: 'stripes',
+          lineColor: '#ffffff',
+          backgroundColor: '#31834a',
         },
-        thumbnail: null, savedAt: now,
+        thumbnail: null,
+        savedAt: now,
       };
       localStorage.setItem('entrenolab:seeded', '1');
       localStorage.setItem('entrenolab:teams', JSON.stringify([team]));
@@ -269,7 +348,13 @@ test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
     await page.locator('[title="Diseñar en pizarra"]').first().click();
     await page.waitForURL('**/board');
     await expect(page.locator('.board-host')).toBeVisible();
-    if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+    if (
+      await page
+        .locator('.help-close')
+        .isVisible()
+        .catch(() => false)
+    )
+      await page.locator('.help-close').click();
 
     // Primera apertura: migra y escalado a la nueva base 0.60 (cone 1.0 → 0.60, texto 3 → 1.80).
     // DECISIÓN DEL DUEÑO (Fase 3): el tamaño base pasa de 0.75 a 0.60 (20 % menor).

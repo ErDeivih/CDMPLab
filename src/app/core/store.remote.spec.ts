@@ -190,6 +190,27 @@ describe('StoreService en modo remoto', () => {
     expect(store.getExercisesForTeam('team-1')[0].revision).toBe(2);
   });
 
+  it('el guardado remoto confirma el éxito solo después de que responda el servidor', async () => {
+    let confirmar!: (result: SaveExerciseResult) => void;
+    const pendiente = new Promise<SaveExerciseResult>((resolve) => {
+      confirmar = resolve;
+    });
+    const fake = makeFake({ saveExercise: vi.fn().mockReturnValue(pendiente) });
+    await store.connectDataSource(fake, 'team-1');
+    const resultado = store.saveExercise(EX('nuevo'));
+    expect(store.pendingWrites()).toBe(1);
+    confirmar({ exercise: EX('nuevo', { revision: 1 }), revision: 1 });
+    expect(await resultado).toBe(true);
+    expect(store.pendingWrites()).toBe(0);
+  });
+
+  it('un fallo remoto no puede presentarse como ejercicio guardado', async () => {
+    const fake = makeFake({ saveExercise: vi.fn().mockRejectedValue(new Error('sin conexión')) });
+    await store.connectDataSource(fake, 'team-1');
+    expect(await store.saveExercise(EX('nuevo'))).toBe(false);
+    expect(store.getExercisesForTeam('team-1')).toHaveLength(0);
+  });
+
   it('«Guardar mi copia» reenvía MI versión con la revisión del servidor', async () => {
     const latest = EX('e1', { title: 'Versión servidor', revision: 2 });
     const saveExercise = vi

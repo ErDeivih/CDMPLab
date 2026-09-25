@@ -1668,7 +1668,7 @@ test.describe('EntrenoLab funcionalidades', () => {
       await page.keyboard.press('Escape');
     }
 
-    // Orientación VERTICAL: el cono rota pero su centro sigue dentro del host y se
+    // Orientación VERTICAL: el campo rota, pero el cono permanece erguido y su centro sigue dentro del host; se
     // selecciona con el mismo clic en el centro visual (round-trip coherente H/V).
     await openProps(page);
     await page

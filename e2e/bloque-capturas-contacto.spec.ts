@@ -272,9 +272,10 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     await expect(page.locator('.tray-quick .tray-quick-chip')).toHaveCount(5);
     await page.screenshot({ path: path.join(OUT, 'fichas-rapidas-por-color.png') });
 
-    // Menú contextual ±45/±90 sobre un cono.
+    // Menú contextual ±45/±90 sobre un balón.
     await openCat(page, 'Material');
-    await page.locator('.rail-btn[title="Cono"]').click();
+    // El cono ya no se gira: usamos un balón para mostrar las acciones ±45/±90.
+    await page.locator('.rail-btn[title="Balón"]').click();
     const box = await hostBox(page);
     const [x, y] = normToScreen(0.5, 0.5, box);
     await page.mouse.click(x, y);

@@ -1,11 +1,7 @@
 <div class="shell" #appShell [class.en-pizarra]="enPizarra()">
   <aside class="sidebar">
     <div class="brand">
-      <img
-        class="brand-shield"
-        src="assets/brand/cdm-pizarrales-escudo.png"
-        alt="CDM Pizarrales"
-      />
+      <img class="brand-shield" src="assets/brand/cdm-pizarrales-escudo.png" alt="CDM Pizarrales" />
       <span class="brand-name">CDMPLab</span>
     </div>
     @if (showNav()) {
@@ -17,8 +13,19 @@
             <span class="nav-label">{{ item.label }}</span>
           </a>
         }
+        @if (administracionItem(); as administracion) {
+          <a
+            [routerLink]="administracion.href"
+            routerLinkActive="nav-active"
+            class="nav-item"
+            data-admin-nav="1"
+          >
+            <span class="msi" aria-hidden="true">{{ administracion.icon }}</span>
+            <span class="nav-label">{{ administracion.label }}</span>
+          </a>
+        }
       </nav>
-      <!-- Navegación INFERIOR de móvil: cuatro destinos + «Más» (Miembros y la cuenta viven ahí). -->
+      <!-- Navegación INFERIOR de móvil: tres destinos + «Más» (Miembros y la cuenta viven ahí). -->
       <nav class="nav nav-movil" aria-label="Navegación principal">
         @for (item of destinosPrincipales(); track item.href) {
           <a [routerLink]="item.href" routerLinkActive="nav-active" class="nav-item">

@@ -473,7 +473,8 @@ export class LibraryComponent implements OnDestroy {
       .filter((m) => m.length > 0);
   }
 
-  protected save(): void {
+  protected async save(): Promise<void> {
+    if (this.saving()) return;
     const teamId = this.team()?.id;
     if (!teamId) return;
     const f = this.form();
@@ -508,7 +509,12 @@ export class LibraryComponent implements OnDestroy {
       thumbnail: existing?.thumbnail ?? null,
       savedAt: new Date().toISOString(),
     };
-    this.store.saveExercise(ex);
+    const persisted = await this.store.saveExercise(ex);
+    if (!persisted) {
+      this.formError.set('No se pudo guardar el ejercicio en tu cuenta. Vuelve a intentarlo.');
+      this.saving.set(false);
+      return;
+    }
     this.store.clearDraft(teamId, f.id);
     this.clearDraftTimer();
     this.saving.set(false);
@@ -516,7 +522,8 @@ export class LibraryComponent implements OnDestroy {
   }
 
   /** Guardo la metadata y abro la pizarra para diseñar este ejercicio. */
-  protected design(): void {
+  protected async design(): Promise<void> {
+    if (this.saving()) return;
     const teamId = this.team()?.id;
     if (!teamId) return;
     const f = this.form();
@@ -550,7 +557,13 @@ export class LibraryComponent implements OnDestroy {
       thumbnail: existing?.thumbnail ?? null,
       savedAt: new Date().toISOString(),
     };
-    this.store.saveExercise(ex);
+    this.saving.set(true);
+    const persisted = await this.store.saveExercise(ex);
+    this.saving.set(false);
+    if (!persisted) {
+      this.formError.set('No se pudo crear el ejercicio en tu cuenta. Vuelve a intentarlo.');
+      return;
+    }
     this.store.clearDraft(teamId, f.id);
     this.clearDraftTimer();
     this.editorOpen.set(false);

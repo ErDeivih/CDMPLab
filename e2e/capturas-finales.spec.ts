@@ -177,7 +177,7 @@ test.describe('Capturas finales de esta versión', () => {
     await page.screenshot({ path: `${SHOTS}/propiedades-jugador.png` });
   });
 
-  test('propiedades de un cono redimensionado y girado ±90°', async ({ page }) => {
+  test('propiedades de un cono que permanece erguido', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
@@ -192,17 +192,12 @@ test.describe('Capturas finales de esta versión', () => {
     // Fase 3: la colocación del cono es CONTINUA → desarmar con "Seleccionar y mover" para
     // poder abrir el menú contextual sobre el cono ya colocado (sin colocar otro).
     await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
-    // Girar +90° desde el menú contextual.
+    // Contrato anterior: esta captura tumbaba el cono. Ahora el dueño exige que
+    // permanezca erguido y que no se ofrezca rotarlo.
     await longPress(page, cx, cy);
     await expect(page.locator('.context-bar')).toBeVisible();
-    await page.locator('.context-bar [aria-label="Girar 90° a la derecha"]').click();
-    // Espera observable: el giro se refleja en la rotación del elemento (sin retardo fijo).
-    await expect
-      .poll(async () => page.locator('.board-canvas svg [transform*="rotate("]').count(), {
-        timeout: 4000,
-      })
-      .toBeGreaterThan(0);
-    await page.screenshot({ path: `${SHOTS}/propiedades-cono-girado.png` });
+    await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
+    await page.screenshot({ path: `${SHOTS}/propiedades-cono-erguido.png` });
   });
 
   test('menús Jugadores, Material y Dibujo abiertos', async ({ page }) => {

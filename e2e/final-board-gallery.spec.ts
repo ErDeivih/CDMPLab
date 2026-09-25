@@ -861,7 +861,9 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
     const [ccx, ccy] = normToScreen(...elCenter(cone0), box2);
     await page.mouse.click(ccx, ccy);
-    await dragRotHandle(page, cone0, box2);
+    // El contrato anterior tumbaba el cono; ahora el control de giro no aparece.
+    await longPress(page, ccx, ccy);
+    await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
     await deselect(page, box2);
 
     // Seleccionar la CURVA por último → muestra extremos + C1 + manija de rotación.
@@ -884,8 +886,8 @@ test.describe('Galería final — escenas a través de la UI real', () => {
     const rectF = doc.frames[0].elements.find((e) => e.t === 'rect')!;
     expect(Math.abs(rectF.rot ?? 0)).toBeGreaterThan(1);
     const coneF = doc.frames[0].elements.find((e) => e.t === 'cone')!;
-    // Fase 1: el material NO se redimensiona (conserva su tamaño base); la rotación sí.
-    expect(Math.abs(coneF.rot ?? 0)).toBeGreaterThan(1);
+    // El material no se redimensiona ni se tumba.
+    expect(coneF.rot).toBeUndefined();
     await verifyExport(page, baseline, [elCenter(curveF), elCenter(coneF)]);
   });
 
@@ -1474,15 +1476,16 @@ interface AsymSpec {
   resize: (page: Page, box: Box, el: CanvasElement) => Promise<void>;
   sx: (svg: string, el: CanvasElement, created: CanvasElement) => void;
   pngPoint: (el: CanvasElement) => [number, number];
-  /** Orientación esperada en píxeles tras girar ~90°: 'wide' (bb.w > bb.h) o 'tall' (bb.h > bb.w). */
+  /** Cono/pértiga/maniquí tienen un arriba físico y no se pueden tumbar. */
+  fixedUpright?: boolean;
+  /** Orientación esperada en píxeles: 'wide' (bb.w > bb.h) o 'tall' (bb.h > bb.w). */
   orient?: 'wide' | 'tall';
-  /** Ruta de captura del estado final (objeto rotado/redimensionado) para inspección visual. */
+  /** Ruta de captura del estado final para inspección visual. */
   shot?: string;
 }
 
-/** Ciclo completo de un objeto asimétrico: crear → mover → rotar (manija real) →
- *  redimensionar (control real) → verificar SVG + PNG → reabrir → igualdad →
- *  el transform SIGUE en el SVG tras reabrir. */
+/** Ciclo completo de un objeto asimétrico: crear → mover → girar si procede →
+ *  redimensionar si procede → verificar SVG + PNG → reabrir → igualdad. */
 async function runAsym(page: Page, spec: AsymSpec, base: [number, number]): Promise<void> {
   await page.setViewportSize({ width: 1366, height: 900 });
   await seed(page);
@@ -1504,14 +1507,22 @@ async function runAsym(page: Page, spec: AsymSpec, base: [number, number]): Prom
   await dragMove(page, box, ccx, ccy, spec.moveDelta);
   const moved = shifted(created, spec.moveDelta[0], spec.moveDelta[1]);
 
-  // Rotar (MANIJA real) usando el elemento desplazado, y redimensionar (control real).
-  await dragRotHandle(page, moved, box);
+  // Giro solo cuando el objeto no tiene un arriba físico.
+  if (spec.fixedUpright) {
+    const [sx, sy] = normToScreen(...elCenter(moved), box);
+    await longPress(page, sx, sy);
+    await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+  } else {
+    await dragRotHandle(page, moved, box);
+  }
   await spec.resize(page, box, moved);
   await save(page);
   const after = await singleEl(page);
 
-  // El modelo giró de verdad (manija) y se movió.
-  expect(Math.abs(after.rot ?? 0)).toBeGreaterThan(5);
+  // El modelo se movió; solo giran los objetos sin arriba físico.
+  if (spec.fixedUpright) expect(after.rot).toBeUndefined();
+  else expect(Math.abs(after.rot ?? 0)).toBeGreaterThan(5);
   expect(
     Math.hypot(
       (after.x ?? 0) + (after.w ?? 0) / 2 - ccx,
@@ -1532,7 +1543,7 @@ async function runAsym(page: Page, spec: AsymSpec, base: [number, number]): Prom
   const diff = await pngRegionDiff(page, baseline, withEl, pnx, pny);
   expect(diff, `dif de píxeles de "${spec.label}" en (${pnx}, ${pny})`).toBeGreaterThan(0);
   if (spec.orient) {
-    expect(Math.abs(after.rot ?? 0)).toBeGreaterThan(60); // ~90° para que la orientación invierta
+    if (!spec.fixedUpright) expect(Math.abs(after.rot ?? 0)).toBeGreaterThan(60);
     const bb = await pngChangedBBox(page, baseline, withEl, pnx, pny, 120);
     expect(bb, `bbox de píxeles de "${spec.label}"`).not.toBeNull();
     if (spec.orient === 'wide') {
@@ -1546,7 +1557,7 @@ async function runAsym(page: Page, spec: AsymSpec, base: [number, number]): Prom
   await save(page);
   const a = await canvasDoc(page);
 
-  // Tras reabrir: el transform SIGUE en el SVG y el PNG aún muestra el objeto.
+  // Tras reabrir, SVG y PNG aún muestran el objeto en la misma posición.
   await reopen(page);
   await page.keyboard.press('Escape');
   const svg2 = await page.locator('.board-canvas svg').evaluate((el) => el.outerHTML as string);
@@ -1561,9 +1572,7 @@ async function runAsym(page: Page, spec: AsymSpec, base: [number, number]): Prom
 }
 
 test.describe('Fase 4 — objetos asimétricos: SVG renderizado y PNG exportado', () => {
-  test('cono (rojo): rotate + Tamaño → SVG con <image> crecido y <g rotate>, PNG en su posición', async ({
-    page,
-  }) => {
+  test('cono (rojo): permanece erguido en SVG y PNG tras moverlo', async ({ page }) => {
     await runAsym(
       page,
       {
@@ -1573,7 +1582,8 @@ test.describe('Fase 4 — objetos asimétricos: SVG renderizado y PNG exportado'
         resize: async () => undefined,
         sx: assertMaterialSvg,
         pngPoint: (el) => elCenter(el),
-        shot: `${FASE4_SHOTS}/cono-rojo-rotado-resize.png`,
+        fixedUpright: true,
+        shot: `${FASE4_SHOTS}/cono-rojo-erguido.png`,
       },
       [0.62, 0.6],
     );
@@ -1596,9 +1606,7 @@ test.describe('Fase 4 — objetos asimétricos: SVG renderizado y PNG exportado'
     );
   });
 
-  test('pértiga: rotate ~90° + Tamaño → SVG con <g rotate> y el PNG ANCHO (orientación real)', async ({
-    page,
-  }) => {
+  test('pértiga: permanece vertical en SVG y PNG tras moverla', async ({ page }) => {
     await runAsym(
       page,
       {
@@ -1608,7 +1616,8 @@ test.describe('Fase 4 — objetos asimétricos: SVG renderizado y PNG exportado'
         resize: async () => undefined,
         sx: assertMaterialSvg,
         pngPoint: (el) => elCenter(el),
-        orient: 'wide',
+        fixedUpright: true,
+        orient: 'tall',
       },
       [0.6, 0.5],
     );

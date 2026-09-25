@@ -73,7 +73,11 @@ test('FASE 10: rectángulo con perímetro rojo y relleno rojo al 50% (el relleno
   await captionSwatch(page, 0, '#c0392b');
   // Relleno = mismo color que el perímetro; solo se elige opacidad 50%.
   await page.locator('.tools-caption .chip', { hasText: 'Relleno' }).click();
-  await page.locator('.tools-caption .chip', { hasText: '50%' }).click();
+  // El antiguo chip de porcentajes se sustituyó por un deslizador continuo.
+  await page.locator('#tool-fill-opacity').evaluate((el: HTMLInputElement) => {
+    el.value = '0.5';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
   await drawShape(page, host, [0.2, 0.3], [0.6, 0.6]);
 
   const d = await rectData(page);
@@ -116,8 +120,12 @@ test('FASE 10: guardar/reabrir y respaldo conservan relleno, color y opacidad (v
   const c = normToScreen(0.4, 0.45, host);
   await page.mouse.click(c[0], c[1]);
   await expect(page.locator('.inspector')).toBeVisible();
-  await page.locator('.studio-panel .swatch[aria-label="Color verde"]').click();
-  await page.locator('.studio-panel .field', { hasText: 'Opacidad del relleno' }).locator('.chip', { hasText: '20%' }).click();
+  // La barra de dibujo y el inspector comparten paleta; cambiar solo el objeto seleccionado.
+  await page.locator('.studio-panel .inspector .swatch[aria-label="Color verde"]').click();
+  await page.locator('#selected-fill-opacity').evaluate((el: HTMLInputElement) => {
+    el.value = '0.2';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await page.waitForTimeout(120);
   await fillBoardTitle(page, 'Relleno');
   await page.locator('.chip-icon-primary').click();

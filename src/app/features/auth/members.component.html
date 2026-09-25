@@ -3,7 +3,9 @@
     {{
       isOwner()
         ? 'Invita hasta ' + seatsLimit + ' colaboradores (activos + invitaciones pendientes).'
-        : 'Solo el propietario puede invitarte o revocarte el acceso.'
+        : platformAdmin()
+          ? 'Vista de consulta para la administración de la plataforma. Solo el propietario gestiona invitaciones y colaboradores.'
+          : 'Solo el propietario puede invitarte o revocarte el acceso.'
     }}
   </p>
 
@@ -41,10 +43,12 @@
       <p class="auth-note" data-motivo-no-salir="1">{{ motivo }}</p>
     }
   } @else {
-    <div class="auth-row">
-      <span style="margin-right: auto">Plazas de colaboradores</span>
-      <strong>{{ seatsUsed() }} de {{ seatsLimit }} usadas</strong>
-    </div>
+    @if (isOwner()) {
+      <div class="auth-row">
+        <span style="margin-right: auto">Plazas de colaboradores</span>
+        <strong>{{ seatsUsed() }} de {{ seatsLimit }} usadas</strong>
+      </div>
+    }
 
     <!-- El propietario que quiera dejar el equipo necesita saber que primero hay que traspasarlo:
          no puede «salir» y dejar el equipo sin dueño. -->
@@ -85,7 +89,9 @@
     @if (isOwner()) {
       <div class="auth-stack" data-seccion="nombre-equipo">
         <strong>Nombre del equipo</strong>
-        <span class="auth-note">Corrige aquí cualquier error de escritura. El cambio se aplica a todo el equipo.</span>
+        <span class="auth-note"
+          >Corrige aquí cualquier error de escritura. El cambio se aplica a todo el equipo.</span
+        >
         <div class="invite-form">
           <label class="sr-only" for="team-name">Nombre del equipo</label>
           <input

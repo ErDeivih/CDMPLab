@@ -152,8 +152,8 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await expect(page.locator('.studio-panel')).toBeVisible();
 
     const color = page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch');
-    // 9 muestras: la paleta incorporó el BLANCO (color por defecto del dibujo) al final.
-    await expect(color).toHaveCount(9);
+    // La paleta ampliada conserva las nueve muestras originales y añade ocho tonos.
+    await expect(color).toHaveCount(17);
     await expectSwatchNamed(color, 'Color del jugador');
     await expect(color.nth(0)).toHaveAttribute('aria-label', 'Color azul');
     await expectEverythingNamed(page, 'jugador seleccionado');
@@ -173,7 +173,7 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await expect(page.locator('.studio-panel')).toBeVisible();
 
     const color = page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch');
-    await expect(color).toHaveCount(9);
+    await expect(color).toHaveCount(17);
     await expectSwatchNamed(color, 'Color del material');
     await expectEverythingNamed(page, 'material seleccionado');
   });
@@ -188,7 +188,7 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await expect(page.locator('.studio-panel')).toBeVisible();
 
     const color = page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch');
-    await expect(color).toHaveCount(9);
+    await expect(color).toHaveCount(17);
     await expectSwatchNamed(color, 'Color del texto');
     await expectEverythingNamed(page, 'texto seleccionado');
   });
@@ -214,10 +214,8 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     const color = page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch');
     // Fase 10: la figura usa un único color (el relleno es del mismo color que el
     // perímetro), así que solo hay los swatches de "Color" (ya no "Color de relleno").
-    // Son 9 desde que la paleta incorporó el BLANCO al final: es el color por defecto
-    // del dibujo (el mismo con el que el campo pinta sus marcas), y al ser un miembro
-    // de la paleta el control de color marca la muestra activa.
-    await expect(color).toHaveCount(9);
+    // La paleta ampliada mantiene el blanco como opción y ofrece 17 tonos.
+    await expect(color).toHaveCount(17);
     await expectSwatchNamed(color, 'Color de la figura');
     await expectEverythingNamed(page, 'figura (rect) seleccionada');
   });
@@ -231,11 +229,14 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
 
     const swatches = page.locator('.tools-caption .swatch');
     // Fase 10: herramienta de dibujo coloreable → los colores de dibujo; el relleno usa
-    // el mismo color, así que ya no se muestran los swatches de "Relleno". Son 9 desde
-    // que la paleta incorporó el blanco (color por defecto del dibujo).
-    await expect(swatches).toHaveCount(9);
+    // el mismo color, así que ya no se muestran los swatches de "Relleno".
+    await expect(swatches).toHaveCount(17);
     await expectSwatchNamed(swatches, 'colores de dibujo');
     await expect(swatches.nth(0)).toHaveAttribute('aria-label', 'Color azul');
+    const names = await swatches.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('aria-label')),
+    );
+    expect(new Set(names).size, 'cada tono debe tener un nombre accesible distinto').toBe(17);
     await expectEverythingNamed(page, 'dibujo activo');
   });
 

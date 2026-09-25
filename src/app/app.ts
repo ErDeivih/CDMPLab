@@ -56,7 +56,7 @@ export class App {
 
   /**
    * FASE 4.1: dentro de la pizarra la navegación global inferior se oculta por completo en móvil
-   * (Plantilla, Pizarra, Biblioteca, Sesiones y Más) para que el campo use toda la pantalla. Las
+   * (Plantilla, Biblioteca, Sesiones y Más) para que el campo use toda la pantalla. Las
    * demás pantallas la conservan. La salida de la pizarra es el botón «Volver» del encabezado.
    */
   protected readonly enPizarra = signal(false);
@@ -252,20 +252,19 @@ export class App {
   protected readonly navItems = computed<NavItem[]>(() => {
     const base: NavItem[] = [
       { label: 'Plantilla', href: '/team', icon: 'group' },
-      { label: 'Pizarra', href: '/board', icon: 'sports_soccer' },
       { label: 'Biblioteca', href: '/library', icon: 'collections_bookmark' },
       { label: 'Sesiones', href: '/sessions', icon: 'calendar_month' },
     ];
-    // "Miembros" SOLO para el propietario del equipo: en el servidor
-    // `list_team_members` es owner-only (migración 20260827000005: `forbidden: not team
-    // owner`), así que a un colaborador el enlace le devolvía siempre un error. Si el rol
-    // todavía no se conoce (modo local o sesión resolviéndose) NO se oculta nada: la RLS
-    // es la barrera real y ocultar de más rompería la navegación local.
+    // "Miembros" para el propietario y el administrador de plataforma. La migración
+    // 20260928000000 permite al segundo CONSULTAR cualquier equipo; un editor normal no
+    // tiene esa autorización. En modo local no se oculta la pantalla.
     const members: NavItem = { label: 'Miembros', href: '/settings/team/members', icon: 'people' };
-    return this.access.target().role === 'editor' ? base : [...base, members];
+    return this.access.target().role === 'editor' && !this.access.platformAdmin()
+      ? base
+      : [...base, members];
   });
 
-  /** Destinos PRINCIPALES. En móvil la barra inferior muestra estos cuatro + «Más». */
+  /** Destinos PRINCIPALES. La pizarra se abre desde un ejercicio de Biblioteca. */
   protected readonly destinosPrincipales = computed<NavItem[]>(() =>
     this.navItems().filter((i) => i.href !== '/settings/team/members'),
   );

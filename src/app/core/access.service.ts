@@ -446,10 +446,26 @@ export class AccessService {
     const userId = this.supabase.user()?.id;
     if (!client || !userId) throw new Error('No hay sesión.');
     const repo = new SupabaseRepository(client, userId, teamId);
+    const team = (await repo.adminTeamOverview()).find((entry) => entry.teamId === teamId);
+    if (!team) throw new Error('El equipo ya no existe o no está disponible.');
     await this.store.connectDataSource(repo, teamId);
     this._repo = repo;
+    const owner = team.ownerUserId === userId;
     this._resolution.update((r) =>
-      r ? { ...r, ownedTeam: null, membership: { teamId, role: 'editor' } } : r,
+      r
+        ? {
+            ...r,
+            ownedTeam: owner
+              ? {
+                  id: team.teamId,
+                  name: team.name,
+                  accentColor: team.accentColor,
+                  createdAt: team.createdAt,
+                }
+              : null,
+            membership: owner ? null : { teamId, role: 'editor' },
+          }
+        : r,
     );
     this._state.set('ready');
   }

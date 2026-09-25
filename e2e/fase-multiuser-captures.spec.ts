@@ -208,12 +208,12 @@ test.describe('Fase multiusuario — capturas del estado actual', () => {
     await page.setViewportSize(DESKTOP);
     await seed(page);
 
-    // Miembros del equipo: la RPC de colaboradores exige propietario autenticado,
-    // Contrato de la captura actualizado: el producto ahora admite seis colaboradores
-    // además del propietario. La expectativa anterior de «0 de 4» era del test, no de la UI.
+    // Sin propietario autenticado no se puede mostrar un contador de plazas verificable.
+    // Antes la captura esperaba «0 de 6» aunque no existía una cuenta propietaria local.
     await page.goto('/settings/team/members');
     await expect(page.locator('.auth-title')).toHaveText('Miembros del equipo');
-    await expect(page.locator('.auth-row')).toContainText('0 de 6');
+    await expect(page.locator('.auth-row')).toHaveCount(0);
+    await expect(page.locator('.auth-note').first()).toContainText('Solo el propietario');
     await page.waitForTimeout(250);
     await page.screenshot({ path: `${SHOTS}/members.png` });
 

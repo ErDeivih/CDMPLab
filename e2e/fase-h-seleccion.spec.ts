@@ -176,7 +176,8 @@ test.describe('FASE H — selección, asas, resize y rotación', () => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1366, height: 768 });
     await seedBoard(page); await openBoard(page);
-    await placeMaterial(page, 'Cono', 0.5, 0.5);
+    // La rotación ya no aplica al cono (siempre erguido); el balón sí admite el menú completo.
+    await placeMaterial(page, 'Balón', 0.5, 0.5);
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
     const host = await hostBox(page); const fit = await fitMode(page);
     const p = normToScreen(0.5, 0.5, host, fit);

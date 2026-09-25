@@ -609,8 +609,8 @@
   }
 
   // ---------- FASE 4: la pizarra ocupa TODO en móvil ----------
-  // Dentro de /board no hay navegación global: se oculta la barra inferior entera (sus cinco
-  // entradas: Plantilla, Pizarra, Biblioteca, Sesiones y Más), se retira el hueco que reservaba y
+  // Dentro de /board no hay navegación global: se oculta la barra inferior entera (sus cuatro
+  // entradas: Plantilla, Biblioteca, Sesiones y Más), se retira el hueco que reservaba y
   // se anula el token de su altura para que todo lo que se ancla a él (paneles, hojas y el propio
   // tablero) llegue hasta el borde inferior respetando solo la safe area. La salida de la pizarra
   // es el botón «Volver» del encabezado compacto.

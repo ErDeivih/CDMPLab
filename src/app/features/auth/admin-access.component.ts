@@ -36,6 +36,9 @@ export class AdminAccessComponent {
   protected readonly loading = signal(true);
   protected readonly busyId = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
+  protected readonly adminError = signal<string | null>(null);
+  protected readonly overviewLoaded = signal(false);
+  protected readonly administratorsLoaded = signal(false);
   protected readonly administrators = signal<string[]>([]);
   /**
    * Resumen de TODOS los equipos. Lo devuelve el SERVIDOR ya contado (`admin_team_overview`):
@@ -68,24 +71,48 @@ export class AdminAccessComponent {
    */
   protected readonly adminReady = signal(false);
 
+  /** Los apartados viven dentro del contenedor desplazable de la aplicación.
+   * Un enlace con fragmento de URL no desplaza de forma fiable ese contenedor. */
+  protected goToSection(id: 'cuentas' | 'solicitudes-equipo'): void {
+    const section = document.getElementById(id);
+    if (!section) return;
+    section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    section.focus({ preventScroll: true });
+  }
+
   protected isAdmin(userId: string): boolean {
     return this.administrators().includes(userId);
   }
 
   protected async loadAdministration(): Promise<void> {
     this.adminReady.set(false);
+    this.adminError.set(null);
+    this.overviewLoaded.set(false);
+    this.administratorsLoaded.set(false);
     try {
       // El permiso se comprueba CONTRA EL SERVIDOR antes de ofrecer nada (ver `adminReady`).
       const esAdmin = await this.access.checkIsPlatformAdmin();
-      const [admins, overview] = await Promise.all([
+      if (!esAdmin) return;
+      this.adminReady.set(true);
+      // Una estadística averiada no debe ocultar la cola de cuentas y solicitudes.
+      const [admins, overview] = await Promise.allSettled([
         this.access.listAdministrators(),
         this.access.adminOverview(),
       ]);
-      this.administrators.set(admins);
-      this.overview.set(overview);
-      this.adminReady.set(esAdmin);
+      if (admins.status === 'fulfilled') {
+        this.administrators.set(admins.value);
+        this.administratorsLoaded.set(true);
+      }
+      if (overview.status === 'fulfilled') {
+        this.overview.set(overview.value);
+        this.overviewLoaded.set(true);
+      }
+      const failures = [admins, overview]
+        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+        .map((result) => (result.reason as Error)?.message ?? 'No se pudo cargar el resumen.');
+      if (failures.length) this.adminError.set(failures.join(' '));
     } catch (e) {
-      this.error.set((e as Error).message);
+      this.adminError.set((e as Error).message);
     }
   }
 

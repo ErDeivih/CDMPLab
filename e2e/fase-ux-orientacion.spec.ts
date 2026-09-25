@@ -4,8 +4,8 @@ import { openBoard, hostBox, normToScreen, showCategory, fitMode } from './board
 /**
  * FASE 4 del encargo — PIZARRA MÓVIL Y ORIENTACIÓN.
  *
- *  1/2. Dentro de /board la navegación global inferior NO se muestra en móvil (las cinco entradas:
- *      Plantilla, Pizarra, Biblioteca, Sesiones y Más); las demás pantallas la conservan.
+ *  1/2. Dentro de /board la navegación global inferior NO se muestra en móvil (las cuatro entradas:
+ *      Plantilla, Biblioteca, Sesiones y Más); las demás pantallas la conservan.
  *  3.   La pizarra ocupa todo el espacio hasta la safe area (sin hueco reservado a la nav).
  *  4.   Hay salida clara por el encabezado compacto (botón «Volver»).
  *  6/11. Si el navegador no permite bloquear la orientación, la app NO se bloquea: aparece un aviso
@@ -65,7 +65,7 @@ test.describe('FASE 4 — pizarra móvil, navegación y orientación', () => {
       // Otra pantalla: la navegación sigue ahí, con sus cinco entradas.
       await page.goto('/team');
       await expect(page.locator('.nav-movil')).toBeVisible();
-      await expect(page.locator('.nav-movil .nav-item')).toHaveCount(5);
+      await expect(page.locator('.nav-movil .nav-item')).toHaveCount(4);
 
       // Pizarra: la navegación global NO se muestra y no deja hueco. Se espera ANTES a que el shell
       // haya aplicado el estado de pizarra: si se mide mientras el layout se recoloca, la prueba se
@@ -74,8 +74,8 @@ test.describe('FASE 4 — pizarra móvil, navegación y orientación', () => {
       await expect(page.locator('.shell')).toHaveClass(/en-pizarra/);
       await expect(page.locator('.sidebar'), 'la barra inferior se oculta en /board').toBeHidden();
       await expect(page.locator('.nav-movil'), 'sin navegación global').toBeHidden();
-      // Las cinco entradas siguen en el DOM (el shell no se desmonta) pero NINGUNA se ve.
-      for (const destino of ['Plantilla', 'Pizarra', 'Biblioteca', 'Sesiones', 'Más']) {
+      // Las cuatro entradas siguen en el DOM (el shell no se desmonta) pero NINGUNA se ve.
+      for (const destino of ['Plantilla', 'Biblioteca', 'Sesiones', 'Más']) {
         const enlaces = page.locator('.shell .nav-item', { hasText: destino });
         const cuantos = await enlaces.count();
         expect(cuantos, `«${destino}» existe en el DOM (shell montado)`).toBeGreaterThan(0);

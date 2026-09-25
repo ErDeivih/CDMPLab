@@ -221,38 +221,40 @@
               <span class="msi">redo</span>
             </button>
             <span class="ctx-sep"></span>
-            <button
-              class="ctx-btn"
-              title="Girar 45° a la izquierda"
-              aria-label="Girar 45° a la izquierda"
-              (click)="rotateSelected(-45); closeCtxMenu()"
-            >
-              <span class="msi">rotate_90_degrees_ccw</span>
-            </button>
-            <button
-              class="ctx-btn"
-              title="Girar 45° a la derecha"
-              aria-label="Girar 45° a la derecha"
-              (click)="rotateSelected(45); closeCtxMenu()"
-            >
-              <span class="msi">rotate_90_degrees_cw</span>
-            </button>
-            <button
-              class="ctx-btn"
-              title="Girar 90° a la izquierda"
-              aria-label="Girar 90° a la izquierda"
-              (click)="rotateSelected(-90); closeCtxMenu()"
-            >
-              <span class="msi">rotate_left</span>
-            </button>
-            <button
-              class="ctx-btn"
-              title="Girar 90° a la derecha"
-              aria-label="Girar 90° a la derecha"
-              (click)="rotateSelected(90); closeCtxMenu()"
-            >
-              <span class="msi">rotate_right</span>
-            </button>
+            @if (canRotateSelected()) {
+              <button
+                class="ctx-btn"
+                title="Girar 45° a la izquierda"
+                aria-label="Girar 45° a la izquierda"
+                (click)="rotateSelected(-45); closeCtxMenu()"
+              >
+                <span class="msi">rotate_90_degrees_ccw</span>
+              </button>
+              <button
+                class="ctx-btn"
+                title="Girar 45° a la derecha"
+                aria-label="Girar 45° a la derecha"
+                (click)="rotateSelected(45); closeCtxMenu()"
+              >
+                <span class="msi">rotate_90_degrees_cw</span>
+              </button>
+              <button
+                class="ctx-btn"
+                title="Girar 90° a la izquierda"
+                aria-label="Girar 90° a la izquierda"
+                (click)="rotateSelected(-90); closeCtxMenu()"
+              >
+                <span class="msi">rotate_left</span>
+              </button>
+              <button
+                class="ctx-btn"
+                title="Girar 90° a la derecha"
+                aria-label="Girar 90° a la derecha"
+                (click)="rotateSelected(90); closeCtxMenu()"
+              >
+                <span class="msi">rotate_right</span>
+              </button>
+            }
             <button
               class="ctx-btn"
               title="Duplicar"
@@ -510,13 +512,12 @@
             ) {
               <div class="field">
                 <label>Grosor</label>
-                <!-- Default 0.4 (mitad del antiguo 0.8); mínimo coherente 0.1 (nunca 0/negativo). -->
                 <input
                   type="number"
                   step="0.1"
                   min="0.1"
                   max="2.5"
-                  [value]="selectedElement()!.strokeWidth ?? 0.4"
+                  [value]="selectedElement()!.strokeWidth ?? 0.2"
                   (change)="setSelStrokeWidth($event)"
                 />
               </div>
@@ -589,51 +590,19 @@
                      Se retira el selector independiente de color de relleno; se conserva
                      la opacidad y el modo Solo perímetro / Con relleno. -->
                 <div class="field">
-                  <label>Opacidad del relleno</label>
-                  <div class="chips">
-                    <button
-                      class="chip"
-                      [class.chip-active]="selectedElement()!.fillOpacity === undefined"
-                      (click)="setSelFillOpacity(undefined)"
-                    >
-                      Auto
-                    </button>
-                    <button
-                      class="chip"
-                      [class.chip-active]="selectedElement()!.fillOpacity === 0.1"
-                      (click)="setSelFillOpacity(0.1)"
-                    >
-                      10%
-                    </button>
-                    <button
-                      class="chip"
-                      [class.chip-active]="selectedElement()!.fillOpacity === 0.2"
-                      (click)="setSelFillOpacity(0.2)"
-                    >
-                      20%
-                    </button>
-                    <button
-                      class="chip"
-                      [class.chip-active]="selectedElement()!.fillOpacity === 0.35"
-                      (click)="setSelFillOpacity(0.35)"
-                    >
-                      35%
-                    </button>
-                    <button
-                      class="chip"
-                      [class.chip-active]="selectedElement()!.fillOpacity === 0.5"
-                      (click)="setSelFillOpacity(0.5)"
-                    >
-                      50%
-                    </button>
-                    <button
-                      class="chip"
-                      [class.chip-active]="selectedElement()!.fillOpacity === 0.7"
-                      (click)="setSelFillOpacity(0.7)"
-                    >
-                      70%
-                    </button>
-                  </div>
+                  <label for="selected-fill-opacity"
+                    >Opacidad del relleno:
+                    {{ ((selectedElement()!.fillOpacity ?? 0.15) * 100).toFixed(0) }}%</label
+                  >
+                  <input
+                    id="selected-fill-opacity"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    [value]="selectedElement()!.fillOpacity ?? 0.15"
+                    (change)="setSelFillOpacity(+$any($event.target).value)"
+                  />
                 </div>
               }
             }
@@ -1402,49 +1371,19 @@
           @if (shapeFill()) {
             <!-- Fase 10: el relleno usa el mismo color que el perímetro, solo se elige
                  la opacidad. Se retira el selector independiente de color de relleno. -->
-            <div class="chips">
-              <button
-                class="chip"
-                [class.chip-active]="fillOpacity() === undefined"
-                (click)="setFillOpacity(undefined)"
+            <div class="field">
+              <label for="tool-fill-opacity"
+                >Opacidad del relleno: {{ (fillOpacity() * 100).toFixed(0) }}%</label
               >
-                Auto
-              </button>
-              <button
-                class="chip"
-                [class.chip-active]="fillOpacity() === 0.1"
-                (click)="setFillOpacity(0.1)"
-              >
-                10%
-              </button>
-              <button
-                class="chip"
-                [class.chip-active]="fillOpacity() === 0.2"
-                (click)="setFillOpacity(0.2)"
-              >
-                20%
-              </button>
-              <button
-                class="chip"
-                [class.chip-active]="fillOpacity() === 0.35"
-                (click)="setFillOpacity(0.35)"
-              >
-                35%
-              </button>
-              <button
-                class="chip"
-                [class.chip-active]="fillOpacity() === 0.5"
-                (click)="setFillOpacity(0.5)"
-              >
-                50%
-              </button>
-              <button
-                class="chip"
-                [class.chip-active]="fillOpacity() === 0.7"
-                (click)="setFillOpacity(0.7)"
-              >
-                70%
-              </button>
+              <input
+                id="tool-fill-opacity"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                [value]="fillOpacity()"
+                (input)="setFillOpacity(+$any($event.target).value)"
+              />
             </div>
           }
         }

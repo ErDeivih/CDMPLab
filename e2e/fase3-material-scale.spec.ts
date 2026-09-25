@@ -203,10 +203,10 @@ test.describe('Fase 3 — escala del material y selección táctil robusta', () 
   });
 
   // =====================================================================
-  // 3. size escala el <image>, rot aparece en el SVG y se conservan al
-  //    Guardar/reabrir/duplicar; la rotación respeta la hit-test.
+  // 3. El cono y la pértiga tienen un arriba físico; se conservan erguidos al
+  //    guardar/reabrir/duplicar y no muestran control Tamaño.
   // =====================================================================
-  test('material: rot ±90° se aplica y conserva; NO es redimensionable (sin control Tamaño) al guardar, reabrir y duplicar', async ({ page }) => {
+  test('material: cono y pértiga permanecen erguidos y sin control Tamaño al guardar, reabrir y duplicar', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
@@ -220,36 +220,30 @@ test.describe('Fase 3 — escala del material y selección táctil robusta', () 
     // Fase 1: un material NO es redimensionable → su inspector NO muestra "Tamaño".
     await tapSelect(page, box, 0.3, 0.5);
     await expect(page.locator('.studio-panel .inspector .field', { hasText: 'Tamaño' })).toHaveCount(0);
-    // Rotación ±90 (menú contextual, Fase 3: clic derecho sobre el cono).
+    // Contrato anterior: el cono se tumbaba mediante ±90°. Ahora ese control no existe.
     const [rx, ry] = normToScreen(0.3, 0.5, box);
     await longPress(page, rx, ry);
     const ctxRot = page.locator('.context-bar [aria-label="Girar 90° a la derecha"]');
-    await expect(ctxRot).toBeVisible();
-    await ctxRot.click();
+    await expect(ctxRot).toHaveCount(0);
     await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
     await page.keyboard.press('Escape');
-    // FASE G: condición observable — el <image> del cono queda rotado (g rotate) en el SVG;
-    // esperamos esa señal en lugar de un wait fijo.
-    await expect.poll(async () => (await page.locator('.entrenolab-board').innerHTML()).includes('rotate(90 ')).toBe(true);
-
-    // El <image> del cono ROTA (g rotate). Fase 1: NO crece por Tamaño.
+    // El PNG del cono no se tumba en el campo horizontal.
     const svg = await page.locator('.entrenolab-board').innerHTML();
-    expect(svg).toContain('rotate(90 ');
-    await page.screenshot({ path: `${SHOTS}/cone-resized-rotated.png` });
+    expect(svg).not.toContain('rotate(90 ');
+    await page.screenshot({ path: `${SHOTS}/cone-upright.png` });
 
     await save(page);
     let els = await canvasElements(page);
     const cone = els.find((e) => e.t === 'cone')!;
-    // Fase 1: sin resize → el material conserva su size por defecto (no 2); rot=90.
-    expect(cone.rot).toBeCloseTo(90, 0);
+    expect(cone.rot).toBeUndefined();
 
-    // Reabrir → se conserva la rotación.
+    // Reabrir → el material sigue erguido.
     await page.locator('.ex-card').first().hover();
     await page.locator('[title="Diseñar en pizarra"]').first().click();
     await page.waitForURL('**/board');
     await expect(page.locator('.field-count')).toHaveText('2');
 
-    // Duplicar el cono → la copia conserva rot (menú contextual por pulsación larga).
+    // Duplicar el cono → la copia también queda erguida.
     await longPress(page, ...normToScreen(0.3, 0.5, (await page.locator('.board-host').boundingBox())!));
     await page.locator('.context-bar [aria-label="Duplicar"]').click();
     // FASE G: la duplicación se espera con el `toHaveText('3')` siguiente (observable);
@@ -260,8 +254,6 @@ test.describe('Fase 3 — escala del material y selección táctil robusta', () 
     await save(page);
     const cones = (await canvasElements(page)).filter((e) => e.t === 'cone');
     expect(cones).toHaveLength(2);
-    for (const c of cones) {
-      expect(c.rot).toBeCloseTo(90, 0);
-    }
+    for (const c of cones) expect(c.rot).toBeUndefined();
   });
 });
