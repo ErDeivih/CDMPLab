@@ -57,6 +57,8 @@ async function montar(
         provide: AccessService,
         useValue: {
           target: signal({ role, state: 'ready', route: '/team', teamId: 't1' }),
+          switchingTeam: signal(false),
+          accessibleTeams: signal([]),
           pendingInvitations: signal(
             Array.from({ length: opciones.invitacionesPendientes ?? 0 }, (_, i) => ({
               id: `inv-${i}`,

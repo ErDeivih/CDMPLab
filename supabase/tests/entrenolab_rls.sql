@@ -639,7 +639,8 @@ begin
     raise exception '__unexpected_success_owner_leave__';
   exception when others then
     if sqlerrm = '__unexpected_success_owner_leave__' then raise; end if;
-    if position('owner_cannot_leave' in sqlerrm) = 0 then
+    -- Copropiedad: se bloquea al ÚLTIMO propietario, no a todos los propietarios.
+    if position('last_team_owner' in sqlerrm) = 0 then
       raise exception 'FAIL owner leave error: %', sqlerrm;
     end if;
   end;
@@ -778,7 +779,7 @@ begin
     raise exception '__unexpected_success_delete_owner_team__';
   exception when others then
     if sqlerrm = '__unexpected_success_delete_owner_team__' then raise; end if;
-    if position('target_owns_team' in sqlerrm) = 0 then
+    if position('last_team_owner' in sqlerrm) = 0 then
       raise exception 'FAIL delete team-owner error: %', sqlerrm;
     end if;
   end;
@@ -1354,7 +1355,7 @@ begin
     raise exception '__unexpected_owner_admin_self_deletion__';
   exception when others then
     if sqlerrm = '__unexpected_owner_admin_self_deletion__' then raise; end if;
-    if position('target_owns_team' in sqlerrm) = 0 then
+    if position('last_team_owner' in sqlerrm) = 0 then
       raise exception 'FAIL owner admin self deletion error: %', sqlerrm;
     end if;
   end;

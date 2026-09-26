@@ -230,8 +230,14 @@ export class StoreService {
    * Conecta el repositorio como fuente de verdad y HIDRATA los signals con los
    * datos del servidor del equipo indicado.
    */
-  async connectDataSource(ds: DataSource, teamId: string): Promise<void> {
+  async connectDataSource(
+    ds: DataSource,
+    teamId: string,
+    canApply: () => boolean = () => true,
+  ): Promise<void> {
     const dataset = await ds.loadTeam(teamId);
+    if (!canApply())
+      throw new Error('La sesión ha cambiado; no se cargaron datos del equipo anterior.');
     if (!dataset.team) throw new Error('El equipo ya no existe o no tienes acceso.');
     this.dataSource = ds;
     this.hydrate(dataset, teamId);

@@ -76,7 +76,9 @@ async function requestTeam(page: Page, name: string): Promise<void> {
   await page.goto('/onboarding/team');
   await page.locator('#team-name').fill(name);
   await page
-    .locator('button.btn.btn-primary', { hasText: /Enviar solicitud|Actualizar solicitud|Volver a solicitar/ })
+    .locator('button.btn.btn-primary', {
+      hasText: /Enviar solicitud|Actualizar solicitud|Volver a solicitar/,
+    })
     .click();
   await expect(page.locator('[data-estado-solicitud="pendiente"]')).toBeVisible();
 }
@@ -124,7 +126,9 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
     await logout(page);
   });
 
-  test('OWNER: solicita el equipo de prueba (lo aprueba ADMIN) y crea jugador, carpeta y ejercicio', async ({ page }) => {
+  test('OWNER: solicita el equipo de prueba (lo aprueba ADMIN) y crea jugador, carpeta y ejercicio', async ({
+    page,
+  }) => {
     await login(page, env.ownerEmail!, env.ownerPassword!);
     // CAMBIO DE CONTRATO (22/09/2026): la cuenta aprobada SOLICITA el equipo; el equipo lo
     // crea el servidor al aprobarlo un administrador de plataforma.
@@ -136,11 +140,15 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
     await page.locator('.modal input[name="number"]').fill('7');
     await page.locator('.modal select[name="position"]').selectOption({ label: 'Delantero' });
     await page.locator('.modal button.btn.btn-primary', { hasText: 'Guardar' }).click();
-    await expect(page.locator('.data-table tbody tr', { hasText: `${PREFIX} Jugador` })).toHaveCount(1);
+    await expect(
+      page.locator('.data-table tbody tr', { hasText: `${PREFIX} Jugador` }),
+    ).toHaveCount(1);
 
     // Carpeta.
     await page.goto('/library');
-    await page.locator('button.btn.btn-ghost.btn-sm.tree-add', { hasText: 'Nueva carpeta' }).click();
+    await page
+      .locator('button.btn.btn-ghost.btn-sm.tree-add', { hasText: 'Nueva carpeta' })
+      .click();
     await page.locator('.tree-inline input.folder-input').fill(`${PREFIX} Carpeta`);
     await page.locator('.tree-inline button.btn.btn-primary.btn-sm', { hasText: 'Crear' }).click();
     await expect(page.locator('.tree-name', { hasText: `${PREFIX} Carpeta` })).toBeVisible();
@@ -162,7 +170,9 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
     await logout(page);
   });
 
-  test('OWNER invita al colaborador; COLLAB acepta y VE los datos compartidos', async ({ page }) => {
+  test('OWNER invita al colaborador; COLLAB acepta y VE los datos compartidos', async ({
+    page,
+  }) => {
     await login(page, env.ownerEmail!, env.ownerPassword!);
     await page.goto('/settings/team/members');
     await page.locator('#invite-email').fill(env.collaboratorEmail!);
@@ -176,7 +186,9 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
     await page.waitForURL('**/team');
     await expect(page.locator('.page-title')).toHaveText('Plantilla');
     // Ahora ve el jugador del propietario.
-    await expect(page.locator('.data-table tbody tr', { hasText: `${PREFIX} Jugador` })).toHaveCount(1);
+    await expect(
+      page.locator('.data-table tbody tr', { hasText: `${PREFIX} Jugador` }),
+    ).toHaveCount(1);
     // Y la carpeta + el ejercicio.
     await page.goto('/library');
     await expect(page.locator('.tree-name', { hasText: `${PREFIX} Carpeta` })).toBeVisible();
@@ -184,15 +196,22 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
     await logout(page);
   });
 
-  test('COLLAB (aceptado): edita lo permitido y NO puede operar como propietario', async ({ page }) => {
+  test('COLLAB (aceptado): edita lo permitido y NO puede operar como propietario', async ({
+    page,
+  }) => {
     await login(page, env.collaboratorEmail!, env.collaboratorPassword!);
     // Editar un jugador existente (permitido para editor).
     await page.goto('/team');
-    await page.locator('.data-table tr', { hasText: `${PREFIX} Jugador` }).locator('button[aria-label^="Editar"]').click();
+    await page
+      .locator('.data-table tr', { hasText: `${PREFIX} Jugador` })
+      .locator('button[aria-label^="Editar"]')
+      .click();
     const nameInput = page.locator('.modal input[name="name"]');
     await nameInput.fill(`${PREFIX} Jugador Editado`);
     await page.locator('.modal button.btn.btn-primary', { hasText: 'Guardar' }).click();
-    await expect(page.locator('.data-table tbody tr', { hasText: `${PREFIX} Jugador Editado` })).toHaveCount(1);
+    await expect(
+      page.locator('.data-table tbody tr', { hasText: `${PREFIX} Jugador Editado` }),
+    ).toHaveCount(1);
 
     // NO puede gestionar miembros (la RPC solo es para propietario): vista de solo lectura.
     await page.goto('/settings/team/members');
@@ -204,18 +223,25 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
   test('OWNER revoca al colaborador: deja de acceder a los datos', async ({ page }) => {
     await login(page, env.ownerEmail!, env.ownerPassword!);
     await page.goto('/settings/team/members');
-    await page.locator('.invite-row', { hasText: env.collaboratorEmail! }).locator('button', { hasText: 'Revocar' }).click();
+    await page
+      .locator('.invite-row', { hasText: env.collaboratorEmail! })
+      .locator('button', { hasText: 'Revocar' })
+      .click();
     // Confirmar el diálogo.
     await page.locator('.confirm-dialog button', { hasText: 'Revocar' }).click();
     await logout(page);
 
     await login(page, env.collaboratorEmail!, env.collaboratorPassword!);
     await page.goto('/team');
-    await expect(page.locator('.data-table tbody tr', { hasText: `${PREFIX} Jugador Editado` })).toHaveCount(0);
+    await expect(
+      page.locator('.data-table tbody tr', { hasText: `${PREFIX} Jugador Editado` }),
+    ).toHaveCount(0);
     await logout(page);
   });
 
-  test('LÍMITE real: con 6 colaboradores activos, un séptimo es rechazado por el servidor', async ({ page }) => {
+  test('LÍMITE real: con 6 colaboradores activos, un séptimo es rechazado por el servidor', async ({
+    page,
+  }) => {
     // El propietario activa exactamente 6 colaboradores usando los correos de prueba.
     await login(page, env.ownerEmail!, env.ownerPassword!);
     await page.goto('/settings/team/members');
@@ -244,13 +270,16 @@ test.describe('CDMPLab — flujo real en Supabase (opt-in)', () => {
     await page.locator('button.btn.btn-primary', { hasText: 'Invitar' }).click();
     // El servidor responde "collaborator_limit_exceeded" → mensaje de error REAL.
     await expect(page.locator('.auth-msg.err')).toBeVisible();
-    await expect(page.locator('.auth-msg.err')).toContainText('máximo de 6 colaboradores');
+    // Contrato nuevo: el propietario también cuenta dentro de las siete plazas.
+    await expect(page.locator('.auth-msg.err')).toContainText('máximo de 7 cuentas');
     // No se creó una séptima invitación visible.
     await expect(page.locator('.invite-row', { hasText: env.collaboratorEmail! })).toHaveCount(0);
     await logout(page);
   });
 
-  test('RECUPERACIÓN: el flujo se inicia desde la UI y responde (correo final = verificación manual)', async ({ page }) => {
+  test('RECUPERACIÓN: el flujo se inicia desde la UI y responde (correo final = verificación manual)', async ({
+    page,
+  }) => {
     await page.goto('/auth/forgot-password');
     await page.locator('#forgot-email').fill(env.ownerEmail!);
     await page.locator('button[type=submit]').click();

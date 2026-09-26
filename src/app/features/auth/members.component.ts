@@ -31,7 +31,7 @@ import {
   type TeamDeletionPreview,
 } from '../../core/team-management';
 
-const SEAT_LIMIT = 6;
+const SEAT_LIMIT = 7;
 
 @Component({
   selector: 'app-members',
@@ -74,21 +74,30 @@ export class MembersComponent {
    */
   protected readonly sinGestion = computed(() => this.store.isRemote() && !this.canViewMembers());
   protected readonly seatsLimit = SEAT_LIMIT;
+  protected readonly ownerCount = computed(
+    () => this.members().filter((m) => m.status === 'active' && m.role === 'owner').length,
+  );
 
   /** ¿Puede salir del equipo por su cuenta? (El propietario no: debe traspasarlo.) */
   protected readonly puedeSalir = computed(
-    () => this.store.isRemote() && !this.platformAdmin() && canLeaveTeam(this.myRole()),
+    () =>
+      this.store.isRemote() &&
+      canLeaveTeam(this.myRole(), this.ownerCount()) &&
+      (!this.platformAdmin() ||
+        this.members().some((m) => m.userId === this.myUserId() && m.status === 'active')),
   );
   /** Motivo por el que no puede salir, cuando corresponde explicarlo. */
   protected readonly motivoNoSalir = computed(() =>
-    this.store.isRemote() && this.myRole() === 'owner' ? leaveTeamBlockedReason('owner') : null,
+    this.store.isRemote() && this.myRole() === 'owner'
+      ? leaveTeamBlockedReason('owner', this.ownerCount())
+      : null,
   );
 
   protected readonly seatsUsed = computed(() => {
-    const active = this.members().filter((m) => m.role !== 'owner').length;
+    const active = this.members().filter((m) => m.status === 'active').length;
     const now = Date.now();
     const currentInvitations = this.invitations().filter(
-      (invitation) => Date.parse(invitation.expiresAt) > now,
+      (invitation) => invitation.status === 'pending' && Date.parse(invitation.expiresAt) > now,
     ).length;
     return active + currentInvitations;
   });
@@ -111,6 +120,28 @@ export class MembersComponent {
       },
       this.myUserId(),
     );
+  }
+
+  protected cambiarPropiedad(m: TeamMemberInfo): void {
+    const promote = m.role !== 'owner';
+    const name = m.displayName || m.emailNormalized;
+    this.confirm.ask({
+      title: promote ? 'Añadir copropietario' : 'Cambiar a editor',
+      message: promote
+        ? `${name} podrá gestionar miembros y propietarios, y eliminar el equipo sin pedir aprobación a otro propietario. Tú conservarás tus permisos.`
+        : `${name} conservará el acceso al contenido, pero perderá la gestión del equipo y sus miembros. Debe quedar otro propietario aprobado.`,
+      confirmLabel: promote ? 'Hacer copropietario' : 'Cambiar a editor',
+      onConfirm: () => {
+        this.busyId.set(m.userId);
+        this.error.set(null);
+        this.access
+          .setMemberRole(m.userId, promote ? 'owner' : 'editor')
+          .then(() => this.load())
+          .then(() => this.success.set(`Permisos de ${name} actualizados.`))
+          .catch((error) => this.error.set((error as Error).message))
+          .finally(() => this.busyId.set(null));
+      },
+    });
   }
 
   /** Salir del equipo: pérdida de acceso, así que se confirma explicando qué se pierde. */

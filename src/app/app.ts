@@ -63,11 +63,27 @@ export class App {
 
   protected readonly activeTeam = this.store.activeTeam;
   /** Equipos del usuario: con más de uno, la cabecera ofrece cambiar de equipo. */
-  protected readonly teams = this.store.teams;
+  protected readonly teams = computed(() =>
+    this.store.isRemote() ? this.access.accessibleTeams() : this.store.teams(),
+  );
+  protected readonly switchingTeam = this.access.switchingTeam;
+  protected readonly teamSwitchError = signal<string | null>(null);
   protected readonly activeTeamId = computed(() => this.store.activeTeam()?.id ?? '');
-  protected switchTeam(evt: Event): void {
+  protected async switchTeam(evt: Event): Promise<void> {
     const id = (evt.target as HTMLSelectElement).value;
-    if (id) this.store.setActiveTeam(id);
+    if (!id || id === this.activeTeamId()) return;
+    this.teamSwitchError.set(null);
+    try {
+      // Salir primero pasa por el guard de borradores de la pizarra.
+      if (!(await this.router.navigate(['/library']))) return;
+      if (this.store.isRemote()) await this.access.openTeam(id);
+      else this.store.setActiveTeam(id);
+      this.cerrarCuenta();
+    } catch (error) {
+      this.teamSwitchError.set((error as Error).message);
+    } finally {
+      (evt.target as HTMLSelectElement).value = this.activeTeamId();
+    }
   }
   protected readonly storageError = this.store.storageError;
   protected clearStorageError(): void {
@@ -388,8 +404,7 @@ export class App {
 
   /** Cambiar de equipo desde el menú: se cierra para no dejarlo descolgado del equipo nuevo. */
   protected switchTeamDesdeCuenta(evt: Event): void {
-    this.switchTeam(evt);
-    this.cerrarCuenta();
+    void this.switchTeam(evt);
   }
 
   protected async logoutDesdeCuenta(): Promise<void> {

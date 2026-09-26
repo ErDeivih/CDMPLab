@@ -69,6 +69,10 @@ export class AccessService {
   private readonly _target = computed(() => decideAccess(this._resolution()));
   private _repo: SupabaseRepository | null = null;
   private _initPromise: Promise<void> | null = null;
+  private selectedTeamId: string | undefined;
+  private sessionGeneration = 0;
+  readonly switchingTeam = signal(false);
+  readonly accessibleTeams = computed(() => this._resolution()?.accessibleTeams ?? []);
 
   readonly state = this._state.asReadonly();
   readonly target = this._target;
@@ -115,6 +119,7 @@ export class AccessService {
    * crear/entrar en un equipo). Devuelve el destino de acceso resultante.
    */
   async refresh(): Promise<AccessTarget> {
+    this.sessionGeneration++;
     this._initPromise = null;
     this._state.set('resolving');
     return this.resolve();
@@ -157,7 +162,10 @@ export class AccessService {
    * Sin esa distinción el reintento sería infinito.
    */
   private async initialize(reintentarSiElEquipoDesaparece: boolean): Promise<void> {
+    const generation = this.sessionGeneration;
+    const current = () => generation === this.sessionGeneration;
     await this.supabase.ensureResolved();
+    if (!current()) return;
     const status = this.supabase.status();
     if (status !== 'authenticated') {
       this._state.set(status === 'disabled' ? 'disabled' : 'unauthenticated');
@@ -167,6 +175,7 @@ export class AccessService {
       return;
     }
     const client = await this.supabase.getClient();
+    if (!current()) return;
     const userId = this.supabase.user()?.id ?? null;
     if (!client || !userId) {
       this._state.set('unauthenticated');
@@ -181,11 +190,15 @@ export class AccessService {
       // «Administración» SIN ofrecer un enlace que el AdminGuard va a rechazar (ver
       // `platformAdmin`). Un fallo aquí NO bloquea el arranque: se queda en `false`.
       try {
-        this._platformAdmin.set(await repo.isPlatformAdmin());
+        const admin = await repo.isPlatformAdmin();
+        if (!current()) return;
+        this._platformAdmin.set(admin);
       } catch {
         this._platformAdmin.set(false);
       }
       const res = await repo.resolveAccess();
+      if (!current()) return;
+      res.selectedTeamId = this.selectedTeamId;
       this._resolution.set(res);
       const target = decideAccess(res);
       this._state.set(target.state);
@@ -193,8 +206,9 @@ export class AccessService {
         repo.setTeam(target.teamId);
         this._repo = repo;
         try {
-          await this.store.connectDataSource(repo, target.teamId);
+          await this.store.connectDataSource(repo, target.teamId, current);
         } catch (err) {
+          if (!current()) return;
           // `resolveAccess` dijo «ready» pero el equipo ya no está (borrado, salida del equipo o
           // acceso revocado entre las dos consultas): esa resolución está OBSOLETA. Antes el
           // fallo caía en el catch de abajo y el usuario —con sesión perfectamente válida—
@@ -216,6 +230,7 @@ export class AccessService {
         this._repo = repo; // disponible para acciones (crear equipo / aceptar invitación)
       }
     } catch (err) {
+      if (!current()) return;
       console.error('[AccessService] no se pudo resolver el acceso', err);
       this._state.set('unauthenticated');
       this._resolution.set(null);
@@ -245,7 +260,7 @@ export class AccessService {
     if (!repo) throw new Error('La solicitud de equipo necesita una sesión iniciada.');
     const request = await repo.requestTeamCreation(name, accentColor);
     this._resolution.update((r) => (r ? { ...r, teamRequest: request } : r));
-    this._state.set(request.status === 'pending' ? 'request-pending' : 'request-team');
+    this._state.set(decideAccess(this._resolution()).state);
     return request;
   }
 
@@ -349,10 +364,19 @@ export class AccessService {
     await repo.revokeMember(repo.teamId, userId);
   }
 
+  async setMemberRole(userId: string, role: 'owner' | 'editor'): Promise<void> {
+    const repo = await this.ensureRepo();
+    if (!repo?.teamId) throw new Error('No hay equipo de contexto.');
+    await repo.setTeamMemberRole(repo.teamId, userId, role);
+    this.selectedTeamId = repo.teamId;
+    await this.refreshAfterMembershipChange();
+  }
+
   async acceptInvitation(invitationId: string): Promise<void> {
     const repo = await this.ensureRepo();
     if (!repo) throw new Error('No hay sesión.');
-    await repo.acceptInvitation(invitationId);
+    // Aceptar debe abrir el equipo invitado aunque ya se posean otros equipos.
+    this.selectedTeamId = await repo.acceptInvitation(invitationId);
     await this.refreshAfterMembershipChange();
   }
 
@@ -435,39 +459,47 @@ export class AccessService {
   }
 
   async openAdminTeam(teamId: string): Promise<void> {
+    if (!(await this.checkIsPlatformAdmin()))
+      throw new Error('Solo los administradores pueden acceder a todos los equipos.');
+    return this.openTeam(teamId);
+  }
+
+  async openTeam(teamId: string): Promise<void> {
+    if (this.switchingTeam()) throw new Error('Ya hay un cambio de equipo en curso.');
     if (this.store.pendingWrites() > 0 || this.store.lastError()) {
       throw new Error(
         'Espera a que terminen los cambios y resuelve cualquier error de guardado antes de cambiar de equipo.',
       );
     }
-    if (!(await this.checkIsPlatformAdmin()))
-      throw new Error('Solo los administradores pueden acceder a todos los equipos.');
-    const client = await this.supabase.getClient();
-    const userId = this.supabase.user()?.id;
-    if (!client || !userId) throw new Error('No hay sesión.');
-    const repo = new SupabaseRepository(client, userId, teamId);
-    const team = (await repo.adminTeamOverview()).find((entry) => entry.teamId === teamId);
-    if (!team) throw new Error('El equipo ya no existe o no está disponible.');
-    await this.store.connectDataSource(repo, teamId);
-    this._repo = repo;
-    const owner = team.ownerUserId === userId;
-    this._resolution.update((r) =>
-      r
-        ? {
-            ...r,
-            ownedTeam: owner
-              ? {
-                  id: team.teamId,
-                  name: team.name,
-                  accentColor: team.accentColor,
-                  createdAt: team.createdAt,
-                }
-              : null,
-            membership: owner ? null : { teamId, role: 'editor' },
-          }
-        : r,
-    );
-    this._state.set('ready');
+    this.switchingTeam.set(true);
+    const generation = this.sessionGeneration;
+    try {
+      const client = await this.supabase.getClient();
+      const userId = this.supabase.user()?.id;
+      if (!client || !userId) throw new Error('No hay sesión.');
+      const repo = new SupabaseRepository(client, userId, teamId);
+      const teams = await repo.listTeamAccess();
+      const team = teams.find((entry) => entry.id === teamId);
+      if (!team) throw new Error('El equipo ya no existe o no está disponible.');
+      const sessionStillCurrent = () =>
+        this.supabase.user()?.id === userId && generation === this.sessionGeneration;
+      await this.store.connectDataSource(repo, teamId, sessionStillCurrent);
+      if (!sessionStillCurrent()) throw new Error('La sesión ha cambiado.');
+      this._repo = repo;
+      this.selectedTeamId = teamId;
+      this._resolution.update((r) =>
+        r
+          ? {
+              ...r,
+              accessibleTeams: teams,
+              selectedTeamId: teamId,
+            }
+          : r,
+      );
+      this._state.set('ready');
+    } finally {
+      this.switchingTeam.set(false);
+    }
   }
 
   /** Importa datos locales antiguos a Supabase de forma idempotente. */
@@ -521,6 +553,7 @@ export class AccessService {
     const repo = await this.ensureRepo();
     if (!repo || !repo.teamId) throw new Error('No hay equipo de contexto.');
     await repo.transferTeamOwnership(repo.teamId, newOwnerUserId);
+    this.selectedTeamId = repo.teamId;
     await this.refreshAfterMembershipChange();
   }
 
@@ -536,7 +569,15 @@ export class AccessService {
     const updated = await repo.renameTeam(repo.teamId, trimmed, team.accentColor);
     this.store.updateTeam(updated);
     this._resolution.update((resolution) =>
-      resolution?.ownedTeam?.id === updated.id ? { ...resolution, ownedTeam: updated } : resolution,
+      resolution
+        ? {
+            ...resolution,
+            ownedTeam: resolution.ownedTeam?.id === updated.id ? updated : resolution.ownedTeam,
+            accessibleTeams: resolution.accessibleTeams?.map((team) =>
+              team.id === updated.id ? { ...team, ...updated } : team,
+            ),
+          }
+        : resolution,
     );
   }
 
@@ -567,6 +608,7 @@ export class AccessService {
    * de contexto): vuelve a resolver el acceso y reconecta.
    */
   async refreshAfterMembershipChange(): Promise<void> {
+    this.sessionGeneration++;
     this._initPromise = null;
     this._state.set('resolving');
     await this.resolve();
@@ -574,6 +616,8 @@ export class AccessService {
 
   /** Cierra sesión: limpia el repositorio y vuelve el store a local. */
   async clear(): Promise<void> {
+    this.sessionGeneration++;
+    this.selectedTeamId = undefined;
     this._repo = null;
     this._resolution.set(null);
     this._state.set('unauthenticated');

@@ -83,10 +83,19 @@ describe('borrado de cuentas — quién puede y qué se explica', () => {
     ).toBe(false);
   });
 
+  it('solo puede salir un propietario si queda otro; un editor puede salir', () => {
+    expect(canLeaveTeam('owner', 2)).toBe(true);
+    expect(canLeaveTeam('owner', 1)).toBe(false);
+    expect(canLeaveTeam('owner', 0)).toBe(false);
+    expect(canLeaveTeam('editor', 1)).toBe(true);
+    expect(leaveTeamBlockedReason('owner', 2)).toBeNull();
+  });
+
   it('cada bloqueo tiene su explicación en español, y ninguna promete deshacer', () => {
     expect(deletionBlockerMessage('self')).toContain('tu propia cuenta');
     expect(deletionBlockerMessage('platform_admin')).toContain('administrador');
-    expect(deletionBlockerMessage('owns_team')).toContain('Traspasa');
+    // Ahora basta añadir otro propietario; no es obligatorio renunciar a la propiedad.
+    expect(deletionBlockerMessage('owns_team')).toContain('Nombra otro propietario');
     for (const b of ['self', 'platform_admin', 'owns_team'] as const) {
       expect(deletionBlockerMessage(b).toLowerCase()).not.toContain('recuperar');
     }
@@ -115,8 +124,8 @@ describe('borrado de cuentas — quién puede y qué se explica', () => {
       }),
     );
     expect(conEquipo).toContain('Primer Equipo');
-    expect(conEquipo).toContain('11 jugadores');
-    expect(conEquipo).toContain('5 ejercicios');
+    // Los datos del equipo no se borran con la cuenta: no se presentan como pérdidas.
+    expect(conEquipo).toContain('última propietaria aprobada');
     expect(conEquipo).toContain('NO se puede borrar');
   });
 });

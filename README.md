@@ -24,7 +24,18 @@ Dibuja ejercicios sobre el campo, guárdalos en tu biblioteca y compártelos con
 - 🎯 **Seis campos**: campo completo, medio campo, tercio, fútbol sala, F7 transversal y lienzo.
 - 📚 **Biblioteca con carpetas**: crea, mueve, duplica y busca ejercicios.
 - 🗓️ **Sesiones**: encadena ejercicios con tiempos y exporta el PDF de la sesión.
-- 👥 **Multiusuario**: un propietario y hasta **6 colaboradores** por equipo, con permisos comprobados **en el servidor**.
+- 👥 **Multiusuario**: uno o varios propietarios, hasta **7 cuentas totales** por equipo (incluidas invitaciones vigentes), con permisos comprobados **en el servidor**.
+
+### Equipos y copropietarios
+
+- En **Miembros → Hacer copropietario** se comparte la gestión sin perder tu propiedad.
+  Cada propietario puede actuar solo, incluido borrar el equipo tras confirmarlo.
+- **Traspasar mi propiedad** es distinto: la otra persona pasa a propietaria y tú a editor.
+  El último propietario no puede salir, degradarse ni eliminar su cuenta sin dejar otro.
+- **Cuenta → Cambiar de equipo** permite moverse entre los equipos autorizados. Un
+  administrador de plataforma puede entrar en todos; no consume plaza por ese permiso.
+- **Cuenta → Solicitar otro equipo** envía una solicitud que aprueba Administración.
+  Aprobar una cuenta no autoriza a crear equipos libremente.
 - 🔐 **Invita por enlace o por correo**, aprueba cuentas y gestiona quién entra.
 - 📱 **Móvil y tableta**: la misma app, con gestos de pellizco, arrastre y panel adaptado.
 
@@ -56,6 +67,7 @@ Todo el estado vive en un único servicio (`StoreService`) y las pantallas nunca
 
 ```bash
 npm run test:unit          # pruebas unitarias
+npm run test:postgres      # PostgreSQL efímero (Docker): migraciones, permisos y concurrencia
 npm run lint               # ESLint (sin deuda nueva)
 npm run format:check       # Prettier
 npm run validate:migration # SQL: propiedades de seguridad, estático

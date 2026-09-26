@@ -2,7 +2,9 @@
   <p class="auth-note members-intro">
     {{
       isOwner()
-        ? 'Invita hasta ' + seatsLimit + ' colaboradores (activos + invitaciones pendientes).'
+        ? 'Hasta ' +
+          seatsLimit +
+          ' cuentas en total: propietarios, editores e invitaciones pendientes vigentes.'
         : platformAdmin()
           ? 'Vista de consulta para la administración de la plataforma. Solo el propietario gestiona invitaciones y colaboradores.'
           : 'Solo el propietario puede invitarte o revocarte el acceso.'
@@ -52,7 +54,7 @@
   } @else {
     @if (isOwner()) {
       <div class="auth-row members-capacity">
-        <span>Plazas de colaboradores</span>
+        <span>Plazas del equipo</span>
         <strong>{{ seatsUsed() }} de {{ seatsLimit }} usadas</strong>
       </div>
     }
@@ -70,28 +72,45 @@
       <div class="card invite-row">
         <div class="invite-main">
           <strong>{{ m.displayName || m.emailNormalized }}</strong>
-          <span class="auth-note">{{ m.role === 'owner' ? 'Propietario' : 'Editor' }}</span>
+          <span class="auth-note">{{
+            m.role === 'owner' ? (ownerCount() > 1 ? 'Copropietario' : 'Propietario') : 'Editor'
+          }}</span>
         </div>
-        @if (isOwner() && m.role !== 'owner' && !me(m.userId)) {
-          <!-- Traspasar la propiedad: acción de PERMISOS, así que se confirma con las
+        @if (isOwner() && m.status === 'active') {
+          <div class="admin-actions">
+            <button
+              type="button"
+              class="btn btn-ghost"
+              data-accion="copropiedad"
+              [disabled]="busy(m.userId) || (m.role === 'owner' && ownerCount() < 2)"
+              (click)="cambiarPropiedad(m)"
+            >
+              {{ m.role === 'owner' ? 'Cambiar a editor' : 'Hacer copropietario' }}
+            </button>
+            @if (m.role !== 'owner' && !me(m.userId)) {
+              <!-- Traspasar la propiedad: acción de PERMISOS, así que se confirma con las
                consecuencias para las dos partes y solo se ofrece a un colaborador activo. -->
-          <button
-            type="button"
-            class="btn btn-ghost"
-            data-accion="traspasar-propiedad"
-            [disabled]="busy(m.userId) || !puedeTraspasarA(m)"
-            (click)="traspasar(m)"
-          >
-            Hacer propietario
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-danger-text"
-            [disabled]="busy(m.userId)"
-            (click)="revoke(m)"
-          >
-            {{ busy(m.userId) ? '…' : 'Revocar' }}
-          </button>
+              <button
+                type="button"
+                class="btn btn-ghost"
+                data-accion="traspasar-propiedad"
+                [disabled]="busy(m.userId) || !puedeTraspasarA(m)"
+                (click)="traspasar(m)"
+              >
+                Traspasar mi propiedad
+              </button>
+            }
+            @if (!me(m.userId)) {
+              <button
+                type="button"
+                class="btn btn-ghost btn-danger-text"
+                [disabled]="busy(m.userId) || (m.role === 'owner' && ownerCount() < 2)"
+                (click)="revoke(m)"
+              >
+                {{ busy(m.userId) ? '…' : 'Revocar' }}
+              </button>
+            }
+          </div>
         }
       </div>
     }
@@ -123,6 +142,12 @@
           </button>
         </div>
       </div>
+
+      @if (puedeSalir()) {
+        <button type="button" class="btn btn-ghost" [disabled]="busySalir()" (click)="salir()">
+          Salir del equipo
+        </button>
+      }
 
       @if (invitations().length > 0) {
         <h2 class="members-section-title">Invitaciones pendientes</h2>

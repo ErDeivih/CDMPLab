@@ -7,6 +7,62 @@ import { SupabaseService } from '../../core/supabase.service';
 import { MembersComponent } from './members.component';
 
 describe('MembersComponent — invitaciones caducadas', () => {
+  it('cuenta propietarios y editores, y añadir copropietario exige confirmar sin traspasar', async () => {
+    const people = [
+      { userId: 'owner', role: 'owner', displayName: 'Ana' },
+      { userId: 'coowner', role: 'owner', displayName: 'Luis' },
+      { userId: 'editor', role: 'editor', displayName: 'Eva' },
+    ].map((member) => ({
+      ...member,
+      status: 'active',
+      emailNormalized: `${member.userId}@example.com`,
+    }));
+    const access = {
+      target: () => ({ role: 'owner', teamId: 't1' }),
+      platformAdmin: () => false,
+      listMembers: vi.fn().mockResolvedValue(people),
+      listTeamInvitations: vi.fn().mockResolvedValue([]),
+      setMemberRole: vi.fn().mockResolvedValue(undefined),
+      transferTeamOwnership: vi.fn(),
+    };
+    const ask = vi.fn();
+    TestBed.configureTestingModule({
+      imports: [MembersComponent],
+      providers: [
+        { provide: AccessService, useValue: access },
+        {
+          provide: StoreService,
+          useValue: { isRemote: () => true, activeTeam: () => ({ id: 't1', name: 'Equipo' }) },
+        },
+        { provide: SupabaseService, useValue: { user: () => ({ id: 'owner' }) } },
+        { provide: ConfirmService, useValue: { ask } },
+      ],
+    });
+    const fixture = TestBed.createComponent(MembersComponent);
+    fixture.detectChanges();
+    await fixture.componentInstance.load();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('3 de 7 usadas');
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('[data-accion="copropiedad"]'),
+    ) as HTMLButtonElement[];
+    expect(buttons).toHaveLength(3);
+    expect(buttons[0].disabled).toBe(false);
+    buttons[2].click();
+    expect(access.setMemberRole).not.toHaveBeenCalled();
+    const confirmation = ask.mock.calls[0][0];
+    expect(confirmation.message).toContain('Tú conservarás tus permisos');
+    confirmation.onConfirm();
+    await fixture.whenStable();
+    expect(access.setMemberRole).toHaveBeenCalledWith('editor', 'owner');
+    expect(access.transferTeamOwnership).not.toHaveBeenCalled();
+    access.listMembers.mockResolvedValue([people[0]]);
+    await fixture.componentInstance.load();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-accion="copropiedad"]').disabled).toBe(true);
+  });
+
   it('mantiene visible el fallo de correo tras recargar y oculta el detalle técnico', async () => {
     const providerError =
       'We have detected you are using an unrecognised IP address 2a05:d012:fca:9508::1';
@@ -118,7 +174,8 @@ describe('MembersComponent — invitaciones caducadas', () => {
     expect(row).toBeTruthy();
     expect(row.textContent).toContain('Invitación caducada');
     expect(row.textContent).toMatch(/no ocupa plaza/i);
-    expect(fixture.nativeElement.querySelector('.auth-row strong').textContent).toContain('0 de 6');
+    // Contrato nuevo: siete cuentas totales, incluidos los propietarios.
+    expect(fixture.nativeElement.querySelector('.auth-row strong').textContent).toContain('0 de 7');
     expect(row.querySelector('button')?.textContent).toContain('Cancelar');
     expect(row.textContent).not.toContain('Copiar enlace');
     expect(row.textContent).not.toContain('Enviar por correo');

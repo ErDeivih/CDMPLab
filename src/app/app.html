@@ -78,7 +78,11 @@
   </aside>
 
   <div class="main">
-    <main class="content">
+    <main
+      class="content"
+      [attr.inert]="switchingTeam() ? '' : null"
+      [attr.aria-busy]="switchingTeam()"
+    >
       @if (storageError()) {
         <div class="storage-error" role="alert">
           <span class="msi">warning</span>
@@ -153,10 +157,17 @@
 
       <div class="cuenta-bloque">
         <div class="cuenta-etiqueta">Equipo activo</div>
+        @if (switchingTeam()) {
+          <p role="status">Cambiando de equipo…</p>
+        }
         @if (teams().length > 1) {
           <label class="team-switch">
             <span class="msi" aria-hidden="true">swap_horiz</span>
-            <select (change)="switchTeamDesdeCuenta($event)" aria-label="Cambiar de equipo">
+            <select
+              [disabled]="switchingTeam()"
+              (change)="switchTeamDesdeCuenta($event)"
+              aria-label="Cambiar de equipo"
+            >
               @for (t of teams(); track t.id) {
                 <option [value]="t.id" [selected]="t.id === activeTeamId()">{{ t.name }}</option>
               }
@@ -175,6 +186,15 @@
       }
 
       <div class="cuenta-acciones" id="cuenta-mas">
+        @if (teamSwitchError()) {
+          <p class="auth-msg err" role="alert">{{ teamSwitchError() }}</p>
+        }
+        @if (isAuthenticated()) {
+          <a class="cuenta-accion" routerLink="/onboarding/team" (click)="cerrarCuenta()">
+            <span class="msi" aria-hidden="true">add</span>
+            <span>Solicitar otro equipo</span>
+          </a>
+        }
         @if (invitacionesItem(); as invitaciones) {
           <a
             class="cuenta-accion cuenta-accion-pendiente"

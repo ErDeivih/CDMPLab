@@ -4,7 +4,16 @@ import { AccessService } from '../../core/access.service';
 import { AuthCardComponent } from './auth-card.component';
 import type { TeamRequestInfo } from '../../core/repositories/data-source';
 
-const PALETTE = ['#c8102e', '#1a73e8', '#c0392b', '#1f7a4d', '#e67e22', '#7d3c98', '#b8860b', '#111111'];
+const PALETTE = [
+  '#c8102e',
+  '#1a73e8',
+  '#c0392b',
+  '#1f7a4d',
+  '#e67e22',
+  '#7d3c98',
+  '#b8860b',
+  '#111111',
+];
 
 /**
  * SOLICITUD de equipo.
@@ -36,7 +45,7 @@ export class OnboardingTeamComponent {
   constructor() {
     // Si ya pedía un equipo, el formulario se precarga con lo pedido (y el envío lo actualiza).
     const actual: TeamRequestInfo | null = this.access.teamRequest();
-    if (actual) {
+    if (actual && actual.status !== 'approved') {
       this.name.set(actual.name);
       this.color.set(actual.accentColor);
     }
@@ -99,7 +108,7 @@ export class OnboardingTeamComponent {
     try {
       await this.access.refresh();
       const actual = this.access.teamRequest();
-      if (actual) {
+      if (actual && actual.status !== 'approved') {
         this.name.set(actual.name);
         this.color.set(actual.accentColor);
       }
@@ -111,9 +120,11 @@ export class OnboardingTeamComponent {
   private friendly(msg: string): string {
     if (msg.includes('profile_not_approved')) return 'Tu perfil todavía no ha sido aprobado.';
     if (msg.includes('team_name_required')) return 'El nombre del equipo es obligatorio.';
-    if (msg.includes('team_name_too_long')) return 'El nombre del equipo es demasiado largo (máx. 80).';
+    if (msg.includes('team_name_too_long'))
+      return 'El nombre del equipo es demasiado largo (máx. 80).';
     if (msg.includes('invalid_accent_color')) return 'El color del equipo no es válido.';
-    if (msg.includes('already_has_team')) return 'Ya tienes un equipo; no hace falta solicitar otro.';
+    if (msg.includes('already_has_team'))
+      return 'Ya tienes un equipo; no hace falta solicitar otro.';
     if (msg.includes('team_creation_requires_approval'))
       return 'El equipo lo crea el servidor cuando un administrador aprueba la solicitud.';
     return msg;

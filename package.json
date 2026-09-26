@@ -9,6 +9,7 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "test:unit": "ng test --watch=false",
+    "test:postgres": "node scripts/test-coownership-postgres.mjs",
     "test:e2e": "playwright test",
     "test:e2e:dev": "ng build --configuration development && playwright test --config=playwright.dev.config.ts",
     "test:e2e:prod": "ng build && playwright test --config=playwright.prod.config.ts",

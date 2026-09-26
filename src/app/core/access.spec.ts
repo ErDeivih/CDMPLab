@@ -37,6 +37,28 @@ function solicitud(overrides: Partial<TeamRequestInfo> = {}): TeamRequestInfo {
 }
 
 describe('decideAccess (login por estado)', () => {
+  it('elige el rol autorizado del equipo seleccionado, no la referencia heredada', () => {
+    const own = { id: 'a', name: 'A', accentColor: '#123456', createdAt: 'x' };
+    const other = { ...own, id: 'b' };
+    const resolution = res({
+      ownedTeam: own,
+      accessibleTeams: [
+        { ...own, role: 'editor' },
+        { ...other, role: 'owner' },
+      ],
+      selectedTeamId: 'b',
+    });
+    expect(decideAccess(resolution)).toMatchObject({ teamId: 'b', role: 'owner' });
+    expect(decideAccess({ ...resolution, selectedTeamId: 'a' })).toMatchObject({
+      teamId: 'a',
+      role: 'editor',
+    });
+    expect(decideAccess({ ...resolution, selectedTeamId: 'revoked' })).toMatchObject({
+      teamId: 'a',
+      role: 'editor',
+    });
+    expect(decideAccess({ ...resolution, accessibleTeams: [] }).state).toBe('request-team');
+  });
   it('sin resolución → unauthenticated', () => {
     expect(decideAccess(null).route).toBe('/auth/login');
   });

@@ -416,6 +416,13 @@ export class RlsBackend {
     this.rpcCalls.push({ name, args, uid, role });
     const a = (args ?? {}) as Rw;
     switch (name) {
+      // Contrato de copropiedad: el cliente recibe todos los equipos con su rol real.
+      case 'my_accessible_teams':
+        return ok(
+          this.rows.teams
+            .filter((team) => this.teamRole(uid, String(team.id)) !== 'none')
+            .map((team) => ({ ...team, role: this.teamRole(uid, String(team.id)) })),
+        );
       case 'create_my_team':
         return this.rpcCreateMyTeam(a, uid);
       case 'request_team_creation':
@@ -1431,9 +1438,28 @@ function makeRlsClient(
   userId: string,
   role: 'authenticated' | 'service_role' = 'authenticated',
 ) {
-  const rpcMock = vi.fn(async (name: string, args: unknown): Promise<RpcResult> =>
-    backend.rpc(name, args, userId, role),
-  );
+  const rpcMock = vi.fn((name: string, args: unknown) => {
+    if (name !== 'my_accessible_teams') return backend.rpc(name, args, userId, role);
+    let start = 0;
+    let end = 999;
+    const query = {
+      order: () => query,
+      range: (from: number, to: number) => {
+        start = from;
+        end = to;
+        return query;
+      },
+      then: (resolve: (value: RpcResult) => unknown, reject: (error: unknown) => unknown) =>
+        backend
+          .rpc(name, args, userId, role)
+          .then((result) => ({
+            ...result,
+            data: Array.isArray(result.data) ? result.data.slice(start, end + 1) : result.data,
+          }))
+          .then(resolve, reject),
+    };
+    return query;
+  });
   const fromMock = vi.fn((table: string): unknown => backend.tableQuery(table, userId));
   const client = { rpc: rpcMock, from: fromMock } as unknown as SupabaseClient<Database>;
   return { client, rpcMock, fromMock, userId, role };
@@ -2234,7 +2260,8 @@ describe('T4 multiuser — el viaje completo (owner → invitado → editor → 
     expect(emailCols).toEqual([]);
     const identityCols = backend.eqCalls.map((c) => c.col);
     expect(identityCols).toContain('user_id'); // profiles / team_members
-    expect(identityCols).toContain('owner_user_id'); // teams
+    // La propiedad ya no depende de la referencia heredada: la RPC usa auth.uid().
+    expect(backend.rpcCalls.some((call) => call.name === 'my_accessible_teams')).toBe(true);
     expect(identityCols).toContain('team_id'); // scoping de equipo
 
     // 2) Cambiar el email del propietario NO cambia su identidad ni su acceso.
@@ -2447,7 +2474,12 @@ describe('T4 multiuser — AccessService (gate al entrar al equipo)', () => {
     expect(target.state).toBe('ready');
     expect(target.teamId).toBe(team.id);
     expect(target.role).toBe('editor');
-    expect(store.connectDataSource).toHaveBeenCalledWith(expect.anything(), team.id);
+    // La carga lleva una guarda para descartar respuestas de una sesión ya cerrada.
+    expect(store.connectDataSource).toHaveBeenCalledWith(
+      expect.anything(),
+      team.id,
+      expect.any(Function),
+    );
   });
 
   it('un invitado SIN aceptar resuelve a `accept-invitation` y NO conecta ningún equipo', async () => {

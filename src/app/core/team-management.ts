@@ -56,11 +56,11 @@ export function missingDeletionPreview(userId: string): AccountDeletionPreview {
 export function deletionBlockerMessage(blocker: DeletionBlocker): string {
   switch (blocker) {
     case 'self':
-      return 'Es tu propia cuenta: nadie puede borrarse a sí mismo.';
+      return 'Es tu propia cuenta: utiliza la opción de eliminar tu cuenta, no la de borrar otra persona.';
     case 'platform_admin':
-      return 'Es una cuenta de administrador de la plataforma: quítale primero ese permiso desde la base de datos.';
+      return 'Los administradores no pueden eliminarse entre sí. Cada administrador gestiona la baja de su propia cuenta.';
     case 'owns_team':
-      return 'Es propietaria de un equipo. Traspasa antes la propiedad a otra persona (o vacía el equipo) para no borrar sus datos por accidente.';
+      return 'Es la última propietaria aprobada de algún equipo. Nombra otro propietario antes de borrar la cuenta; los datos del equipo se conservarán.';
     default:
       return 'No se puede borrar esta cuenta.';
   }
@@ -97,9 +97,8 @@ export function deletionSummary(preview: AccountDeletionPreview): string {
     partes.push(`se cancelarán ${preview.pendingInvitations} invitación(es) pendiente(s) suya(s)`);
   }
   if (preview.ownsTeam) {
-    const d = preview.ownedTeamData;
     partes.push(
-      `es propietaria del equipo «${preview.ownedTeamName ?? ''}» (${d.players} jugadores, ${d.exercises} ejercicios, ${d.folders} carpetas, ${d.sessions} sesiones), así que NO se puede borrar todavía`,
+      `es la última propietaria aprobada en «${preview.ownedTeamName ?? ''}», así que NO se puede borrar todavía`,
     );
   }
   if (partes.length === 0) return 'Se borrará la cuenta y su perfil. No se puede deshacer.';
@@ -111,13 +110,16 @@ export function deletionSummary(preview: AccountDeletionPreview): string {
 // -------------------------------------------------------------
 
 /** ¿Puede este usuario salir por su cuenta? El propietario no: dejaría el equipo sin dueño. */
-export function canLeaveTeam(role: MemberRole | undefined | null): boolean {
-  return role === 'editor';
+export function canLeaveTeam(role: MemberRole | undefined | null, owners = 1): boolean {
+  return role === 'editor' || (role === 'owner' && owners > 1);
 }
 
 /** Motivo por el que no puede salir (o null si sí puede). */
-export function leaveTeamBlockedReason(role: MemberRole | undefined | null): string | null {
-  if (canLeaveTeam(role)) return null;
+export function leaveTeamBlockedReason(
+  role: MemberRole | undefined | null,
+  owners = 1,
+): string | null {
+  if (canLeaveTeam(role, owners)) return null;
   if (role === 'owner') {
     return 'Eres el propietario: para dejar el equipo, traspasa antes la propiedad a otra persona.';
   }

@@ -1,4 +1,19 @@
-# CDMPLab — Estado remoto de Supabase (actualizado 23/09/2026)
+# CDMPLab — Estado remoto de Supabase (actualizado 26/09/2026)
+
+## Copropiedad aplicada (26/09/2026)
+
+`20260930000001_team_coownership.sql` aplicada como registro remoto
+`20260926131555 / team_coownership`. Propiedad por membresía, siete plazas totales,
+varios equipos autorizados por cuenta y protección transaccional del último propietario.
+Las matrices `coownership.sql` y `entrenolab_rls.sql` pasaron sobre este proyecto con
+`ROLLBACK`; no quedaron fixtures. Conteos reales antes/después iguales: 1 equipo,
+5 miembros activos, 1 propietario, 11 ejercicios, 8 carpetas y 0 sesiones.
+Catálogo posterior: FK del propietario `ON DELETE RESTRICT`, sin `teams_owner_unique`,
+sin `UPDATE` directo de rol para `authenticated`, sin ejecución anónima de la RPC
+de roles. Detalles y límites de prueba en `copropiedad-contrato.md`.
+
+El prefijo local **no se renombra** al remoto: debe ordenar después de las definiciones
+de septiembre 30. Las secciones anteriores siguientes son históricas.
 
 > **Estado actual contrastado con el proyecto remoto `vgwfjkhvzprsoixpzruq`:** se aplicaron
 > `20260923091218_platform_admin_overview.sql` (registro remoto `version=20260923091218,

@@ -56,7 +56,7 @@ import {
   teamFromRow,
 } from './mappers';
 
-const COLLABORATOR_LIMIT = 6;
+const COLLABORATOR_LIMIT = 7;
 
 /**
  * Filas por página en las lecturas del dataset del equipo.
@@ -86,7 +86,10 @@ function chunked<T>(items: readonly T[], size: number): T[][] {
 
 /** Códigos de app conocidos → mensaje en español. */
 const ERROR_MESSAGES: Record<string, string> = {
-  collaborator_limit_exceeded: `No puedes invitar a más personas: el equipo tiene el máximo de ${COLLABORATOR_LIMIT} colaboradores (activos + invitaciones pendientes).`,
+  collaborator_limit_exceeded: `No puedes invitar a más personas: el equipo tiene el máximo de ${COLLABORATOR_LIMIT} cuentas (propietarios, editores e invitaciones pendientes vigentes).`,
+  last_team_owner:
+    'Debe quedar al menos un propietario aprobado y activo. Nombra otro propietario antes de continuar.',
+  already_team_member: 'Esta persona ya es miembro activo del equipo; no necesita otra invitación.',
   owner_cannot_be_collaborator:
     'El propietario del equipo no puede ser invitado como colaborador de su propio equipo.',
   collaborator_not_approved: 'Solo puedes invitar a personas con el perfil aprobado.',
@@ -279,29 +282,10 @@ export class SupabaseRepository implements DataSource {
       approvedAt: profileRow?.approved_at ?? null,
     };
 
-    // Equipo propio (máx. 1).
-    const { data: ownedRow, error: ownedErr } = await this.client
-      .from('teams')
-      .select('*')
-      .eq('owner_user_id', uid)
-      .maybeSingle();
-    if (ownedErr) throw errorToDataError(ownedErr, 'team_read');
-    const ownedTeam = ownedRow ? teamFromRow(ownedRow) : null;
-
-    // Miembro activo (owner/editor) de otro equipo.
-    // NO se pagina a propósito: la pertenencia de UN usuario a equipos es una lista corta por
-    // diseño (un equipo propio como máximo + colaboraciones), no un dataset que crezca como el
-    // del equipo. Además `team_members` no tiene un `id` con el que desempatar el orden.
-    const { data: memberRows, error: memberErr } = await this.client
-      .from('team_members')
-      .select('*')
-      .eq('user_id', uid)
-      .eq('status', 'active');
-    if (memberErr) throw errorToDataError(memberErr, 'team_member_read');
-    const membershipRow = (memberRows ?? []).find((m) => m.team_id !== ownedTeam?.id);
-    const membership = membershipRow
-      ? { teamId: membershipRow.team_id, role: membershipRow.role as 'owner' | 'editor' }
-      : null;
+    const accessibleTeams = await this.listTeamAccess();
+    const ownedTeam = accessibleTeams.find((team) => team.role === 'owner') ?? null;
+    const first = accessibleTeams.find((team) => team.id !== ownedTeam?.id);
+    const membership = first ? { teamId: first.id, role: first.role } : null;
 
     const pendingInvitations = await this.myPendingInvitations();
     // Solicitud de equipo del usuario (si la presentó). Un perfil aprobado sin equipo NO
@@ -309,7 +293,7 @@ export class SupabaseRepository implements DataSource {
     // debe mostrar el estado (pendiente / rechazada).
     const teamRequest = await this.myTeamRequest();
 
-    return { profile, ownedTeam, membership, pendingInvitations, teamRequest };
+    return { profile, ownedTeam, membership, pendingInvitations, teamRequest, accessibleTeams };
   }
 
   // ---------------- Lectura de un equipo ----------------
@@ -1043,6 +1027,31 @@ export class SupabaseRepository implements DataSource {
       this.client.from('teams').select('*').order('id').range(from, to),
     );
     return rows.map(teamFromRow);
+  }
+
+  async listTeamAccess(): Promise<Array<Team & { role: 'owner' | 'editor' }>> {
+    type Row = Database['public']['Functions']['my_accessible_teams']['Returns'][number];
+    const rows = await this.loadAllPages<Row>('team_access', (from, to) =>
+      this.client.rpc('my_accessible_teams').order('created_at').order('id').range(from, to),
+    );
+    return rows
+      .filter((row) => row.role === 'owner' || row.role === 'editor')
+      .map((row) => ({
+        id: row.id,
+        name: row.name,
+        accentColor: row.accent_color,
+        createdAt: row.created_at,
+        role: row.role as 'owner' | 'editor',
+      }));
+  }
+
+  async setTeamMemberRole(teamId: string, userId: string, role: 'owner' | 'editor'): Promise<void> {
+    const { error } = await this.client.rpc('set_team_member_role', {
+      p_team_id: teamId,
+      p_user_id: userId,
+      p_role: role,
+    });
+    if (error) throw errorToDataError(error, 'member_role');
   }
 
   async listProfiles(search: string): Promise<ProfileInfo[]> {

@@ -51,6 +51,9 @@ jobs:
       - name: Validate migrations
         run: npm run validate:migration
 
+      - name: PostgreSQL aislado — migraciones completas, RLS y concurrencia
+        run: npm run test:postgres
+
       - name: Production build
         run: npm run build
 
@@ -68,7 +71,7 @@ jobs:
       # es pesado para CI; se ejecuta de noche en `nightly.yml` y a mano en desarrollo.
       # Se van sumando specs por lote (los nuevos del Lote C: fase-i-*).
       - name: E2E (estable)
-        run: npx playwright test f7-persistence p11-persistence mobile-toolbar accesibilidad galerias fields features fase-h-formaciones fase-i-biblioteca fase-i-plantilla fase-i-sesiones fase-i-ajustes fase-i-shell fase-i-estilos --workers=1
+        run: npx playwright test copropiedad-ui f7-persistence p11-persistence mobile-toolbar accesibilidad galerias fields features fase-h-formaciones fase-i-biblioteca fase-i-plantilla fase-i-sesiones fase-i-ajustes fase-i-shell fase-i-estilos --workers=1
 
       # Diagnóstico: sin esto, un fallo E2E en un push era indiagnosticable desde el log — el
       # reporter es `list`, así que NO existe `playwright-report/`; lo que Playwright deja son las

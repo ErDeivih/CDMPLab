@@ -7,6 +7,27 @@ import type { TeamInvitationInfo } from './repositories/data-source';
 import { SupabaseRepository } from './repositories/supabase-data-source';
 
 describe('AccessService invitations', () => {
+  it('al aceptar selecciona el equipo invitado aunque ya hubiera otro activo', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        AccessService,
+        { provide: SupabaseService, useValue: {} },
+        { provide: StoreService, useValue: {} },
+      ],
+    });
+    const service = TestBed.inject(AccessService);
+    const internal = service as unknown as {
+      _repo: { acceptInvitation: (id: string) => Promise<string> };
+      selectedTeamId: string;
+    };
+    internal.selectedTeamId = 'previous';
+    internal._repo = { acceptInvitation: vi.fn().mockResolvedValue('invited') };
+    const refresh = vi.spyOn(service, 'refreshAfterMembershipChange').mockResolvedValue(undefined);
+    await service.acceptInvitation('invitation');
+    expect(internal.selectedTeamId).toBe('invited');
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
   it('permite consultar invitaciones antes de pertenecer a un equipo', async () => {
     const invitation: TeamInvitationInfo = {
       id: 'inv-1',
@@ -66,6 +87,77 @@ describe('AccessService invitations', () => {
 });
 
 describe('AccessService — navegación del administrador entre equipos', () => {
+  it('bloquea cambios con escrituras pendientes y rechaza un equipo no autorizado', async () => {
+    let pending = 1;
+    const store = {
+      pendingWrites: () => pending,
+      lastError: () => null,
+      connectDataSource: vi.fn(),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        AccessService,
+        { provide: StoreService, useValue: store },
+        {
+          provide: SupabaseService,
+          useValue: { getClient: async () => ({}), user: () => ({ id: 'member' }) },
+        },
+      ],
+    });
+    const service = TestBed.inject(AccessService);
+    await expect(service.openTeam('unknown')).rejects.toThrow('Espera');
+    pending = 0;
+    const lookup = vi.spyOn(SupabaseRepository.prototype, 'listTeamAccess').mockResolvedValue([]);
+    try {
+      await expect(service.openTeam('unknown')).rejects.toThrow('no está disponible');
+      expect(store.connectDataSource).not.toHaveBeenCalled();
+      expect(service.switchingTeam()).toBe(false);
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
+  it('una respuesta tardía tras cerrar sesión no puede cargar el equipo', async () => {
+    let finish!: (value: Awaited<ReturnType<SupabaseRepository['listTeamAccess']>>) => void;
+    const delayed = new Promise<Awaited<ReturnType<SupabaseRepository['listTeamAccess']>>>(
+      (resolve) => {
+        finish = resolve;
+      },
+    );
+    const store = {
+      pendingWrites: () => 0,
+      lastError: () => null,
+      resetToLocal: vi.fn(),
+      connectDataSource: vi.fn(async (_repo: unknown, _id: string, canApply: () => boolean) => {
+        if (!canApply()) throw new Error('La sesión ha cambiado');
+      }),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        AccessService,
+        { provide: StoreService, useValue: store },
+        {
+          provide: SupabaseService,
+          useValue: { getClient: async () => ({}), user: () => ({ id: 'member' }) },
+        },
+      ],
+    });
+    const service = TestBed.inject(AccessService);
+    const lookup = vi
+      .spyOn(SupabaseRepository.prototype, 'listTeamAccess')
+      .mockReturnValue(delayed);
+    try {
+      const switching = service.openTeam('t1');
+      await Promise.resolve();
+      await service.clear();
+      finish([{ id: 't1', role: 'owner', name: 'Old', accentColor: '#123456', createdAt: 'x' }]);
+      await expect(switching).rejects.toThrow('sesión ha cambiado');
+      expect(service.target().state).toBe('unauthenticated');
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
   it('conserva el rol propietario al abrir su propio equipo y editor en otro', async () => {
     const store = {
       pendingWrites: () => 0,
@@ -98,24 +190,23 @@ describe('AccessService — navegación del administrador entre equipos', () => 
       pendingInvitations: [],
       teamRequest: null,
     });
-    const overview = vi.spyOn(SupabaseRepository.prototype, 'adminTeamOverview').mockResolvedValue([
+    // La fuente autorizada incluye el rol de copropietario, no el único owner_user_id legado.
+    const overview = vi.spyOn(SupabaseRepository.prototype, 'listTeamAccess').mockResolvedValue([
       {
-        teamId: 'own',
-        ownerUserId: 'admin',
+        id: 'own',
+        role: 'owner',
         name: 'Propio',
         accentColor: '#c8102e',
         createdAt: '2026-01-01',
-        updatedAt: '2026-01-01',
       },
       {
-        teamId: 'other',
-        ownerUserId: 'someone',
+        id: 'other',
+        role: 'editor',
         name: 'Otro',
         accentColor: '#3056d3',
         createdAt: '2026-01-01',
-        updatedAt: '2026-01-01',
       },
-    ] as Awaited<ReturnType<SupabaseRepository['adminTeamOverview']>>);
+    ]);
     try {
       await service.openAdminTeam('own');
       expect(service.target()).toMatchObject({ state: 'ready', teamId: 'own', role: 'owner' });

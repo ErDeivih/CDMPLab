@@ -53,8 +53,12 @@ export function decideAccess(res: AccessResolution | null): AccessTarget {
   if (profile.status === 'suspended') return { state: 'suspended', route: '/access-suspended' };
 
   // approved
-  if (ownedTeam) return { state: 'ready', teamId: ownedTeam.id, role: 'owner', route: '/team' };
-  if (membership)
+  const selected =
+    res.accessibleTeams?.find((t) => t.id === res.selectedTeamId) ?? res.accessibleTeams?.[0];
+  if (selected) return { state: 'ready', teamId: selected.id, role: selected.role, route: '/team' };
+  if (!res.accessibleTeams && ownedTeam)
+    return { state: 'ready', teamId: ownedTeam.id, role: 'owner', route: '/team' };
+  if (!res.accessibleTeams && membership)
     return { state: 'ready', teamId: membership.teamId, role: membership.role, route: '/team' };
   // Una invitación pendiente se puede aceptar sin esperar a nadie: tiene prioridad.
   if (pendingInvitations.length > 0) return { state: 'accept-invitation', route: '/invitations' };

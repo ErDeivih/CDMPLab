@@ -105,6 +105,9 @@ export interface TeamDataset {
 
 /** Resultado de resolver el estado de acceso del usuario (login por estado). */
 export interface AccessResolution {
+  /** Lista autorizada por el servidor. Si existe, sustituye las referencias heredadas. */
+  accessibleTeams?: Array<Team & { role: MemberRole }>;
+  selectedTeamId?: string;
   profile: ProfileInfo;
   ownedTeam: Team | null;
   /** Equipo del que es miembro ACTIVO (owner/editor), distinto del propio. */

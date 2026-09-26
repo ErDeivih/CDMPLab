@@ -514,6 +514,20 @@ export interface Database {
     };
     Views: {};
     Functions: {
+      my_accessible_teams: {
+        Args: Record<string, never>;
+        Returns: Array<{
+          id: string;
+          name: string;
+          accent_color: string;
+          created_at: string;
+          role: string;
+        }>;
+      };
+      set_team_member_role: {
+        Args: { p_team_id: string; p_user_id: string; p_role: string };
+        Returns: undefined;
+      };
       accept_team_invitation: { Args: { p_invitation_id: string }; Returns: string };
       admin_list_profiles: {
         Args: { p_search?: string };

@@ -81,11 +81,11 @@ const ok = (msg) => console.log('  ✓ ' + msg);
 const VIGILADAS = [
   {
     fn: 'public.admin_team_overview()',
-    fichero: 'supabase/migrations/20260923154046_admin_overview_pending_invitations.sql',
+    fichero: 'supabase/migrations/20260930000001_team_coownership.sql',
   },
   {
     fn: 'public.admin_delete_account(p_user_id uuid, p_reason text default null)',
-    fichero: 'supabase/migrations/20260930000000_reassert_admin_delete_revokes_invitations.sql',
+    fichero: 'supabase/migrations/20260930000001_team_coownership.sql',
   },
   {
     fn: 'private.list_team_members(p_team_id uuid)',
@@ -1194,7 +1194,7 @@ try {
     // abajo). El arreglo está también en `20260923154020_admin_delete_revokes_invitations.sql`
     // —aplicado en remoto—, pero ese fichero ordena ANTES de la migración que crea la función, así
     // que sus propiedades no son las que quedan tras un despliegue desde cero.
-    const f18 = 'supabase/migrations/20260930000000_reassert_admin_delete_revokes_invitations.sql';
+    const f18 = 'supabase/migrations/20260930000001_team_coownership.sql';
     if (!fs.existsSync(f18)) {
       fail('falta la migración que hace que borrar una cuenta cancele sus invitaciones pendientes');
     } else {
@@ -1228,7 +1228,8 @@ try {
       const guardas = [
         'cannot_delete_self',
         'cannot_delete_platform_admin',
-        'target_owns_team',
+        'perform private.prepare_account_removal(p_user_id)',
+        'last_team_owner',
         'platform_admin_required',
         'account_not_found',
       ];
@@ -1356,6 +1357,48 @@ try {
           : `${politicas.length} política(s) y todas deniegan todo (${politicas.join(', ')})`,
       );
       ok('ninguna migración concede acceso de tabla a private.platform_admins');
+    }
+  }
+
+  {
+    const sql = fs
+      .readFileSync('supabase/migrations/20260930000001_team_coownership.sql', 'utf8')
+      .replace(/--[^\n]*/g, ' ');
+    console.log('\nCopropiedad: invariantes de la definición final:');
+    for (const [label, fragment] of [
+      ['varios equipos por propietario', 'drop constraint if exists teams_owner_unique'],
+      [
+        'sin cascada destructiva de cuentas a equipos',
+        'references public.profiles(user_id) on delete restrict',
+      ],
+      ['serialización antes de gestionar permisos', 'pg_advisory_xact_lock(74192, 1)'],
+      [
+        'último propietario protegido',
+        "if replacement is null then raise exception 'last_team_owner'",
+      ],
+      ['propietario sustituto aprobado', "and p.status='approved'"],
+      [
+        'guardas incluso al borrar perfiles',
+        'before delete or update of status on public.profiles',
+      ],
+      ['siete plazas totales', "if used>=7 then raise exception 'collaborator_limit_exceeded'"],
+      [
+        'aceptación no degrada propietarios existentes',
+        "where public.team_members.status<>'active'",
+      ],
+      ['rol desde servidor en selector', 'public.my_accessible_teams()'],
+      [
+        'nombramiento no abierto a anónimos',
+        'revoke all on function public.set_team_member_role(uuid,uuid,text) from public, anon',
+      ],
+      [
+        'no permite autoasignarse un equipo por REST',
+        'revoke insert, update, delete on public.teams from authenticated',
+      ],
+      ['resumen agrupa todos los propietarios', "string_agg(pr.email_normalized, ', '"],
+      ['pendientes solo vigentes en resumen', "i.status = 'pending' and i.expires_at > now()"],
+    ]) {
+      has(sql, fragment) ? ok(label) : fail(`copropiedad: ${label}`);
     }
   }
 
