@@ -58,6 +58,17 @@ la entrega de correo a un buzón real ni se ha cambiado la configuración de Bre
 Paquete final de producción: **10 E2E**; artefacto GitHub Pages: **14 E2E**,
 ambos compilados y probados correctamente tras el último cambio de código.
 
+El primer CI encontró una carrera en el **arnés de pruebas**, no en la aplicación:
+`pg_isready` por socket detectaba el servidor temporal que Docker utiliza al inicializar.
+Se corrigió para esperar TCP en `127.0.0.1`, que identifica el servidor definitivo;
+la reconstrucción local completa volvió a pasar sin relajar ninguna aserción.
+
+Asesores de Supabase revisados tras aplicar la migración: permanecen avisos de RPC
+`SECURITY DEFINER` accesibles para usuarios autenticados (intencionado; autorización
+dentro de cada función, probada con roles no autorizados en la matriz), y la
+[protección de contraseñas filtradas desactivada](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+No se declara que esos avisos estén resueltos ni se ha cambiado el plan de Supabase.
+
 ## Decisiones de David
 
 - No habrá rol «encargado»: habrá propietarios y colaboradores.

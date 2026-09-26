@@ -38,8 +38,10 @@ command('docker', [
 try {
   let ready = false;
   for (let attempt = 0; attempt < 100; attempt++) {
+    // El servidor temporal de inicialización solo acepta sockets. Esperar TCP
+    // garantiza que llegó el servidor definitivo, no el que va a detenerse.
     ready =
-      spawnSync('docker', ['exec', container, 'pg_isready', '-U', 'postgres'], {
+      spawnSync('docker', ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'], {
         windowsHide: true,
         stdio: 'ignore',
       }).status === 0;
