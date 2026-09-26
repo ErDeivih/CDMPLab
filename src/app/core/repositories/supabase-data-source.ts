@@ -668,10 +668,14 @@ export class SupabaseRepository implements DataSource {
     teamId: string,
     name: string,
     parentId: string | null,
+    id: string,
   ): Promise<ExerciseFolder> {
     const { data, error } = await this.client
       .from('exercise_folders')
-      .insert({ team_id: teamId, parent_id: parentId, name })
+      // `id` lo genera el CLIENTE y viaja en el INSERT: la fila del servidor tiene que ser la misma
+      // que el store ya pintó (ver el contrato en `DataSource.createFolder`). Si la base generara
+      // otro id, lo que se cree DENTRO de esta carpeta apuntaría a un id inexistente y fallaría.
+      .insert({ id, team_id: teamId, parent_id: parentId, name })
       .select()
       .single();
     if (error) throw errorToDataError(error, 'folder_create');

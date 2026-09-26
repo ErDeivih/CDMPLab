@@ -272,28 +272,43 @@ test.describe('ESCALA DE MATERIALES — medición por campo', () => {
       await cambiarCampo(page, campo.etiqueta, campo.id);
       medidas[campo.id] = await medir(page);
     }
+    // BASE EN VERTICAL (23/09/2026). La cadena de cambios de campo deja el tablero en VERTICAL (al
+    // pasar por «Medio campo», que por diseño se muestra con la portería arriba, y ya no vuelve), así
+    // que el LIENZO se mide en vertical mientras que la base «Campo completo» de arriba se midió en
+    // HORIZONTAL. En una pantalla apaisada un campo vertical ocupa menos píxeles por unidad
+    // (medido: 8,32 frente a 10,4 px/unidad → factor 0,80), así que comparar esas dos medidas
+    // hablaba de la ORIENTACIÓN, no del tamaño del objeto. Se mide la base en vertical para poder
+    // comparar como con como.
+    await cambiarCampo(page, 'Campo completo', 'full');
+    const baseVertical = await medir(page);
+    console.log(`[escala] base vertical (campo completo) = ${JSON.stringify(baseVertical)}`);
 
     // Bandas pedidas (en píxeles, mismo viewport y mismo objeto). La PORTERÍA se excluye de esta
     // tabla: es la excepción de la FASE 3 (tamaño reglamentario del campo) y se comprueba aparte.
-    const POLITICA: Array<{ campo: string; min: number; max: number }> = [
+    const POLITICA: Array<{ campo: string; min: number; max: number; baseVertical?: boolean }> = [
       { campo: 'full', min: 1.0, max: 1.0 },
       { campo: 'half', min: 1.15, max: 1.25 },
       { campo: 'third', min: 1.2, max: 1.35 },
       { campo: 'futsal', min: 1.1, max: 1.25 },
       { campo: 'f7', min: 1.1, max: 1.25 },
-      // Lienzo: comportamiento ESTABLE y documentado = mismo tamaño aparente que campo completo.
-      { campo: 'blank', min: 0.95, max: 1.05 },
+      // LIENZO: mismo tamaño aparente que el campo completo (encargo del dueño, 23/09/2026: un
+      // colaborador avisó de que los jugadores se veían «muy gordos» en el lienzo). Se compara con la
+      // base VERTICAL porque este campo se mide en vertical (ver arriba). El factor 1,25 que había en
+      // `ESCALA_APARENTE_POR_CAMPO.blank` servía para tapar la diferencia de orientación: dejaba
+      // «cuadrando» el lienzo vertical y, en cambio, hacía un lienzo HORIZONTAL un 25 % más grande que
+      // el campo completo horizontal, que es justo lo que se veía mal.
+      { campo: 'blank', min: 0.95, max: 1.05, baseVertical: true },
     ];
     const informes: string[] = [];
     for (const p of POLITICA) {
       for (const o of OBJETOS.filter((x) => x.nombre !== 'porteria')) {
-        const base = medidas['full'][o.nombre].w;
+        const base = (p.baseVertical ? baseVertical : medidas['full'])[o.nombre].w;
         const valor = medidas[p.campo][o.nombre].w;
         const ratio = valor / base;
         informes.push(`${o.nombre}@${p.campo}=${ratio.toFixed(3)}`);
         expect(
           ratio,
-          `${o.nombre} en ${p.campo}: ${valor} px vs ${base} px en campo completo → ${(ratio * 100).toFixed(0)} % (se pide ${(p.min * 100).toFixed(0)}-${(p.max * 100).toFixed(0)} %)`,
+          `${o.nombre} en ${p.campo}: ${valor} px vs ${base} px en campo completo${p.baseVertical ? ' (misma orientación)' : ''} → ${(ratio * 100).toFixed(0)} % (se pide ${(p.min * 100).toFixed(0)}-${(p.max * 100).toFixed(0)} %)`,
         ).toBeGreaterThanOrEqual(p.min - 0.005);
         expect(ratio).toBeLessThanOrEqual(p.max + 0.005);
       }

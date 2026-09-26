@@ -35,6 +35,60 @@ export class LibraryComponent implements OnDestroy {
   private readonly sessionSvc = inject(BoardSessionService);
   private readonly confirmSvc = inject(ConfirmService);
 
+  protected readonly refreshing = signal(false);
+  protected readonly refreshMessage = signal('');
+  protected readonly pendingWrites = this.store.pendingWrites;
+  protected isRemote(): boolean {
+    return this.store.isRemote();
+  }
+  private destroyed = false;
+
+  private canRefresh(): boolean {
+    return (
+      !this.destroyed &&
+      !this.editorOpen() &&
+      this.newChildParent() === null &&
+      this.renameTarget() === null &&
+      !this.store.pendingWrites() &&
+      !this.store.lastError()
+    );
+  }
+
+  protected async refreshLibrary(automatic = false): Promise<void> {
+    if (!this.isRemote() || this.refreshing()) return;
+    if (!this.canRefresh()) {
+      if (!automatic)
+        this.refreshMessage.set(
+          'Termina la edición o resuelve el guardado pendiente antes de actualizar.',
+        );
+      return;
+    }
+    this.refreshing.set(true);
+    this.refreshMessage.set('');
+    try {
+      const applied = await this.store.refreshRemoteData(() => this.canRefresh());
+      if (!this.destroyed && !automatic)
+        this.refreshMessage.set(
+          applied
+            ? 'Biblioteca actualizada con los datos del equipo.'
+            : 'Hay cambios en curso. Vuelve a actualizar cuando termines.',
+        );
+    } catch (error) {
+      if (!this.destroyed)
+        this.refreshMessage.set(
+          (error as Error)?.message ??
+            'No se pudo actualizar. Tus datos actuales siguen disponibles.',
+        );
+    } finally {
+      this.refreshing.set(false);
+    }
+  }
+
+  @HostListener('document:visibilitychange')
+  protected onVisibilityChange(): void {
+    if (document.visibilityState === 'visible') void this.refreshLibrary(true);
+  }
+
   // Fuente ÚNICA de categorías (`models.EXERCISE_CATEGORIES`). Antes había una lista
   // local de 6 categorías frente a las 14 del modelo: los ejercicios creados en la
   // pizarra como "Rondo", "Posesión" o "Finalización" NO se podían filtrar aquí.
@@ -633,6 +687,7 @@ export class LibraryComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.clearDraftTimer();
     if (this.searchTimer) {
       clearTimeout(this.searchTimer);

@@ -126,6 +126,105 @@ describe('StoreService en modo remoto', () => {
     store.resetToLocal();
   });
 
+  it('con red lenta espera al padre, después a la subcarpeta y finalmente guarda el ejercicio', async () => {
+    let releaseParent!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseParent = resolve;
+    });
+    const created = new Set<string>();
+    const fake = makeFake({
+      createFolder: vi.fn(async (teamId, name, parentId, id) => {
+        if (!parentId) await gate;
+        else expect(created.has(parentId)).toBe(true);
+        created.add(id);
+        return { id, teamId, name, parentId };
+      }),
+      saveExercise: vi.fn(async (exercise) => {
+        expect(created.has(exercise.folderId!)).toBe(true);
+        return { exercise, conflict: false, revision: 1 };
+      }),
+    });
+    await store.connectDataSource(fake, 'team-1');
+    store.createFolder('team-1', 'Padre');
+    const parent = store.folders()[0];
+    store.createFolder('team-1', 'Hija', parent.id);
+    const child = store.folders().find((folder) => folder.parentId === parent.id)!;
+    const saving = store.saveExercise(EX('exercise-1', { folderId: child.id }));
+    expect(fake.createFolder).toHaveBeenCalledTimes(1);
+    expect(fake.saveExercise).not.toHaveBeenCalled();
+    releaseParent();
+    expect(await saving).toBe(true);
+    expect(fake.createFolder).toHaveBeenCalledTimes(2);
+    expect(store.pendingWrites()).toBe(0);
+  });
+
+  it('si falla el padre no envía la subcarpeta ni el ejercicio y revierte sus optimistas', async () => {
+    let rejectParent!: (error: Error) => void;
+    const gate = new Promise<ExerciseFolder>((_, reject) => {
+      rejectParent = reject;
+    });
+    const fake = makeFake({ createFolder: vi.fn(() => gate) });
+    await store.connectDataSource(fake, 'team-1');
+    store.createFolder('team-1', 'Padre');
+    const parent = store.folders()[0];
+    store.createFolder('team-1', 'Hija', parent.id);
+    const child = store.folders().find((folder) => folder.parentId === parent.id)!;
+    const saving = store.saveExercise(EX('exercise-1', { folderId: child.id }));
+    rejectParent(new Error('Sin conexión'));
+    expect(await saving).toBe(false);
+    expect(fake.createFolder).toHaveBeenCalledTimes(1);
+    expect(fake.saveExercise).not.toHaveBeenCalled();
+    expect(store.folders()).toHaveLength(0);
+    expect(store.exercises()).toHaveLength(0);
+    expect(store.lastError()).toContain('carpeta');
+  });
+
+  it('refresca cambios de compañeros sin reconectar el contexto', async () => {
+    const fake = makeFake();
+    await store.connectDataSource(fake, 'team-1');
+    vi.mocked(fake.loadTeam).mockResolvedValue(teamDataset({ exercises: [EX('nuevo')] }));
+    expect(await store.refreshRemoteData()).toBe(true);
+    expect(store.exercises()[0].id).toBe('nuevo');
+  });
+
+  it('descarta una lectura vieja si durante el refresco se guarda un ejercicio', async () => {
+    const fake = makeFake({
+      saveExercise: vi.fn(async (exercise) => ({ exercise, conflict: false, revision: 1 })),
+    });
+    await store.connectDataSource(fake, 'team-1');
+    let resolve!: (dataset: TeamDataset) => void;
+    vi.mocked(fake.loadTeam).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const refreshing = store.refreshRemoteData();
+    await store.saveExercise(EX('mi-cambio'));
+    resolve(teamDataset());
+    expect(await refreshing).toBe(false);
+    expect(store.exercises()[0].id).toBe('mi-cambio');
+  });
+
+  it('no aplica un refresco después de cerrar sesión o empezar una edición', async () => {
+    const fake = makeFake();
+    await store.connectDataSource(fake, 'team-1');
+    let resolve!: (dataset: TeamDataset) => void;
+    vi.mocked(fake.loadTeam).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    let canApply = true;
+    const refreshing = store.refreshRemoteData(() => canApply);
+    canApply = false;
+    resolve(teamDataset({ exercises: [EX('no-aplicar')] }));
+    expect(await refreshing).toBe(false);
+    expect(store.exercises()).toHaveLength(0);
+    const afterLogout = store.refreshRemoteData();
+    store.resetToLocal();
+    expect(await afterLogout).toBe(false);
+  });
+
   it('si el equipo ya no existe (o no hay acceso) NO conecta y avisa: no hidrata una pizarra vacía', async () => {
     // Contrato NUEVO (22/09/2026): `loadTeam` devolviendo `team: null` significa que el equipo se
     // borró o que el usuario perdió el acceso. Antes se hidrataba igualmente (pizarra vacía como si
@@ -516,6 +615,36 @@ describe('StoreService en modo remoto', () => {
     expect(lista.find((e) => e.title === 'Primero')?.folderId).toBe('f1');
     // …y no se toca el de la copia, que ya había quedado guardada sin carpeta.
     expect(lista.find((e) => e.title === 'Primero (copia)')?.folderId).toBeNull();
+  });
+
+  it('la carpeta creada usa el MISMO id en el store y en el servidor (lo que cuelgue de ella no se rompe)', async () => {
+    // FALLO REAL (23/09/2026): el store generaba un id y la base generaba otro, así que crear una
+    // SUBCARPETA dentro de una carpeta recién creada apuntaba a un `parent_id` inexistente y el
+    // servidor lo rechazaba (clave foránea). Aquí se fija el contrato: el id del cliente viaja al
+    // repositorio y es el que identifica la carpeta en los dos sitios.
+    const llamadas: Array<{ teamId: string; name: string; parentId: string | null; id: string }> =
+      [];
+    const fake = makeFake({
+      teamId: 'team-1',
+      createFolder: vi.fn(
+        async (teamId: string, name: string, parentId: string | null, id: string) => {
+          llamadas.push({ teamId, name, parentId, id });
+          return { id, teamId, name, parentId };
+        },
+      ),
+    });
+    await store.connectDataSource(fake, 'team-1');
+
+    store.createFolder('team-1', 'Rondos');
+    await vi.waitFor(() => expect(llamadas).toHaveLength(1));
+    const enStore = store.getFoldersForTeam('team-1').find((f) => f.name === 'Rondos')!;
+    expect(enStore.id, 'el store y el servidor comparten id').toBe(llamadas[0].id);
+
+    // La subcarpeta cuelga del MISMO id que existe en el servidor.
+    store.createFolder('team-1', 'Rondos 4x2', enStore.id);
+    await vi.waitFor(() => expect(llamadas).toHaveLength(2));
+    expect(llamadas[1].parentId, 'el padre es el id real, no uno inventado').toBe(enStore.id);
+    expect(llamadas[1].parentId).toBe(llamadas[0].id);
   });
 
   it('aísla las claves de localStorage por usuario y equipo', async () => {

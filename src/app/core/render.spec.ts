@@ -30,6 +30,7 @@ import {
   svgZigzag,
   screenPxToNormTolerance,
   BOARD_CANON_RECT,
+  DASH_PATTERN,
 } from './render';
 import { CanvasElement } from './models';
 import { MATERIAL_SIZE_RATIO, TACTICAL_SIZE } from './tactic-assets';
@@ -1752,7 +1753,49 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
     const path = /<path d="([^"]+)"/.exec(short)!;
     expect((path[1].match(/L /g) ?? []).length).toBeGreaterThanOrEqual(4);
     const dashed = svgZigzag(0.2, 0.3, 0.8, 0.3, '#ffffff', false, 0.2, 'dashed', g);
-    expect(dashed).toContain('stroke-dasharray="2.4,0.7"');
+    // CAMBIO DE CONTRATO VISUAL (encargo del dueño, 23/09/2026): el patrón discontinuo era
+    // `2.4,0.7` (guion muy largo, hueco diminuto: la línea parecía casi continua). Ahora es
+    // `1.2,0.8`, así que la discontinuidad se repite mucho más a menudo. El valor vive en
+    // `DASH_PATTERN`, que es la FUENTE ÚNICA para línea, flecha, conducción, curva y preview.
+    expect(dashed).toContain(`stroke-dasharray="${DASH_PATTERN}"`);
+    expect(DASH_PATTERN, 'el guion es más corto que el hueco: se lee discontinuo de verdad').toBe(
+      '1.2,0.8',
+    );
+  });
+
+  it('la CURVA admite trazo discontinuo y de puntos; la continua no lleva dasharray', () => {
+    // Encargo del dueño (23/09/2026): «la línea curva a izquierda y derecha pueda ponerse en línea
+    // discontinua». Antes el `case 'curve'` dibujaba el `path` sin mirar `lineStyle`.
+    const curva = (extra: Partial<CanvasElement>): CanvasElement => ({
+      id: 'c1',
+      t: 'curve',
+      x1: 0.2,
+      y1: 0.5,
+      x2: 0.8,
+      y2: 0.5,
+      c1x: 0.5,
+      c1y: 0.3,
+      c: '#ffffff',
+      ...extra,
+    });
+    const continuo = renderBoardSvg('full', [curva({})], {});
+    expect(continuo, 'la curva continua no lleva dasharray').not.toMatch(
+      /<path[^>]*stroke-dasharray/,
+    );
+    for (const estilo of ['dashed', 'dotted'] as const) {
+      const svg = renderBoardSvg('full', [curva({ lineStyle: estilo })], {});
+      expect(svg, `la curva con lineStyle ${estilo} lleva dasharray`).toMatch(
+        /<path[^>]*stroke-dasharray/,
+      );
+      // Y usa el MISMO patrón que la línea: son la misma constante.
+      const esperado = estilo === 'dashed' ? DASH_PATTERN : '0.6,1.4';
+      expect(svg).toContain(`stroke-dasharray="${esperado}"`);
+    }
+    // Compatibilidad: los documentos antiguos guardan el estilo en `style`, no en `lineStyle`.
+    const antiguo = renderBoardSvg('full', [curva({ style: 'dashed' })], {});
+    expect(antiguo, 'la curva antigua con `style: dashed` también sale discontinua').toContain(
+      `stroke-dasharray="${DASH_PATTERN}"`,
+    );
   });
 
   it('el zigzag NUEVO (Fase 6) tiene ~el doble de picos que el anterior para una longitud representativa', () => {

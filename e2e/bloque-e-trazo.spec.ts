@@ -210,6 +210,61 @@ test.describe('BLOQUE E — trazo por herramienta, clave versionada y migración
     expect(stored['arrow'], 'Flecha recuerda Continuo').toBe('solid');
   });
 
+  test('la CURVA (izquierda y derecha) se puede dibujar discontinua y se guarda así', async ({
+    page,
+  }) => {
+    // ENCARGO DEL DUEÑO (23/09/2026): «la línea curva a izquierda y derecha pueda ponerse en línea
+    // discontinua». Antes la curva no ofrecía el control (la lista de herramientas con chips no la
+    // incluía) y su `path` se dibujaba siempre continuo, aunque el modelo ya tuviera `lineStyle`.
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await seed(page);
+    await openBoard(page);
+
+    await useDrawTool(page, 'Curva izquierda');
+    await pickTrazo(page, 'Discontinuo');
+    await dragDraw(page, [0.15, 0.35], [0.55, 0.35]);
+
+    await useDrawTool(page, 'Curva derecha');
+    await pickTrazo(page, 'Continuo');
+    await dragDraw(page, [0.15, 0.65], [0.55, 0.65]);
+
+    // El render del SVG se programa tras pointerup; esperar su resultado, no leer
+    // inmediatamente el frame anterior (que todavía puede contener una sola curva).
+    await expect(page.locator('.entrenolab-board g[data-el-type="curve"] path')).toHaveCount(2);
+    const curvas = await page.evaluate(() =>
+      [...document.querySelectorAll('.entrenolab-board g[data-el-type="curve"] path')].map((p) =>
+        p.getAttribute('stroke-dasharray'),
+      ),
+    );
+    expect(curvas, 'se han dibujado las dos curvas').toHaveLength(2);
+    expect(
+      curvas.filter((d) => d).length,
+      'la curva dibujada con «Discontinuo» lleva dasharray',
+    ).toBe(1);
+    expect(curvas.filter((d) => !d).length, 'la curva continua no lo lleva').toBe(1);
+    // Y el patrón es el compartido: el mismo que usa la línea (más corto que antes de este cambio).
+    expect(curvas.find((d) => d)).toBe('1.2,0.8');
+
+    // La preferencia por herramienta recuerda lo elegido para cada curva.
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('cdmplab:tool-line-style:v1') ?? '{}'),
+    );
+    expect(stored['curve_left'], 'Curva izquierda recuerda Discontinuo').toBe('dashed');
+    expect(stored['curve_right'], 'Curva derecha recuerda Continuo').toBe('solid');
+
+    // El modelo guarda el estilo de la curva discontinua (no solo el dibujo).
+    await save(page);
+    const doc = await canvasDoc(page);
+    const estiloCurvas = doc.frames[0].elements
+      .filter((e) => e.t === 'curve')
+      .map((e) => e.style ?? e.lineStyle ?? 'solid')
+      .sort();
+    expect(estiloCurvas, 'una discontinua y una continua en el modelo').toEqual([
+      'dashed',
+      'solid',
+    ]);
+  });
+
   test('la clave antigua de color se migra a la clave CDMPLab versionada y se descarta', async ({
     page,
   }) => {

@@ -212,6 +212,16 @@ corrección de esta auditoría. El README actual ya no contiene las dos frases q
 en la sección 3 (el recuento «once» y el nombre remoto del endurecimiento) y remite a este
 documento. Las líneas citadas de `README.md` son, por tanto, líneas de `HEAD`.
 
+> **Aviso añadido el 23/09/2026:** el `README.md` **se reescribió por encargo del dueño**
+> («más amigable y vistoso, sin tanta explicación»): pasó de 414 a ~100 líneas y las
+> secciones largas («Estado real de Supabase», «Validación de migraciones», el detalle de
+> las migraciones una a una) **ya no existen allí**: su contenido vive en este documento y en
+> `docs/FASE-10-solicitud-de-equipo.md`. Por eso las citas de abajo son **históricas**: los
+> números de línea y los títulos señalados corresponden al README **anterior** a esa
+> reescritura, y se conservan como evidencia de lo que el repositorio afirmaba entonces. No
+> se ha perdido ninguna afirmación de fondo: la que importaba (recuento de migraciones y
+> mapeo con el nombre remoto) es justo lo que este documento audita.
+
 ### `README.md` — «Estado real de Supabase» (HEAD, líneas 160-164)
 
 > La **build de producción** apunta al proyecto Supabase real (autenticación obligatoria,

@@ -136,6 +136,17 @@
         <p class="page-sub">Diseña, guarda y encuentra tus ejercicios.</p>
       </div>
       <div class="page-actions">
+        @if (isRemote()) {
+          <button
+            class="btn btn-ghost"
+            type="button"
+            (click)="refreshLibrary()"
+            [disabled]="refreshing() || pendingWrites() > 0"
+          >
+            <span class="msi" aria-hidden="true">refresh</span>
+            {{ refreshing() ? 'Actualizando…' : 'Actualizar equipo' }}
+          </button>
+        }
         <button
           class="btn btn-ghost sidebar-toggle"
           (click)="toggleSidebar()"
@@ -149,6 +160,9 @@
       </div>
     </div>
 
+    @if (refreshMessage()) {
+      <p role="status">{{ refreshMessage() }}</p>
+    }
     <div class="filters">
       <div class="search">
         <span class="msi">search</span>

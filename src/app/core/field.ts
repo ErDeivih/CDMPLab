@@ -332,7 +332,13 @@ export const ESCALA_APARENTE_POR_CAMPO: Record<string, number> = {
   third: 1.99,
   futsal: 1.66,
   f7: 1.99,
-  blank: 1.25,
+  // LIENZO = MISMO TAMAÑO QUE EL CAMPO COMPLETO (encargo del dueño, 23/09/2026, a partir del aviso
+  // de un colaborador: «los jugadores muy gordos en el lienzo»). Aquí había 1,25, que inflaba un 25 %
+  // todo lo que se colocara en un lienzo —justo lo contrario de lo que decía el comentario de arriba,
+  // que ya documentaba 1,00—. Medido en el render: el grupo del jugador salía con `scale(0.75)` en el
+  // lienzo frente a `scale(0.60)` en el campo completo. El E2E de escala no lo detectaba porque mide
+  // un documento CREADO en campo completo y luego CAMBIADO de campo.
+  blank: 1.0,
   two_halves: 1.0, // retirado de la oferta: apariencia histórica intacta
   box: 1.0,
 };

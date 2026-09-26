@@ -337,6 +337,18 @@ describe('fieldGeometry — proporciones reales por tipo y orientación', () => 
     expect(fieldObjectScale('vertical_half', 'vertical')).toBeCloseTo(0.5 * 1.62, 5);
     expect(fieldObjectScale('f7', 'horizontal')).toBeCloseTo(0.5 * 1.99, 5);
     expect(fieldObjectScale('third', 'horizontal')).toBeCloseTo((35 / 105) * 1.99, 5);
+    // LIENZO = campo completo (encargo del dueño, 23/09/2026). Aquí hubo 1,25, que inflaba un 25 %
+    // todo lo que se colocara en un lienzo: lo avisó un colaborador («los jugadores muy gordos») y el
+    // comentario de la tabla ya decía que el objetivo era 1,00. Se comprueba contra el campo completo
+    // en vez de contra un número suelto, que es la propiedad que se pidió.
+    expect(fieldObjectScale('blank', 'horizontal')).toBeCloseTo(
+      fieldObjectScale('full', 'horizontal'),
+      5,
+    );
+    expect(fieldObjectScale('blank', 'vertical')).toBeCloseTo(
+      fieldObjectScale('full', 'vertical'),
+      5,
+    );
     // Los campos RETIRADOS de la oferta conservan la apariencia de los documentos históricos.
     expect(fieldObjectScale('two_halves', 'horizontal')).toBeCloseTo(1, 5);
     expect(fieldObjectScale('box', 'horizontal')).toBeCloseTo(22 / 105, 5);

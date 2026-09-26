@@ -34,12 +34,45 @@ export const MARGIN_STRIP = STRIP_MARGIN_NORM;
  *  fracción (TACTICAL_BBOX) que la caja respeta. */
 export const MATERIAL_BOX = 5.2;
 
+/**
+ * Patrón del trazo DISCONTINUO (guion, hueco) en unidades del viewBox. FUENTE ÚNICA: la usan la
+ * línea, la flecha, la conducción (zigzag), la curva y el borrador de previsualización del tablero.
+ *
+ * CAMBIO DE CONTRATO VISUAL (encargo del dueño, 23/09/2026): antes era `2.4,0.7` —un guion muy
+ * largo con un hueco diminuto, así que la línea parecía casi continua y el «discontinuo» se leía
+ * mal—. Ahora el guion es la mitad y el hueco algo mayor, de modo que la discontinuidad se repite
+ * mucho más a menudo («no tantas líneas hasta el siguiente discontinuo»).
+ */
+export const DASH_PATTERN = '1.2,0.8';
+
+/** Patrón del trazo de PUNTOS (guion muy corto, hueco amplio). Fuente única, igual que el anterior. */
+export const DOTTED_PATTERN = '0.6,1.4';
+
+/** `stroke-dasharray` según el estilo de trazo del elemento, o cadena vacía si es continuo. */
+export function dashArray(lineStyle: string | undefined): string {
+  if (lineStyle === 'dashed') return ` stroke-dasharray="${DASH_PATTERN}"`;
+  if (lineStyle === 'dotted') return ` stroke-dasharray="${DOTTED_PATTERN}"`;
+  return '';
+}
+
 /** Tamaño efectivo de un material: `el.size` si está fijado; si no, el tamaño
  *  base normalizado del tipo (TACTICAL_SIZE). Así los documentos antiguos sin
  *  `size` también se normalizan y ya no hay materiales diminutos. */
 export function materialSize(el: CanvasElement): number {
   return el.size ?? materialBaseSize(el.assetKind ?? el.t);
 }
+
+/**
+ * Reducción del tamaño de JUGADORES y BALÓN, igual en TODOS los campos (encargo del dueño,
+ * 23/09/2026, a partir del aviso de un colaborador: «los jugadores muy gordos»).
+ *
+ * - Se aplica multiplicando la escala del grupo, así que el NÚMERO, el NOMBRE y el «POR» —que
+ *   viajan DENTRO del grupo escalado— encogen en la MISMA proporción, que es lo que se pidió.
+ * - Solo afecta a esos dos tipos: conos, picas, escaleras, porterías… conservan su tamaño.
+ * - No toca el dato (`el.size` sigue siendo el que era): es una decisión de DIBUJO, así que
+ *   reabrir un ejercicio antiguo no lo modifica y el deslizador de tamaño sigue funcionando.
+ */
+export const PLAYER_BALL_SIZE_FACTOR = 0.9;
 
 /** Semiejes (normalizados 0..1) de la hit-box de un material, en su espacio LOCAL
  *  (sin rotación). Usa el recuadro de contenido (bbox) escalado por `size` y lo
@@ -58,9 +91,17 @@ export function materialHitHalfExtents(
   // (misma escala en render, hit-test y marco de selección), así que aquí se recibe el campo.
   field?: FieldType,
 ): { hw: number; hh: number } {
-  const s = materialSize(el) * objectScale;
-  const frac = materialHitFrac(el.assetKind ?? el.t);
-  const esPorteria = (el.assetKind ?? el.t) === 'goal' && !!field;
+  // El DIBUJO de jugador y balón se reduce un 10 % (`PLAYER_BALL_SIZE_FACTOR`, encargo del dueño del
+  // 23/09/2026): la caja táctil tiene que medir lo mismo que se ve, porque el contrato es «misma
+  // escala en render, hit-test y marco de selección». El mínimo táctil de abajo sigue garantizando
+  // el área mínima de toque, así que reducirla no hace que cueste más seleccionarlos.
+  const tipo = el.assetKind ?? el.t;
+  const s =
+    materialSize(el) *
+    objectScale *
+    (tipo === 'player' || tipo === 'ball' ? PLAYER_BALL_SIZE_FACTOR : 1);
+  const frac = materialHitFrac(tipo);
+  const esPorteria = tipo === 'goal' && !!field;
   const cajaPorteria = esPorteria ? goalBoxUnits(field) : null;
   // Semiejes en UNIDADES del viewBox (sin normalizar todavía). El intercambio del caso vertical
   // se hace AQUÍ, en unidades: norm X y norm Y escalan distinto (92 vs 59,6 unidades), así que
@@ -833,7 +874,9 @@ function elStr(
       const c = el.c ?? '#1a73e8';
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el) * objectScale;
+      // −10 % pedido por el dueño (23/09/2026). El número, el nombre y el «POR» viajan dentro de
+      // este grupo, así que encogen en la misma proporción sin tocar sus tamaños por separado.
+      const s = materialSize(el) * objectScale * PLAYER_BALL_SIZE_FACTOR;
       const ring = selected
         ? ' stroke="#fff" stroke-width="0.5" stroke-dasharray="0.8,0.6"'
         : ' stroke="#ffffff" stroke-width="0.6"';
@@ -869,7 +912,8 @@ function elStr(
     case 'ball': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const s = materialSize(el) * objectScale;
+      // Mismo −10 % que el jugador (el balón acompaña al jugador en la petición del dueño).
+      const s = materialSize(el) * objectScale * PLAYER_BALL_SIZE_FACTOR;
       const g = `<g transform="translate(${x} ${y}) scale(${s})"><circle r="1.3" fill="#ffffff" stroke="#111111" stroke-width="0.4"/><circle cx="-0.4" cy="0.4" r="0.35" fill="#111111"/></g>`;
       return rotWrap(g, el.rot, x, y);
     }
@@ -1370,7 +1414,11 @@ function elStr(
       const y2 = gy(el.y2 ?? 0);
       const c = el.c ?? DEFAULT_ELEMENT_COLOR;
       const width = el.strokeWidth ?? DEFAULT_STROKE_WIDTH;
-      let s = `<path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${c}" stroke-width="${width}" stroke-linecap="round"/>`;
+      // La curva admite trazo discontinuo y de puntos (encargo del dueño, 23/09/2026: «la línea
+      // curva a izquierda y derecha pueda ponerse en línea discontinua»). Usa el MISMO patrón que la
+      // línea y la flecha: `dashArray` es la fuente única, así que un cambio de patrón vale para todo.
+      const dash = dashArray(el.lineStyle ?? el.style);
+      let s = `<path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${c}" stroke-width="${width}" stroke-linecap="round"${dash}/>`;
       const ang = Math.atan2(y2 - cy, x2 - cx);
       const size = arrowHeadSize(width);
       s += `<polygon points="${x2},${y2} ${x2 - size * Math.cos(ang - 0.5)},${y2 - size * Math.sin(ang - 0.5)} ${x2 - size * Math.cos(ang + 0.5)},${y2 - size * Math.sin(ang + 0.5)}" fill="${c}"/>`;
@@ -1409,12 +1457,7 @@ function svgLine(
   const ax2 = px(x2, r);
   const ay2 = py(y2, r);
   const c = sel ? '#2563eb' : color;
-  const dash =
-    lineStyle === 'dashed'
-      ? ' stroke-dasharray="2.4,0.7"'
-      : lineStyle === 'dotted'
-        ? ' stroke-dasharray="0.6,1.4"'
-        : '';
+  const dash = dashArray(lineStyle);
   let s = `<line x1="${ax1}" y1="${ay1}" x2="${ax2}" y2="${ay2}" stroke="${c}" stroke-width="${width}"${dash}/>`;
   const size = arrowHeadSize(width);
   if (arrow === 'end' || arrow === 'both') {
@@ -1452,12 +1495,7 @@ export function svgZigzag(
   // escalando con la longitud (trazos cortos reducen picos y amplitud).
   const amp = Math.min(1.5, len * 0.04);
   const n = Math.max(4, Math.min(32, Math.ceil(len / 1.8)));
-  const dash =
-    lineStyle === 'dashed'
-      ? ' stroke-dasharray="2.4,0.7"'
-      : lineStyle === 'dotted'
-        ? ' stroke-dasharray="0.6,1.4"'
-        : '';
+  const dash = dashArray(lineStyle);
   // Picos intermedios (i = 1..n-1); el path termina EXACTAMENTE en (ax2,ay2).
   let d = `M ${ax1} ${ay1}`;
   let lx = ax1;

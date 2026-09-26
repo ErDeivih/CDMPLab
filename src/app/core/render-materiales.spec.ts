@@ -227,4 +227,42 @@ describe('FASE 4 — un PNG antiguo NO puede volver a pintar estos materiales', 
     );
     expect(conCono).toContain('<image');
   });
+
+  it('jugador y balón se dibujan un 10 % más pequeños en TODOS los campos, y el resto no cambia', () => {
+    // CAMBIO DE CONTRATO VISUAL (encargo del dueño, 23/09/2026, a partir del aviso de un
+    // colaborador: «los jugadores muy gordos»):
+    //   · jugador y balón se reducen un 10 % → miden 9/10 de un material que NO se reduce;
+    //   · el número y el nombre viajan DENTRO del grupo escalado, así que encogen en la MISMA
+    //     proporción sin tocar sus tamaños por separado (lo pidió así);
+    //   · los demás materiales (aquí un cono) conservan su tamaño;
+    //   · vale para los seis campos, no solo para el campo completo.
+    //
+    // El 0,9 va escrito AQUÍ a propósito (no se lee de `PLAYER_BALL_SIZE_FACTOR`): si el factor
+    // cambiara, la prueba tiene que fallar y obligar a decidir si el cambio de tamaño es
+    // intencionado. Con la constante dentro de la expectativa, la prueba pasaría con cualquier
+    // valor (comprobado: pasaba con el factor a 1) y no vigilaría nada.
+    const REFERENCIA = 0.9;
+    // Los tres con el MISMO `size` explícito, para que la comparación no dependa del tamaño base
+    // que cada tipo tenga por defecto: solo se está midiendo la reducción pedida.
+    const elementos: CanvasElement[] = [
+      { id: 'p', t: 'player', x: 0.5, y: 0.5, n: 10, size: 0.5 },
+      { id: 'b', t: 'ball', x: 0.3, y: 0.5, size: 0.5 },
+      { id: 'c', t: 'cone', x: 0.7, y: 0.5, size: 0.5 },
+    ];
+    for (const campo of ['full', 'half', 'third', 'futsal', 'f7', 'blank'] as const) {
+      const svg = renderBoardSvg(campo, elementos, {});
+      // El render emite un `scale(...)` por elemento, en el orden de la lista.
+      const escalas = [...svg.matchAll(/scale\(([\d.]+)\)/g)].map((m) => Number(m[1]));
+      expect(escalas, `tres elementos → tres escalas en ${campo}`).toHaveLength(3);
+      const [jugador, balon, cono] = escalas;
+      expect(jugador, `jugador en ${campo}: 90 % del material de referencia`).toBeCloseTo(
+        cono * REFERENCIA,
+        5,
+      );
+      expect(balon, `el balón se reduce como el jugador en ${campo}`).toBeCloseTo(
+        cono * REFERENCIA,
+        5,
+      );
+    }
+  });
 });

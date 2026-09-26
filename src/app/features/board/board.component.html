@@ -505,10 +505,18 @@
                 (change)="setSelOpacity($event)"
               />
             </div>
+            <!-- Grosor y TRAZO de los elementos de línea. La lista incluye todo lo que el render
+                 sabe dibujar discontinuo; desde el 23/09/2026 también la CURVA (encargo del dueño:
+                 «la línea curva a izquierda y derecha pueda ponerse en línea discontinua») y, de
+                 paso, `doubleArrow` y `measure`, que ya se dibujaban con su `lineStyle` pero no
+                 ofrecían ningún control al seleccionarlos. -->
             @if (
               selectedElement()!.t === 'arrow' ||
               selectedElement()!.t === 'line' ||
-              selectedElement()!.t === 'dribble'
+              selectedElement()!.t === 'dribble' ||
+              selectedElement()!.t === 'curve' ||
+              selectedElement()!.t === 'doubleArrow' ||
+              selectedElement()!.t === 'measure'
             ) {
               <div class="field">
                 <label>Grosor</label>
@@ -1323,9 +1331,18 @@
     }
     <div class="tools-caption" [class.tools-caption-color]="isColorTool()">
       <span class="tools-caption-title">{{ activeToolTitle() }}</span>
-      <!-- Bloque E: trazo Continuo/Discontinuo para Línea y Flecha (preferencia por herramienta). -->
+      <!-- Bloque E: trazo Continuo/Discontinuo por HERRAMIENTA (se elige antes de dibujar y cada
+           herramienta recuerda el suyo). Ampliado el 23/09/2026 a las curvas (izquierda/derecha) y a
+           la conducción, que ya admitían `lineStyle` en el modelo y en el render. -->
       @if (
-        tool() === 'line' || tool() === 'arrow' || tool() === 'doubleArrow' || tool() === 'measure'
+        tool() === 'line' ||
+        tool() === 'arrow' ||
+        tool() === 'doubleArrow' ||
+        tool() === 'measure' ||
+        tool() === 'dribble' ||
+        tool() === 'curve' ||
+        tool() === 'curve_left' ||
+        tool() === 'curve_right'
       ) {
         <div class="chips" role="group" aria-label="Estilo de trazo">
           <button

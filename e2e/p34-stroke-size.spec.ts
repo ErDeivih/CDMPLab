@@ -205,7 +205,9 @@ function findDrawnRectStruct(
 test.setTimeout(120_000);
 
 test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
-  test('dibujo: trazo y contorno nuevos 0.2; las líneas del campo siguen en 0.3', async ({ page }) => {
+  test('dibujo: trazo y contorno nuevos 0.2; las líneas del campo siguen en 0.3', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
@@ -246,7 +248,7 @@ test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
     expect(svg).toContain('stroke-width="0.3"');
   });
 
-  test('tamaño inicial: cono base 0.60 y jugador con scale(0.60) (Decisión del dueño, Fase 3)', async ({
+  test('tamaño inicial: cono base 0.60 y jugador un 10 % menor que él (decisiones del dueño)', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
@@ -257,12 +259,15 @@ test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
     await placePlayer(page, 0.6, 0.5);
 
     const svg = await boardSvg(page);
-    // Cono (material PNG): caja 5.2·0.60 = 3.12 (0.75 → 0.60: 20 % menor).
+    // Cono (material PNG): caja 5.2·0.60 = 3.12 (0.75 → 0.60: 20 % menor, decisión de la Fase 3).
     const coneW = MATERIAL_BOX * materialBaseSize('cone_red');
     expect(svg).toContain(`width="${coneW}"`);
-    // Jugador (vectorial): se envuelve con scale(0.60), es decir ~60 % del antiguo 1
-    // (Decisión del dueño, Fase 3: los objetos puntuales/players son un 20 % más pequeños).
-    expect(svg).toMatch(/scale\(0\.6/);
+    // CAMBIO DE CONTRATO VISUAL (23/09/2026): el dueño pidió reducir JUGADOR y BALÓN un 10 % más
+    // («los jugadores muy gordos»). Antes el jugador se dibujaba con `scale(0.60)`; ahora es 0.60 ·
+    // `PLAYER_BALL_SIZE_FACTOR` = 0.54. Los demás materiales (este cono) siguen igual: la prueba
+    // compara contra el cono en vez de contra un número suelto, que es la relación que se pidió.
+    expect(svg).toMatch(/scale\(0\.54/);
+    expect(svg).not.toMatch(/scale\(0\.6[^0-9]/);
 
     await page.waitForTimeout(250);
     await page.screenshot({ path: `${SHOTS}/02-tamano-60.png` });

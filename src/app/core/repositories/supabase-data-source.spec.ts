@@ -1166,4 +1166,40 @@ describe('SupabaseRepository.updatePlayer — un parche PARCIAL no borra lo que 
       message: expect.stringContaining('Cancela esa invitación'),
     });
   });
+
+  it('createFolder manda el id del CLIENTE: la fila del servidor es la que ya se pintó', async () => {
+    // FALLO REAL (23/09/2026, reportado por dos colaboradores distintos): al crear una carpeta, el
+    // store generaba un id y la base generaba OTRO, así que el usuario veía la carpeta pero
+    // cualquier acción posterior usaba un id inexistente: crear una subcarpeta dentro chocaba con
+    // la clave foránea `(team_id, parent_id)` (23503) y renombrar/borrar afectaba a 0 filas.
+    const payloads: Array<Record<string, unknown>> = [];
+    const builder = {
+      insert: (payload: Record<string, unknown>) => {
+        payloads.push(payload);
+        return {
+          select: () => ({
+            single: async () => ({
+              data: {
+                id: payload['id'],
+                team_id: payload['team_id'],
+                parent_id: payload['parent_id'],
+                name: payload['name'],
+                created_at: '2026-01-01T00:00:00.000Z',
+              },
+              error: null,
+            }),
+          }),
+        };
+      },
+    };
+    const { client } = makeClient({ from: () => builder });
+    const repo = new SupabaseRepository(client, 'u-1', 'team-1');
+
+    const creada = await repo.createFolder('team-1', 'Rondos', null, 'f-9');
+
+    expect(payloads[0]['id'], 'el INSERT lleva el id del cliente').toBe('f-9');
+    expect(creada.id, 'y el servidor devuelve ese mismo id').toBe('f-9');
+    expect(payloads[0]['team_id']).toBe('team-1');
+    expect(payloads[0]['parent_id']).toBeNull();
+  });
 });

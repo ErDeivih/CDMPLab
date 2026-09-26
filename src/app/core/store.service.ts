@@ -242,6 +242,27 @@ export class StoreService {
     }
   }
 
+  /** Refresco de consulta: descarta respuestas si hubo una escritura o cambió el contexto. */
+  async refreshRemoteData(canApply: () => boolean = () => true): Promise<boolean> {
+    const ds = this.dataSource;
+    const teamId = this.activeTeam()?.id;
+    if (!ds || !teamId || this.pendingWrites() || this.lastError() || !canApply()) return false;
+    const generation = this.opSeq;
+    const dataset = await ds.loadTeam(teamId);
+    if (
+      this.dataSource !== ds ||
+      this.activeTeam()?.id !== teamId ||
+      generation !== this.opSeq ||
+      this.pendingWrites() ||
+      this.lastError() ||
+      !canApply()
+    )
+      return false;
+    if (!dataset.team) throw new Error('El equipo ya no existe o no tienes acceso.');
+    this.hydrate(dataset, teamId);
+    return true;
+  }
+
   /** Activa un equipo remoto recién creado (llamado tras crear equipo). */
   activateRemoteTeam(ds: DataSource, team: Team): void {
     this.dataSource = ds;
@@ -650,7 +671,8 @@ export class StoreService {
           return idx === -1 ? [...list, base] : list.map((e) => (e.id === ex.id ? base : e));
         });
       },
-      () => ds.saveExercise(base, expectedRevision, opts),
+      () =>
+        this.afterFolderCreated(base.folderId, () => ds.saveExercise(base, expectedRevision, opts)),
       () => {
         if (existing)
           this._exercises.update((list) => list.map((e) => (e.id === ex.id ? existing : e)));
@@ -758,6 +780,23 @@ export class StoreService {
   private readonly _folders = signal<ExerciseFolder[]>(load<ExerciseFolder>(this.key(KEY_FOLDERS)));
   readonly folders = this._folders.asReadonly();
 
+  private readonly folderCreates = new Map<string, Promise<boolean>>();
+
+  private afterFolderCreated<T>(
+    id: string | null | undefined,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    const pending = id ? this.folderCreates.get(id) : undefined;
+    if (!pending) return action();
+    return pending.then((ok) => {
+      if (!ok)
+        throw new Error(
+          'No se pudo guardar la carpeta. Créala de nuevo antes de guardar su contenido.',
+        );
+      return action();
+    });
+  }
+
   getFoldersForTeam(teamId: string): ExerciseFolder[] {
     return this._folders().filter((f) => f.teamId === teamId);
   }
@@ -768,13 +807,23 @@ export class StoreService {
     if (parentId && this.folderDepth(parentId) >= 4) return;
     const folder: ExerciseFolder = { id: uid(), teamId, parentId, name };
     if (ds) {
-      this.applyRemote(
+      const creation = this.applyRemote(
         () => this._folders.update((list) => [...list, folder]),
-        () => ds.createFolder(teamId, name, parentId),
+        // El `id` viaja al servidor: la fila real es la MISMA que se acaba de pintar. Sin esto, la
+        // base generaba otro id y una acción iniciada ANTES de recibir el alta podía apuntar a un
+        // id provisional inexistente. La espera también impide enviar hijos antes que el padre.
+        () =>
+          this.afterFolderCreated(parentId, () =>
+            ds.createFolder(teamId, name, parentId, folder.id),
+          ),
         () => this._folders.update((list) => list.filter((f) => f.id !== folder.id)),
         (saved) =>
-          this._folders.update((list) => list.map((f) => (f.id === folder.id ? saved : f))),
-      );
+          this._folders.update((list) =>
+            list.map((f) => (f.id === folder.id ? { ...saved, ...f } : f)),
+          ),
+      ).then((result) => result.ok);
+      this.folderCreates.set(folder.id, creation);
+      void creation.then(() => this.folderCreates.delete(folder.id));
       return;
     }
     this._folders.update((list) => {
@@ -799,7 +848,7 @@ export class StoreService {
     if (ds) {
       this.applyRemote(
         () => this._folders.update((list) => list.map((f) => (f.id === id ? { ...f, name } : f))),
-        () => ds.renameFolder(id, name),
+        () => this.afterFolderCreated(id, () => ds.renameFolder(id, name)),
       );
       return;
     }
@@ -823,7 +872,7 @@ export class StoreService {
             list.map((e) => (idsToDelete.has(e.folderId as string) ? { ...e, folderId: null } : e)),
           );
         },
-        () => ds.deleteFolder(id),
+        () => this.afterFolderCreated(id, () => ds.deleteFolder(id)),
         () => {
           // Rollback INCREMENTAL (ver `reinsertar`/`revincularCarpetas`): vuelven SOLO las carpetas
           // de este subárbol y los vínculos que esta operación quitó, sin pisar cambios posteriores.
@@ -862,7 +911,8 @@ export class StoreService {
           this._exercises.update((list) =>
             list.map((e) => (e.id === exerciseId ? { ...e, folderId } : e)),
           ),
-        () => ds.moveExerciseToFolder(exerciseId, folderId),
+        () =>
+          this.afterFolderCreated(folderId, () => ds.moveExerciseToFolder(exerciseId, folderId)),
       );
       return;
     }
@@ -882,7 +932,7 @@ export class StoreService {
           this._exercises.update((list) =>
             list.map((e) => (set.has(e.id) ? { ...e, folderId } : e)),
           ),
-        () => ds.moveExercisesToFolder(ids, folderId),
+        () => this.afterFolderCreated(folderId, () => ds.moveExercisesToFolder(ids, folderId)),
       );
       return;
     }
@@ -906,7 +956,10 @@ export class StoreService {
         () => {
           /* optimista: nada hasta confirmar */
         },
-        () => ds.duplicateFolderTree(id).then(() => this.connectDataSource(ds, ds.teamId ?? '')),
+        () =>
+          this.afterFolderCreated(id, () => ds.duplicateFolderTree(id)).then(() =>
+            this.connectDataSource(ds, ds.teamId ?? ''),
+          ),
         () => {
           /* rollback: recargar desde servidor */
           return this.connectDataSource(ds, ds.teamId ?? '');

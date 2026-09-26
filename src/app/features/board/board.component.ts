@@ -67,6 +67,9 @@ import {
   DEFAULT_ELEMENT_COLOR,
   COLORABLE_ELEMENT_TYPES,
   FIXED_UPRIGHT_TYPES,
+  // Patrón del trazo discontinuo: FUENTE ÚNICA compartida con el render. Estaba copiado a mano aquí
+  // (`2.4,0.7`), así que cambiar el del render dejaba la previsualización con otro patrón.
+  DASH_PATTERN,
 } from '../../core/render';
 import { colorName, colorNamePlural } from '../../core/color-name';
 import { generateThumbnail } from '../../core/canvas-export';
@@ -5120,6 +5123,9 @@ export class BoardComponent {
         y1: d.y0,
         x2: d.x1,
         y2: d.y1,
+        // Igual que la curva: la conducción también admite trazo discontinuo, pero no lo guardaba al
+        // crearse, así que se dibujaba siempre continua aunque la barra dijera «Discontinuo».
+        style,
         c: col,
         strokeWidth: DEFAULT_STROKE_WIDTH,
       });
@@ -5167,6 +5173,10 @@ export class BoardComponent {
         y2: d.y1,
         c1x: (d.x0 + d.x1) / 2,
         c1y: (d.y0 + d.y1) / 2 + bend,
+        // `style`: la curva nace con el trazo elegido en la barra (continuo/discontinuo). Faltaba, así
+        // que una curva dibujada con «Discontinuo» salía continua y había que seleccionarla y
+        // cambiarla después (encargo del dueño, 23/09/2026).
+        style,
         c: col,
         strokeWidth: DEFAULT_STROKE_WIDTH,
       });
@@ -5328,7 +5338,7 @@ export class BoardComponent {
     const ay1 = y1 * g.h + g.y;
     const ax2 = x2 * g.w + g.x;
     const ay2 = y2 * g.h + g.y;
-    const dash = lineStyle === 'dashed' ? ' stroke-dasharray="2.4,0.7"' : '';
+    const dash = lineStyle === 'dashed' ? ` stroke-dasharray="${DASH_PATTERN}"` : '';
     let s = `<line x1="${ax1}" y1="${ay1}" x2="${ax2}" y2="${ay2}" stroke="${color}" stroke-width="${width}"${dash}/>`;
     const size = arrowHeadSize(width);
     if (arrow === 'end' || arrow === 'both') {

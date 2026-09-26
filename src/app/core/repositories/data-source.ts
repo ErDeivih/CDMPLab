@@ -267,7 +267,29 @@ export interface DataSource {
   removePlayer(id: string): Promise<void>;
 
   // ---- Carpetas ----
-  createFolder(teamId: string, name: string, parentId: string | null): Promise<ExerciseFolder>;
+  /**
+   * Crea una carpeta. El CLIENTE manda el `id` (uuid v4) y el servidor lo respeta como clave
+   * primaria, de modo que la fila real y la carpeta que el store ya pintó de forma OPTIMISTA son la
+   * MISMA fila.
+   *
+   * POR QUÉ (fallo detectado el 23/09/2026): antes el INSERT no enviaba `id` y lo generaba la base,
+   * así que, mientras llegaba la respuesta, el store usaba uno provisional y el servidor otro.
+   * El usuario veía la carpeta (optimista), pero una acción iniciada antes de confirmar el alta
+   * podía conservar ese id INEXISTENTE:
+   *   · crear una subcarpeta dentro chocaba con la clave foránea `(team_id, parent_id)`: el servidor
+   *     respondía 23503 («El dato hace referencia a algo que ya no existe») y la subcarpeta
+   *     desaparecía;
+   *   · renombrarla, borrarla o duplicarla afectaba a 0 filas (el `.single()` devolvía error);
+   * La respuesta sí sustituía después la carpeta optimista; no corregía las operaciones que ya
+   * habían capturado el id provisional. Además de compartir el id, el store espera el alta antes
+   * de enviar las operaciones dependientes.
+   */
+  createFolder(
+    teamId: string,
+    name: string,
+    parentId: string | null,
+    id: string,
+  ): Promise<ExerciseFolder>;
   renameFolder(id: string, name: string): Promise<ExerciseFolder>;
   deleteFolder(id: string): Promise<void>;
   duplicateFolderTree(id: string): Promise<void>;
