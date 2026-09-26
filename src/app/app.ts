@@ -74,8 +74,14 @@ export class App {
     if (!id || id === this.activeTeamId()) return;
     this.teamSwitchError.set(null);
     try {
-      // Salir primero pasa por el guard de borradores de la pizarra.
-      if (!(await this.router.navigate(['/library']))) return;
+      // En remoto desmontar las vistas evita conservar datos del equipo anterior.
+      // En local las listas son reactivas: conservar la pantalla, salvo la pizarra,
+      // cuya salida debe pasar siempre por el guard de borradores.
+      if (
+        (this.store.isRemote() || /^\/board(?:[/?#]|$)/.test(this.router.url)) &&
+        !(await this.router.navigate(['/library']))
+      )
+        return;
       if (this.store.isRemote()) await this.access.openTeam(id);
       else this.store.setActiveTeam(id);
       this.cerrarCuenta();
