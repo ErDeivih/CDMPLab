@@ -35,6 +35,12 @@ export function captureCoachTransfer(): void {
     if (noncePattern.test(nonce) && window.opener) {
       sessionStorage.setItem(transferKey, nonce);
       incomingDraft.set(null);
+      // Las primeras extensiones abrían la raíz de CDMPLab. Reencaminar ese enlace
+      // ANTES de la navegación inicial evita que el redirect normal lleve a Plantilla.
+      const basePath = new URL(document.baseURI).pathname;
+      if (url.pathname === basePath || url.pathname === basePath.replace(/\/$/, '')) {
+        url.pathname = `${basePath.replace(/\/?$/, '/')}library`;
+      }
     }
     url.searchParams.delete('coachTransfer');
     history.replaceState(history.state, '', url.pathname + url.search + url.hash);

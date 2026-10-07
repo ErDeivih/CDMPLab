@@ -133,7 +133,8 @@ test('Coach abre la creación con datos, CDMPLab guarda y entrega su PNG', async
   await page.context().route(coachUrl, (route) =>
     route.fulfill({
       contentType: 'text/html; charset=utf-8',
-      body: `<button id="open" onclick="window.open('http://127.0.0.1:4200/library?coachTransfer=${nonce}', '_blank')">Abrir</button>
+      // Emula el enlace de la extensión inicial (raíz); debe abrir la biblioteca igualmente.
+      body: `<button id="open" onclick="window.open('http://127.0.0.1:4200/?coachTransfer=${nonce}', '_blank')">Abrir</button>
         <script>
           window.addEventListener('message', (event) => {
             if (event.origin === 'http://127.0.0.1:4200' &&
@@ -156,6 +157,7 @@ test('Coach abre la creación con datos, CDMPLab guarda y entrega su PNG', async
   const opened = page.waitForEvent('popup');
   await page.locator('#open').click();
   const lab = await opened;
+  await expect(lab).toHaveURL(/\/library$/);
   await expect(lab.getByRole('heading', { name: 'Nuevo ejercicio' })).toBeVisible();
   await expect(lab.locator('input[name="title"]')).toHaveValue('Rueda de pases');
   await expect(lab.locator('textarea[name="description"]')).toHaveValue('Perfilar el cuerpo');
