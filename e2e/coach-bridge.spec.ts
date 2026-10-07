@@ -1,6 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
-import { fillBoardTitle } from './gesture-helpers';
 
 // Contrato del puente en páginas SIMULADAS: no inicia sesión ni escribe en Coach real.
 const coachUrl = 'https://coach.cdmpizarrales.es/prueba-local';
@@ -11,9 +10,13 @@ const png =
 async function openFixture(page: Page): Promise<void> {
   await page.context().route('https://coach.cdmpizarrales.es/**', (route) =>
     route.fulfill({
-      contentType: 'text/html',
+      contentType: 'text/html; charset=utf-8',
       body: `<form id="form-entrenamiento-2106">
-        <section id="task-1165"><input type="file" id="src-imagen-ejer-1165"
+        <section id="task-1165"><h3>Rondo con presión</h3>
+          <textarea name="desarrollo[1165]">Circular y apoyar</textarea>
+          <textarea name="aspectos[1165]">Orientar el cuerpo</textarea>
+          <textarea name="progresion[1165]">Limitar toques</textarea>
+          <input type="file" id="src-imagen-ejer-1165"
           name="src-imagen-ejer[1165]" accept=".jpg,.jpeg,.png,.webp"></section>
         <section id="task-1166"><input type="file" id="src-imagen-ejer-1166"
           name="src-imagen-ejer[1166]" accept=".jpg,.jpeg,.png,.webp"></section>
@@ -25,12 +28,16 @@ async function openFixture(page: Page): Promise<void> {
   // Las rutas registradas en el contexto también interceptan la nueva pestaña.
   await page.context().route('https://erdeivih.github.io/CDMPLab/**', (route) =>
     route.fulfill({
-      contentType: 'text/html',
+      contentType: 'text/html; charset=utf-8',
       body: `<button id="send" onclick="window.opener.postMessage({
           kind:'CDMPLAB_COACH_PNG',
           nonce:new URLSearchParams(location.search).get('coachTransfer'),
           dataUrl:'${png}',fileName:'cdmplab-prueba.png'
-        },'https://coach.cdmpizarrales.es')">Enviar PNG</button>`,
+        },'https://coach.cdmpizarrales.es')">Enviar PNG</button>
+        <script>window.addEventListener('message',event=>{
+          if(event.data?.kind==='CDMPLAB_COACH_DRAFT')
+            document.body.dataset.draft=JSON.stringify(event.data.draft);
+        });</script>`,
     }),
   );
   await page.goto(coachUrl);
@@ -76,7 +83,34 @@ test('si la tarea desaparece, no adjunta el PNG a otra', async ({ page }) => {
   ).toBe(0);
 });
 
-test('CDMPLab guarda y entrega su PNG real a la pestaña que lo abrió', async ({ page }) => {
+test('precarga solo los datos reconocidos de la tarea elegida', async ({ page }) => {
+  await openFixture(page);
+  const opened = page.waitForEvent('popup');
+  await page.locator('#task-1165 .cdmplab-coach-button').click();
+  const popup = await opened;
+  await popup.evaluate(() =>
+    window.opener?.postMessage(
+      {
+        kind: 'CDMPLAB_COACH_READY',
+        nonce: new URLSearchParams(location.search).get('coachTransfer'),
+      },
+      'https://coach.cdmpizarrales.es',
+    ),
+  );
+  await expect
+    .poll(() => popup.locator('body').getAttribute('data-draft'))
+    .toContain('Rondo con presión');
+  const draft = JSON.parse((await popup.locator('body').getAttribute('data-draft'))!);
+  expect(draft).toMatchObject({
+    title: 'Rondo con presión',
+    development: 'Circular y apoyar',
+    aspects: 'Orientar el cuerpo',
+    progression: 'Limitar toques',
+    durationMinutes: null,
+  });
+});
+
+test('Coach abre la creación con datos, CDMPLab guarda y entrega su PNG', async ({ page }) => {
   const nonce = '12345678-1234-4123-8123-123456789abc';
   await page.context().addInitScript(() => {
     if (localStorage.getItem('entrenolab:seeded')) return;
@@ -98,10 +132,18 @@ test('CDMPLab guarda y entrega su PNG real a la pestaña que lo abrió', async (
   });
   await page.context().route(coachUrl, (route) =>
     route.fulfill({
-      contentType: 'text/html',
-      body: `<button id="open" onclick="window.open('http://127.0.0.1:4200/board?coachTransfer=${nonce}', '_blank')">Abrir</button>
+      contentType: 'text/html; charset=utf-8',
+      body: `<button id="open" onclick="window.open('http://127.0.0.1:4200/library?coachTransfer=${nonce}', '_blank')">Abrir</button>
         <script>
           window.addEventListener('message', (event) => {
+            if (event.origin === 'http://127.0.0.1:4200' &&
+                event.data?.kind === 'CDMPLAB_COACH_READY' && event.data.nonce === '${nonce}') {
+              event.source.postMessage({kind:'CDMPLAB_COACH_DRAFT',nonce:'${nonce}',draft:{
+                title:'Rueda de pases',development:'Pase y apoyo',aspects:'Perfilar el cuerpo',
+                progression:'Dos toques',players:14,durationMinutes:null
+              }},event.origin);
+              return;
+            }
             if (event.origin !== 'http://127.0.0.1:4200' ||
                 event.data?.kind !== 'CDMPLAB_COACH_PNG' || event.data.nonce !== '${nonce}') return;
             document.body.dataset.png = event.data.dataUrl;
@@ -114,12 +156,19 @@ test('CDMPLab guarda y entrega su PNG real a la pestaña que lo abrió', async (
   const opened = page.waitForEvent('popup');
   await page.locator('#open').click();
   const lab = await opened;
+  await expect(lab.getByRole('heading', { name: 'Nuevo ejercicio' })).toBeVisible();
+  await expect(lab.locator('input[name="title"]')).toHaveValue('Rueda de pases');
+  await expect(lab.locator('textarea[name="description"]')).toHaveValue('Perfilar el cuerpo');
+  await lab.getByRole('button', { name: 'Crear y dibujar' }).click();
   await expect(lab.locator('.board-host')).toBeVisible();
-  await fillBoardTitle(lab, 'Transferencia de prueba');
-  await lab.locator('button[aria-label="Exportar"]').click();
-  await lab.getByRole('button', { name: 'Guardar y enviar a Coach' }).click();
+  await expect(lab.locator('.top-title .exercise')).toHaveText('Rueda de pases');
+  await expect(lab.locator('.studio-top .coach-export')).toBeVisible();
+  await lab.locator('.studio-top .coach-export').click();
+  await lab.locator('.top-pop-export button[aria-label="Enviar imagen a Coach"]').click();
+  await expect(lab.locator('.board-notice')).toBeVisible({ timeout: 2000 });
+  await expect(lab.locator('[data-guardado]')).toHaveAttribute('data-guardado', 'guardado');
   await expect
-    .poll(() => page.locator('body').getAttribute('data-png'))
+    .poll(() => page.locator('body').getAttribute('data-png'), { timeout: 20_000 })
     .toMatch(/^data:image\/png;base64,/);
   await expect(lab.locator('.studio')).toBeVisible();
   await expect(lab.locator('[aria-label="Exportar"]')).toBeVisible();

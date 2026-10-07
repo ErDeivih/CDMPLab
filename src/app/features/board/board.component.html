@@ -1,5 +1,5 @@
 <div class="studio">
-  <header class="studio-top">
+  <header class="studio-top" [class.coach-mode]="coachTransferReady()">
     <div class="top-left">
       <button class="edge-btn" title="Volver" aria-label="Volver" (click)="requestBack()">
         <span class="msi">arrow_back</span>
@@ -65,12 +65,20 @@
       <span class="sr-only" role="status">{{ estadoGuardado() }}</span>
       <button
         class="edge-btn"
+        [class.coach-export]="coachTransferReady()"
         [class.edge-on]="exportMenuOpen()"
-        title="Exportar"
-        aria-label="Exportar"
+        [title]="
+          coachTransferReady()
+            ? 'Enviar imagen a Coach u otras opciones de exportación'
+            : 'Exportar'
+        "
+        [attr.aria-label]="coachTransferReady() ? 'Enviar imagen a Coach' : 'Exportar'"
         (click)="toggleExportMenu()"
       >
-        <span class="msi">file_download</span>
+        <span class="msi">{{ coachTransferReady() ? 'send' : 'file_download' }}</span>
+        @if (coachTransferReady()) {
+          <span class="coach-export-label">Enviar a Coach</span>
+        }
       </button>
       <button
         class="edge-btn"
@@ -1150,11 +1158,26 @@
       (keydown.escape)="toggleExportMenu()"
     >
       <div class="panel-head">
-        <div class="tools-panel-title">Exportar</div>
+        <div class="tools-panel-title">
+          {{ coachTransferReady() ? 'Enviar a Coach' : 'Exportar' }}
+        </div>
         <button class="panel-close" aria-label="Cerrar panel" (click)="toggleExportMenu()">
           <span class="msi">close</span>
         </button>
       </div>
+      @if (coachTransferReady()) {
+        <button
+          class="rail-btn rail-row"
+          type="button"
+          title="Guardar el ejercicio y adjuntar su PNG en Coach"
+          aria-label="Enviar imagen a Coach"
+          [disabled]="saving()"
+          (click)="saveAndSendToCoach(); toggleExportMenu()"
+        >
+          <span class="msi">send</span>
+          <span class="rail-label">Guardar y enviar imagen a Coach</span>
+        </button>
+      }
       <button
         class="rail-btn rail-row"
         title="Descargar PNG"
@@ -1164,19 +1187,6 @@
         <span class="msi">image</span>
         <span class="rail-label">Descargar PNG</span>
       </button>
-      @if (coachTransferReady()) {
-        <button
-          class="rail-btn rail-row"
-          type="button"
-          title="Guardar el ejercicio y adjuntar su PNG en Coach"
-          aria-label="Guardar y enviar a Coach"
-          [disabled]="saving()"
-          (click)="saveAndSendToCoach(); toggleExportMenu()"
-        >
-          <span class="msi">send</span>
-          <span class="rail-label">Guardar y enviar a Coach</span>
-        </button>
-      }
       <button
         class="rail-btn rail-row"
         title="Exportar con opciones (PNG)"

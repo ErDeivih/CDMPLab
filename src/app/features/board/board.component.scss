@@ -126,6 +126,13 @@
   }
 }
 
+.edge-btn.coach-export {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+}
+
 .board-notice {
   position: absolute;
   bottom: calc(76px + env(safe-area-inset-bottom));
@@ -950,6 +957,16 @@
 
   .studio-top {
     height: 44px;
+  }
+
+  .studio-top.coach-mode .top-title {
+    display: none;
+  }
+
+  .edge-btn.coach-export {
+    width: auto;
+    min-width: 108px;
+    padding: 0 7px;
   }
 
   // Objetivos táctiles esenciales ≥ 44×44 px en móvil. «Volver al encuadre» flota sobre el

@@ -357,6 +357,13 @@
             </button>
           </div>
           <div class="modal-body">
+            @if (fromCoach && !form().id) {
+              <p role="status">
+                Este ejercicio se abrió desde Coach. Revisa el título, elige la carpeta y los
+                detalles; después pulsa «Crear y dibujar». En la pizarra usa «Enviar imagen a
+                Coach». La imagen no aparecerá en Coach hasta que pulses «Aplicar» allí.
+              </p>
+            }
             @if (formError()) {
               <div class="form-error" role="alert">
                 <span class="msi">warning</span> {{ formError() }}
@@ -480,7 +487,7 @@
           <div class="modal-foot">
             <button class="btn" (click)="closeEditor()">Cancelar</button>
             <button class="btn" [disabled]="saving()" (click)="design()">
-              <span class="msi">edit</span> Diseñar
+              <span class="msi">edit</span> {{ fromCoach ? 'Crear y dibujar' : 'Diseñar' }}
             </button>
             <button
               class="btn btn-primary"

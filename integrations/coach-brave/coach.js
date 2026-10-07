@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const labUrl = 'https://erdeivih.github.io/CDMPLab/';
+  const labUrl = 'https://erdeivih.github.io/CDMPLab/library';
   const labOrigin = new URL(labUrl).origin;
   const selector = 'input[type="file"][name^="src-imagen-ejer["]';
   const maxBytes = 10 * 1024 * 1024;
@@ -10,6 +10,65 @@
   function status(node, message, isError = false) {
     node.textContent = message;
     node.classList.toggle('cdmplab-error', isError);
+  }
+
+  function text(value, max = 4000) {
+    return typeof value === 'string' ? value.trim().slice(0, max) : '';
+  }
+
+  function relatedExercise(input) {
+    let node = input.parentElement;
+    while (node && node !== input.form) {
+      if (
+        node.querySelectorAll(selector).length === 1 &&
+        node.querySelectorAll('textarea').length >= 3
+      ) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function coachDraft(input) {
+    const task = relatedExercise(input);
+    if (!task) return null;
+    const taskId = /\[(\d+)\]/.exec(input.name)?.[1] ?? '';
+    const fields = [...task.querySelectorAll('input,textarea,select')].filter(
+      (field) => !taskId || `${field.name} ${field.id}`.includes(taskId),
+    );
+    const namedValue = (pattern) => {
+      const matches = fields.filter(
+        (field) => pattern.test(`${field.name} ${field.id}`) && field.type !== 'file',
+      );
+      return matches.length === 1 ? text(matches[0].value) : '';
+    };
+    const areas = [...task.querySelectorAll('textarea')];
+    // La captura de Coach muestra exactamente tres cajas, en este orden.
+    // Si cambia el formulario, no se adivina: solo se usan nombres inequívocos.
+    const ordered = areas.length === 3 ? areas : [];
+    const development = namedValue(/desarrollo/i) || text(ordered[0]?.value);
+    const aspects = namedValue(/aspectos|incidir/i) || text(ordered[1]?.value);
+    const progression = namedValue(/progresi[oó]n/i) || text(ordered[2]?.value);
+    const titleFromInput = namedValue(/nombre|t[ií]tulo/i);
+    const titleElements = [...task.querySelectorAll('h2,h3,h4,[class*="title"],[class*="nombre"]')]
+      .map((element) => text(element.textContent, 160))
+      .filter(
+        (value) =>
+          value && !/nuevo ejercicio|configuraci[oó]n|desarrollo|progresi[oó]n/i.test(value),
+      );
+    const title = titleFromInput || (titleElements.length === 1 ? titleElements[0] : '');
+    const playersText = namedValue(/^jugadores(?:\b|[-_\[])/i);
+    const players = /^\d{1,2}$/.test(playersText) ? Number(playersText) : null;
+    // No se copia «Tiempo/rep» ni el volumen de la sesión como duración del ejercicio.
+    return {
+      title,
+      development,
+      aspects,
+      progression,
+      players: players && players <= 99 ? players : null,
+      durationMinutes: null,
+    };
   }
 
   function installButton(input) {
@@ -49,6 +108,7 @@
         input,
         form: input.form,
         originalFile: input.files?.item(0) ?? null,
+        draft: coachDraft(input),
         nonce,
         popup,
         message,
@@ -67,6 +127,13 @@
     const target = active;
     if (!target || event.origin !== labOrigin || event.source !== target.popup) return;
     const data = event.data;
+    if (data?.kind === 'CDMPLAB_COACH_READY' && data.nonce === target.nonce) {
+      target.popup.postMessage(
+        { kind: 'CDMPLAB_COACH_DRAFT', nonce: target.nonce, draft: target.draft ?? {} },
+        labOrigin,
+      );
+      return;
+    }
     if (data?.kind !== 'CDMPLAB_COACH_PNG' || data.nonce !== target.nonce) return;
 
     const fail = (message) => {
@@ -119,5 +186,8 @@
   });
 
   findInputs();
-  new MutationObserver(findInputs).observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(findInputs).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
 })();

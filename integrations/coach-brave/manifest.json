@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "CDMPLab para Coach CDMP",
-  "version": "0.1.0",
+  "name": "CDMPLab para Coach CDMP (Chrome y Brave)",
+  "version": "0.2.0",
   "description": "Adjunta en Coach el PNG de una pizarra creada en CDMPLab.",
   "content_scripts": [
     {

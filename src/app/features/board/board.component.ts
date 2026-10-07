@@ -3930,7 +3930,9 @@ export class BoardComponent {
   protected readonly coachTransferReady = signal(hasCoachTransfer());
 
   protected async saveAndSendToCoach(): Promise<void> {
-    if (!this.coachTransferReady() || !(await this.saveToExercise(false))) return;
+    if (!this.coachTransferReady()) return;
+    this.notify('Guardando el ejercicio y preparando su imagen para Coach…');
+    if (!(await this.saveToExercise(false))) return;
     const png = await this.boardPngDataUrl();
     if (!png) return;
     try {

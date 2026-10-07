@@ -1,4 +1,12 @@
-import { Component, HostListener, OnDestroy, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  HostListener,
+  OnDestroy,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Router } from '@angular/router';
@@ -7,6 +15,7 @@ import { Exercise, ExerciseCategory, ExerciseFolder, EXERCISE_CATEGORIES } from 
 import { renderBoardSvg } from '../../core/render';
 import { BoardSessionService } from '../../core/board-session.service';
 import { ConfirmService } from '../../core/confirm.service';
+import { coachDraft, hasCoachTransfer } from '../../core/coach-bridge';
 
 interface EditorForm {
   id: string | null;
@@ -34,6 +43,41 @@ export class LibraryComponent implements OnDestroy {
   private readonly router = inject(Router);
   private readonly sessionSvc = inject(BoardSessionService);
   private readonly confirmSvc = inject(ConfirmService);
+  protected readonly fromCoach = hasCoachTransfer();
+  private coachEditorOpened = false;
+  private coachDraftApplied = false;
+  private coachEditorTouched = false;
+
+  constructor() {
+    effect(() => {
+      const team = this.team();
+      const draft = coachDraft();
+      if (this.fromCoach && team && !this.coachEditorOpened) {
+        this.coachEditorOpened = true;
+        this.createNew(true);
+      }
+      if (this.fromCoach && this.coachEditorOpened && draft && !this.coachDraftApplied) {
+        this.coachDraftApplied = true;
+        if (!this.coachEditorTouched && this.editorOpen()) {
+          const details = [
+            draft.development,
+            draft.progression && `Progresión: ${draft.progression}`,
+          ]
+            .filter(Boolean)
+            .join('\n\n');
+          this.form.update((f) => ({
+            ...f,
+            title: draft.title || f.title,
+            description: draft.aspects || f.description,
+            explanation: details || f.explanation,
+            durationMinutes: draft.durationMinutes ?? f.durationMinutes,
+            minPlayers: draft.players ?? f.minPlayers,
+            maxPlayers: draft.players ?? f.maxPlayers,
+          }));
+        }
+      }
+    });
+  }
 
   protected readonly refreshing = signal(false);
   protected readonly refreshMessage = signal('');
@@ -448,11 +492,11 @@ export class LibraryComponent implements OnDestroy {
 
   // ---------- Acciones ----------
 
-  protected createNew(): void {
+  protected createNew(fromCoach = false): void {
     const teamId = this.team()?.id;
     if (!teamId) return;
     // Retomar el borrador si existe.
-    const draft = this.store.loadDraft(teamId, null);
+    const draft = fromCoach ? null : this.store.loadDraft(teamId, null);
     const base: EditorForm = {
       id: null,
       title: draft?.title ?? '',
@@ -495,6 +539,7 @@ export class LibraryComponent implements OnDestroy {
   }
 
   protected onFormChange(): void {
+    this.coachEditorTouched = true;
     const teamId = this.team()?.id;
     if (!teamId || !this.editorOpen()) return;
     const f = this.form();
