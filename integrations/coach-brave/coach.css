@@ -1,0 +1,34 @@
+.cdmplab-coach-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin: 4px 0;
+}
+
+.cdmplab-coach-button {
+  border: 1px solid #a50000;
+  border-radius: 4px;
+  background: #fff;
+  color: #a50000;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  min-height: 30px;
+  padding: 3px 7px;
+}
+
+.cdmplab-coach-button:hover,
+.cdmplab-coach-button:focus-visible {
+  background: #fff1f1;
+}
+
+.cdmplab-coach-status {
+  color: #344054;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.cdmplab-coach-status.cdmplab-error {
+  color: #a50000;
+}

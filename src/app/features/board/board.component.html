@@ -1164,6 +1164,19 @@
         <span class="msi">image</span>
         <span class="rail-label">Descargar PNG</span>
       </button>
+      @if (coachTransferReady()) {
+        <button
+          class="rail-btn rail-row"
+          type="button"
+          title="Guardar el ejercicio y adjuntar su PNG en Coach"
+          aria-label="Guardar y enviar a Coach"
+          [disabled]="saving()"
+          (click)="saveAndSendToCoach(); toggleExportMenu()"
+        >
+          <span class="msi">send</span>
+          <span class="rail-label">Guardar y enviar a Coach</span>
+        </button>
+      }
       <button
         class="rail-btn rail-row"
         title="Exportar con opciones (PNG)"

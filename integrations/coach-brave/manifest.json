@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "CDMPLab para Coach CDMP",
+  "version": "0.1.0",
+  "description": "Adjunta en Coach el PNG de una pizarra creada en CDMPLab.",
+  "content_scripts": [
+    {
+      "matches": ["https://coach.cdmpizarrales.es/*"],
+      "js": ["coach.js"],
+      "css": ["coach.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

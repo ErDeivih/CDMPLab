@@ -17,6 +17,7 @@ import { ConfirmService } from './core/confirm.service';
 import { SupabaseService } from './core/supabase.service';
 import { AccessService } from './core/access.service';
 import { ConfirmDialogComponent } from './shared/confirm-dialog.component';
+import { captureCoachTransfer } from './core/coach-bridge';
 
 interface NavItem {
   label: string;
@@ -38,6 +39,7 @@ export class App {
   private readonly router = inject(Router);
 
   constructor() {
+    captureCoachTransfer();
     // `enAuth` tiene que seguir al router: sin esto, entrar en /auth/login desde la app dejaba la
     // navegación del shell pintada encima del formulario. `enPizarra` (FASE 4) sigue al router por
     // el mismo motivo: dentro de /board la navegación global NO se muestra en móvil, y al salir

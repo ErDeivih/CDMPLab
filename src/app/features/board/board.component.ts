@@ -73,6 +73,7 @@ import {
 } from '../../core/render';
 import { colorName, colorNamePlural } from '../../core/color-name';
 import { generateThumbnail } from '../../core/canvas-export';
+import { deliverPngToCoach, hasCoachTransfer } from '../../core/coach-bridge';
 import { inlineSvgAssets } from '../../core/asset-inline';
 import { BoardSessionService } from '../../core/board-session.service';
 import {
@@ -3926,7 +3927,31 @@ export class BoardComponent {
     return true;
   }
 
+  protected readonly coachTransferReady = signal(hasCoachTransfer());
+
+  protected async saveAndSendToCoach(): Promise<void> {
+    if (!this.coachTransferReady() || !(await this.saveToExercise(false))) return;
+    const png = await this.boardPngDataUrl();
+    if (!png) return;
+    try {
+      await deliverPngToCoach(png, pngFileName(this.metaTitle() ?? ''));
+      this.coachTransferReady.set(false);
+      this.notify('Imagen adjunta en Coach. Vuelve a esa pestaña y pulsa Aplicar.');
+    } catch (error) {
+      this.notify((error as Error).message + ' Puedes descargar el PNG e incorporarlo a mano.');
+    }
+  }
+
   protected async exportPng(): Promise<void> {
+    const png = await this.boardPngDataUrl();
+    if (!png) return;
+    const a = document.createElement('a');
+    a.href = png;
+    a.download = pngFileName(this.metaTitle() ?? '');
+    a.click();
+  }
+
+  private async boardPngDataUrl(): Promise<string | null> {
     const g = this.geo();
     const w = g.vbW >= g.vbH ? 1600 : 1280;
     const h = g.vbW >= g.vbH ? 1280 : 1600;
@@ -3950,21 +3975,15 @@ export class BoardComponent {
     });
     if (!loaded) {
       this.notify('No se pudo generar la imagen PNG. Reintenta.');
-      return; // nunca descargar una imagen vacía
+      return null; // nunca entregar una imagen vacía
     }
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) return null;
     ctx.drawImage(img, 0, 0, w, h);
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    // FASE 7: nombre del PNG derivado del título REAL del ejercicio (limpio para Windows);
-    // si no hay título, `metaTitle()` es '' → `pngFileName('')` = 'cdmplab-pizarra.png'
-    // (NUNCA 'nueva-pizarra.png': ese texto es solo el placeholder de la cabecera).
-    a.download = pngFileName(this.metaTitle() ?? '');
-    a.click();
+    return canvas.toDataURL('image/png');
   }
 
   // ---------- Interacción ----------
