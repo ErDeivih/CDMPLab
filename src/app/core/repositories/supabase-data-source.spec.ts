@@ -124,6 +124,13 @@ describe('SupabaseRepository.saveSession (RPC transaccional)', () => {
         date: '2026-01-01',
         duration_minutes: 60,
         notes: 'notas',
+        plan: {
+          number: null,
+          objectives: '',
+          material: '',
+          attendance: [],
+          tasks: { t1: { section: 'main', seriesCount: null, minutesPerSeries: null } },
+        },
       },
       p_revision: null, // sesión nueva o sin revisión → la RPC inserta
       p_tasks: [
@@ -304,6 +311,7 @@ describe('SupabaseRepository.importLocalData', () => {
     name?: string;
     title?: string;
     canvas_data?: unknown;
+    plan?: unknown;
     tasks?: ImportTask[];
   }
   interface ImportPayload {
@@ -336,14 +344,43 @@ describe('SupabaseRepository.importLocalData', () => {
     const folders = [makeFolder('f-child', 'f-root', 'Hijo'), makeFolder('f-root', null, 'Raíz')];
     const exercises = [makeExercise()];
     const players = [makePlayer()];
-    const sessions = [makeSessionWithTasks()];
+    const sessions = [
+      makeSessionWithTasks({
+        number: 12,
+        attendance: [
+          {
+            playerId: 'j-1',
+            playerName: 'Marcos',
+            status: 'Asiste',
+            group: '',
+            attitude: '',
+            minutes: 60,
+            notes: '',
+          },
+        ],
+        tasks: [
+          {
+            id: 'task-1',
+            exerciseId: 'ex-1',
+            title: 'Rondos',
+            durationMinutes: 15,
+            material: '',
+            sortOrder: 0,
+            section: 'warmup',
+            seriesCount: 3,
+            minutesPerSeries: 5,
+          },
+        ],
+      }),
+    ];
 
     const counts = await repo.importLocalData('team-1', { players, folders, exercises, sessions });
 
     // 1) Una SOLA llamada (la transacción vive en el servidor), sin `from()`.
     expect(fromMock.mock.calls).toHaveLength(0);
     expect(rpcMock.mock.calls).toHaveLength(1);
-    expect(rpcMock.mock.calls[0][0]).toBe('import_team_dataset');
+    // El contrato cambió: el wrapper mantiene la importación atómica y conserva plan/asistencia.
+    expect(rpcMock.mock.calls[0][0]).toBe('import_team_dataset_with_plan');
 
     // 2) Conteos mapeados a ImportCounts (sin errores: todo-o-nada).
     expect(counts.created).toEqual({ players: 1, folders: 2, exercises: 1, sessions: 1 });
@@ -372,6 +409,15 @@ describe('SupabaseRepository.importLocalData', () => {
     expect(task['exercise_id']).toBe(payload.exercises[0]['id']);
     expect(task['id']).toMatch(UUID_RE);
     expect(task['id']).not.toBe('task-1');
+    const plan = payload.sessions[0]['plan'] as {
+      number: number;
+      attendance: Array<{ playerId: string }>;
+      tasks: Record<string, { section: string; seriesCount: number }>;
+    };
+    expect(plan.number).toBe(12);
+    expect(plan.attendance[0].playerId).toBe(payload.players[0]['id']);
+    expect(plan.tasks[task['id']].section).toBe('warmup');
+    expect(plan.tasks[task['id']].seriesCount).toBe(3);
   });
 
   it('mapea el resultado idempotente de la RPC (created=0, skipped=total)', async () => {

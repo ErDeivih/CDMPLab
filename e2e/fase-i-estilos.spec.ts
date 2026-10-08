@@ -98,11 +98,12 @@ test.describe('Lote D — CSS consolidado', () => {
     );
     await page.locator('.modal-foot button', { hasText: 'Cancelar' }).click();
 
-    // Sesiones: 640 (modal-lg) con el cuerpo scrolleable.
+    // Contrato actualizado: el editor ahora incluye asistencia por jugador y
+    // necesita 1000 px en escritorio; conserva el cuerpo scrolleable.
     await page.goto('/sessions');
     await page.locator('button', { hasText: 'Nueva sesión' }).click();
     await expect(page.locator('.modal-lg')).toBeVisible();
-    expect((await css(page, '.modal-lg', ['width'])).width).toBe('640px');
+    expect((await css(page, '.modal-lg', ['width'])).width).toBe('1000px');
     expect((await css(page, '.modal-lg', ['max-height']))['max-height']).not.toBe('none');
   });
 

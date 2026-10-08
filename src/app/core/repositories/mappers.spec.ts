@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { exerciseFromRow, exerciseRowForInsert } from './mappers';
-import type { ExercisesRow } from '../database.types';
-import type { CanvasDocument, Exercise } from '../models';
+import { exerciseFromRow, exerciseRowForInsert, sessionFromRow, sessionPlanToRow } from './mappers';
+import type { ExercisesRow, SessionsRow } from '../database.types';
+import type { CanvasDocument, Exercise, Session } from '../models';
 
 // Round-trip del MAPPER de ejercicio a través de la capa Supabase (canvas_data):
 // un documento con campo 'f7' debe conservar el campo y sus elementos/frames al
@@ -80,5 +80,35 @@ describe('mappers ejercicio ↔ canvas_data (campo F7)', () => {
     // La revisión viaja para el control de conflicto (no se pierde al guardar).
     expect(updated.revision).toBe(3);
     expect((insert.canvas_data as unknown as CanvasDocument).field).toBe('f7');
+  });
+});
+
+describe('mappers de planificación de sesiones', () => {
+  const base: Session = {
+    id: 's1', teamId: 'team1', title: '', date: '2026-10-08', durationMinutes: 120,
+    notes: '', number: 12, objectives: 'Defender por dentro', material: 'Balones',
+    attendance: [{ playerId: 'p1', playerName: 'Portero', status: 'Asiste', group: 'Agua', attitude: 'Buena', minutes: 110, notes: 'Sin molestias' }],
+    tasks: [{ id: 't1', exerciseId: 'e1', title: 'Rueda', durationMinutes: 16, material: '', sortOrder: 0, section: 'warmup', seriesCount: 2, minutesPerSeries: 8 }],
+    createdAt: 'c', savedAt: 'u',
+  };
+  const row: SessionsRow = {
+    id: 's1', team_id: 'team1', title: '', date: '2026-10-08', duration_minutes: 120,
+    notes: '', revision: 1, created_at: 'c', updated_at: 'u',
+  };
+
+  it('conserva número, bloques, series y asistencia en el plan remoto', () => {
+    const loaded = sessionFromRow({ ...row, plan: sessionPlanToRow(base) }, base.tasks.map((t) => ({ id: t.id, exerciseId: t.exerciseId, title: t.title, durationMinutes: t.durationMinutes, material: t.material, sortOrder: t.sortOrder })));
+    expect(loaded.number).toBe(12);
+    expect(loaded.objectives).toBe('Defender por dentro');
+    expect(loaded.tasks[0]).toMatchObject({ section: 'warmup', seriesCount: 2, minutesPerSeries: 8 });
+    expect(loaded.attendance?.[0]).toMatchObject({ playerId: 'p1', status: 'Asiste', minutes: 110 });
+  });
+
+  it('lee una sesión antigua sin plan sin inventar asistencia ni alterar tareas', () => {
+    const task = { id: 't1', exerciseId: null, title: 'Rueda', durationMinutes: 10, material: '', sortOrder: 0 };
+    const loaded = sessionFromRow(row, [task]);
+    expect(loaded.tasks).toEqual([task]);
+    expect(loaded.attendance).toEqual([]);
+    expect(loaded.number).toBeNull();
   });
 });

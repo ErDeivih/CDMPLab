@@ -16,9 +16,14 @@ async function openFixture(page: Page): Promise<void> {
           <textarea name="desarrollo[1165]">Circular y apoyar</textarea>
           <textarea name="aspectos[1165]">Orientar el cuerpo</textarea>
           <textarea name="progresion[1165]">Limitar toques</textarea>
+          <select name="tipo-imagen[1165]" aria-label="Imagen de Rondo con presión">
+            <option value="none">Sin imagen</option><option value="drawing">Dibujo</option>
+          </select>
           <input type="file" id="src-imagen-ejer-1165"
           name="src-imagen-ejer[1165]" accept=".jpg,.jpeg,.png,.webp"></section>
-        <section id="task-1166"><input type="file" id="src-imagen-ejer-1166"
+        <section id="task-1166"><select name="tipo-imagen[1166]" aria-label="Imagen de otra tarea">
+          <option value="none">Sin imagen</option><option value="drawing">Dibujo</option>
+          </select><input type="file" id="src-imagen-ejer-1166"
           name="src-imagen-ejer[1166]" accept=".jpg,.jpeg,.png,.webp"></section>
         <button type="button" id="apply" onclick="document.getElementById('preview').hidden=false">Aplicar</button>
         <img id="preview" alt="Miniatura" hidden>
@@ -51,6 +56,8 @@ test('adjunta el PNG solo a la tarea elegida y deja Aplicar bajo control del usu
   const opened = page.waitForEvent('popup');
   await page.locator('#task-1165 .cdmplab-coach-button').click();
   const popup = await opened;
+  await expect(page.locator('#task-1165 select')).toHaveValue('drawing');
+  await expect(page.locator('#task-1166 select')).toHaveValue('none');
   await expect(popup).toHaveURL(new RegExp('^' + labUrl.replaceAll('.', '\\.')));
   await popup.locator('#send').click();
   await expect(page.locator('#task-1165 .cdmplab-coach-status')).toContainText('Pulsa «Aplicar»');
@@ -80,6 +87,37 @@ test('si la tarea desaparece, no adjunta el PNG a otra', async ({ page }) => {
     await page
       .locator('#src-imagen-ejer-1166')
       .evaluate((element: HTMLInputElement) => element.files?.length),
+  ).toBe(0);
+});
+
+test('si Coach reconstruye el selector al elegir Dibujo, mantiene la tarea de destino', async ({
+  page,
+}) => {
+  await openFixture(page);
+  await page.locator('#task-1165 select').evaluate((select) => {
+    select.addEventListener('change', () => {
+      const input = document.querySelector<HTMLInputElement>('#src-imagen-ejer-1165')!;
+      input.nextElementSibling?.remove();
+      input.replaceWith(input.cloneNode() as HTMLInputElement);
+    });
+  });
+  const opened = page.waitForEvent('popup');
+  await page.locator('#task-1165 .cdmplab-coach-button').click();
+  const popup = await opened;
+  await expect(page.locator('#task-1165 select')).toHaveValue('drawing');
+  await popup.locator('#send').click();
+  await expect
+    .poll(() =>
+      page
+        .locator('#src-imagen-ejer-1165')
+        .evaluate((input: HTMLInputElement) => input.files?.item(0)?.name),
+    )
+    .toBe('cdmplab-prueba.png');
+  await expect(page.locator('#task-1165 .cdmplab-coach-status')).toContainText('Pulsa «Aplicar»');
+  expect(
+    await page
+      .locator('#src-imagen-ejer-1166')
+      .evaluate((input: HTMLInputElement) => input.files?.length),
   ).toBe(0);
 });
 
@@ -134,10 +172,11 @@ test('Coach abre la creación con datos, CDMPLab guarda y entrega su PNG', async
     route.fulfill({
       contentType: 'text/html; charset=utf-8',
       // Emula el enlace de la extensión inicial (raíz); debe abrir la biblioteca igualmente.
-      body: `<button id="open" onclick="window.open('http://127.0.0.1:4200/?coachTransfer=${nonce}', '_blank')">Abrir</button>
+      // Este spec usa playwright.dev.config.ts (puerto 4301); 4200 era un fixture obsoleto.
+      body: `<button id="open" onclick="window.open('http://127.0.0.1:4301/?coachTransfer=${nonce}', '_blank')">Abrir</button>
         <script>
           window.addEventListener('message', (event) => {
-            if (event.origin === 'http://127.0.0.1:4200' &&
+            if (event.origin === 'http://127.0.0.1:4301' &&
                 event.data?.kind === 'CDMPLAB_COACH_READY' && event.data.nonce === '${nonce}') {
               event.source.postMessage({kind:'CDMPLAB_COACH_DRAFT',nonce:'${nonce}',draft:{
                 title:'Rueda de pases',development:'Pase y apoyo',aspects:'Perfilar el cuerpo',
@@ -145,7 +184,7 @@ test('Coach abre la creación con datos, CDMPLab guarda y entrega su PNG', async
               }},event.origin);
               return;
             }
-            if (event.origin !== 'http://127.0.0.1:4200' ||
+            if (event.origin !== 'http://127.0.0.1:4301' ||
                 event.data?.kind !== 'CDMPLAB_COACH_PNG' || event.data.nonce !== '${nonce}') return;
             document.body.dataset.png = event.data.dataUrl;
             event.source.postMessage({kind:'CDMPLAB_COACH_ACK',nonce:'${nonce}',success:true},event.origin);

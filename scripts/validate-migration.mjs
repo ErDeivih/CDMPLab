@@ -1402,6 +1402,38 @@ try {
     }
   }
 
+  if (!target) {
+    console.log('\nPlanificación de sesiones: definición FINAL y compatibilidad:');
+    const definitions = files.filter((file) =>
+      /create or replace function public\.save_session_with_tasks\(/i.test(
+        fs.readFileSync(file, 'utf8'),
+      ),
+    );
+    const winner = definitions.at(-1);
+    const sql = winner ? fs.readFileSync(winner, 'utf8').toLowerCase() : '';
+    const schema = fs
+      .readFileSync('supabase/migrations/20261007220820_session_planning.sql', 'utf8')
+      .toLowerCase();
+    winner?.endsWith('20261007220919_preserve_session_plan_on_legacy_save.sql')
+      ? ok('la última definición de save_session_with_tasks es la compatible')
+      : fail('una redefinición posterior anula la conservación del plan');
+    for (const [label, fragment] of [
+      ['una pestaña antigua no borra el plan', 'coalesce(v_plan, v_existing.plan)'],
+      ['plan se guarda en la misma transacción', 'plan = v_plan'],
+      ['sigue siendo SECURITY INVOKER', 'security invoker'],
+      ['anon no ejecuta la RPC', 'from public, anon'],
+    ]) {
+      sql.includes(fragment) ? ok(label) : fail(`sesiones: ${label}`);
+    }
+    schema.includes('add column plan jsonb not null default')
+      ? ok('las sesiones antiguas reciben un plan vacío')
+      : fail('sesiones: falta columna plan con valor por defecto');
+    schema.includes('create function public.import_team_dataset_with_plan') &&
+    schema.includes('v_result := public.import_team_dataset(p_team_id, p_payload)')
+      ? ok('la importación delega en la RPC atómica existente')
+      : fail('sesiones: la importación no conserva la atomicidad');
+  }
+
   if (failed > 0) {
     console.error(`\nVALIDACIÓN ESTÁTICA CON ${failed} PROBLEMA(S).`);
     process.exit(1);

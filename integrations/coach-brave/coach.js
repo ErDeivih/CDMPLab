@@ -71,8 +71,34 @@
     };
   }
 
+  function selectDrawing(input) {
+    const task = relatedExercise(input);
+    if (!task) return false;
+    const candidates = [...task.querySelectorAll('select')].filter((select) => {
+      const labels = [...select.options].map((option) => option.textContent.trim().toLowerCase());
+      return labels.includes('dibujo') && labels.includes('sin imagen');
+    });
+    if (candidates.length !== 1) return false;
+    const select = candidates[0];
+    const drawing = [...select.options].find(
+      (option) => option.textContent.trim().toLowerCase() === 'dibujo',
+    );
+    if (!drawing) return false;
+    if (select.value !== drawing.value) {
+      select.value = drawing.value;
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return true;
+  }
+
   function installButton(input) {
-    if (input.dataset.cdmplabBridge === 'ready') return;
+    // Coach puede clonar el input al cambiar «Imagen». cloneNode conserva data-*,
+    // pero no el botón adyacente ni sus listeners: se reinstala en ese caso.
+    if (
+      input.dataset.cdmplabBridge === 'ready' &&
+      input.nextElementSibling?.classList.contains('cdmplab-coach-row')
+    ) return;
     input.dataset.cdmplabBridge = 'ready';
     const row = document.createElement('div');
     row.className = 'cdmplab-coach-row';
@@ -88,7 +114,7 @@
 
     button.addEventListener('click', () => {
       if (active?.popup.closed) active = null;
-      if (active?.input === input) {
+      if (active?.inputName === input.name && active.form === input.form) {
         active = null;
         button.textContent = 'Crear en CDMPLab';
         status(message, 'Conexión cancelada. Puedes iniciar otra.');
@@ -98,6 +124,16 @@
         status(message, 'Termina primero la otra imagen.', true);
         return;
       }
+      const draft = coachDraft(input);
+      const originalFile = input.files?.item(0) ?? null;
+      const form = input.form;
+      if (!selectDrawing(input)) {
+        status(message, 'No se encontró la opción «Dibujo» de esta tarea. Selecciónala manualmente.', true);
+        return;
+      }
+      // Si Coach reconstruye el input de forma síncrona, el MutationObserver aún
+      // no habrá corrido; instala ya el botón nuevo antes de abrir la pestaña.
+      findInputs();
       const nonce = crypto.randomUUID();
       const popup = window.open(labUrl + '?coachTransfer=' + nonce, '_blank');
       if (!popup) {
@@ -106,9 +142,10 @@
       }
       active = {
         input,
-        form: input.form,
-        originalFile: input.files?.item(0) ?? null,
-        draft: coachDraft(input),
+        inputName: input.name,
+        form,
+        originalFile,
+        draft,
         nonce,
         popup,
         message,
@@ -136,20 +173,33 @@
     }
     if (data?.kind !== 'CDMPLAB_COACH_PNG' || data.nonce !== target.nonce) return;
 
+    const matchingInputs = [...target.form.querySelectorAll(selector)].filter(
+      (input) => input.name === target.inputName,
+    );
+    const currentInput = matchingInputs.length === 1 ? matchingInputs[0] : null;
+    const currentRow = currentInput?.nextElementSibling?.classList.contains('cdmplab-coach-row')
+      ? currentInput.nextElementSibling
+      : null;
+    const currentMessage = currentRow?.querySelector('.cdmplab-coach-status') ?? target.message;
+    const currentButton = currentRow?.querySelector('.cdmplab-coach-button') ?? target.button;
+
     const fail = (message) => {
-      status(target.message, message, true);
+      status(currentMessage, message, true);
       target.popup.postMessage(
         { kind: 'CDMPLAB_COACH_ACK', nonce: target.nonce, success: false },
         labOrigin,
       );
-      target.button.textContent = 'Crear en CDMPLab';
+      currentButton.textContent = 'Crear en CDMPLab';
       active = null;
     };
-    if (!target.input.isConnected || target.input.form !== target.form) {
+    if (!currentInput || !target.form.isConnected || currentInput.form !== target.form) {
       fail('La tarea cambió o se cerró. Ábrela y vuelve a intentarlo.');
       return;
     }
-    if ((target.input.files?.item(0) ?? null) !== target.originalFile) {
+    if (
+      (currentInput.files?.item(0) ?? null) !== target.originalFile &&
+      !(currentInput !== target.input && !target.originalFile && !currentInput.files?.length)
+    ) {
       fail('Elegiste otro archivo mientras dibujabas. No se ha sustituido.');
       return;
     }
@@ -169,15 +219,15 @@
       const file = new File([bytes], name, { type: 'image/png' });
       const transfer = new DataTransfer();
       transfer.items.add(file);
-      target.input.files = transfer.files;
-      target.input.dispatchEvent(new Event('input', { bubbles: true }));
-      target.input.dispatchEvent(new Event('change', { bubbles: true }));
-      status(target.message, 'PNG seleccionado. Pulsa «Aplicar» y después «Guardar».');
+      currentInput.files = transfer.files;
+      currentInput.dispatchEvent(new Event('input', { bubbles: true }));
+      currentInput.dispatchEvent(new Event('change', { bubbles: true }));
+      status(currentMessage, 'PNG seleccionado. Pulsa «Aplicar» y después «Guardar».');
       target.popup.postMessage(
         { kind: 'CDMPLAB_COACH_ACK', nonce: target.nonce, success: true },
         labOrigin,
       );
-      target.button.textContent = 'Crear en CDMPLab';
+      currentButton.textContent = 'Crear en CDMPLab';
       active = null;
       window.focus();
     } catch {

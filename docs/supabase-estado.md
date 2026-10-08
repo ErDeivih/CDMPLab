@@ -1,4 +1,22 @@
-# CDMPLab — Estado remoto de Supabase (actualizado 26/09/2026)
+# CDMPLab — Estado remoto de Supabase (actualizado 08/10/2026)
+
+## Planificación de sesiones aplicada (08/10/2026)
+
+Catálogo remoto consultado **antes** de migrar: `public.sessions` y
+`public.session_exercises` existían, `sessions.plan` y `session_attendance` no;
+`save_session_with_tasks(jsonb,integer,jsonb)` era `SECURITY INVOKER`. Había 0 sesiones.
+Las migraciones locales `20261007220820_session_planning.sql` y
+`20261007220919_preserve_session_plan_on_legacy_save.sql` quedaron registradas en remoto
+con esas mismas versiones y nombres `session_planning` y
+`preserve_session_plan_on_legacy_save`. Después se verificó que `sessions.plan` es
+`jsonb` con `{}` por defecto, que las RPC `save_session_with_tasks` e
+`import_team_dataset_with_plan` son `SECURITY INVOKER`, ejecutables por
+`authenticated` y no por `anon`, y que sigue habiendo 0 sesiones. El validador
+local comprueba que la última definición conserva el plan si una pestaña antigua
+guarda sin enviarlo. **No** se ha ejecutado una sesión real con credenciales de
+usuario contra la RPC nueva; esa comprobación queda pendiente del recorrido
+end-to-end autenticado. Las secciones históricas de abajo conservan su alcance
+de la fecha en que fueron escritas.
 
 ## Copropiedad aplicada (26/09/2026)
 

@@ -12,9 +12,9 @@ versiones.
 
 1. Abre `brave://extensions` o `chrome://extensions`, activa **Modo desarrollador**.
 2. Pulsa **Cargar descomprimida** y selecciona esta carpeta `integrations/coach-brave`.
-3. Recarga Coach. En una tarea de prueba elige **Imagen → Dibujo**: junto al
-   selector PNG debe aparecer **Crear en CDMPLab**.
-4. Pulsa ese botón. CDMPLab abre **Biblioteca → Nuevo ejercicio**. Revisa los
+3. Recarga Coach. En una tarea de prueba, junto al selector de imagen debe aparecer
+   **Crear en CDMPLab**. Al pulsarlo, la extensión elige **Imagen → Dibujo** en esa tarea.
+4. CDMPLab abre **Biblioteca → Nuevo ejercicio**. Revisa los
    campos precargados, completa título y carpeta, y pulsa **Crear y dibujar**.
 5. En la pizarra pulsa **Enviar a Coach → Guardar y enviar imagen a Coach**.
 6. Vuelve a Coach: debe aparecer el nombre del PNG junto al selector. Pulsa
@@ -37,9 +37,10 @@ Si Coach no identifica inequívocamente un dato, se deja vacío para revisión.
 No se deduce la duración del ejercicio a partir del volumen de la sesión ni de
 «Tiempo/rep»; tampoco se modifica su configuración de carga en Coach.
 
-Si Coach sustituye el selector después de abrir CDMPLab, la transferencia se
-rechaza para impedir que el PNG termine en otra tarea. Usa la descarga normal
-de PNG como alternativa.
+Si Coach reconstruye el selector al pasar a «Dibujo», la extensión busca de nuevo
+el selector con el mismo identificador dentro del mismo entrenamiento. Si no hay
+uno inequívoco, rechaza la transferencia para no adjuntar el PNG a otra tarea.
+Usa la descarga normal de PNG como alternativa.
 
 Si decides no enviar ese dibujo, vuelve a Coach y pulsa **Cancelar conexión**
 junto al selector. Después puedes iniciar otra tarea.

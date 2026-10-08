@@ -121,7 +121,8 @@ test.describe('EntrenoLab flujos', () => {
     await page.goto('/sessions');
     await page.getByText('Nueva sesión').click();
     await page.locator('.modal input[name="title"]').fill('Sesión de posesión');
-    await page.getByText('Añadir ejercicio').click();
+    // El editor ahora ofrece un botón por bloque; esta prueba usa el acceso general.
+    await page.locator('.tasks-head').getByText('Añadir ejercicio').click();
     await page.locator('.picker-item').first().click();
     await expect(page.locator('.task')).toHaveCount(1);
     await page.getByText('Guardar sesión').click();
@@ -143,7 +144,7 @@ test.describe('EntrenoLab flujos', () => {
     await page.goto('/sessions');
     await page.getByText('Nueva sesión').click();
     await page.locator('.modal input[name="title"]').fill('Sesión del martes');
-    await page.getByText('Añadir ejercicio').click();
+    await page.locator('.tasks-head').getByText('Añadir ejercicio').click();
     await page.locator('.picker-item').first().click();
     await expect(page.locator('.task')).toHaveCount(1);
     await expect(page.locator('.task-badge')).toHaveCount(0);
@@ -181,7 +182,7 @@ test.describe('EntrenoLab flujos', () => {
     await page.goto('/sessions');
     await page.getByText('Nueva sesión').click();
     await page.locator('.modal input[name="title"]').fill('Sesión del martes');
-    await page.getByText('Añadir ejercicio').click();
+    await page.locator('.tasks-head').getByText('Añadir ejercicio').click();
     await page.locator('.picker-item').first().click();
     await page.getByText('Guardar sesión').click();
 

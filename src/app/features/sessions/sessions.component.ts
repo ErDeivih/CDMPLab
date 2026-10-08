@@ -1,7 +1,13 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { StoreService, uid } from '../../core/store.service';
-import { Exercise, Session, SessionTask } from '../../core/models';
+import {
+  Exercise,
+  Session,
+  SessionAttendance,
+  SessionSection,
+  SessionTask,
+} from '../../core/models';
 import { ConfirmService } from '../../core/confirm.service';
 
 interface SessionDraft {
@@ -10,8 +16,36 @@ interface SessionDraft {
   date: string;
   durationMinutes: number | null;
   notes: string;
+  number: number | null;
+  objectives: string;
+  material: string;
+  attendance: SessionAttendance[];
   tasks: SessionTask[];
 }
+
+const SECTIONS: ReadonlyArray<{ id: SessionSection; label: string }> = [
+  { id: 'warmup', label: 'Calentamiento' },
+  { id: 'main', label: 'Parte principal' },
+  { id: 'cooldown', label: 'Vuelta a la calma' },
+];
+
+const ATTENDANCE_STATUSES = [
+  'Pendiente',
+  'Asiste',
+  'Tarde',
+  'Recupera',
+  'Lesión',
+  'Enfermo',
+  'Estudios',
+  'Viaje / Vacaciones',
+  'Trabajo',
+  'Sanción interna',
+  'Castigo de padres',
+  'Falta no justificada',
+  'Otros',
+] as const;
+
+const ATTITUDES = ['', 'Excelente', 'Muy buena', 'Buena', 'Regular', 'Mala', 'Pésima'] as const;
 
 function todayIso(): string {
   const d = new Date();
@@ -30,6 +64,10 @@ export class SessionsComponent {
   private readonly confirmSvc = inject(ConfirmService);
 
   protected readonly team = this.store.activeTeam;
+  protected readonly sections = SECTIONS;
+  protected readonly attendanceStatuses = ATTENDANCE_STATUSES;
+  protected readonly attitudes = ATTITUDES;
+  protected readonly roster = this.store.activeTeamPlayers;
 
   protected readonly sessions = computed(() => {
     const teamId = this.team()?.id;
@@ -46,6 +84,12 @@ export class SessionsComponent {
   protected formatDate(iso: string): string {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '');
     return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso ?? '');
+  }
+
+  protected sessionLabel(s: Session): string {
+    return (
+      s.title.trim() || (s.number ? `Sesión ${s.number}` : `Sesión del ${this.formatDate(s.date)}`)
+    );
   }
 
   /** ¿La tarea se quedó atrás respecto al ejercicio de la biblioteca? Se compara el
@@ -70,18 +114,91 @@ export class SessionsComponent {
   // ---------- Picker de ejercicios ----------
   protected readonly pickerOpen = signal(false);
   protected readonly pickerSearch = signal('');
+  protected readonly pickerFolder = signal('all');
+  protected readonly pickerSection = signal<SessionSection>('main');
+  protected readonly folders = computed(() =>
+    this.team() ? this.store.getFoldersForTeam(this.team()!.id) : [],
+  );
+  protected readonly folderOptions = computed(() => {
+    const folders = this.folders();
+    const rows: Array<{ id: string; label: string }> = [];
+    const walk = (parentId: string | null, depth: number): void => {
+      for (const f of folders.filter((item) => item.parentId === parentId)) {
+        rows.push({ id: f.id, label: `${'— '.repeat(depth)}${f.name}` });
+        walk(f.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    return rows;
+  });
+  private folderAndDescendants(id: string): Set<string> {
+    const ids = new Set([id]);
+    const folders = this.folders();
+    for (const parent of ids) {
+      for (const child of folders.filter((f) => f.parentId === parent)) ids.add(child.id);
+    }
+    return ids;
+  }
   protected readonly pickerExercises = computed(() => {
     const teamId = this.team()?.id;
     if (!teamId) return [];
     const q = this.pickerSearch().trim().toLowerCase();
+    const folder = this.pickerFolder();
+    const folderIds =
+      folder !== 'all' && folder !== 'none' ? this.folderAndDescendants(folder) : null;
     return this.store
       .getExercisesForTeam(teamId)
-      .filter((e) => (q ? e.title.toLowerCase().includes(q) : true))
+      .filter(
+        (e) =>
+          (!q || e.title.toLowerCase().includes(q)) &&
+          (folder === 'all' ||
+            (folder === 'none' ? e.folderId === null : folderIds!.has(e.folderId ?? ''))),
+      )
       .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
   });
 
   private emptyForm(): SessionDraft {
-    return { id: null, title: '', date: todayIso(), durationMinutes: null, notes: '', tasks: [] };
+    return {
+      id: null,
+      title: '',
+      date: todayIso(),
+      durationMinutes: 120,
+      notes: '',
+      number: null,
+      objectives: '',
+      material: '',
+      attendance: [],
+      tasks: [],
+    };
+  }
+
+  protected tasksInSection(section: SessionSection): SessionTask[] {
+    return this.form().tasks.filter((t) => (t.section ?? 'main') === section);
+  }
+
+  protected sectionLabel(section: SessionSection): string {
+    return SECTIONS.find((item) => item.id === section)?.label ?? 'Parte principal';
+  }
+
+  protected moveTaskInSection(id: string, dir: -1 | 1): void {
+    const task = this.form().tasks.find((item) => item.id === id);
+    if (!task) return;
+    const siblings = this.tasksInSection(task.section ?? 'main');
+    const siblingIndex = siblings.findIndex((item) => item.id === id);
+    const other = siblings[siblingIndex + dir];
+    if (!other) return;
+    this.form.update((f) => {
+      const tasks = [...f.tasks];
+      const a = tasks.findIndex((item) => item.id === id);
+      const b = tasks.findIndex((item) => item.id === other.id);
+      [tasks[a], tasks[b]] = [tasks[b], tasks[a]];
+      return { ...f, tasks };
+    });
+  }
+
+  protected attendanceCount(): number {
+    return this.form().attendance.filter((a) => a.status === 'Asiste' || a.status === 'Tarde')
+      .length;
   }
 
   protected totalMinutes(): number {
@@ -99,7 +216,20 @@ export class SessionsComponent {
 
   protected createNew(): void {
     this.formError.set('');
-    this.form.set(this.emptyForm());
+    const nextNumber = Math.max(0, ...this.sessions().map((s) => s.number ?? 0)) + 1;
+    this.form.set({
+      ...this.emptyForm(),
+      number: nextNumber,
+      attendance: this.roster().map((p) => ({
+        playerId: p.id,
+        playerName: p.name,
+        status: 'Pendiente',
+        group: '',
+        attitude: '',
+        minutes: null,
+        notes: '',
+      })),
+    });
     this.editorOpen.set(true);
   }
 
@@ -111,7 +241,29 @@ export class SessionsComponent {
       date: s.date,
       durationMinutes: s.durationMinutes,
       notes: s.notes,
-      tasks: s.tasks.map((t) => ({ ...t })),
+      number: s.number ?? null,
+      objectives: s.objectives ?? '',
+      material: s.material ?? '',
+      attendance: [
+        ...(s.attendance ?? []),
+        ...this.roster()
+          .filter((p) => !(s.attendance ?? []).some((a) => a.playerId === p.id))
+          .map((p) => ({
+            playerId: p.id,
+            playerName: p.name,
+            status: 'Pendiente',
+            group: '',
+            attitude: '',
+            minutes: null,
+            notes: '',
+          })),
+      ],
+      tasks: s.tasks.map((t) => ({
+        ...t,
+        section: t.section ?? 'main',
+        seriesCount: t.seriesCount ?? 1,
+        minutesPerSeries: t.minutesPerSeries ?? t.durationMinutes,
+      })),
     });
     this.editorOpen.set(true);
   }
@@ -126,6 +278,7 @@ export class SessionsComponent {
 
   protected openPicker(): void {
     this.pickerSearch.set('');
+    this.pickerFolder.set('all');
     this.pickerOpen.set(true);
   }
 
@@ -150,6 +303,9 @@ export class SessionsComponent {
           title: ex.title,
           durationMinutes: ex.durationMinutes,
           material: '',
+          section: this.pickerSection(),
+          seriesCount: 1,
+          minutesPerSeries: ex.durationMinutes,
           sortOrder: f.tasks.length,
           snapshot: structuredClone(ex),
         },
@@ -185,13 +341,39 @@ export class SessionsComponent {
     }));
   }
 
+  protected updateTask(id: string, patch: Partial<SessionTask>): void {
+    this.form.update((f) => ({
+      ...f,
+      tasks: f.tasks.map((t) => {
+        if (t.id !== id) return t;
+        const next = { ...t, ...patch };
+        if ('seriesCount' in patch || 'minutesPerSeries' in patch) {
+          next.durationMinutes =
+            next.seriesCount != null && next.minutesPerSeries != null
+              ? next.seriesCount * next.minutesPerSeries
+              : null;
+        }
+        return next;
+      }),
+    }));
+  }
+
+  protected updateAttendance(playerId: string, patch: Partial<SessionAttendance>): void {
+    this.form.update((f) => ({
+      ...f,
+      attendance: f.attendance.map((a) => (a.playerId === playerId ? { ...a, ...patch } : a)),
+    }));
+  }
+
   /**
    * Valida el borrador ANTES de guardar y explica el motivo. Antes solo se exigía el
    * título: se podía guardar una sesión con fecha vacía o mal formada (que luego ordena
    * mal y no se puede filtrar) y con duraciones negativas.
    */
   private validateForm(f: SessionDraft): string | null {
-    if (!f.title.trim()) return 'El título de la sesión es obligatorio.';
+    if (f.number !== null && (!Number.isInteger(f.number) || f.number < 1 || f.number > 9999)) {
+      return 'El número de sesión debe estar entre 1 y 9999.';
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) return 'La fecha no es válida.';
     const dur = f.durationMinutes;
     if (dur !== null && (!Number.isFinite(dur) || dur < 0 || dur > 600)) {
@@ -201,6 +383,25 @@ export class SessionsComponent {
       const d = t.durationMinutes;
       if (d !== null && (!Number.isFinite(d) || d < 0 || d > 600)) {
         return 'La duración de una tarea no puede ser negativa ni superar 600 minutos.';
+      }
+      if (
+        t.seriesCount != null &&
+        (!Number.isInteger(t.seriesCount) || t.seriesCount < 1 || t.seriesCount > 50)
+      ) {
+        return 'Las series deben estar entre 1 y 50.';
+      }
+      if (
+        t.minutesPerSeries != null &&
+        (!Number.isInteger(t.minutesPerSeries) ||
+          t.minutesPerSeries < 0 ||
+          t.minutesPerSeries > 600)
+      ) {
+        return 'Los minutos por serie deben estar entre 0 y 600.';
+      }
+    }
+    for (const a of f.attendance) {
+      if (a.minutes != null && (!Number.isInteger(a.minutes) || a.minutes < 0 || a.minutes > 600)) {
+        return 'Los minutos de asistencia deben estar entre 0 y 600.';
       }
     }
     return null;
@@ -236,6 +437,10 @@ export class SessionsComponent {
       date: f.date,
       durationMinutes: duracionEfectiva,
       notes: f.notes,
+      number: f.number,
+      objectives: f.objectives.trim(),
+      material: f.material.trim(),
+      attendance: f.attendance.map((a) => ({ ...a })),
       tasks: f.tasks.map((t, i) => ({ ...t, sortOrder: i })),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       savedAt: new Date().toISOString(),
@@ -248,7 +453,7 @@ export class SessionsComponent {
   protected remove(s: Session): void {
     this.confirmSvc.ask({
       title: 'Eliminar sesión',
-      message: `¿Eliminar la sesión “${s.title}”?`,
+      message: `¿Eliminar la sesión “${this.sessionLabel(s)}”?`,
       confirmLabel: 'Eliminar',
       onConfirm: () => this.store.deleteSession(s.id),
     });

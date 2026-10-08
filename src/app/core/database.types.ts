@@ -375,6 +375,7 @@ export type SessionsRow = {
   date: string | null;
   duration_minutes: number | null;
   notes: string;
+  plan?: Json;
   revision: number;
   created_at: string;
   updated_at: string;
@@ -387,6 +388,7 @@ export type SessionsInsert = {
   date?: string | null;
   duration_minutes?: number | null;
   notes?: string;
+  plan?: Json;
   revision?: number;
   created_at?: string;
   updated_at?: string;
@@ -397,6 +399,7 @@ export type SessionsUpdate = {
   date?: string | null;
   duration_minutes?: number | null;
   notes?: string;
+  plan?: Json;
   updated_at?: string;
 };
 
@@ -606,6 +609,10 @@ export interface Database {
       delete_folder_tree: { Args: { p_folder_id: string }; Returns: undefined };
       duplicate_folder_tree: { Args: { p_folder_id: string }; Returns: string };
       import_team_dataset: { Args: { p_payload: Json; p_team_id: string }; Returns: Json };
+      import_team_dataset_with_plan: {
+        Args: { p_payload: Json; p_team_id: string };
+        Returns: Json;
+      };
       invite_team_member: { Args: { p_email: string; p_team_id: string }; Returns: string };
       is_platform_admin: { Args: never; Returns: boolean };
       admin_list_administrators: { Args: never; Returns: Array<{ user_id: string }> };

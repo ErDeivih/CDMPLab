@@ -7,6 +7,7 @@
 // =============================================================
 
 import type {
+  Json,
   ExercisesRow,
   ExerciseFoldersRow,
   PlayersRow,
@@ -159,7 +160,33 @@ export function exerciseRowForInsert(
 
 // ---------- Session ----------
 
+function isJsonRecord(value: Json | undefined): value is { [key: string]: Json | undefined } {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function sessionPlanToRow(session: Session): Json {
+  return {
+    number: session.number ?? null,
+    objectives: session.objectives ?? '',
+    material: session.material ?? '',
+    attendance: (session.attendance ?? []).map((a) => ({ ...a })),
+    tasks: Object.fromEntries(
+      session.tasks.map((t) => [
+        t.id,
+        {
+          section: t.section ?? 'main',
+          seriesCount: t.seriesCount ?? null,
+          minutesPerSeries: t.minutesPerSeries ?? null,
+        },
+      ]),
+    ),
+  } as Json;
+}
+
 export function sessionFromRow(row: SessionsRow, tasks: SessionTask[]): Session {
+  const plan = isJsonRecord(row.plan) ? row.plan : {};
+  const taskPlan = isJsonRecord(plan['tasks']) ? plan['tasks'] : {};
+  const attendance = Array.isArray(plan['attendance']) ? plan['attendance'] : [];
   return {
     id: row.id,
     teamId: row.team_id,
@@ -167,7 +194,32 @@ export function sessionFromRow(row: SessionsRow, tasks: SessionTask[]): Session 
     date: row.date ?? '',
     durationMinutes: row.duration_minutes,
     notes: row.notes,
-    tasks,
+    number: typeof plan['number'] === 'number' ? plan['number'] : null,
+    objectives: typeof plan['objectives'] === 'string' ? plan['objectives'] : '',
+    material: typeof plan['material'] === 'string' ? plan['material'] : '',
+    attendance: attendance
+      .filter(isJsonRecord)
+      .filter((a) => typeof a['playerId'] === 'string')
+      .map((a) => ({
+        playerId: String(a['playerId']),
+        playerName: typeof a['playerName'] === 'string' ? a['playerName'] : '',
+        status: typeof a['status'] === 'string' ? a['status'] : 'Pendiente',
+        group: typeof a['group'] === 'string' ? a['group'] : '',
+        attitude: typeof a['attitude'] === 'string' ? a['attitude'] : '',
+        minutes: typeof a['minutes'] === 'number' ? a['minutes'] : null,
+        notes: typeof a['notes'] === 'string' ? a['notes'] : '',
+      })),
+    tasks: tasks.map((t) => {
+      const detail = taskPlan[t.id];
+      if (!isJsonRecord(detail)) return t;
+      const d = detail;
+      return {
+        ...t,
+        section: d['section'] === 'warmup' || d['section'] === 'cooldown' ? d['section'] : 'main',
+        seriesCount: typeof d['seriesCount'] === 'number' ? d['seriesCount'] : null,
+        minutesPerSeries: typeof d['minutesPerSeries'] === 'number' ? d['minutesPerSeries'] : null,
+      };
+    }),
     createdAt: row.created_at,
     savedAt: row.updated_at,
     revision: row.revision,

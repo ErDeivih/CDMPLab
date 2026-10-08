@@ -53,6 +53,7 @@ import {
   invitationFromRow,
   playerFromRow,
   sessionFromRow,
+  sessionPlanToRow,
   teamFromRow,
 } from './mappers';
 
@@ -817,6 +818,7 @@ export class SupabaseRepository implements DataSource {
       date: session.date || null,
       duration_minutes: session.durationMinutes,
       notes: session.notes,
+      plan: sessionPlanToRow(session),
     };
     const tasks = session.tasks.map((t, i) => ({
       id: t.id,
@@ -1268,6 +1270,17 @@ export class SupabaseRepository implements DataSource {
         date: s.date || null,
         duration_minutes: s.durationMinutes,
         notes: s.notes,
+        plan: sessionPlanToRow({
+          ...s,
+          attendance: (s.attendance ?? []).map((a) => ({
+            ...a,
+            playerId: playerIds.get(a.playerId) ?? a.playerId,
+          })),
+          tasks: s.tasks.map((t) => ({
+            ...t,
+            id: taskIds.get(`${s.id}:${t.id}`) as string,
+          })),
+        }),
         tasks: s.tasks.map((t, i) => ({
           id: taskIds.get(`${s.id}:${t.id}`) as string,
           exercise_id: t.exerciseId ? (exerciseIds.get(t.exerciseId) ?? null) : null,
@@ -1283,7 +1296,7 @@ export class SupabaseRepository implements DataSource {
     //    ciclo, id de otro equipo, contenido incompatible) el servidor revierte
     //    TODO y propaga el error. No hay escrituras parciales ni try/catch por
     //    entidad.
-    const { data: result, error } = await this.client.rpc('import_team_dataset', {
+    const { data: result, error } = await this.client.rpc('import_team_dataset_with_plan', {
       p_team_id: teamId,
       p_payload: payload,
     });

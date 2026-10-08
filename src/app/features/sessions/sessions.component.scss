@@ -108,7 +108,7 @@
 }
 
 .modal-lg {
-  width: 640px;
+  width: min(1000px, 96vw);
   max-height: 92dvh;
   display: flex;
   flex-direction: column;
@@ -116,6 +116,112 @@
 
 .modal-body {
   overflow: auto;
+}
+
+.field-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.field-row .field {
+  flex: 1 1 170px;
+}
+
+.section-heading,
+.attendance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.section-heading h4,
+.attendance-head h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.attendance-head span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.task-time,
+.attendance-row label,
+.folder-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.task-time input {
+  width: 70px;
+}
+
+.task-sum {
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.attendance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.attendance-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(145px, 1.3fr) 100px 110px 72px minmax(
+      135px,
+      1.4fr
+    );
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.attendance-row strong {
+  align-self: center;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.attendance-row select,
+.attendance-row input,
+.folder-choice select,
+.task-time input {
+  min-height: 36px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 4px 8px;
+}
+
+@media (max-width: 760px) {
+  .attendance-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .attendance-row strong,
+  .attendance-note {
+    grid-column: 1 / -1;
+  }
+  .task {
+    flex-wrap: wrap;
+  }
+  .task-title {
+    flex-basis: 100%;
+  }
 }
 
 // ---------- Tareas ----------

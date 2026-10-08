@@ -288,6 +288,18 @@ export interface CanvasDocument {
 
 // ---------- Sesiones ----------
 
+export type SessionSection = 'warmup' | 'main' | 'cooldown';
+
+export interface SessionAttendance {
+  playerId: string;
+  playerName: string;
+  status: string;
+  group: string;
+  attitude: string;
+  minutes: number | null;
+  notes: string;
+}
+
 export interface SessionTask {
   id: string;
   exerciseId: string | null;
@@ -295,6 +307,9 @@ export interface SessionTask {
   durationMinutes: number | null;
   material: string;
   sortOrder: number;
+  section?: SessionSection;
+  seriesCount?: number | null;
+  minutesPerSeries?: number | null;
   /** Copia de los datos del ejercicio al añadirlo (la sesión no cambia si se edita el original). */
   snapshot?: Exercise;
 }
@@ -306,6 +321,10 @@ export interface Session {
   date: string; // yyyy-mm-dd
   durationMinutes: number | null;
   notes: string;
+  number?: number | null;
+  objectives?: string;
+  material?: string;
+  attendance?: SessionAttendance[];
   tasks: SessionTask[];
   createdAt: string;
   savedAt: string;
