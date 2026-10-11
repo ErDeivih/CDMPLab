@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { isPointLike, isMaterial, selCenter, elementOutline, resizeHandles, normalizeRotation, pointLikeResizeHalf, MIN_RESIZE_HALF } from './board-selection';
+import {
+  isPointLike,
+  isMaterial,
+  selCenter,
+  elementOutline,
+  resizeHandles,
+  resizeTextFromCorner,
+  normalizeRotation,
+  pointLikeResizeHalf,
+  MIN_RESIZE_HALF,
+} from './board-selection';
 import { CanvasElement } from '../../core/models';
 
 /** Instancia un elemento dado `t` con las coords indicadas. */
@@ -8,6 +18,33 @@ function el(t: CanvasElement['t'], extra: Partial<CanvasElement> = {}): CanvasEl
 }
 
 describe('board-selection (geometría/selección pura)', () => {
+  for (const vertical of [false, true]) {
+    for (const rot of [0, 45, 90]) {
+      it(`texto: escalado estable con ancla fija, vertical=${vertical}, giro=${rot}`, () => {
+        const r = { x: 5, y: 5, w: 52.5, h: 68 };
+        const text = el('text', { x: 0.4, y: 0.4, w: 0.2, h: 0.1, size: 2, rot });
+        const handles = resizeHandles(text, r, vertical);
+        for (const [index, opposite] of [
+          [0, 3],
+          [1, 2],
+          [2, 1],
+          [3, 0],
+        ]) {
+          const a = handles[opposite],
+            b = handles[index];
+          const pointer = { x: a.x + (b.x - a.x) * 1.5, y: a.y + (b.y - a.y) * 1.5 };
+          const resized = { ...text, ...resizeTextFromCorner(text, b.key, pointer, r, vertical) };
+          expect(resized.size).toBeCloseTo(3);
+          expect(resized.w).toBeCloseTo(0.3);
+          expect(resized.h).toBeCloseTo(0.15);
+          const anchor = resizeHandles(resized, r, vertical)[opposite];
+          expect(anchor.x).toBeCloseTo(a.x);
+          expect(anchor.y).toBeCloseTo(a.y);
+          expect(resized.rot).toBe(rot);
+        }
+      });
+    }
+  }
   it('reconoce elementos "puntuales" movibles', () => {
     expect(isPointLike('player')).toBe(true);
     expect(isPointLike('cone')).toBe(true);
@@ -112,7 +149,13 @@ describe('board-selection (geometría/selección pura)', () => {
   });
 
   it('mano alzada: caja envolvente con 4 asas de esquina', () => {
-    const f = el('freehand', { points: [[0.2, 0.2], [0.5, 0.4], [0.4, 0.7]] });
+    const f = el('freehand', {
+      points: [
+        [0.2, 0.2],
+        [0.5, 0.4],
+        [0.4, 0.7],
+      ],
+    });
     const hs = resizeHandles(f);
     expect(hs).toHaveLength(4);
     const xs = hs.map((h) => h.x);
@@ -124,7 +167,28 @@ describe('board-selection (geometría/selección pura)', () => {
   });
 
   it('FASE 1: un MATERIAL no tiene asas de redimensionado (solo se mueve/rota/duplica)', () => {
-    for (const t of ['cone', 'ball', 'mannequin', 'minigoal', 'pole', 'marker', 'hurdle', 'ring', 'ladder', 'flag', 'trampoline', 'target', 'net', 'vball', 'coachC', 'peto', 'chaleco', 'bosu', 'fitball', 'pica'] as const) {
+    for (const t of [
+      'cone',
+      'ball',
+      'mannequin',
+      'minigoal',
+      'pole',
+      'marker',
+      'hurdle',
+      'ring',
+      'ladder',
+      'flag',
+      'trampoline',
+      'target',
+      'net',
+      'vball',
+      'coachC',
+      'peto',
+      'chaleco',
+      'bosu',
+      'fitball',
+      'pica',
+    ] as const) {
       const e = el(t, { x: 0.5, y: 0.5, size: 1 });
       expect(isMaterial(t)).toBe(true);
       expect(resizeHandles(e), `asas de material ${t}`).toHaveLength(0);

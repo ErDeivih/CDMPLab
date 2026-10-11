@@ -947,7 +947,7 @@ select {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 
   .roster-item {
     flex: 1;
@@ -960,8 +960,8 @@ select {
   }
 
   .roster-color {
-    width: 26px;
-    height: 26px;
+    width: 18px;
+    height: 18px;
     border-radius: 999px;
     display: grid;
     place-items: center;
@@ -978,20 +978,51 @@ select {
 
   .roster-color-menu {
     position: static;
-    flex-basis: 100%;
+    flex: 0 0 auto;
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 4px 6px 8px;
+    flex-wrap: nowrap;
+    gap: 3px;
+    padding: 0;
     background: transparent;
     border: 0;
     border-radius: 8px;
     justify-content: space-between;
     .swatch {
-      width: 44px;
-      height: 44px;
-      min-width: 44px;
+      width: 22px;
+      height: 28px;
+      min-width: 22px;
+      border-radius: 6px;
+      background: transparent;
+      position: relative;
+      border: 0;
+      &::before {
+        content: '';
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--player-swatch);
+      }
+      .msi {
+        position: relative;
+        font-size: 14px;
+      }
+      &:focus-visible {
+        outline: 2px solid #fff;
+        outline-offset: 1px;
+      }
     }
+  }
+  .mini-pos,
+  .roster-color {
+    display: none;
+  }
+  .roster-item {
+    padding: 4px 0;
+    gap: 5px;
+  }
+  .mini-avatar {
+    flex-shrink: 0;
   }
 }
 .tools-material-variants {

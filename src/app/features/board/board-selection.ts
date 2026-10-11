@@ -1,6 +1,17 @@
 import { CanvasElement } from '../../core/models';
 import { CANONICAL_MATERIALS } from '../../core/material-registry';
-import { py, px, BOARD_CANON_RECT, materialSize, MATERIAL_BOX, SEL_STROKE, SEL_STROKE_POINT } from '../../core/render';
+import {
+  py,
+  px,
+  BOARD_CANON_RECT,
+  materialSize,
+  MATERIAL_BOX,
+  SEL_STROKE,
+  SEL_STROKE_POINT,
+  rotateTextPoint,
+  textRotation,
+  DEFAULT_TEXT_SIZE,
+} from '../../core/render';
 import { elementCenter } from './board-doc';
 
 // =============================================================
@@ -55,9 +66,12 @@ export const MIN_RESIZE_HALF = 0.06;
 /** Semiejes (normalizado 0..1) del cuadro de redimensionado de un material/jugador
  *  para UN tamaño `size` concreto: la caja del material (MATERIAL_BOX × size) pero
  *  con un mínimo `MIN_RESIZE_HALF` por eje. */
-export function pointLikeResizeHalf(size: number, r: { x: number; y: number; w: number; h: number } = BOARD_CANON_RECT): { hw: number; hh: number } {
-  const hw = Math.max((MATERIAL_BOX * size / 2) / r.w, MIN_RESIZE_HALF);
-  const hh = Math.max((MATERIAL_BOX * size / 2) / r.h, MIN_RESIZE_HALF);
+export function pointLikeResizeHalf(
+  size: number,
+  r: { x: number; y: number; w: number; h: number } = BOARD_CANON_RECT,
+): { hw: number; hh: number } {
+  const hw = Math.max((MATERIAL_BOX * size) / 2 / r.w, MIN_RESIZE_HALF);
+  const hh = Math.max((MATERIAL_BOX * size) / 2 / r.h, MIN_RESIZE_HALF);
   return { hw, hh };
 }
 
@@ -72,7 +86,11 @@ export function pointLikeResizeHalf(size: number, r: { x: number; y: number; w: 
  *   con un área táctil mayor (la tolerancia de toque la amplía el llamador).
  * `r` es el rect canónico activo (por defecto BOARD_CANON_RECT).
  */
-export function resizeHandles(el: CanvasElement, r: { x: number; y: number; w: number; h: number } = BOARD_CANON_RECT): Array<{ x: number; y: number; key: string }> {
+export function resizeHandles(
+  el: CanvasElement,
+  r: { x: number; y: number; w: number; h: number } = BOARD_CANON_RECT,
+  vertical = false,
+): Array<{ x: number; y: number; key: string }> {
   const t = el.t;
   // Fase 1: los MATERIALES no se redimensionan — sin asas (ni UI ni gesto).
   if (isMaterial(t)) return [];
@@ -81,14 +99,27 @@ export function resizeHandles(el: CanvasElement, r: { x: number; y: number; w: n
     const y = el.y ?? 0;
     const w = el.w ?? 0;
     const h = el.h ?? 0;
-    return [
+    const corners = [
       { x, y, key: 'tl' },
       { x: x + w, y, key: 'tr' },
       { x, y: y + h, key: 'bl' },
       { x: x + w, y: y + h, key: 'br' },
     ];
+    return t === 'text'
+      ? corners.map((p) => ({
+          ...rotateTextPoint(p, selCenter(el), textRotation(el, vertical), r),
+          key: p.key,
+        }))
+      : corners;
   }
-  if (t === 'line' || t === 'arrow' || t === 'curve' || t === 'doubleArrow' || t === 'measure' || t === 'dribble') {
+  if (
+    t === 'line' ||
+    t === 'arrow' ||
+    t === 'curve' ||
+    t === 'doubleArrow' ||
+    t === 'measure' ||
+    t === 'dribble'
+  ) {
     const hs = [
       { x: el.x1 ?? 0, y: el.y1 ?? 0, key: 'x1' },
       { x: el.x2 ?? 0, y: el.y2 ?? 0, key: 'x2' },
@@ -130,8 +161,45 @@ export function resizeHandles(el: CanvasElement, r: { x: number; y: number; w: n
   return [];
 }
 
+/** Escala proporcional desde la instantánea inicial del gesto, con esquina opuesta fija. */
+export function resizeTextFromCorner(
+  el: CanvasElement,
+  key: string,
+  p: { x: number; y: number },
+  r: { x: number; y: number; w: number; h: number },
+  vertical = false,
+): Partial<CanvasElement> {
+  const w0 = el.w ?? 0.3,
+    h0 = el.h ?? 0.14,
+    size0 = el.size ?? DEFAULT_TEXT_SIZE;
+  const sx = key.endsWith('l') ? -1 : 1,
+    sy = key.startsWith('t') ? -1 : 1;
+  const opposite = { x: (el.x ?? 0) + (sx < 0 ? w0 : 0), y: (el.y ?? 0) + (sy < 0 ? h0 : 0) };
+  const angle = textRotation(el, vertical);
+  const anchor = rotateTextPoint(opposite, selCenter(el), angle, r);
+  const local = rotateTextPoint(p, anchor, -angle, r);
+  const dx = sx * w0 * r.w,
+    dy = sy * h0 * r.h;
+  const factor =
+    ((local.x - anchor.x) * r.w * dx + (local.y - anchor.y) * r.h * dy) /
+    Math.max(0.0001, dx * dx + dy * dy);
+  const scale = Math.max(0.4 / size0, Math.min(6 / size0, 1 / w0, 1 / h0, factor));
+  const w = w0 * scale,
+    h = h0 * scale;
+  const center = rotateTextPoint(
+    { x: anchor.x + (sx * w) / 2, y: anchor.y + (sy * h) / 2 },
+    anchor,
+    angle,
+    r,
+  );
+  return { x: center.x - w / 2, y: center.y - h / 2, w, h, size: size0 * scale, autoH: false };
+}
+
 /** Contorno de selección (SVG) de un elemento, dado el rect activo. */
-export function elementOutline(el: CanvasElement, r: { x: number; y: number; w: number; h: number }): string {
+export function elementOutline(
+  el: CanvasElement,
+  r: { x: number; y: number; w: number; h: number },
+): string {
   // TEXTO: NO se pinta aquí ninguna forma. Su selección la dibujan el cuadro
   // punteado (`.text-edit-rect`, render.ts) y las 4 manijas de redimensionado
   // (board.component.ts). Un círculo centrado en el origen (el.x/el.y) taparía
@@ -142,7 +210,13 @@ export function elementOutline(el: CanvasElement, r: { x: number; y: number; w: 
     const y = py(el.y ?? 0, r);
     return `<circle cx="${x}" cy="${y}" r="3.4" fill="none" stroke="${SEL}" stroke-width="${SEL_STROKE_POINT}" stroke-dasharray="1,0.7"/>`;
   }
-  if (el.t === 'arrow' || el.t === 'line' || el.t === 'dribble' || el.t === 'doubleArrow' || el.t === 'measure') {
+  if (
+    el.t === 'arrow' ||
+    el.t === 'line' ||
+    el.t === 'dribble' ||
+    el.t === 'doubleArrow' ||
+    el.t === 'measure'
+  ) {
     return `<line x1="${px(el.x1 ?? 0, r)}" y1="${py(el.y1 ?? 0, r)}" x2="${px(el.x2 ?? 0, r)}" y2="${py(el.y2 ?? 0, r)}" stroke="${SEL}" stroke-width="${SEL_STROKE}" stroke-dasharray="1,0.7"/>`;
   }
   if (el.t === 'curve') {

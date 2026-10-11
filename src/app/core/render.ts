@@ -311,11 +311,37 @@ export function textLayoutForBox(lines: string[], size: number, boxH: number): T
  * líneas envueltas (auto-crecimiento). Se usa al editar el texto en vivo para que
  * ninguna línea quede recortada por la altura del cuadro.
  */
-export function autoTextBoxH(text: string, size: number, boxW: number): number {
+export function autoTextBoxH(
+  text: string,
+  size: number,
+  boxW: number,
+  boxHeight = BOARD_CANON_RECT.h,
+): number {
   const lines = wrapTextForBox(text, boxW, size);
   const n = Math.max(1, lines.length);
   const contentH = size + (n - 1) * size * TEXT_LINE_H + 0.4;
-  return contentH / BOARD_CANON_RECT.h;
+  return contentH / boxHeight;
+}
+
+/** El texto conserva su orientación de pantalla; rot es un giro explícito del usuario. */
+export function textRotation(el: CanvasElement, vertical = false): number {
+  return (el.rot ?? 0) - (vertical ? 90 : 0);
+}
+
+/** Rotación en unidades físicas del SVG, no en el cuadrado normalizado. */
+export function rotateTextPoint(
+  p: { x: number; y: number },
+  c: { x: number; y: number },
+  deg: number,
+  r: { w: number; h: number },
+): { x: number; y: number } {
+  const a = (deg * Math.PI) / 180,
+    dx = (p.x - c.x) * r.w,
+    dy = (p.y - c.y) * r.h;
+  return {
+    x: c.x + (dx * Math.cos(a) - dy * Math.sin(a)) / r.w,
+    y: c.y + (dx * Math.sin(a) + dy * Math.cos(a)) / r.h,
+  };
 }
 
 /**
@@ -665,9 +691,19 @@ export function hitTestElement(
   for (let i = elements.length - 1; i >= 0; i--) {
     const el = elements[i];
     // Rotación: prueba en el espacio local del elemento (punto rotado por -rot alrededor de su centro).
-    const visualRot = FIXED_UPRIGHT_TYPES.has(el.t) ? 0 : (el.rot ?? 0);
+    const visualRot =
+      el.t === 'text'
+        ? textRotation(el, vertical)
+        : FIXED_UPRIGHT_TYPES.has(el.t)
+          ? 0
+          : (el.rot ?? 0);
     const c = visualRot ? elementCenter(el) : null;
-    const lp = visualRot && c ? rotatePoint(p, c, -visualRot) : p;
+    const lp =
+      visualRot && c
+        ? el.t === 'text'
+          ? rotateTextPoint(p, c, -visualRot, r)
+          : rotatePoint(p, c, -visualRot)
+        : p;
     if (
       el.t === 'player' ||
       el.t === 'ball' ||
@@ -1259,7 +1295,7 @@ function elStr(
         }
       }
       const cc = elementCenter(el);
-      return rotWrap(body, el.rot, gx(cc.x), gy(cc.y));
+      return rotWrap(body, textRotation(el, isVertical), gx(cc.x), gy(cc.y));
     }
     case 'arrow': {
       const x1 = el.x1 ?? 0;
@@ -1672,8 +1708,8 @@ export function renderBoardSvg(
       // tipo y la orientación del campo (un cono siempre con la base hacia abajo; portería,
       // miniportería, escalera y pica siempre con la misma orientación). El grupo exterior rota
       // 90° cuando el campo es vertical, así que el material se contrarrota -90° sobre SU punto:
-      // la POSICIÓN sigue al campo, el DIBUJO no. Líneas, flechas, figuras, zonas y textos NO se
-      // contrarrotan: forman parte del dibujo táctico y deben girar con el campo.
+      // la POSICIÓN sigue al campo, el DIBUJO no. Líneas, flechas, figuras y zonas giran con
+      // el campo; el texto compensa su orientación por separado alrededor de su centro.
       // Se aplica al envoltorio `[data-el-type]`, sin añadir ni tocar ningún grupo interno: el
       // primer `translate(...)` del elemento sigue siendo el suyo (las pruebas que lo leen, y el
       // hit-test, no cambian).

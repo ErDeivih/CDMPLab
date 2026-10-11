@@ -1288,11 +1288,13 @@ test.describe('EntrenoLab funcionalidades', () => {
     const box = (await page.locator('.board-host').boundingBox())!;
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.5);
     await expect(page.locator('.field-count')).toHaveText('1');
-    // La tarjeta queda deshabilitada con "Ya está en el campo".
+    // Contrato de paleta rápida: conservar el nombre para identificar/recolorear
+    // al jugador ya colocado; "Ya está en el campo" es el tooltip, no su nombre.
     // FASE B (paneles persistentes): el panel ya está abierto; no se re-togglea (lo cerraría).
     await openCat(page, 'Jugadores');
     await expect(first).toHaveClass(/tray-disabled/);
-    await expect(first.locator('.mini-name')).toHaveText('Ya está en el campo');
+    await expect(first.locator('.mini-name')).toHaveText('Marcos');
+    await expect(first).toHaveAttribute('title', 'Ya está en el campo');
     // Pulsar de nuevo no duplica.
     await first.click({ force: true });
     await expect(page.locator('.field-count')).toHaveText('1');

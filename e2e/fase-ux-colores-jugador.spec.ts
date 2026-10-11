@@ -287,6 +287,12 @@ test.describe('FASE 2 — el color del jugador pertenece al ejercicio', () => {
         await openBoard(page);
         await abrirJugadores(page);
         await expect(page.locator('.field-count')).toHaveText('0');
+        // Nuevo contrato visual: paleta compacta en la misma fila que el nombre.
+        const row = page.locator('.roster-row').first();
+        const name = (await row.locator('.mini-name').boundingBox())!;
+        const swatch = (await row.locator('.swatch').first().boundingBox())!;
+        expect(swatch.width).toBeLessThanOrEqual(28);
+        expect(Math.abs(name.y + name.height / 2 - swatch.y - swatch.height / 2)).toBeLessThan(4);
         const colores = ['#e67e22', '#c0392b', '#8e44ad'];
         for (let i = 0; i < 3; i++) {
           const menu = page.locator('.roster-color-menu').nth(i);

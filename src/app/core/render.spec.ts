@@ -7,6 +7,8 @@ import {
   screenToNorm,
   wrapTextForBox,
   autoTextBoxH,
+  textRotation,
+  rotateTextPoint,
   textLayoutForBox,
   DEFAULT_TEXT_SIZE,
   DEFAULT_TEXT_W,
@@ -123,6 +125,28 @@ function normToScreenPointFit(
 }
 
 describe('render', () => {
+  it('el texto queda horizontal por pantalla en vertical y su hit-test sigue el cuadro visible', () => {
+    const r = fieldGeometry('half', 'vertical').rect;
+    const text: CanvasElement = {
+      id: 'texto',
+      t: 'text',
+      x: 0.4,
+      y: 0.4,
+      w: 0.3,
+      h: 0.1,
+      v: 'Presión',
+      size: 2,
+    };
+    expect(textRotation(text, true)).toBe(-90);
+    const p = rotateTextPoint({ x: 0.65, y: 0.45 }, { x: 0.55, y: 0.45 }, -90, r);
+    expect(hitTestElement(p, [text], r, 1, undefined, true, 'half')).toBe('texto');
+    const svg = renderBoardSvg('half', [text], { orientation: 'vertical' });
+    expect(svg).toContain('rotate(-90');
+    expect(textRotation({ ...text, rot: 45 }, true)).toBe(-45);
+  });
+  it('autoaltura utiliza la altura real del campo, no siempre la del campo completo', () => {
+    expect(autoTextBoxH('A\nB\nC', 2, 20, 40)).toBeCloseTo(autoTextBoxH('A\nB\nC', 2, 20, 80) * 2);
+  });
   it('las nuevas vallas mantienen estilo y color en el SVG exportable', () => {
     for (const style of ['low', 'high'] as const) {
       const el: CanvasElement = {

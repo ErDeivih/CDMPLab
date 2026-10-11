@@ -121,6 +121,7 @@ import {
   isPointLike as isPointLikeFn,
   isMaterial as isMaterialFn,
   resizeHandles,
+  resizeTextFromCorner,
   normalizeRotation,
   pointLikeResizeHalf,
 } from './board-selection';
@@ -1260,6 +1261,7 @@ export class BoardComponent {
   private resizeId: string | null = null;
   /** `size` inicial al empezar a redimensionar un material/jugador (escala uniforme). */
   private resizeStartSize: number | null = null;
+  private resizeStartText: CanvasElement | null = null;
   /** `points` iniciales al redimensionar un trazo a mano alzada (bbox proporcional). */
   private resizeStartPoints: [number, number][] | null = null;
   private gestureBase: BoardSnapshot | null = null;
@@ -2135,7 +2137,16 @@ export class BoardComponent {
    *  posicionar la barra de contexto SIN tapar el objeto. */
   private elNormBBox(el: CanvasElement): { x0: number; y0: number; x1: number; y1: number } {
     const t = el.t;
-    if (t === 'rect' || t === 'zone' || t === 'ellipse' || t === 'text') {
+    if (t === 'text') {
+      const corners = resizeHandles(el, this.geo().rect, this.geo().vertical);
+      return {
+        x0: Math.min(...corners.map((p) => p.x)),
+        y0: Math.min(...corners.map((p) => p.y)),
+        x1: Math.max(...corners.map((p) => p.x)),
+        y1: Math.max(...corners.map((p) => p.y)),
+      };
+    }
+    if (t === 'rect' || t === 'zone' || t === 'ellipse') {
       const w = el.w ?? 0;
       const h = el.h ?? 0;
       return { x0: el.x ?? 0, y0: el.y ?? 0, x1: (el.x ?? 0) + w, y1: (el.y ?? 0) + h };
@@ -3662,7 +3673,7 @@ export class BoardComponent {
   /** Alto normalizado necesario para que el texto (v) quepa entero en su cuadro. */
   private autoHForText(v: string, size: number, w: number): number {
     const boxW = w * this.geo().rect.w;
-    return autoTextBoxH(v, size, boxW);
+    return autoTextBoxH(v, size, boxW, this.geo().rect.h);
   }
 
   protected setSelColor(c: string): void {
@@ -3689,6 +3700,11 @@ export class BoardComponent {
 
   protected setSelArrowStyle(style: 'solid' | 'dashed'): void {
     this.editSelected({ style });
+  }
+
+  protected textSizeValue(): number {
+    // Redondear solo la presentación: el gesto y el guardado conservan su precisión.
+    return Math.round((this.selectedElement()?.size ?? DEFAULT_TEXT_SIZE) * 10) / 10;
   }
 
   protected setSelSize(evt: Event): void {
@@ -3742,6 +3758,10 @@ export class BoardComponent {
     const maxW = Math.max(0.02, 1 - (el.x ?? 0));
     const fit = fitTextToContent(el.v ?? '', el.size ?? DEFAULT_TEXT_SIZE, maxW, this.geo().rect);
     this.editSelected({ w: fit.w, h: fit.h, autoH: true });
+  }
+
+  protected straightenTextSelected(): void {
+    if (this.selectedElement()?.t === 'text') this.editSelected({ rot: 0 });
   }
 
   protected setSelOpacity(evt: Event): void {
@@ -3823,7 +3843,7 @@ export class BoardComponent {
     }
     const last = this.selectedElement();
     if (last) {
-      for (const rh of resizeHandles(last, this.geo().rect)) {
+      for (const rh of resizeHandles(last, this.geo().rect, this.geo().vertical)) {
         s += `<rect class="reshandle" x="${this.px(rh.x) - 0.6}" y="${this.py(rh.y) - 0.6}" width="1.2" height="1.2" fill="#ffffff" stroke="#2563eb" stroke-width="${SEL_HANDLE_STROKE}"/>`;
       }
     }
@@ -3839,7 +3859,7 @@ export class BoardComponent {
     // con un área táctil CONSTANTE en px (ratón ~10, táctil ~16) en vez del 0.045 norm,
     // que crecía con la magnificación y hacía que asas próximas se solaparan entre sí.
     const tol = this.resizeTolNorm(screenPx);
-    for (const h of resizeHandles(el, this.geo().rect)) {
+    for (const h of resizeHandles(el, this.geo().rect, this.geo().vertical)) {
       if (Math.hypot(p.x - h.x, p.y - h.y) < tol) return h.key;
     }
     return null;
@@ -4201,6 +4221,7 @@ export class BoardComponent {
           this.resizing = true;
           this.resizeKey = rKey;
           this.resizeId = selEl.id;
+          this.resizeStartText = selEl.t === 'text' ? { ...selEl } : null;
           this.moveStart = { x: p.x, y: p.y };
           this.resizeStartSize =
             selEl.t !== 'text' && this.isPointLike(selEl.t)
@@ -4808,7 +4829,20 @@ export class BoardComponent {
 
   private applyResize(el: CanvasElement, key: string, p: { x: number; y: number }): void {
     const t = el.t;
-    if (t === 'rect' || t === 'zone' || t === 'ellipse' || t === 'text') {
+    if (t === 'text') {
+      this.updateElement(
+        el.id,
+        resizeTextFromCorner(
+          this.resizeStartText ?? el,
+          key,
+          p,
+          this.geo().rect,
+          this.geo().vertical,
+        ),
+      );
+      return;
+    }
+    if (t === 'rect' || t === 'zone' || t === 'ellipse') {
       let x = el.x ?? 0;
       let y = el.y ?? 0;
       let w = el.w ?? 0.05;
@@ -4829,15 +4863,7 @@ export class BoardComponent {
       if (key === 'tl' || key === 'bl') x = this.clamp01(x);
       if (key === 'tr' || key === 'br') x = el.x ?? 0;
       if (key === 'tl') y = this.clamp01(y);
-      let patch: Partial<CanvasElement> = { x, y, w, h };
-      if (t === 'text') {
-        // Redimensionar con el asa fija el cuadro (ya no auto-crece).
-        patch.autoH = false;
-        // Mantener el cuadro dentro del campo (sin desbordar por la derecha/abajo).
-        const fx = Math.max(0, Math.min(1 - w, x));
-        const fy = Math.max(0, Math.min(1 - h, y));
-        patch = { x: fx, y: fy, w, h, autoH: false };
-      }
+      const patch: Partial<CanvasElement> = { x, y, w, h };
       this.updateElement(el.id, patch);
     } else if (
       t === 'line' ||
@@ -4968,6 +4994,7 @@ export class BoardComponent {
     this.resizeKey = null;
     this.resizeId = null;
     this.resizeStartSize = null;
+    this.resizeStartText = null;
     this.resizeStartPoints = null;
     this.rotating = false;
     this.rotCenter = null;

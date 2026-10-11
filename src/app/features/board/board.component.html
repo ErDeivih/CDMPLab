@@ -496,7 +496,11 @@
                   step="0.1"
                   min="0.4"
                   max="6"
-                  [value]="selectedElement()!.size ?? 1"
+                  [value]="
+                    selectedElement()!.t === 'text'
+                      ? textSizeValue()
+                      : (selectedElement()!.size ?? 1)
+                  "
                   (change)="setSelSize($event)"
                   aria-label="Tamaño (unidades)"
                 />
@@ -631,6 +635,14 @@
                   (click)="fitTextToContentSelected()"
                 >
                   <span class="msi">fit_screen</span> Ajustar al contenido
+                </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  title="Enderezar texto"
+                  aria-label="Enderezar texto"
+                  (click)="straightenTextSelected()"
+                >
+                  <span class="msi">horizontal_rule</span> Enderezar texto
                 </button>
               }
               <button
@@ -949,8 +961,8 @@
                   <button
                     class="swatch"
                     role="radio"
-                    [style.background]="c.color"
                     [class.swatch-active]="playerColors()[p.id] === c.color"
+                    [style.--player-swatch]="c.color"
                     [attr.aria-checked]="playerColors()[p.id] === c.color"
                     [attr.data-color]="c.color"
                     [attr.aria-label]="
