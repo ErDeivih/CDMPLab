@@ -76,7 +76,8 @@ test.describe('Botones del inspector en panel oscuro', () => {
     const names = results.map((r) => r.name);
     expect(names, 'no hay Duplicar en el inspector (Fase 3)').not.toContain('Duplicar');
     expect(names, 'no hay Eliminar en el inspector (Fase 3)').not.toContain('Eliminar');
-    const general = ['Bloquear', 'Desbloquear', 'Traer adelante', 'Enviar atrás'];
+    // Contrato nuevo: mover al extremo, no avanzar/retroceder una sola capa.
+    const general = ['Bloquear', 'Desbloquear', 'Traer al frente', 'Enviar al fondo'];
     const presentGeneral = general.filter((g) => names.some((n) => n.includes(g)));
     expect(presentGeneral.length, 'quedan las acciones generales').toBeGreaterThanOrEqual(3);
     for (const r of results) {

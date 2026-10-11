@@ -125,7 +125,12 @@ import {
   pointLikeResizeHalf,
 } from './board-selection';
 import { ExportDialogComponent } from './export-dialog.component';
-import { visibleMaterials, CANONICAL_MATERIALS } from '../../core/material-registry';
+import {
+  visibleMaterials,
+  CANONICAL_MATERIALS,
+  CHINO_COLORS,
+  hurdleSvg,
+} from '../../core/material-registry';
 
 type Tool =
   | 'select'
@@ -411,6 +416,7 @@ interface BoardSnapshot {
   field: FieldType;
   orientation: 'horizontal' | 'vertical';
   frames: CanvasFrame[];
+  playerColors: MapaColoresJugador;
 }
 
 @Component({
@@ -647,16 +653,16 @@ export class BoardComponent {
         <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="700" fill="#fff">${label || ''}</text>
       </svg>`;
     } else {
-      // Material: imagen PNG real o fallback SVG circular.
+      // Material: imagen PNG real o el mismo vector que el panel y el campo.
       const kind = this.materialVariant()[a.tool] ?? this.defaultKindFor(a.tool);
       const asset = kind ? tacticAsset(kind) : undefined;
       if (asset?.asset) {
         html = `<img src="${asset.asset}" style="width:${size}px;height:${size}px;object-fit:contain" alt="">`;
       } else {
-        const col = asset?.color ?? '#e8edf2';
-        html = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
-          <circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 4}" fill="${col}"></circle>
-        </svg>`;
+        html = this.materialVectorThumb(a.tool).replace(
+          '<svg ',
+          `<svg width="${size}" height="${size}" `,
+        );
       }
     }
     // Contenido 100 % generado por el estado de la app (colores/assets constantes, dorsal
@@ -1382,7 +1388,38 @@ export class BoardComponent {
     }
   }
   protected colorFor(tool: Tool): string {
-    return this.toolColor()[tool] ?? DEFAULT_ELEMENT_COLOR;
+    return this.toolColor()[tool] ?? (tool === 'target' ? '#e74c3c' : DEFAULT_ELEMENT_COLOR);
+  }
+  protected readonly chinoColors = CHINO_COLORS;
+  protected chinoColorName(color: string): string {
+    return (
+      [
+        'Azul',
+        'Amarillo',
+        'Rojo',
+        'Blanco',
+        'Morado',
+        'Verde',
+        'Naranja',
+        'Rosa',
+        'Negro',
+        'Turquesa',
+      ][CHINO_COLORS.indexOf(color)] ?? 'Color'
+    );
+  }
+  protected pickMaterialColor(tool: Tool, color: string): void {
+    this.toolColor.update((colors) => ({ ...colors, [tool]: color }));
+    try {
+      localStorage.setItem(BoardComponent.toolColorKey, JSON.stringify(this.toolColor()));
+    } catch {
+      /* preferencia no crítica */
+    }
+    if (this.tool() === tool) this.drawColor.set(color);
+  }
+  protected hurdleVariantThumb(kind: TacticalKind): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(
+      hurdleSvg(tacticAsset(kind)?.color, kind === 'hurdle_low' ? 'low' : 'high'),
+    );
   }
   /** E/Bloque E — preferencia de trazo (continuo/discontinuo) POR HERRAMIENTA de dibujo
    *  (Línea y Flecha independientes). Se persiste localmente bajo una clave CDMPLab
@@ -2588,6 +2625,8 @@ export class BoardComponent {
     switch (id) {
       case 'cone':
         return ['cone_red', 'cone_yellow', 'cone_blue', 'cone_orange', 'cone_white', 'cone_blue2'];
+      case 'hurdle':
+        return ['hurdle', 'hurdle_low', 'hurdle_high'];
       default:
         // FASE 7: una única escalera, un único aro y un maniquí independiente de la
         // barrera. Se eliminan las variantes ring_flat/ladder_yellow/mannequin_row del
@@ -2622,6 +2661,13 @@ export class BoardComponent {
    *  material tiene PNG (no debe llegar aquí). Los colores por defecto coinciden con
    *  los que usa el render cuando el elemento no lleva color explícito. */
   protected materialVectorThumb(id: string): string {
+    if (id === 'hurdle') {
+      const kind = this.materialVariant()[id] ?? 'hurdle';
+      return hurdleSvg(
+        tacticAsset(kind)?.color,
+        kind === 'hurdle_low' ? 'low' : kind === 'hurdle_high' ? 'high' : 'classic',
+      );
+    }
     const DEF: Record<string, string> = {
       fitball: '#e67e22',
       coachC: '#e6b800',
@@ -2631,7 +2677,7 @@ export class BoardComponent {
       marker: '#3056d3',
       pica: '#ffffff',
     };
-    const c = DEF[id] ?? '#e8edf2';
+    const c = id === 'target' ? this.colorFor('target') : (DEF[id] ?? '#e8edf2');
     let inner = '';
     switch (id) {
       case 'fitball':
@@ -2797,12 +2843,18 @@ export class BoardComponent {
   }
   /** Snapshot de documento (campo + orientación + frames) usado por el historial. */
   private docSnapshot(): BoardSnapshot {
-    return { field: this.field(), orientation: this.orientation(), frames: this.frames() };
+    return {
+      field: this.field(),
+      orientation: this.orientation(),
+      frames: this.frames(),
+      playerColors: this.playerColors(),
+    };
   }
   private restoreSnapshot(s: BoardSnapshot): void {
     this.field.set(s.field);
     this.orientation.set(s.orientation);
     this.frames.set(s.frames);
+    this.playerColors.set(s.playerColors);
   }
 
   protected undo(): void {
@@ -2942,11 +2994,19 @@ export class BoardComponent {
   protected sendBack(): void {
     this.layerShift(-1);
   }
-  private layerShift(dir: 1 | -1): void {
+  protected advanceLayer(): void {
+    this.layerShift(1, true);
+  }
+  protected retreatLayer(): void {
+    this.layerShift(-1, true);
+  }
+  private layerShift(dir: 1 | -1, step = false): void {
     const id = this.selectedId();
     if (!id) return;
+    const next = layerShiftFrames(this.frames(), id, dir, step);
+    if (next === this.frames()) return;
     this.beginHistory();
-    this.frames.set(layerShiftFrames(this.frames(), id, dir));
+    this.frames.set(next);
     this.endHistory();
   }
 
@@ -3302,8 +3362,6 @@ export class BoardComponent {
     this.cdr.detectChanges();
   }
 
-  /** Fase 12 — color rápido por jugador. Id del jugador cuya mini-paleta está abierta. */
-  protected readonly rosterColorOpen = signal<string | null>(null);
   /**
    * FASE 2 del encargo — color de cada jugador de plantilla DENTRO de este ejercicio.
    *
@@ -3321,12 +3379,6 @@ export class BoardComponent {
     return colorDeJugador(this.playerColors(), p);
   }
 
-  /** Abre/cierra la mini-paleta de color de un jugador de plantilla. */
-  protected toggleRosterColor(id: string, evt: Event): void {
-    evt.stopPropagation();
-    this.rosterColorOpen.set(this.rosterColorOpen() === id ? null : id);
-  }
-
   /**
    * Aplica un color a la ficha del jugador DENTRO DE ESTE EJERCICIO y a las fichas ya colocadas
    * con ese `playerId`.
@@ -3339,12 +3391,65 @@ export class BoardComponent {
    */
   protected setRosterColor(id: string, c: string, evt: Event): void {
     evt.stopPropagation();
+    const player = this.players().find((p) => p.id === id);
+    if (!player) return;
+    // Repetir el color actual no debe vaciar la pila de rehacer.
+    if (this.playerColors()[id] === c && this.placedPlayerIds().has(id)) {
+      this.setTool('select');
+      return;
+    }
+    this.beginHistory();
     this.playerColors.set(conColorDeJugador(this.playerColors(), id, c));
     // Un jugador de plantilla colocado debe actualizar su color visible en el ejercicio.
     const repintadas = fichasDeJugador(this.frames(), id);
     if (repintadas > 0) this.frames.set(pintarFichasDeJugador(this.frames(), id, c));
-    this.markDirty();
-    this.rosterColorOpen.set(null);
+    if (!this.placedPlayerIds().has(id)) {
+      // Huecos dentro del campo, visibles con la orientación/zoom actuales y fuera de los paneles.
+      const occupied = this.view().filter((e) => e.x != null && e.y != null);
+      const hostEl = this.host()?.nativeElement;
+      const hostRect = hostEl?.getBoundingClientRect();
+      const panels = Array.from(
+        hostEl?.closest('.studio')?.querySelectorAll('.side-panel, .studio-tools') ?? [],
+      ).map((el) => el.getBoundingClientRect());
+      let position = { x: 0.5, y: 0.5 };
+      let bestDistance = -1;
+      for (let row = 0; row < 9; row++) {
+        for (let col = 0; col < 9; col++) {
+          const candidate = { x: 0.1 + col * 0.1, y: 0.1 + row * 0.1 };
+          if (hostRect) {
+            const screen = this.normToScreenDisplay(candidate.x, candidate.y);
+            const x = screen.x + hostRect.left;
+            const y = screen.y + hostRect.top;
+            const padding = 24;
+            if (
+              x < hostRect.left + padding ||
+              x > hostRect.right - padding ||
+              y < hostRect.top + padding ||
+              y > hostRect.bottom - padding ||
+              panels.some(
+                (p) =>
+                  x > p.left - padding &&
+                  x < p.right + padding &&
+                  y > p.top - padding &&
+                  y < p.bottom + padding,
+              )
+            )
+              continue;
+          }
+          const distance = Math.min(
+            ...occupied.map((e) => Math.hypot(e.x! - candidate.x, e.y! - candidate.y)),
+            1,
+          );
+          if (distance > bestDistance) {
+            position = candidate;
+            bestDistance = distance;
+          }
+        }
+      }
+      this.placePlayerElement(position, { ...this.rosterDragSpec(player).player!, c });
+    }
+    this.endHistory();
+    this.setTool('select');
   }
 
   /** C1: fichas rápidas de jugador GENERICO por color (azul/rojo/amarillo/verde/morado).
@@ -4950,7 +5055,14 @@ export class BoardComponent {
       // size base normalizado del tipo: así cada material nace con un tamaño
       // coherente (pértiga/escalera/portería mayores que cono/diana) y el modelo
       // lo persiste (Save/reabrir/duplicar lo conservan).
-      if (a) return { ...e, size: materialBaseSize(kind), asset: a.asset, assetKind: kind };
+      if (a)
+        return {
+          ...e,
+          c: tool === 'hurdle' && kind !== 'hurdle' ? a.color : e.c,
+          size: materialBaseSize(kind),
+          asset: a.asset,
+          assetKind: kind,
+        };
       return { ...e, size: materialBaseSize(kind) };
     };
     switch (t) {
@@ -5006,7 +5118,10 @@ export class BoardComponent {
         el = withMaterial({ id: uid(), t: 'dumbbell', x: p.x, y: p.y, c: '#20242a' }, 'dumbbell');
         break;
       case 'target':
-        el = withMaterial({ id: uid(), t: 'target', x: p.x, y: p.y, c: '#e74c3c' }, 'target');
+        el = withMaterial(
+          { id: uid(), t: 'target', x: p.x, y: p.y, c: this.colorFor('target') },
+          'target',
+        );
         break;
       case 'net':
         el = withMaterial({ id: uid(), t: 'net', x: p.x, y: p.y, c: '#e74c3c' }, 'net');

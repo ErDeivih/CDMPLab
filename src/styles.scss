@@ -947,9 +947,16 @@ select {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 
   .roster-item {
     flex: 1;
+    min-width: 0;
+  }
+  .mini-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .roster-color {
@@ -962,7 +969,7 @@ select {
     border: 1px solid rgba(0, 0, 0, 0.35);
     color: #fff;
     font-size: 13px;
-    cursor: pointer;
+    cursor: default;
 
     &:hover {
       filter: brightness(1.1);
@@ -970,19 +977,53 @@ select {
   }
 
   .roster-color-menu {
-    position: absolute;
-    right: 0;
-    top: 100%;
-    z-index: 30;
+    position: static;
+    flex-basis: 100%;
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    padding: 6px;
-    background: #171d23;
-    border: 1px solid #2b3947;
+    padding: 4px 6px 8px;
+    background: transparent;
+    border: 0;
     border-radius: 8px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-    max-width: 180px;
+    justify-content: space-between;
+    .swatch {
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+    }
+  }
+}
+.tools-material-variants {
+  flex-wrap: wrap;
+  .variant-swatch {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+  }
+  .variant-swatch .msi {
+    font-size: 18px;
+    color: #fff;
+    text-shadow: 0 1px 2px #000;
+  }
+  .hurdle-variant {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    background: #303941 !important;
+  }
+  .hurdle-variant img,
+  .hurdle-variant span {
+    width: 36px;
+    height: 36px;
+  }
+  .hurdle-variant span {
+    display: block;
+  }
+  .hurdle-variant svg {
+    width: 100%;
+    height: 100%;
   }
 }
 

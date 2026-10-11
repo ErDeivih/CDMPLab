@@ -290,7 +290,9 @@ test.describe('ESCALA DE MATERIALES — medición por campo', () => {
       { campo: 'half', min: 1.15, max: 1.25 },
       { campo: 'third', min: 1.2, max: 1.35 },
       { campo: 'futsal', min: 1.1, max: 1.25 },
-      { campo: 'f7', min: 1.1, max: 1.25 },
+      // Contrato 11/10: F7 deja de inflar los objetos; comparte factor físico 1,62 con half.
+      // El encuadre transversal ocupa menos px/unidad: antiguo 1,18 × 1,62/1,99 ≈ 0,96.
+      { campo: 'f7', min: 0.9, max: 1.05 },
       // LIENZO: mismo tamaño aparente que el campo completo (encargo del dueño, 23/09/2026: un
       // colaborador avisó de que los jugadores se veían «muy gordos» en el lienzo). Se compara con la
       // base VERTICAL porque este campo se mide en vertical (ver arriba). El factor 1,25 que había en
@@ -319,6 +321,31 @@ test.describe('ESCALA DE MATERIALES — medición por campo', () => {
       JSON.stringify({ medidas, informes }, null, 2),
       'utf8',
     );
+  });
+
+  test('F7 y medio campo: mismos tamaños con el mismo encuadre físico', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await abrirDocumento(page, 'full');
+    for (const halfOrientation of ['horizontal', 'vertical'] as const) {
+      await cambiarCampo(page, 'Medio campo', 'half');
+      const halfChip = page.locator(`.studio-panel .chip[data-orient="${halfOrientation}"]`);
+      await halfChip.click();
+      await expect(halfChip).toHaveClass(/chip-active/);
+      const half = await medir(page);
+      await cambiarCampo(page, 'F7 transversal', 'f7');
+      // F7 es el mismo terreno transversal: rotación opuesta = mismo encuadre en pantalla.
+      const f7Orientation = halfOrientation === 'horizontal' ? 'vertical' : 'horizontal';
+      const f7Chip = page.locator(`.studio-panel .chip[data-orient="${f7Orientation}"]`);
+      await f7Chip.click();
+      await expect(f7Chip).toHaveClass(/chip-active/);
+      const f7 = await medir(page);
+      for (const object of OBJETOS) {
+        expect(
+          f7[object.nombre].w / half[object.nombre].w,
+          `${object.nombre}/${halfOrientation}`,
+        ).toBeCloseTo(1, 1);
+      }
+    }
   });
 
   test('la portería de MATERIAL coincide con la portería dibujada en el campo (0,90-1,10)', async ({

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { abrirHerramientas } from './board-helpers';
+import { abrirHerramientas, showCategory } from './board-helpers';
 
 // FASE 12 — color rápido por jugador en el panel Jugadores, sin abrir el inspector.
 async function seed(page: Page): Promise<void> {
@@ -46,10 +46,30 @@ test('FASE 12 + FASE 2: cambiar el color de un jugador NO toca la plantilla; que
   await seed(page);
   await openBoard(page);
   await expect(page.locator('.roster-item')).toHaveCount(1);
-  // Abrir la mini-paleta del jugador y elegir naranja.
-  await page.locator('.roster-color').click();
+  // Contrato nuevo: paleta siempre visible; elegir color también coloca al jugador.
   await expect(page.locator('.roster-color-menu')).toBeVisible();
   await page.locator('.roster-color-menu .swatch[aria-label^="Color Naranja"]').click();
+  await expect(page.locator('.field-count')).toHaveText('1');
+  await expect(page.locator('.board-canvas svg [data-player-id="p1"]')).toHaveAttribute(
+    'data-color',
+    '#e67e22',
+  );
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.field-count')).toHaveText('0');
+  await expect(page.locator('.roster-color-menu [aria-checked="true"]')).toHaveCount(0);
+  await page.keyboard.press('Control+y');
+  await expect(page.locator('.field-count')).toHaveText('1');
+
+  // Un clic repetido no modifica el documento ni destruye la operación pendiente de rehacer.
+  await page.locator('.roster-color-menu [data-color="#1a73e8"]').click();
+  await page.keyboard.press('Control+z');
+  await page.locator('.roster-color-menu [data-color="#e67e22"]').click();
+  await page.keyboard.press('Control+y');
+  await expect(page.locator('.board-canvas [data-player-id="p1"]')).toHaveAttribute(
+    'data-color',
+    '#1a73e8',
+  );
+  await page.keyboard.press('Control+z');
 
   // CONTRATO ACTUALIZADO (FASE 2 del encargo del dueño): esta prueba exigía antes que el color
   // del JUGADOR DE PLANTILLA cambiase en el almacén (`entrenolab:players[0].color === '#1f7a4d'`).
@@ -61,7 +81,6 @@ test('FASE 12 + FASE 2: cambiar el color de un jugador NO toca la plantilla; que
   expect(storeColor, 'la plantilla NO se modifica al elegir color en la pizarra').toBe('#1a73e8');
 
   // Y la paleta marca el color elegido (accesible con aria-checked + tick).
-  await page.locator('.roster-color').click();
   await expect(page.locator('.roster-color-menu .swatch[aria-checked="true"]')).toHaveAttribute(
     'data-color',
     '#e67e22',
@@ -83,7 +102,6 @@ test('FASE 12: cambiar el color estando ya colocado actualiza la ficha visible e
   await expect(page.locator('.field-count')).toHaveText('1');
   // FASE B: el panel Jugadores permanece abierto tras colocar, así que NO se re-togglea
   // (eso lo cerraría); se usa el panel ya desplegado.
-  await page.locator('.roster-color').click();
   await page.locator('.roster-color-menu .swatch[aria-label^="Color Naranja"]').click();
   await expect(page.locator('.field-count')).toHaveText('1');
   // Fase 12: el color del jugador YA colocado se refleja en el campo (reactivo).
@@ -96,4 +114,50 @@ test('FASE 12: cambiar el color estando ya colocado actualiza la ficha visible e
     .locator('.board-canvas svg [data-el-type="player"]')
     .evaluateAll((els) => els.map((e) => e.getAttribute('data-player-id')));
   expect(playerIds).toEqual(['p1']);
+});
+
+test('chinos con color previo y vallas baja/alta se colocan y conservan sus variantes', async ({
+  page,
+}) => {
+  await seed(page);
+  await openBoard(page);
+  await showCategory(page, 'Material');
+  await page.locator('.chino-colors [data-color="#a855f7"]').click();
+  const chino = page.locator('.tools-material-card').filter({ has: page.locator('.chino-colors') });
+  await chino.locator('.rail-row').click();
+  const host = (await page.locator('.board-host').boundingBox())!;
+  await page.mouse.click(host.x + host.width * 0.65, host.y + host.height * 0.4);
+  await expect(page.locator('.board-canvas [data-el-type="target"]')).toHaveAttribute(
+    'data-color',
+    '#a855f7',
+  );
+  for (const [label, kind, y] of [
+    ['Valla baja', 'hurdle_low', 0.55],
+    ['Valla alta', 'hurdle_high', 0.7],
+  ] as const) {
+    await page.getByRole('button', { name: label, exact: true }).click();
+    const row = page
+      .locator('.tools-material-card')
+      .filter({ has: page.getByRole('button', { name: label, exact: true }) });
+    await row.locator('.rail-row').click();
+    await page.mouse.click(host.x + host.width * 0.65, host.y + host.height * y);
+    await expect(page.locator(`.board-canvas [data-asset-kind="${kind}"]`)).toHaveCount(1);
+  }
+  await expect(page.locator('.field-count')).toHaveText('3');
+  await page.screenshot({ path: 'test-results/materiales-colores-rapidos.png' });
+  await page.getByRole('button', { name: 'Propiedades', exact: true }).click();
+  await page
+    .getByRole('textbox', { name: 'Título del ejercicio', exact: true })
+    .fill('Materiales rápidos');
+  await page.locator('.chip-icon-primary').click();
+  await page.waitForURL('**/library');
+  await page.locator('.ex-card', { hasText: 'Materiales rápidos' }).locator('.ex-open-btn').click();
+  await page.waitForURL('**/board');
+  await expect(page.locator('.board-canvas [data-el-type="target"]')).toHaveAttribute(
+    'data-color',
+    '#a855f7',
+  );
+  await expect(page.locator('.board-canvas [data-asset-kind="hurdle_low"]')).toHaveCount(1);
+  await expect(page.locator('.board-canvas [data-asset-kind="hurdle_high"]')).toHaveCount(1);
+  await expect(page.locator('.field-count')).toHaveText('3');
 });

@@ -501,10 +501,10 @@ test.describe('Fase 11 — round-trip de modelo y persistencia por familia', () 
     expect(keep.c).toBe('#1f7a4d');
     expect(keep.opacity).toBeCloseTo(0.6, 2);
 
-    // Traer adelante (capa) y reabrir → lo mismo persiste.
+    // Contrato nuevo: Traer al frente (extremo de capas) y reabrir → lo mismo persiste.
     await reopen(page);
     await selectAt(page, keep);
-    await page.locator('.inspector-actions button[title="Traer adelante"]').click();
+    await page.locator('.inspector-actions button[title="Traer al frente"]').click();
     await save(page);
     const layered = (await savedElements(page))[0];
     expect(layered.rot).toBeCloseTo(90, 0);

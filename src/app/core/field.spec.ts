@@ -329,13 +329,18 @@ describe('fieldGeometry — proporciones reales por tipo y orientación', () => 
     // IGUALES en todos los campos. El dueño pidió lo contrario: en los campos más cortos deben verse
     // ALGO MAYORES. El factor aparente se calibró MIDIENDO píxeles en
     // `e2e/fase-materiales-escala.spec.ts`; la política final es: campo completo 100 %, medio 120 %,
-    // tercio 128 %, fútbol sala 118 %, F7 118 % y lienzo 100 % (documentado).
+    // tercio 128 %, fútbol sala 118 % y lienzo 100 %; F7 comparte factor físico con half.
     expect(fieldObjectScale('full', 'horizontal')).toBe(1);
     expect(fieldObjectScale('full', 'vertical')).toBe(1);
     // La compensación geométrica sigue ahí (0,5 en medio campo) MULTIPLICADA por el factor aparente.
     expect(fieldObjectScale('half', 'horizontal')).toBeCloseTo(0.5 * 1.62, 5);
     expect(fieldObjectScale('vertical_half', 'vertical')).toBeCloseTo(0.5 * 1.62, 5);
-    expect(fieldObjectScale('f7', 'horizontal')).toBeCloseTo(0.5 * 1.99, 5);
+    // Contrato actualizado: F7 transversal ocupa el mismo medio campo F11.
+    expect(fieldObjectScale('f7', 'horizontal')).toBeCloseTo(
+      fieldObjectScale('half', 'horizontal'),
+      5,
+    );
+    expect(fieldObjectScale('f7', 'vertical')).toBe(fieldObjectScale('half', 'vertical'));
     expect(fieldObjectScale('third', 'horizontal')).toBeCloseTo((35 / 105) * 1.99, 5);
     // LIENZO = campo completo (encargo del dueño, 23/09/2026). Aquí hubo 1,25, que inflaba un 25 %
     // todo lo que se colocara en un lienzo: lo avisó un colaborador («los jugadores muy gordos») y el

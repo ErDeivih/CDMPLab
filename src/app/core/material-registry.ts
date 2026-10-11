@@ -335,7 +335,14 @@ export function dumbbellSvg(): string {
 }
 
 /** SVG vectorial ORIGINAL de la Valla de entrenamiento, transparente. */
-export function hurdleSvg(color = '#e8edf2'): string {
+export function hurdleSvg(
+  color = '#e8edf2',
+  style: 'low' | 'high' | 'classic' = 'classic',
+): string {
   const c = color || '#e8edf2';
+  if (style !== 'classic') {
+    const top = style === 'low' ? 16 : 4;
+    return `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><g stroke="#20242a" stroke-width="0.8" fill="${c}"><rect x="3" y="${top}" width="26" height="3" rx="1"/><rect x="5" y="${top + 3}" width="3" height="${26 - top}" rx="1"/><rect x="24" y="${top + 3}" width="3" height="${26 - top}" rx="1"/><rect x="2" y="27" width="9" height="3" rx="1"/><rect x="21" y="27" width="9" height="3" rx="1"/></g></svg>`;
+  }
   return `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><g stroke="${c}" stroke-width="2" fill="none"><rect x="6" y="14" width="20" height="4" rx="2"/><line x1="8" y1="18" x2="8" y2="7"/><line x1="24" y1="18" x2="24" y2="7"/></g><rect x="4" y="6" width="24" height="2" fill="${c}"/></svg>`;
 }

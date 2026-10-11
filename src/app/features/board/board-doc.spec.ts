@@ -61,13 +61,29 @@ describe('board-doc (operaciones puras del documento)', () => {
     expect(movedLine.x2).toBeCloseTo(0.95);
     expect((movedLine as { t: string }).t).toBe('line');
 
-    const curve = { id: 'c', t: 'curve' as const, x1: 0.1, y1: 0.1, c1x: 0.5, c1y: 0.9, x2: 0.9, y2: 0.1 };
+    const curve = {
+      id: 'c',
+      t: 'curve' as const,
+      x1: 0.1,
+      y1: 0.1,
+      c1x: 0.5,
+      c1y: 0.9,
+      x2: 0.9,
+      y2: 0.1,
+    };
     const movedCurve = translateElement(curve, 0.1, 0);
     expect(movedCurve.x1).toBeCloseTo(0.2);
     expect(movedCurve.c1x).toBeCloseTo(0.6);
     expect(movedCurve.x2).toBeCloseTo(1);
 
-    const fh = { id: 'f', t: 'freehand' as const, points: [[0.2, 0.2], [0.4, 0.4]] as [number, number][] };
+    const fh = {
+      id: 'f',
+      t: 'freehand' as const,
+      points: [
+        [0.2, 0.2],
+        [0.4, 0.4],
+      ] as [number, number][],
+    };
     const movedFh = translateElement(fh, 0.1, 0.1);
     expect(movedFh.points![0][0]).toBeCloseTo(0.3, 5);
     expect(movedFh.points![1][0]).toBeCloseTo(0.5, 5);
@@ -82,7 +98,14 @@ describe('board-doc (operaciones puras del documento)', () => {
       ['vball', 0.6, 0.7],
     ];
     for (const [t, x, y] of specs) {
-      const el = { id: `${t}-x`, t, x, y, asset: '/assets/tactical/x.png', assetKind: String(t) } as CanvasElement;
+      const el = {
+        id: `${t}-x`,
+        t,
+        x,
+        y,
+        asset: '/assets/tactical/x.png',
+        assetKind: String(t),
+      } as CanvasElement;
       const moved = translateElement(el, 0.05, -0.02);
       expect(moved.x).toBeCloseTo(x + 0.05, 5);
       expect(moved.y).toBeCloseTo(y - 0.02, 5);
@@ -100,7 +123,9 @@ describe('board-doc (operaciones puras del documento)', () => {
       const moved = translateElement(el, 0.12, 0.08);
       expect(moved.x, `se mueve ${t} en x`).toBeCloseTo(x + 0.12, 5);
       expect(moved.y, `se mueve ${t} en y`).toBeCloseTo(y + 0.08, 5);
-      expect(moved.x === x && moved.y === y, `${t} no debe quedar en la misma posición`).toBe(false);
+      expect(moved.x === x && moved.y === y, `${t} no debe quedar en la misma posición`).toBe(
+        false,
+      );
     }
   });
 
@@ -108,7 +133,15 @@ describe('board-doc (operaciones puras del documento)', () => {
     const curve = { id: 'c', t: 'curve' as const, x1: 0, y1: 0, c1x: 0.5, c1y: 0.5, x2: 1, y2: 0 };
     const c = elementCenter(curve);
     expect(c.x).toBeCloseTo(0.5, 5);
-    const fh = { id: 'f', t: 'freehand' as const, points: [[0.2, 0.2], [0.4, 0.4], [0.6, 0.2]] as [number, number][] };
+    const fh = {
+      id: 'f',
+      t: 'freehand' as const,
+      points: [
+        [0.2, 0.2],
+        [0.4, 0.4],
+        [0.6, 0.2],
+      ] as [number, number][],
+    };
     const fc = elementCenter(fh);
     expect(fc.x).toBeCloseTo(0.4, 5);
   });
@@ -124,6 +157,56 @@ describe('board-doc (operaciones puras del documento)', () => {
     const frames = [frame(1000, p('a', 0.2, 0.2), p('b', 0.5, 0.5))];
     const out = layerShiftFrames(frames, 'a', 1);
     expect(out[0].elements.map((e) => e.id)).toEqual(['b', 'a']);
+  });
+
+  it('un paso envía al fondo de todos los objetos sin alterar el resto', () => {
+    const frames = [frame(1000, ...['a', 'b', 'c', 'd', 'e'].map((id) => p(id, 0.2, 0.2)))];
+    const out = layerShiftFrames(frames, 'd', -1);
+    expect(out[0].elements.map((e) => e.id)).toEqual(['d', 'a', 'b', 'c', 'e']);
+    expect(out[0].elements[0]).toBe(frames[0].elements[3]);
+    expect(frames[0].elements.map((e) => e.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  it('un paso trae al frente en cada fotograma, aunque tenga distinto orden', () => {
+    const frames = [
+      frame(1000, ...['a', 'b', 'c', 'd', 'e'].map((id) => p(id, 0.2, 0.2))),
+      frame(2000, ...['d', 'a', 'e', 'b', 'c'].map((id) => p(id, 0.3, 0.4))),
+      frame(1000, p('otro', 0.1, 0.2)),
+    ];
+    const out = layerShiftFrames(frames, 'b', 1);
+    expect(out[0].elements.map((e) => e.id)).toEqual(['a', 'c', 'd', 'e', 'b']);
+    expect(out[1].elements.map((e) => e.id)).toEqual(['d', 'a', 'e', 'c', 'b']);
+    expect(out[1].duration).toBe(2000);
+    expect(out[2]).toBe(frames[2]);
+  });
+
+  it('en un extremo o con id ausente es un no-op', () => {
+    const frames = [frame(1000, p('a', 0.2, 0.2), p('b', 0.5, 0.5))];
+    expect(layerShiftFrames(frames, 'a', -1)).toBe(frames);
+    expect(layerShiftFrames(frames, 'b', 1)).toBe(frames);
+    expect(layerShiftFrames(frames, 'ausente', 1)).toBe(frames);
+    expect(layerShiftFrames([], 'a', -1)).toEqual([]);
+  });
+
+  it('el modo paso mueve exactamente una capa, sin saltar al extremo', () => {
+    const frames = [frame(1000, ...['a', 'b', 'c', 'd', 'e'].map((id) => p(id, 0.2, 0.2)))];
+    expect(layerShiftFrames(frames, 'c', 1, true)[0].elements.map((e) => e.id)).toEqual([
+      'a',
+      'b',
+      'd',
+      'c',
+      'e',
+    ]);
+    expect(layerShiftFrames(frames, 'c', -1, true)[0].elements.map((e) => e.id)).toEqual([
+      'a',
+      'c',
+      'b',
+      'd',
+      'e',
+    ]);
+    expect(layerShiftFrames(frames, 'a', -1, true)).toBe(frames);
+    expect(layerShiftFrames(frames, 'e', 1, true)).toBe(frames);
+    expect(layerShiftFrames(frames, 'ausente', 1, true)).toBe(frames);
   });
 
   it('añade un fotograma (copia) y permite moverlo/borrarlo', () => {

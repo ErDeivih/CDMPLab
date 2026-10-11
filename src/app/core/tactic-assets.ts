@@ -29,6 +29,8 @@ export type TacticalKind =
   | 'ladder'
   | 'ladder_yellow'
   | 'hurdle'
+  | 'hurdle_low'
+  | 'hurdle_high'
   | 'minigoal'
   | 'ring'
   | 'ring_flat'
@@ -81,6 +83,8 @@ export const TACTIC_ASSETS: TacticAsset[] = [
     color: '#f6c945',
   },
   { kind: 'hurdle', asset: `${P}hurdle.png`, label: 'Valla', color: '#e8edf2' },
+  { kind: 'hurdle_low', asset: '', label: 'Valla baja', color: '#f6c945' },
+  { kind: 'hurdle_high', asset: '', label: 'Valla alta', color: '#e67e22' },
   // FASE 4: miniportería VECTORIAL (ver nota de la escalera).
   { kind: 'minigoal', asset: '', label: 'Miniportería', color: '#e8edf2' },
   { kind: 'ring', asset: `${P}ring.png`, label: 'Aro', color: '#e8c3c9' },
@@ -155,6 +159,8 @@ export const TACTICAL_SIZE: Record<string, number> = {
   ladder: 1.6,
   ladder_yellow: 1.6,
   hurdle: 1.35,
+  hurdle_low: 1.35,
+  hurdle_high: 1.35,
   minigoal: 1.45,
   ring: 1.0,
   ring_flat: 1.15,
@@ -208,6 +214,9 @@ export const TACTICAL_BBOX: Record<string, BBoxFrac> = {
   ladder: { w: 1.2, h: 0.44 },
   ladder_yellow: { w: 1.2, h: 0.44 },
   hurdle: { w: 0.78, h: 1 },
+  // Caja vectorial, incluido el borde de 0,8; el render centra el contenido visible.
+  hurdle_low: { w: 0.9, h: 0.4625 },
+  hurdle_high: { w: 0.9, h: 0.8375 },
   minigoal: { w: 1, h: 0.573 },
   ring: { w: 1, h: 1 },
   ring_flat: { w: 1, h: 0.36 },

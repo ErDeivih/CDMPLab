@@ -33,6 +33,7 @@ import {
   DASH_PATTERN,
 } from './render';
 import { CanvasElement } from './models';
+import { hurdleSvg } from './material-registry';
 import { MATERIAL_SIZE_RATIO, TACTICAL_SIZE } from './tactic-assets';
 import { fieldGeometry, F7_LINE_COLOR, OFFICIAL_PITCH_COLOR, goalBoxUnits } from './field';
 
@@ -122,6 +123,27 @@ function normToScreenPointFit(
 }
 
 describe('render', () => {
+  it('las nuevas vallas mantienen estilo y color en el SVG exportable', () => {
+    for (const style of ['low', 'high'] as const) {
+      const el: CanvasElement = {
+        id: 'valla',
+        t: 'hurdle',
+        x: 0.5,
+        y: 0.5,
+        c: '#e67e22',
+        assetKind: style === 'low' ? 'hurdle_low' : 'hurdle_high',
+        asset: '',
+        size: 1.35,
+      };
+      const svg = renderBoardSvg('half', [el], {});
+      const inner = hurdleSvg(el.c, style)
+        .replace(/^<svg[^>]*>/, '')
+        .replace(/<\/svg>$/, '');
+      expect(svg).toContain(inner);
+      expect(svg).toContain(`data-asset-kind="${el.assetKind}"`);
+    }
+    expect(hurdleSvg('#e67e22', 'low')).not.toBe(hurdleSvg('#e67e22', 'high'));
+  });
   it('renderBoardSvg produces svg markup with the elements', () => {
     const svg = renderBoardSvg('full', [mkPlayer('p1', 0.5, 0.5)], {});
     expect(svg).toContain('<svg');

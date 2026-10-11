@@ -212,7 +212,8 @@ test('genera docs/screenshots/fase-ux-final (17 capturas + hoja de contacto + í
   );
 
   await showCategory(page, 'Jugadores');
-  await page.locator('.roster-color').first().click();
+  // Los colores ahora están visibles en todas las filas, sin abrir un popover.
+  await expect(page.locator('.roster-color-menu').first()).toBeVisible();
   await page.waitForTimeout(120);
   await disparo(
     page,

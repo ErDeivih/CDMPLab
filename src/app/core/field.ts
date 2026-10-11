@@ -320,7 +320,9 @@ export function fieldSurface(field: FieldType): {
  *   medio 0,74 · tercio 0,64 · fútbol sala 0,71 · F7 0,59 · lienzo 0,80
  * Objetivo del dueño y resultado tras aplicar estos factores:
  *   medio 1,20 (115-125 %) · tercio 1,28 (120-135 %) · fútbol sala 1,18 (110-125 %) ·
- *   F7 1,18 (110-125 %) · lienzo 1,00 (documentado: mismo tamaño aparente que campo completo).
+ *   lienzo 1,00 (documentado: mismo tamaño aparente que campo completo).
+ * Revisión 11/10/2026: F7 comparte el factor físico de medio campo (1,62), no el antiguo 1,99.
+ * Su tamaño en píxeles depende del encuadre apaisado, pero por metro es el mismo que en medio campo.
  *
  * Los campos RETIRADOS de la oferta (`box`, `two_halves`) conservan su escala anterior (factor 1)
  * para no cambiar la apariencia de documentos históricos.
@@ -331,7 +333,8 @@ export const ESCALA_APARENTE_POR_CAMPO: Record<string, number> = {
   vertical_half: 1.62, // alias histórico del medio campo
   third: 1.99,
   futsal: 1.66,
-  f7: 1.99,
+  // F7 transversal ocupa el mismo medio campo F11: misma escala física de objetos.
+  f7: 1.62,
   // LIENZO = MISMO TAMAÑO QUE EL CAMPO COMPLETO (encargo del dueño, 23/09/2026, a partir del aviso
   // de un colaborador: «los jugadores muy gordos en el lienzo»). Aquí había 1,25, que inflaba un 25 %
   // todo lo que se colocara en un lienzo —justo lo contrario de lo que decía el comentario de arriba,

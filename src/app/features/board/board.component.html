@@ -644,19 +644,35 @@
               </button>
               <button
                 class="btn btn-ghost btn-sm"
-                title="Traer adelante"
-                aria-label="Traer adelante"
+                title="Traer al frente"
+                aria-label="Traer al frente"
                 (click)="bringForward()"
               >
-                <span class="msi">flip_to_front</span> Traer adelante
+                <span class="msi">flip_to_front</span> Traer al frente
               </button>
               <button
                 class="btn btn-ghost btn-sm"
-                title="Enviar atrás"
-                aria-label="Enviar atrás"
+                title="Enviar al fondo"
+                aria-label="Enviar al fondo"
                 (click)="sendBack()"
               >
-                <span class="msi">flip_to_back</span> Enviar atrás
+                <span class="msi">flip_to_back</span> Enviar al fondo
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                title="Adelantar una capa"
+                aria-label="Adelantar una capa"
+                (click)="advanceLayer()"
+              >
+                <span class="msi">arrow_upward</span> Adelantar una capa
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                title="Atrasar una capa"
+                aria-label="Atrasar una capa"
+                (click)="retreatLayer()"
+              >
+                <span class="msi">arrow_downward</span> Atrasar una capa
               </button>
             </div>
           </div>
@@ -878,7 +894,9 @@
             <span class="msi">close</span>
           </button>
         </div>
-        <p class="panel-hint">Toca un jugador de la plantilla o crea uno genérico.</p>
+        <p class="panel-hint">
+          Elige un color para colocar al jugador. Después puedes moverlo en el campo.
+        </p>
         <div class="roster-list">
           @for (p of players(); track p.id) {
             <div class="roster-row">
@@ -905,51 +923,52 @@
                   [style.color]="textColor(colorDeJugadorDe(p))"
                   >{{ p.number ?? '·' }}</span
                 >
-                <span class="mini-name">{{
-                  placedPlayerIds().has(p.id) ? 'Ya está en el campo' : p.name
-                }}</span>
+                <span class="mini-name">{{ p.name }}</span>
                 <span class="mini-pos">{{ positionLabel(p.position) }}</span>
               </button>
               <!-- Fase 12 / FASE 2: color del jugador DENTRO DE ESTE EJERCICIO (la plantilla no
                    se toca). El color mostrado es el del ejercicio (`colorDeJugadorDe`). -->
-              <button
+              <span
                 class="roster-color"
                 [style.background]="colorDeJugadorDe(p)"
                 [attr.data-color-ejercicio]="colorDeJugadorDe(p)"
-                [attr.aria-label]="'Cambiar color de ' + p.name + ' en este ejercicio'"
-                title="Cambiar color en este ejercicio"
-                (click)="toggleRosterColor(p.id, $event)"
+                [attr.aria-label]="'Color actual de ' + p.name + ' en este ejercicio'"
+                title="Color actual en este ejercicio"
               >
-                <span class="msi">palette</span>
-              </button>
-              @if (rosterColorOpen() === p.id) {
-                <div
-                  class="roster-color-menu"
-                  (click)="$event.stopPropagation()"
-                  role="menu"
-                  [attr.aria-label]="'Paleta de color de ' + p.name + ' en este ejercicio'"
-                >
-                  @for (c of paletaJugador; track c.color) {
-                    <button
-                      class="swatch"
-                      role="menuitemradio"
-                      [style.background]="c.color"
-                      [class.swatch-active]="colorDeJugadorDe(p) === c.color"
-                      [attr.aria-checked]="colorDeJugadorDe(p) === c.color"
-                      [attr.data-color]="c.color"
-                      [attr.aria-label]="
-                        'Color ' + c.nombre + (colorDeJugadorDe(p) === c.color ? ' (elegido)' : '')
-                      "
-                      [title]="'Color ' + c.nombre"
-                      (click)="setRosterColor(p.id, c.color, $event)"
-                    >
-                      @if (colorDeJugadorDe(p) === c.color) {
-                        <span class="msi" aria-hidden="true">check</span>
-                      }
-                    </button>
-                  }
-                </div>
-              }
+                @if (placedPlayerIds().has(p.id)) {
+                  <span class="msi">check</span>
+                }
+              </span>
+              <div
+                class="roster-color-menu"
+                (click)="$event.stopPropagation()"
+                role="radiogroup"
+                [attr.aria-label]="'Paleta de color de ' + p.name + ' en este ejercicio'"
+              >
+                @for (c of paletaJugador; track c.color) {
+                  <button
+                    class="swatch"
+                    role="radio"
+                    [style.background]="c.color"
+                    [class.swatch-active]="playerColors()[p.id] === c.color"
+                    [attr.aria-checked]="playerColors()[p.id] === c.color"
+                    [attr.data-color]="c.color"
+                    [attr.aria-label]="
+                      'Color ' +
+                      c.nombre +
+                      ' para ' +
+                      p.name +
+                      (playerColors()[p.id] === c.color ? ' (elegido)' : '')
+                    "
+                    [title]="'Color ' + c.nombre"
+                    (click)="setRosterColor(p.id, c.color, $event)"
+                  >
+                    @if (playerColors()[p.id] === c.color) {
+                      <span class="msi" aria-hidden="true">check</span>
+                    }
+                  </button>
+                }
+              </div>
             </div>
           }
           @if (players().length === 0) {
@@ -1100,7 +1119,40 @@
                               [style.background]="variantAsset(k)?.color"
                               [class.sel]="materialVariant()[t.id] === k"
                               (click)="setMaterialVariant(t.id, k)"
-                            ></button>
+                              [class.hurdle-variant]="t.id === 'hurdle'"
+                            >
+                              @if (t.id === 'hurdle') {
+                                @if (k === 'hurdle') {
+                                  <img src="assets/tactical/hurdle.png" alt="" />
+                                } @else {
+                                  <span [innerHTML]="hurdleVariantThumb(k)"></span>
+                                }
+                              }
+                            </button>
+                          }
+                        </div>
+                      }
+                      @if (t.id === 'target') {
+                        <div
+                          class="tools-material-variants chino-colors"
+                          role="group"
+                          aria-label="Colores de Chino"
+                        >
+                          @for (c of chinoColors; track c) {
+                            <button
+                              class="variant-swatch"
+                              [style.background]="c"
+                              [class.sel]="colorFor('target') === c"
+                              [attr.data-color]="c"
+                              [attr.aria-pressed]="colorFor('target') === c"
+                              [attr.aria-label]="'Chino ' + chinoColorName(c)"
+                              [title]="'Chino ' + chinoColorName(c)"
+                              (click)="pickMaterialColor('target', c)"
+                            >
+                              @if (colorFor('target') === c) {
+                                <span class="msi" aria-hidden="true">check</span>
+                              }
+                            </button>
                           }
                         </div>
                       }

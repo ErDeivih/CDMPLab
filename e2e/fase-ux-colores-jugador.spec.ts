@@ -83,13 +83,12 @@ async function abrirJugadores(page: Page): Promise<void> {
   await expect(page.locator('.side-panel-left')).toBeVisible();
 }
 
-/** Elige un color en la paleta del jugador (abre la mini-paleta y pulsa el swatch). */
+/** Elige un color en la paleta siempre visible; coloca si todavía no está en el campo. */
 async function elegirColor(page: Page, color: string): Promise<void> {
-  await page.locator('.roster-color').first().click();
-  const swatch = page.locator(`.roster-color-menu .swatch[data-color="${color}"]`);
+  const swatch = page.locator(`.roster-color-menu .swatch[data-color="${color}"]`).first();
   await expect(swatch, 'el swatch del color pedido está en la paleta').toHaveCount(1);
   await swatch.click();
-  // El cierre de la paleta no garantiza que Angular haya repintado la ficha y el SVG.
+  // Esperar al repintado observable, no a un temporizador.
   await expect(page.locator('.roster-color').first()).toHaveAttribute(
     'data-color-ejercicio',
     color,
@@ -160,7 +159,8 @@ test.describe('FASE 2 — el color del jugador pertenece al ejercicio', () => {
     await openBoard(page);
     await abrirJugadores(page);
     await elegirColor(page, ROJO);
-    await colocarMarcos(page);
+    // El color explícito ya coloca a Marcos: no se vuelve a pulsar su fila deshabilitada.
+    await expect(page.locator('.field-count')).toHaveText('1');
     expect(await colorFichaEnPantalla(page), 'la ficha colocada sale ROJA').toBe(ROJO);
     await guardar(page, 'Ejercicio A');
 
@@ -273,25 +273,65 @@ test.describe('FASE 2 — el color del jugador pertenece al ejercicio', () => {
     expect(plantilla.map((p) => p.color)).toEqual(['#1a73e8', '#c0392b', '#8e44ad']);
   });
 
+  test.describe('colocación táctil por color', () => {
+    test.use({ hasTouch: true });
+    for (const viewport of [
+      { width: 844, height: 390 },
+      { width: 390, height: 844 },
+    ]) {
+      test(`móvil ${viewport.width}: elegir colores coloca tres jugadores sin duplicados y conserva sus posiciones`, async ({
+        page,
+      }) => {
+        await page.setViewportSize(viewport);
+        await seed(page);
+        await openBoard(page);
+        await abrirJugadores(page);
+        await expect(page.locator('.field-count')).toHaveText('0');
+        const colores = ['#e67e22', '#c0392b', '#8e44ad'];
+        for (let i = 0; i < 3; i++) {
+          const menu = page.locator('.roster-color-menu').nth(i);
+          await menu.locator(`[data-color="${colores[i]}"]`).tap();
+          await expect(page.locator('.field-count')).toHaveText(String(i + 1));
+        }
+        const fichas = page.locator('.board-canvas [data-el-type="player"]');
+        expect(
+          await fichas.evaluateAll((els) => els.map((e) => e.getAttribute('data-color'))),
+        ).toEqual(colores);
+        const before = await fichas.evaluateAll((els) => els.map((e) => e.innerHTML));
+        await page.locator('.roster-color-menu').first().locator('[data-color="#e67e22"]').tap();
+        await expect(page.locator('.field-count')).toHaveText('3');
+        expect(await fichas.evaluateAll((els) => els.map((e) => e.innerHTML))).toEqual(before);
+        const panel = (await page.locator('.side-panel-left').boundingBox())!;
+        for (const ficha of await fichas.all()) {
+          const b = (await ficha.boundingBox())!;
+          const x = b.x + b.width / 2,
+            y = b.y + b.height / 2;
+          expect(
+            x < panel.x || x > panel.x + panel.width || y < panel.y || y > panel.y + panel.height,
+            'jugador fuera del panel',
+          ).toBe(true);
+        }
+        await page.screenshot({
+          path: `test-results/plantilla-colores-movil-${viewport.width}.png`,
+        });
+      });
+    }
+  });
+
   test('la paleta marca el color elegido con un tick accesible', async ({ page }) => {
     await page.setViewportSize(ESCRITORIO);
     await seed(page);
     await openBoard(page);
     await abrirJugadores(page);
 
-    await page.locator('.roster-color').first().click();
-    const menu = page.locator('.roster-color-menu');
+    const menu = page.locator('.roster-color-menu').first();
     await expect(menu).toBeVisible();
     // Los cinco colores del encargo, con su estado accesible.
     await expect(menu.locator('.swatch')).toHaveCount(5);
-    await expect(menu.locator('.swatch[data-color="#1a73e8"]')).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
-    await expect(menu.locator('.swatch[aria-checked="true"] .msi')).toHaveText('check');
+    // Sin asignación explícita no hay tick, aunque la ficha tenga azul por defecto.
+    await expect(menu.locator('.swatch[aria-checked="true"]')).toHaveCount(0);
 
     await menu.locator('.swatch[data-color="#e67e22"]').click();
-    await page.locator('.roster-color').first().click();
     await expect(menu.locator('.swatch[data-color="#e67e22"]')).toHaveAttribute(
       'aria-checked',
       'true',

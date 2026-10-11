@@ -1,5 +1,5 @@
 import { CanvasElement, FieldType, F7Overlay } from './models';
-import { CANONICAL_MATERIALS } from './material-registry';
+import { CANONICAL_MATERIALS, hurdleSvg } from './material-registry';
 import {
   FIELD_RECT,
   fieldSvg,
@@ -1070,6 +1070,17 @@ function elStr(
     case 'hurdle': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
+      if (el.assetKind === 'hurdle_low' || el.assetKind === 'hurdle_high') {
+        const svg = hurdleSvg(el.c, el.assetKind === 'hurdle_low' ? 'low' : 'high');
+        const inner = svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
+        const scale = (materialSize(el) * objectScale * MATERIAL_BOX) / 32;
+        return rotWrap(
+          `<g transform="translate(${x} ${y}) scale(${scale}) translate(-16 ${el.assetKind === 'hurdle_low' ? -23 : -17})">${inner}</g>`,
+          el.rot,
+          x,
+          y,
+        );
+      }
       const g =
         `<g transform="translate(${x} ${y}) scale(${materialSize(el) * objectScale})" fill="${el.c ?? '#ffffff'}" stroke="#20242a" stroke-width="0.2">` +
         `<rect x="-2.4" y="-1.9" width="4.8" height="0.55"/>` +
