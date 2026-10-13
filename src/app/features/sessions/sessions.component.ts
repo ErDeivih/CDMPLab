@@ -1,4 +1,5 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, computed, effect, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { StoreService, uid } from '../../core/store.service';
 import {
@@ -7,8 +8,15 @@ import {
   SessionAttendance,
   SessionSection,
   SessionTask,
+  SessionSheet,
+  EXERCISE_CATEGORIES,
 } from '../../core/models';
 import { ConfirmService } from '../../core/confirm.service';
+import { BoardSessionService } from '../../core/board-session.service';
+import { SessionDesignService } from '../../core/session-design.service';
+import { EMPTY_SESSION_SHEET, taskMinutes, validSessionDate } from '../../core/session-plan';
+import { PALETA_JUGADOR } from '../../core/player-colors';
+import { fillSessionSheetWindow } from '../../core/session-sheet';
 
 interface SessionDraft {
   id: string | null;
@@ -21,6 +29,8 @@ interface SessionDraft {
   material: string;
   attendance: SessionAttendance[];
   tasks: SessionTask[];
+  sheet: SessionSheet;
+  revision?: number;
 }
 
 const SECTIONS: ReadonlyArray<{ id: SessionSection; label: string }> = [
@@ -62,6 +72,72 @@ function todayIso(): string {
 export class SessionsComponent {
   private readonly store = inject(StoreService);
   private readonly confirmSvc = inject(ConfirmService);
+  private readonly boardSession = inject(BoardSessionService);
+  private readonly designBridge = inject(SessionDesignService);
+  private readonly router = inject(Router);
+  protected readonly colors = PALETA_JUGADOR;
+  protected readonly categories = EXERCISE_CATEGORIES;
+  protected readonly pdfError = signal('');
+  protected readonly exporting = signal(false);
+  protected readonly newExerciseOpen = signal(false);
+  protected readonly newExerciseTitle = signal('');
+  protected readonly newExerciseCategory = signal<Exercise['category']>('Técnica');
+  protected readonly newExerciseFolder = signal<string | null>(null);
+  protected readonly newExerciseDescription = signal('');
+  protected readonly newExerciseDevelopment = signal('');
+  private restoredContext = '';
+  private baseline = '';
+  private designInProgress = false;
+
+  private hasChanges(): boolean {
+    return (
+      this.editorOpen() &&
+      (JSON.stringify(this.form()) !== this.baseline ||
+        (this.newExerciseOpen() && !!this.newExerciseTitle().trim()))
+    );
+  }
+
+  canLeaveSession(): boolean {
+    if (this.saving()) return false;
+    return (
+      this.designInProgress ||
+      !this.hasChanges() ||
+      window.confirm('Hay cambios sin guardar en esta sesión. ¿Descartarlos y salir?')
+    );
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.hasChanges() && !this.designInProgress) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+
+  constructor() {
+    effect(() => {
+      if (!this.team()) return;
+      const context = this.store.sessionDesignContext();
+      if (context === this.restoredContext) return;
+      this.restoredContext = context;
+      try {
+        const handoff = this.designBridge.take(context);
+        if (!handoff || handoff.session.teamId !== this.team()?.id) return;
+        const ex = this.store.exercises().find((e) => e.id === handoff.exerciseId);
+        const restored = structuredClone(handoff.session);
+        if (ex)
+          restored.tasks = restored.tasks.map((t) =>
+            t.id === handoff.taskId ? { ...t, snapshot: structuredClone(ex) } : t,
+          );
+        this.edit(restored);
+        if (!this.store.sessions().some((s) => s.id === restored.id))
+          this.form.update((f) => ({ ...f, id: null }));
+        this.baseline = handoff.baseline;
+      } catch (error) {
+        this.pdfError.set(`No se pudo recuperar el borrador: ${(error as Error).message}`);
+      }
+    });
+  }
 
   protected readonly team = this.store.activeTeam;
   protected readonly sections = SECTIONS;
@@ -124,6 +200,7 @@ export class SessionsComponent {
     const rows: Array<{ id: string; label: string }> = [];
     const walk = (parentId: string | null, depth: number): void => {
       for (const f of folders.filter((item) => item.parentId === parentId)) {
+        if (rows.some((row) => row.id === f.id)) continue;
         rows.push({ id: f.id, label: `${'— '.repeat(depth)}${f.name}` });
         walk(f.id, depth + 1);
       }
@@ -169,6 +246,7 @@ export class SessionsComponent {
       material: '',
       attendance: [],
       tasks: [],
+      sheet: { ...EMPTY_SESSION_SHEET },
     };
   }
 
@@ -223,6 +301,7 @@ export class SessionsComponent {
       attendance: this.roster().map((p) => ({
         playerId: p.id,
         playerName: p.name,
+        position: p.position,
         status: 'Pendiente',
         group: '',
         attitude: '',
@@ -231,6 +310,7 @@ export class SessionsComponent {
       })),
     });
     this.editorOpen.set(true);
+    this.baseline = JSON.stringify(this.form());
   }
 
   protected edit(s: Session): void {
@@ -244,13 +324,20 @@ export class SessionsComponent {
       number: s.number ?? null,
       objectives: s.objectives ?? '',
       material: s.material ?? '',
+      sheet: { ...EMPTY_SESSION_SHEET, ...s.sheet },
+      revision: s.revision,
       attendance: [
-        ...(s.attendance ?? []),
+        ...(s.attendance ?? []).map((a) => ({
+          ...a,
+          position:
+            a.position || this.roster().find((p) => p.id === a.playerId)?.position || ('' as const),
+        })),
         ...this.roster()
           .filter((p) => !(s.attendance ?? []).some((a) => a.playerId === p.id))
           .map((p) => ({
             playerId: p.id,
             playerName: p.name,
+            position: p.position,
             status: 'Pendiente',
             group: '',
             attitude: '',
@@ -258,7 +345,7 @@ export class SessionsComponent {
             notes: '',
           })),
       ],
-      tasks: s.tasks.map((t) => ({
+      tasks: structuredClone(s.tasks).map((t) => ({
         ...t,
         section: t.section ?? 'main',
         seriesCount: t.seriesCount ?? 1,
@@ -266,12 +353,15 @@ export class SessionsComponent {
       })),
     });
     this.editorOpen.set(true);
+    this.baseline = JSON.stringify(this.form());
   }
 
   protected closeEditor(): void {
+    if (!this.canLeaveSession()) return;
     this.formError.set('');
     this.editorOpen.set(false);
     this.pickerOpen.set(false);
+    this.newExerciseOpen.set(false);
   }
 
   // ---------- Tareas ----------
@@ -302,12 +392,18 @@ export class SessionsComponent {
           exerciseId: ex.id,
           title: ex.title,
           durationMinutes: ex.durationMinutes,
-          material: '',
+          material: ex.materials.join(', '),
           section: this.pickerSection(),
           seriesCount: 1,
           minutesPerSeries: ex.durationMinutes,
           sortOrder: f.tasks.length,
           snapshot: structuredClone(ex),
+          repetitions: 1,
+          restMinutes: 0,
+          development: ex.explanation,
+          aspects: ex.description,
+          progression: '',
+          playerColors: { ...ex.canvas?.playerColors },
         },
       ],
     }));
@@ -347,11 +443,13 @@ export class SessionsComponent {
       tasks: f.tasks.map((t) => {
         if (t.id !== id) return t;
         const next = { ...t, ...patch };
-        if ('seriesCount' in patch || 'minutesPerSeries' in patch) {
-          next.durationMinutes =
-            next.seriesCount != null && next.minutesPerSeries != null
-              ? next.seriesCount * next.minutesPerSeries
-              : null;
+        if (
+          'seriesCount' in patch ||
+          'minutesPerSeries' in patch ||
+          'repetitions' in patch ||
+          'restMinutes' in patch
+        ) {
+          next.durationMinutes = taskMinutes(next);
         }
         return next;
       }),
@@ -374,14 +472,27 @@ export class SessionsComponent {
     if (f.number !== null && (!Number.isInteger(f.number) || f.number < 1 || f.number > 9999)) {
       return 'El número de sesión debe estar entre 1 y 9999.';
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) return 'La fecha no es válida.';
+    if (!validSessionDate(f.date)) return 'La fecha no es válida.';
+    if (f.sheet.time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(f.sheet.time))
+      return 'La hora no es válida.';
     const dur = f.durationMinutes;
-    if (dur !== null && (!Number.isFinite(dur) || dur < 0 || dur > 600)) {
+    if (dur !== null && (!Number.isInteger(dur) || dur < 0 || dur > 600)) {
       return 'La duración de la sesión tiene que estar entre 0 y 600 minutos.';
     }
     for (const t of f.tasks) {
+      if (!t.title.trim()) return 'Cada ejercicio necesita un título.';
+      if (
+        t.repetitions != null &&
+        (!Number.isInteger(t.repetitions) || t.repetitions < 1 || t.repetitions > 50)
+      )
+        return 'Las repeticiones deben estar entre 1 y 50.';
+      if (
+        t.restMinutes != null &&
+        (!Number.isInteger(t.restMinutes) || t.restMinutes < 0 || t.restMinutes > 600)
+      )
+        return 'El descanso debe ser un número entero entre 0 y 600 minutos.';
       const d = t.durationMinutes;
-      if (d !== null && (!Number.isFinite(d) || d < 0 || d > 600)) {
+      if (d !== null && (!Number.isInteger(d) || d < 0 || d > 600)) {
         return 'La duración de una tarea no puede ser negativa ni superar 600 minutos.';
       }
       if (
@@ -407,7 +518,8 @@ export class SessionsComponent {
     return null;
   }
 
-  protected save(): void {
+  protected async save(): Promise<void> {
+    if (this.saving()) return;
     const teamId = this.team()?.id;
     if (!teamId) return;
     const f = this.form();
@@ -421,7 +533,7 @@ export class SessionsComponent {
     // Se guardaba 750 y, al reabrir la sesión, no se podía volver a guardar por un número que el
     // usuario nunca escribió.
     const duracionEfectiva = f.durationMinutes ?? this.totalMinutes();
-    if (!Number.isFinite(duracionEfectiva) || duracionEfectiva < 0 || duracionEfectiva > 600) {
+    if (!Number.isInteger(duracionEfectiva) || duracionEfectiva < 0 || duracionEfectiva > 600) {
       this.formError.set(
         'La duración de la sesión (la suma de sus tareas) no puede superar 600 minutos. Ajusta las tareas o escribe una duración menor.',
       );
@@ -440,14 +552,173 @@ export class SessionsComponent {
       number: f.number,
       objectives: f.objectives.trim(),
       material: f.material.trim(),
+      sheet: { ...f.sheet },
+      revision: f.revision,
       attendance: f.attendance.map((a) => ({ ...a })),
       tasks: f.tasks.map((t, i) => ({ ...t, sortOrder: i })),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       savedAt: new Date().toISOString(),
     };
-    this.store.saveSession(session);
-    this.saving.set(false);
-    this.editorOpen.set(false);
+    try {
+      if (await this.store.saveSession(session)) {
+        this.editorOpen.set(false);
+        this.pickerOpen.set(false);
+      } else {
+        this.formError.set(
+          'No se confirmó el guardado. Tu borrador sigue abierto; revisa el aviso y reintenta.',
+        );
+      }
+    } catch (error) {
+      this.formError.set(`No se pudo guardar: ${(error as Error).message}`);
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected jumpTo(id: string): void {
+    document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  protected setBib(task: SessionTask, playerId: string, color: string): void {
+    const playerColors = { ...task.playerColors };
+    if (playerColors[playerId] === color) delete playerColors[playerId];
+    else playerColors[playerId] = color;
+    this.updateTask(task.id, { playerColors });
+  }
+
+  protected startNewExercise(section: SessionSection): void {
+    this.pickerSection.set(section);
+    this.newExerciseTitle.set('');
+    this.newExerciseCategory.set(
+      section === 'warmup' ? 'Calentamiento' : section === 'cooldown' ? 'Recuperación' : 'Técnica',
+    );
+    this.newExerciseFolder.set(null);
+    this.newExerciseDescription.set('');
+    this.newExerciseDevelopment.set('');
+    this.newExerciseOpen.set(true);
+  }
+
+  protected async createExercise(): Promise<void> {
+    if (this.saving()) return;
+    const teamId = this.team()?.id;
+    const title = this.newExerciseTitle().trim();
+    if (!teamId || !title) {
+      this.formError.set('Pon un título al nuevo ejercicio.');
+      return;
+    }
+    const ex: Exercise = {
+      id: uid(),
+      teamId,
+      title,
+      folderId: this.newExerciseFolder(),
+      category: this.newExerciseCategory(),
+      description: this.newExerciseDescription(),
+      explanation: this.newExerciseDevelopment(),
+      objectives: [],
+      materials: [],
+      durationMinutes: null,
+      minPlayers: null,
+      maxPlayers: null,
+      loadMode: 'fixed',
+      seriesCount: null,
+      repetitionsCount: null,
+      workSeconds: null,
+      restSeconds: null,
+      isTemplate: false,
+      canvas: null,
+      thumbnail: null,
+      savedAt: new Date().toISOString(),
+    };
+    this.saving.set(true);
+    this.formError.set('');
+    try {
+      if (!(await this.store.saveExercise(ex))) {
+        this.formError.set('No se pudo crear el ejercicio. Reintenta.');
+        return;
+      }
+      this.addExercise(ex);
+      this.newExerciseOpen.set(false);
+    } catch (error) {
+      this.formError.set(`No se pudo crear: ${(error as Error).message}`);
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected designTask(task: SessionTask): void {
+    const ex = this.store
+      .exercises()
+      .find((e) => e.id === task.exerciseId && e.teamId === this.team()?.id);
+    if (!ex) {
+      this.formError.set(
+        'El ejercicio ya no está en la biblioteca. Su copia permanece en esta sesión.',
+      );
+      return;
+    }
+    const f = this.form();
+    try {
+      this.designBridge.put(this.store.sessionDesignContext(), {
+        session: {
+          ...structuredClone(f),
+          id: f.id ?? uid(),
+          teamId: this.team()!.id,
+          createdAt: new Date().toISOString(),
+          savedAt: new Date().toISOString(),
+        },
+        taskId: task.id,
+        exerciseId: ex.id,
+        baseline: this.baseline,
+      });
+      this.boardSession.open(ex.id, ex.canvas, null, '/sessions');
+      this.designInProgress = true;
+      void this.router
+        .navigate(['/board'])
+        .then((ok) => {
+          if (!ok) this.designInProgress = false;
+        })
+        .catch((error: Error) => {
+          this.designInProgress = false;
+          this.formError.set(error.message);
+        });
+    } catch (error) {
+      this.formError.set(
+        `No se pudo conservar el borrador para dibujar: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  protected async viewPdf(session: Session): Promise<void> {
+    if (this.exporting()) return;
+    this.pdfError.set('');
+    const view = window.open('', '_blank');
+    if (!view) {
+      this.pdfError.set('Permite ventanas emergentes para abrir la ficha PDF.');
+      return;
+    }
+    view.opener = null;
+    view.document.body.textContent = 'Preparando ficha e imágenes…';
+    this.exporting.set(true);
+    try {
+      const printable = {
+        ...session,
+        attendance: (session.attendance ?? []).map((a) => ({
+          ...a,
+          position:
+            a.position || this.roster().find((p) => p.id === a.playerId)?.position || ('' as const),
+        })),
+      };
+      await fillSessionSheetWindow(
+        view,
+        printable,
+        this.team()?.name ?? '',
+        this.store.getExercisesForTeam(session.teamId),
+      );
+    } catch (error) {
+      if (!view.closed) view.close();
+      this.pdfError.set(`No se pudo preparar el PDF: ${(error as Error).message}`);
+    } finally {
+      this.exporting.set(false);
+    }
   }
 
   protected remove(s: Session): void {

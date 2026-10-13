@@ -129,6 +129,9 @@ export const routes: Routes = [
       },
       {
         path: 'sessions',
+        canDeactivate: [
+          (component: { canLeaveSession: () => boolean }) => component.canLeaveSession(),
+        ],
         loadComponent: () =>
           import('./features/sessions/sessions.component').then((m) => m.SessionsComponent),
         canActivate: [ApprovedGuard],

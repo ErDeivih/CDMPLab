@@ -89,7 +89,8 @@ test('sesión de 120 min: bloques, carpetas, series y asistencia sobreviven a un
   await page
     .locator('.section-heading')
     .filter({ hasText: 'Calentamiento' })
-    .getByRole('button')
+    // El bloque tiene ahora acciones distintas para añadir uno existente o crear uno nuevo.
+    .getByRole('button', { name: 'Añadir ejercicio' })
     .click();
   await page.locator('.folder-choice select').selectOption('f1');
   await expect(page.locator('.picker-item')).toHaveCount(1);
@@ -98,8 +99,9 @@ test('sesión de 120 min: bloques, carpetas, series y asistencia sobreviven a un
   const task = page.locator('.task').filter({ hasText: 'Rueda 4-3-3' });
   await task.getByLabel('Series').fill('2');
   await task.getByLabel('Series').dispatchEvent('change');
-  await task.getByLabel('Min/serie').fill('8');
-  await task.getByLabel('Min/serie').dispatchEvent('change');
+  // Con repeticiones explícitas, el tiempo de trabajo se etiqueta por repetición.
+  await task.getByLabel('Min/rep').fill('8');
+  await task.getByLabel('Min/rep').dispatchEvent('change');
   await expect(task.locator('.task-sum')).toHaveText('16 min');
   const keeper = page.locator('.attendance-row').filter({ hasText: 'Portero' });
   await keeper.getByLabel('Estado').selectOption('Asiste');

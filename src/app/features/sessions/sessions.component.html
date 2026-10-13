@@ -2,20 +2,32 @@
   <div class="page-head">
     <div>
       <h1 class="page-title">Sesiones</h1>
-      <p class="page-sub">Planifica bloques, tiempos y asistencia con ejercicios de tu biblioteca.</p>
+      <p class="page-sub">
+        Planifica bloques, tiempos y asistencia con ejercicios de tu biblioteca.
+      </p>
     </div>
     @if (team()) {
-      <button class="btn btn-primary" (click)="createNew()">
+      <button class="btn btn-primary" aria-label="Nueva sesión" (click)="createNew()">
         <span class="msi">add</span> Nueva sesión
       </button>
     }
   </div>
 
+  @if (pdfError()) {
+    <p class="form-error" role="alert">{{ pdfError() }}</p>
+  }
+
   @if (sessions().length === 0) {
     <div class="empty">
-      <div class="empty-title">{{ team() ? 'Aún no hay sesiones' : 'Empieza creando un equipo' }}</div>
+      <div class="empty-title">
+        {{ team() ? 'Aún no hay sesiones' : 'Empieza creando un equipo' }}
+      </div>
       <div class="empty-sub">
-        {{ team() ? 'Crea una sesión y añade ejercicios desde la biblioteca.' : 'Crea un equipo en “Plantilla” para poder planificar sesiones.' }}
+        {{
+          team()
+            ? 'Crea una sesión y añade ejercicios desde la biblioteca.'
+            : 'Crea un equipo en “Plantilla” para poder planificar sesiones.'
+        }}
       </div>
     </div>
   }
@@ -26,11 +38,18 @@
         <div class="session-main">
           <div class="session-title">{{ sessionLabel(s) }}</div>
           <div class="session-meta">
-            <span class="meta-item"><span class="msi">calendar_today</span> {{ formatDate(s.date) }}</span>
+            <span class="meta-item"
+              ><span class="msi">calendar_today</span> {{ formatDate(s.date) }}</span
+            >
             <span class="meta-item"><span class="msi">list</span> {{ s.tasks.length }} tareas</span>
-            <span class="meta-item"><span class="msi">schedule</span> {{ sessionTotal(s) }} min</span>
+            <span class="meta-item"
+              ><span class="msi">schedule</span> {{ sessionTotal(s) }} min</span
+            >
             @if (s.attendance?.length) {
-              <span class="meta-item"><span class="msi">groups</span> {{ s.attendance.length }} jugadores registrados</span>
+              <span class="meta-item"
+                ><span class="msi">groups</span> {{ s.attendance.length }} jugadores
+                registrados</span
+              >
             }
           </div>
           @if (s.notes) {
@@ -38,6 +57,14 @@
           }
         </div>
         <div class="session-actions">
+          <button
+            class="btn btn-ghost"
+            title="Ver PDF"
+            [disabled]="exporting()"
+            (click)="viewPdf(s)"
+          >
+            <span class="msi">picture_as_pdf</span> Ver PDF
+          </button>
           <button class="btn btn-ghost" title="Editar" (click)="edit(s)">
             <span class="msi">edit</span> Editar
           </button>
@@ -51,19 +78,39 @@
 
   <!-- Editor de sesión -->
   @if (editorOpen()) {
-    <div class="modal-backdrop" (click)="closeEditor()">
+    <div class="modal-backdrop">
       <div class="modal modal-lg" (click)="$event.stopPropagation()">
         <div class="modal-head">
           <h3>{{ form().id ? 'Editar sesión' : 'Nueva sesión' }}</h3>
-          <button class="btn btn-ghost btn-icon" (click)="closeEditor()" title="Cerrar">
+          <button
+            class="btn btn-ghost btn-icon"
+            [disabled]="saving()"
+            (click)="closeEditor()"
+            title="Cerrar"
+          >
             <span class="msi">close</span>
           </button>
         </div>
-        <div class="modal-body">
+        <nav class="session-nav" aria-label="Apartados de la sesión">
+          <button class="btn btn-ghost" (click)="jumpTo('session-organization')">
+            Organización
+          </button>
+          <button class="btn btn-ghost" (click)="jumpTo('session-content')">Contenido</button>
+          <button class="btn btn-ghost" (click)="jumpTo('session-attendance')">Jugadores</button>
+        </nav>
+        <fieldset class="modal-body" [disabled]="saving()">
+          <h4 id="session-organization">Organización</h4>
           <div class="field-row">
             <div class="field">
               <label for="session-number">Número de sesión</label>
-              <input id="session-number" type="number" min="1" max="9999" [(ngModel)]="form().number" name="number" />
+              <input
+                id="session-number"
+                type="number"
+                min="1"
+                max="9999"
+                [(ngModel)]="form().number"
+                name="number"
+              />
             </div>
             <div class="field">
               <label for="session-date">Fecha</label>
@@ -71,78 +118,383 @@
             </div>
             <div class="field">
               <label for="session-duration">Tiempo previsto (min)</label>
-              <input id="session-duration" type="number" min="0" max="600" [(ngModel)]="form().durationMinutes" name="dur" />
+              <input
+                id="session-duration"
+                type="number"
+                min="0"
+                max="600"
+                [(ngModel)]="form().durationMinutes"
+                name="dur"
+              />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="session-time">Hora</label
+              ><input id="session-time" type="time" [(ngModel)]="form().sheet.time" />
+            </div>
+            <div class="field">
+              <label for="session-macro">Macrociclo</label
+              ><input id="session-macro" [(ngModel)]="form().sheet.macrocycle" />
+            </div>
+            <div class="field">
+              <label for="session-meso">Mesociclo</label
+              ><input id="session-meso" [(ngModel)]="form().sheet.mesocycle" />
+            </div>
+            <div class="field">
+              <label for="session-micro">Microciclo</label
+              ><input id="session-micro" [(ngModel)]="form().sheet.microcycle" />
             </div>
           </div>
           <div class="field">
             <label for="session-title">Título (opcional)</label>
-            <input id="session-title" [(ngModel)]="form().title" name="title" placeholder="Si lo dejas vacío, se mostrará el número de sesión" />
+            <input
+              id="session-title"
+              [(ngModel)]="form().title"
+              name="title"
+              placeholder="Si lo dejas vacío, se mostrará el número de sesión"
+            />
           </div>
           <div class="field-row">
             <div class="field">
               <label for="session-objectives">Objetivos / contenido</label>
-              <textarea id="session-objectives" [(ngModel)]="form().objectives" name="objectives" rows="2"></textarea>
+              <textarea
+                id="session-objectives"
+                [(ngModel)]="form().objectives"
+                name="objectives"
+                rows="2"
+              ></textarea>
             </div>
             <div class="field">
               <label for="session-material">Material</label>
-              <textarea id="session-material" [(ngModel)]="form().material" name="material" rows="2"></textarea>
+              <textarea
+                id="session-material"
+                [(ngModel)]="form().material"
+                name="material"
+                rows="2"
+              ></textarea>
             </div>
           </div>
           <div class="field">
             <label for="session-notes">Notas generales</label>
-            <textarea id="session-notes" [(ngModel)]="form().notes" name="notes" rows="2" placeholder="Indicaciones adicionales…"></textarea>
+            <textarea
+              id="session-notes"
+              [(ngModel)]="form().notes"
+              name="notes"
+              rows="2"
+              placeholder="Indicaciones adicionales…"
+            ></textarea>
           </div>
 
-          <div class="tasks-head">
+          <div class="field">
+            <label for="session-pre">Pre-sesión</label
+            ><textarea
+              id="session-pre"
+              [(ngModel)]="form().sheet.preSession"
+              rows="2"
+              placeholder="Avisos, organización o charla previa"
+            ></textarea>
+          </div>
+          <div class="tasks-head" id="session-content">
             <span class="tasks-label">Contenido de la sesión</span>
-            <span class="tasks-total">{{ form().tasks.length }} {{ form().tasks.length === 1 ? 'ejercicio' : 'ejercicios' }} · {{ totalMinutes() }} min programados</span>
+            <span class="tasks-total"
+              >{{ form().tasks.length }}
+              {{ form().tasks.length === 1 ? 'ejercicio' : 'ejercicios' }} ·
+              {{ totalMinutes() }} min programados</span
+            >
             <button class="btn btn-ghost" (click)="pickerSection.set('main'); openPicker()">
               <span class="msi">add</span> Añadir ejercicio
             </button>
           </div>
+          <p class="panel-hint">
+            El tiempo incluye trabajo y descansos entre repeticiones. Las indicaciones y los petos
+            se guardan para esta sesión, sin cambiar el ejercicio de la biblioteca.
+          </p>
+          @if (form().durationMinutes !== null && totalMinutes() > form().durationMinutes!) {
+            <p class="form-error" role="status">
+              El contenido supera el tiempo previsto en
+              {{ totalMinutes() - form().durationMinutes! }} min.
+            </p>
+          }
+          @if (newExerciseOpen()) {
+            <div class="new-exercise" role="region" aria-label="Crear ejercicio en la sesión">
+              <h4>Nuevo ejercicio para {{ sectionLabel(pickerSection()) }}</h4>
+              <div class="field">
+                <label for="new-session-ex-title">Título del nuevo ejercicio</label
+                ><input
+                  id="new-session-ex-title"
+                  [ngModel]="newExerciseTitle()"
+                  (ngModelChange)="newExerciseTitle.set($event)"
+                />
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="new-session-ex-folder">Guardar en carpeta</label
+                  ><select
+                    id="new-session-ex-folder"
+                    [ngModel]="newExerciseFolder()"
+                    (ngModelChange)="newExerciseFolder.set($event)"
+                  >
+                    <option [ngValue]="null">Sin carpeta</option>
+                    @for (folder of folderOptions(); track folder.id) {
+                      <option [ngValue]="folder.id">{{ folder.label }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="new-session-ex-category">Categoría</label
+                  ><select
+                    id="new-session-ex-category"
+                    [ngModel]="newExerciseCategory()"
+                    (ngModelChange)="newExerciseCategory.set($event)"
+                  >
+                    @for (category of categories; track category) {
+                      <option [value]="category">{{ category }}</option>
+                    }
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label for="new-session-ex-development">Desarrollo</label
+                ><textarea
+                  id="new-session-ex-development"
+                  [ngModel]="newExerciseDevelopment()"
+                  (ngModelChange)="newExerciseDevelopment.set($event)"
+                ></textarea>
+              </div>
+              <div class="field">
+                <label for="new-session-ex-aspects">Aspectos a incidir</label
+                ><textarea
+                  id="new-session-ex-aspects"
+                  [ngModel]="newExerciseDescription()"
+                  (ngModelChange)="newExerciseDescription.set($event)"
+                ></textarea>
+              </div>
+              <button class="btn btn-primary" (click)="createExercise()">
+                Crear y añadir a la sesión
+              </button>
+              <button class="btn btn-ghost" (click)="newExerciseOpen.set(false)">
+                Cancelar creación
+              </button>
+              <p class="panel-hint">
+                También quedará en la biblioteca. Después usa «Dibujar» en su ficha.
+              </p>
+            </div>
+          }
 
           @for (section of sections; track section.id) {
             <div class="section-heading">
               <h4>{{ section.label }}</h4>
-              <button class="btn btn-ghost btn-sm" (click)="pickerSection.set(section.id); openPicker()">
+              <button class="btn btn-ghost btn-sm" (click)="startNewExercise(section.id)">
+                <span class="msi">draw</span> Crear ejercicio
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                (click)="pickerSection.set(section.id); openPicker()"
+              >
                 <span class="msi">add</span> Añadir ejercicio
               </button>
             </div>
             <div class="tasks">
-            @for (t of tasksInSection(section.id); track t.id) {
-              <div class="task">
-                <div class="task-title">{{ t.title }}</div>
-                @if (t.exerciseId === null && t.title) {
-                  <span class="task-badge" title="El ejercicio se borró de la biblioteca: la tarea conserva su título, su duración y su material.">Ejercicio eliminado de biblioteca</span>
-                }
-                @if (isTaskOutdated(t)) {
-                  <span class="task-badge task-badge-info" title="El ejercicio se editó en la biblioteca después de añadirlo: la tarea conserva la versión de entonces.">Actualizado en biblioteca</span>
-                }
-                <label class="task-time">Series
-                  <input type="number" min="1" max="50" [value]="t.seriesCount ?? 1"
-                    (change)="updateTask(t.id, { seriesCount: $any($event.target).valueAsNumber })" />
-                </label>
-                <label class="task-time">Min/serie
-                  <input type="number" min="0" max="600" [value]="t.minutesPerSeries ?? t.durationMinutes ?? ''"
-                    (change)="updateTask(t.id, { minutesPerSeries: $any($event.target).valueAsNumber })" />
-                </label>
-                <strong class="task-sum">{{ t.durationMinutes ?? 0 }} min</strong>
-                <div class="task-actions">
-                  <button class="btn btn-ghost btn-icon" title="Subir" (click)="moveTaskInSection(t.id, -1)" [disabled]="tasksInSection(section.id)[0]?.id === t.id">
-                    <span class="msi">arrow_upward</span>
-                  </button>
-                  <button class="btn btn-ghost btn-icon" title="Bajar" (click)="moveTaskInSection(t.id, 1)" [disabled]="tasksInSection(section.id).at(-1)?.id === t.id">
-                    <span class="msi">arrow_downward</span>
-                  </button>
-                  <button class="btn btn-ghost btn-icon" title="Quitar" (click)="removeTask(form().tasks.indexOf(t))">
-                    <span class="msi">close</span>
-                  </button>
+              @for (t of tasksInSection(section.id); track t.id) {
+                <div class="task">
+                  <div class="task-header">
+                    <div class="task-title">{{ t.title }}</div>
+                    @if (t.exerciseId === null && t.title) {
+                      <span
+                        class="task-badge"
+                        title="El ejercicio se borró de la biblioteca: la tarea conserva su título, su duración y su material."
+                        >Ejercicio eliminado de biblioteca</span
+                      >
+                    }
+                    @if (isTaskOutdated(t)) {
+                      <span
+                        class="task-badge task-badge-info"
+                        title="El ejercicio se editó en la biblioteca después de añadirlo: la tarea conserva la versión de entonces."
+                        >Actualizado en biblioteca</span
+                      >
+                    }
+                    <label class="task-time"
+                      >Series
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        [value]="t.seriesCount ?? 1"
+                        (change)="
+                          updateTask(t.id, { seriesCount: $any($event.target).valueAsNumber })
+                        "
+                      />
+                    </label>
+                    <label class="task-time"
+                      >Min/rep
+                      <input
+                        type="number"
+                        min="0"
+                        max="600"
+                        [value]="t.minutesPerSeries ?? t.durationMinutes ?? ''"
+                        (change)="
+                          updateTask(t.id, { minutesPerSeries: $any($event.target).valueAsNumber })
+                        "
+                      />
+                    </label>
+                    <strong class="task-sum">{{ t.durationMinutes ?? 0 }} min</strong>
+                    <div class="task-actions">
+                      <button
+                        class="btn btn-ghost btn-icon"
+                        title="Subir"
+                        (click)="moveTaskInSection(t.id, -1)"
+                        [disabled]="tasksInSection(section.id)[0]?.id === t.id"
+                      >
+                        <span class="msi">arrow_upward</span>
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-icon"
+                        title="Bajar"
+                        (click)="moveTaskInSection(t.id, 1)"
+                        [disabled]="tasksInSection(section.id).at(-1)?.id === t.id"
+                      >
+                        <span class="msi">arrow_downward</span>
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-icon"
+                        title="Quitar"
+                        (click)="removeTask(form().tasks.indexOf(t))"
+                      >
+                        <span class="msi">close</span>
+                      </button>
+                    </div>
+                  </div>
+                  <details class="task-details">
+                    <summary>Indicaciones, imagen y petos</summary>
+                    <div class="task-edit-grid">
+                      <div class="task-image">
+                        @if (t.snapshot?.thumbnail) {
+                          <img [src]="t.snapshot!.thumbnail" [alt]="'Diagrama de ' + t.title" />
+                        } @else {
+                          <p class="panel-hint">Sin dibujo</p>
+                        }
+                        @if (t.exerciseId) {
+                          <button
+                            class="btn btn-ghost"
+                            aria-label="Dibujar"
+                            (click)="designTask(t)"
+                          >
+                            <span class="msi">draw</span> Dibujar
+                          </button>
+                        }
+                        <p class="panel-hint">
+                          Abre la pizarra y guarda para volver aquí. El dibujo se edita también en
+                          la biblioteca.
+                        </p>
+                      </div>
+                      <div>
+                        <label class="field"
+                          >Título en esta sesión<input
+                            [ngModel]="t.title"
+                            (ngModelChange)="updateTask(t.id, { title: $event })"
+                        /></label>
+                        <label class="field"
+                          >Desarrollo<textarea
+                            rows="3"
+                            [ngModel]="t.development ?? t.snapshot?.explanation ?? ''"
+                            (ngModelChange)="updateTask(t.id, { development: $event })"
+                          ></textarea>
+                        </label>
+                        <label class="field"
+                          >Aspectos a incidir<textarea
+                            rows="2"
+                            [ngModel]="t.aspects ?? t.snapshot?.description ?? ''"
+                            (ngModelChange)="updateTask(t.id, { aspects: $event })"
+                          ></textarea>
+                        </label>
+                        <label class="field"
+                          >Progresión<textarea
+                            rows="2"
+                            [ngModel]="t.progression ?? ''"
+                            (ngModelChange)="updateTask(t.id, { progression: $event })"
+                          ></textarea>
+                        </label>
+                        <div class="field-row">
+                          <label class="field"
+                            >Dimensiones<input
+                              [ngModel]="t.dimensions ?? ''"
+                              (ngModelChange)="updateTask(t.id, { dimensions: $event })"
+                              placeholder="Por ejemplo: 30 × 20 m"
+                          /></label>
+                          <label class="field"
+                            >Material<input
+                              [ngModel]="t.material"
+                              (ngModelChange)="updateTask(t.id, { material: $event })"
+                          /></label>
+                          <label class="task-time"
+                            >Repeticiones<input
+                              type="number"
+                              min="1"
+                              max="50"
+                              [ngModel]="t.repetitions ?? 1"
+                              (ngModelChange)="updateTask(t.id, { repetitions: $event })"
+                          /></label>
+                          <label class="task-time"
+                            >Descanso (min)<input
+                              type="number"
+                              min="0"
+                              max="600"
+                                  step="1"
+                              [ngModel]="t.restMinutes ?? 0"
+                              (ngModelChange)="updateTask(t.id, { restMinutes: $event })"
+                          /></label>
+                        </div>
+                        <label class="field"
+                          >Bloque<select
+                            [ngModel]="t.section ?? 'main'"
+                            (ngModelChange)="updateTask(t.id, { section: $event })"
+                          >
+                            @for (block of sections; track block.id) {
+                              <option [value]="block.id">{{ block.label }}</option>
+                            }
+                          </select></label
+                        >
+                      </div>
+                    </div>
+                    <div class="bib-table" role="group" [attr.aria-label]="'Petos de ' + t.title">
+                      <div class="bib-row bib-head">
+                        <span>Jugador</span>
+                        @for (color of colors; track color.color) {
+                          <span>{{ color.nombre }}</span>
+                        }
+                      </div>
+                      @for (player of form().attendance; track player.playerId) {
+                        <div class="bib-row">
+                          <span>{{ player.playerName }}</span>
+                          @for (color of colors; track color.color) {
+                            <button
+                              type="button"
+                              class="bib-choice"
+                              [style.--bib-color]="color.color"
+                              [attr.aria-label]="player.playerName + ': ' + color.nombre"
+                              [attr.aria-pressed]="
+                                t.playerColors?.[player.playerId] === color.color
+                              "
+                              (click)="setBib(t, player.playerId, color.color)"
+                            >
+                              <span>{{
+                                t.playerColors?.[player.playerId] === color.color ? '✓' : ''
+                              }}</span>
+                            </button>
+                          }
+                        </div>
+                      }
+                      @if (!form().attendance.length) {
+                        <p class="panel-hint">Añade jugadores a la plantilla para asignar petos.</p>
+                      }
+                    </div>
+                  </details>
                 </div>
-              </div>
-            }
-            @if (tasksInSection(section.id).length === 0) {
-              <p class="panel-hint">Sin ejercicios en este bloque.</p>
-            }
+              }
+              @if (tasksInSection(section.id).length === 0) {
+                <p class="panel-hint">Sin ejercicios en este bloque.</p>
+              }
             </div>
           }
 
@@ -152,7 +504,9 @@
           @if (pickerOpen()) {
             <div class="picker-inline" role="region" aria-label="Añadir ejercicio">
               <div class="picker-inline-head">
-                <span class="picker-inline-title">Añadir a {{ sectionLabel(pickerSection()) }}</span>
+                <span class="picker-inline-title"
+                  >Añadir a {{ sectionLabel(pickerSection()) }}</span
+                >
                 <span class="picker-inline-hint">Puedes añadir varios seguidos</span>
                 <button class="btn btn-ghost btn-sm" (click)="closePicker()">Listo</button>
               </div>
@@ -165,8 +519,12 @@
                   aria-label="Buscar ejercicio"
                 />
               </div>
-              <label class="folder-choice">Carpeta
-                <select [value]="pickerFolder()" (change)="pickerFolder.set($any($event.target).value)">
+              <label class="folder-choice"
+                >Carpeta
+                <select
+                  [value]="pickerFolder()"
+                  (change)="pickerFolder.set($any($event.target).value)"
+                >
                   <option value="all">Todas las carpetas</option>
                   <option value="none">Sin carpeta</option>
                   @for (folder of folderOptions(); track folder.id) {
@@ -179,51 +537,91 @@
                   <button class="picker-item" (click)="addExercise(ex)">
                     <span class="picker-title">{{ ex.title }}</span>
                     <span class="picker-meta">
-                      {{ ex.category }}@if (ex.durationMinutes) { · {{ ex.durationMinutes }} min }
-                      @if (timesInSession(ex.id)) { · <strong>en la sesión ×{{ timesInSession(ex.id) }}</strong> }
+                      {{ ex.category }}
+                      @if (ex.durationMinutes) {
+                        · {{ ex.durationMinutes }} min
+                      }
+                      @if (timesInSession(ex.id)) {
+                        · <strong>en la sesión ×{{ timesInSession(ex.id) }}</strong>
+                      }
                     </span>
                   </button>
                 }
                 @if (pickerExercises().length === 0) {
-                  <p class="panel-hint" style="color:var(--text-muted)">No hay ejercicios. Créalos en la Biblioteca primero.</p>
+                  <p class="panel-hint" style="color: var(--text-muted)">
+                    No hay ejercicios. Créalos en la Biblioteca primero.
+                  </p>
                 }
               </div>
             </div>
           }
-          <div class="attendance-head">
+          <div class="attendance-head" id="session-attendance">
             <h4>Asistencia de plantilla</h4>
-            <span>{{ attendanceCount() }} presentes · {{ form().attendance.length }} jugadores</span>
+            <span
+              >{{ attendanceCount() }} presentes · {{ form().attendance.length }} jugadores</span
+            >
           </div>
           @if (form().attendance.length) {
             <div class="attendance-list">
               @for (a of form().attendance; track a.playerId) {
                 <div class="attendance-row">
                   <strong>{{ a.playerName }}</strong>
-                  <label>Estado
-                    <select [ngModel]="a.status" (ngModelChange)="updateAttendance(a.playerId, { status: $event })">
+                  <label
+                    >Estado
+                    <select
+                      [ngModel]="a.status"
+                      (ngModelChange)="updateAttendance(a.playerId, { status: $event })"
+                    >
                       @for (status of attendanceStatuses; track status) {
                         <option [value]="status">{{ status }}</option>
                       }
                     </select>
                   </label>
-                  <label>Grupo
-                    <select [ngModel]="a.group" (ngModelChange)="updateAttendance(a.playerId, { group: $event })">
-                      <option value="">Sin grupo</option><option value="Agua">Agua</option><option value="Material">Material</option>
+                  <label
+                    >Grupo
+                    <select
+                      [ngModel]="a.group"
+                      (ngModelChange)="updateAttendance(a.playerId, { group: $event })"
+                    >
+                      <option value="">Sin grupo</option>
+                      <option value="Agua">Agua</option>
+                      <option value="Material">Material</option>
                     </select>
                   </label>
-                  <label>Actitud
-                    <select [ngModel]="a.attitude" (ngModelChange)="updateAttendance(a.playerId, { attitude: $event })">
+                  <label
+                    >Actitud
+                    <select
+                      [ngModel]="a.attitude"
+                      (ngModelChange)="updateAttendance(a.playerId, { attitude: $event })"
+                    >
                       @for (attitude of attitudes; track attitude) {
                         <option [value]="attitude">{{ attitude || 'Sin valorar' }}</option>
                       }
                     </select>
                   </label>
-                  <label>Minutos
-                    <input type="number" min="0" max="600" [value]="a.minutes ?? ''"
-                      (change)="updateAttendance(a.playerId, { minutes: $any($event.target).value === '' ? null : $any($event.target).valueAsNumber })" />
+                  <label
+                    >Minutos
+                    <input
+                      type="number"
+                      min="0"
+                      max="600"
+                      [value]="a.minutes ?? ''"
+                      (change)="
+                        updateAttendance(a.playerId, {
+                          minutes:
+                            $any($event.target).value === ''
+                              ? null
+                              : $any($event.target).valueAsNumber,
+                        })
+                      "
+                    />
                   </label>
-                  <label class="attendance-note">Observaciones
-                    <input [value]="a.notes" (change)="updateAttendance(a.playerId, { notes: $any($event.target).value })" />
+                  <label class="attendance-note"
+                    >Observaciones
+                    <input
+                      [value]="a.notes"
+                      (change)="updateAttendance(a.playerId, { notes: $any($event.target).value })"
+                    />
                   </label>
                 </div>
               }
@@ -231,7 +629,7 @@
           } @else {
             <p class="panel-hint">Añade jugadores a la plantilla para registrar su asistencia.</p>
           }
-        </div>
+        </fieldset>
         @if (formError()) {
           <p class="form-error" role="alert">{{ formError() }}</p>
         }

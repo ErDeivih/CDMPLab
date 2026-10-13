@@ -16,6 +16,9 @@ import type {
   TeamsRow,
 } from '../database.types';
 import type { ProfileStatus, TeamInvitationInfo } from './data-source';
+import { EMPTY_SESSION_SHEET } from '../session-plan';
+import { normalizeCanvas } from '../canvas';
+import { normalizarMapaColores } from '../player-colors';
 import type {
   CanvasDocument,
   Exercise,
@@ -166,6 +169,7 @@ function isJsonRecord(value: Json | undefined): value is { [key: string]: Json |
 
 export function sessionPlanToRow(session: Session): Json {
   return {
+    sheet: { ...(session.sheet ?? EMPTY_SESSION_SHEET) },
     number: session.number ?? null,
     objectives: session.objectives ?? '',
     material: session.material ?? '',
@@ -177,6 +181,14 @@ export function sessionPlanToRow(session: Session): Json {
           section: t.section ?? 'main',
           seriesCount: t.seriesCount ?? null,
           minutesPerSeries: t.minutesPerSeries ?? null,
+          repetitions: t.repetitions ?? 1,
+          restMinutes: t.restMinutes ?? 0,
+          development: t.development ?? t.snapshot?.explanation ?? '',
+          aspects: t.aspects ?? t.snapshot?.description ?? '',
+          progression: t.progression ?? '',
+          dimensions: t.dimensions ?? '',
+          playerColors: t.playerColors ?? {},
+          snapshot: t.snapshot ? (JSON.parse(JSON.stringify(t.snapshot)) as Json) : null,
         },
       ]),
     ),
@@ -187,7 +199,14 @@ export function sessionFromRow(row: SessionsRow, tasks: SessionTask[]): Session 
   const plan = isJsonRecord(row.plan) ? row.plan : {};
   const taskPlan = isJsonRecord(plan['tasks']) ? plan['tasks'] : {};
   const attendance = Array.isArray(plan['attendance']) ? plan['attendance'] : [];
+  const sheet = isJsonRecord(plan['sheet']) ? plan['sheet'] : {};
   return {
+    sheet: Object.fromEntries(
+      Object.entries(EMPTY_SESSION_SHEET).map(([key, fallback]) => [
+        key,
+        typeof sheet[key] === 'string' ? sheet[key] : fallback,
+      ]),
+    ) as unknown as Session['sheet'],
     id: row.id,
     teamId: row.team_id,
     title: row.title,
@@ -208,6 +227,13 @@ export function sessionFromRow(row: SessionsRow, tasks: SessionTask[]): Session 
         attitude: typeof a['attitude'] === 'string' ? a['attitude'] : '',
         minutes: typeof a['minutes'] === 'number' ? a['minutes'] : null,
         notes: typeof a['notes'] === 'string' ? a['notes'] : '',
+        position:
+          a['position'] === 'GK' ||
+          a['position'] === 'DF' ||
+          a['position'] === 'MF' ||
+          a['position'] === 'FW'
+            ? a['position']
+            : '',
       })),
     tasks: tasks.map((t) => {
       const detail = taskPlan[t.id];
@@ -218,6 +244,23 @@ export function sessionFromRow(row: SessionsRow, tasks: SessionTask[]): Session 
         section: d['section'] === 'warmup' || d['section'] === 'cooldown' ? d['section'] : 'main',
         seriesCount: typeof d['seriesCount'] === 'number' ? d['seriesCount'] : null,
         minutesPerSeries: typeof d['minutesPerSeries'] === 'number' ? d['minutesPerSeries'] : null,
+        repetitions: typeof d['repetitions'] === 'number' ? d['repetitions'] : 1,
+        restMinutes: typeof d['restMinutes'] === 'number' ? d['restMinutes'] : 0,
+        development: typeof d['development'] === 'string' ? d['development'] : undefined,
+        aspects: typeof d['aspects'] === 'string' ? d['aspects'] : undefined,
+        progression: typeof d['progression'] === 'string' ? d['progression'] : undefined,
+        dimensions: typeof d['dimensions'] === 'string' ? d['dimensions'] : '',
+        playerColors: normalizarMapaColores(d['playerColors']),
+        // La copia histórica gana a la biblioteca actual. Planes antiguos conservan su fallback.
+        snapshot:
+          isJsonRecord(d['snapshot']) &&
+          typeof d['snapshot']['title'] === 'string' &&
+          d['snapshot']['teamId'] === row.team_id
+            ? {
+                ...(d['snapshot'] as unknown as Exercise),
+                canvas: d['snapshot']['canvas'] ? normalizeCanvas(d['snapshot']['canvas']) : null,
+              }
+            : t.snapshot,
       };
     }),
     createdAt: row.created_at,

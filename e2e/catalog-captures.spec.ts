@@ -53,19 +53,39 @@ function recordPlaced(kind: keyof Manifest, title: string): void {
 
 // ---------- Tipo de elemento (modelo real) por título de herramienta ----------
 const MATERIAL_TYPE: Record<string, string> = {
-  'Balón': 'ball', 'Fitball': 'vball', 'Cono': 'cone', 'BOSU': 'marker',
-  'Banderín': 'flag', 'Chino': 'target', 'Pica': 'pica',
-  'Pértiga / poste': 'pole', 'Maniquí individual': 'mannequin',
-  'Barrera de maniquíes': 'mannequin_row', 'Miniportería': 'minigoal',
-  'Portería grande': 'goal', 'Valla': 'hurdle', 'Aro': 'ring',
-  'Escalera': 'ladder', 'Minitrampolín': 'trampoline', 'Peto': 'peto',
-  'Chaleco lastrado': 'chaleco', 'Mancuerna / pesa': 'dumbbell',
+  Balón: 'ball',
+  Fitball: 'vball',
+  Cono: 'cone',
+  BOSU: 'marker',
+  Banderín: 'flag',
+  Chino: 'target',
+  Pica: 'pica',
+  'Pértiga / poste': 'pole',
+  'Maniquí individual': 'mannequin',
+  'Barrera de maniquíes': 'mannequin_row',
+  Miniportería: 'minigoal',
+  'Portería grande': 'goal',
+  Valla: 'hurdle',
+  Aro: 'ring',
+  Escalera: 'ladder',
+  Minitrampolín: 'trampoline',
+  Peto: 'peto',
+  'Chaleco lastrado': 'chaleco',
+  'Mancuerna / pesa': 'dumbbell',
+  'Gomas elásticas': 'resistance_band',
+  'Balón medicinal': 'medicine_ball',
 };
 const DRAW_TYPE: Record<string, string> = {
-  'Línea': 'line', 'Flecha (movimiento)': 'arrow', 'Flecha doble sentido': 'doubleArrow',
-  'Curva derecha': 'curve', 'Curva izquierda': 'curve', 'Conducción (zigzag)': 'dribble',
-  'Dibujo a mano alzada': 'freehand', 'Rectángulo': 'rect', 'Círculo / elipse': 'ellipse',
-  'Texto': 'text',
+  Línea: 'line',
+  'Flecha (movimiento)': 'arrow',
+  'Flecha doble sentido': 'doubleArrow',
+  'Curva derecha': 'curve',
+  'Curva izquierda': 'curve',
+  'Conducción (zigzag)': 'dribble',
+  'Dibujo a mano alzada': 'freehand',
+  Rectángulo: 'rect',
+  'Círculo / elipse': 'ellipse',
+  Texto: 'text',
 };
 
 function normToScreen(nx: number, ny: number, host: Box, fit: Fit, panX = 0, panY = 0, zoom = 1) {
@@ -97,11 +117,35 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Pau',
+          number: 10,
+          position: 'MF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
@@ -114,15 +158,32 @@ async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await expect(page.locator('.board-canvas svg')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.fill-hint-close').click();
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
   if (category) {
     // FASE B: el catálogo persiste abierto; solo se abre si su herramienta no está
     // visible (un re-toggle la cerraría).
-    if (!(await page.locator(`.rail-btn[title="${title}"]`).isVisible().catch(() => false))) {
+    if (
+      !(await page
+        .locator(`.rail-btn[title="${title}"]`)
+        .isVisible()
+        .catch(() => false))
+    ) {
       await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: category }).click();
     }
@@ -141,8 +202,17 @@ async function useTool(page: Page, title: string, category?: string): Promise<vo
 
 /** Abre un catálogo lateral solo si no está ya abierto (idempotente, FASE B). */
 async function openCatalog(page: Page, category: string): Promise<void> {
-  const probe = category === 'Jugadores' ? '.side-panel-left[aria-label="Jugadores"]' : '.side-panel-left.tools-panel-side';
-  if (await page.locator(probe).isVisible().catch(() => false)) return;
+  const probe =
+    category === 'Jugadores'
+      ? '.side-panel-left[aria-label="Jugadores"]'
+      : '.side-panel-left.tools-panel-side';
+  if (
+    await page
+      .locator(probe)
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
   await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: category }).click();
 }
@@ -189,45 +259,62 @@ async function countTotal(page: Page): Promise<number> {
   return page.locator('.board-canvas svg [data-el-type]').count();
 }
 /** Ejecuta `action` y exige que cree EXACTAMENTE un elemento del `type` dado. */
-async function expectNewElement(page: Page, type: string, action: () => Promise<void>): Promise<void> {
+async function expectNewElement(
+  page: Page,
+  type: string,
+  action: () => Promise<void>,
+): Promise<void> {
   const beforeType = await countType(page, type);
   const beforeTotal = await countTotal(page);
   await action();
   // Esperar la confirmación de Angular (poll): si el tipo no aparece, es un falso verde.
-  await expect.poll(
-    () => countType(page, type),
-    { timeout: 8000, message: `se creó un elemento del tipo ${type}` }
-  ).toBe(beforeType + 1);
+  await expect
+    .poll(() => countType(page, type), {
+      timeout: 8000,
+      message: `se creó un elemento del tipo ${type}`,
+    })
+    .toBe(beforeType + 1);
   const afterType = await countType(page, type);
   const afterTotal = await countTotal(page);
   expect(afterTotal - beforeTotal, `exactamente un elemento nuevo del tipo ${type}`).toBe(1);
   expect(afterType - beforeType, `el nuevo elemento es del tipo ${type}`).toBe(1);
 }
 
-interface PlayerPred { side?: string; kind?: string; playerId?: string }
+interface PlayerPred {
+  side?: string;
+  kind?: string;
+  playerId?: string;
+}
 async function countPlayers(page: Page, pred: PlayerPred): Promise<number> {
   const p = pred;
   return page.evaluate((pred) => {
-    return Array.from(document.querySelectorAll('.board-canvas svg [data-el-type="player"]'))
-      .filter((e) => {
-        const side = e.getAttribute('data-side') ?? '';
-        const kind = e.getAttribute('data-kind') ?? '';
-        const pid = e.getAttribute('data-player-id') ?? '';
-        if (pred.side !== undefined && side !== pred.side) return false;
-        if (pred.kind !== undefined && kind !== pred.kind) return false;
-        if (pred.playerId !== undefined && pid !== pred.playerId) return false;
-        return true;
-      }).length;
+    return Array.from(
+      document.querySelectorAll('.board-canvas svg [data-el-type="player"]'),
+    ).filter((e) => {
+      const side = e.getAttribute('data-side') ?? '';
+      const kind = e.getAttribute('data-kind') ?? '';
+      const pid = e.getAttribute('data-player-id') ?? '';
+      if (pred.side !== undefined && side !== pred.side) return false;
+      if (pred.kind !== undefined && kind !== pred.kind) return false;
+      if (pred.playerId !== undefined && pid !== pred.playerId) return false;
+      return true;
+    }).length;
   }, p);
 }
-async function expectNewPlayer(page: Page, pred: PlayerPred, action: () => Promise<void>): Promise<void> {
+async function expectNewPlayer(
+  page: Page,
+  pred: PlayerPred,
+  action: () => Promise<void>,
+): Promise<void> {
   const before = await countPlayers(page, pred);
   const beforeTotal = await countTotal(page);
   await action();
-  await expect.poll(
-    () => countPlayers(page, pred),
-    { timeout: 8000, message: `se creó un jugador del tipo ${JSON.stringify(pred)}` }
-  ).toBe(before + 1);
+  await expect
+    .poll(() => countPlayers(page, pred), {
+      timeout: 8000,
+      message: `se creó un jugador del tipo ${JSON.stringify(pred)}`,
+    })
+    .toBe(before + 1);
   const after = await countPlayers(page, pred);
   const afterTotal = await countTotal(page);
   expect(afterTotal - beforeTotal, 'exactamente un jugador nuevo').toBe(1);
@@ -235,7 +322,14 @@ async function expectNewPlayer(page: Page, pred: PlayerPred, action: () => Promi
 }
 
 // ---------- Colocación (con verificación antes de recordPlaced) ----------
-async function placeMaterial(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
+async function placeMaterial(
+  page: Page,
+  host: Box,
+  fit: Fit,
+  title: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   const type = MATERIAL_TYPE[title];
   expect(type, `tipo de material conocido: ${title}`).toBeTruthy();
   const input = page.locator('.tools-search-input');
@@ -254,7 +348,14 @@ async function placeMaterial(page: Page, host: Box, fit: Fit, title: string, nx:
   recordPlaced('materials', title);
 }
 
-async function placeText(page: Page, host: Box, fit: Fit, content: string, nx: number, ny: number): Promise<void> {
+async function placeText(
+  page: Page,
+  host: Box,
+  fit: Fit,
+  content: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   await useTool(page, 'Texto', 'Dibujo');
   const p = normToScreen(nx, ny, host, fit);
   await expectNewElement(page, 'text', () => page.mouse.click(p.x, p.y));
@@ -268,7 +369,15 @@ async function placeText(page: Page, host: Box, fit: Fit, content: string, nx: n
   recordPlaced('draw', 'Texto');
 }
 
-async function placeRealPlayer(page: Page, host: Box, fit: Fit, name: string, pid: string, nx: number, ny: number): Promise<void> {
+async function placeRealPlayer(
+  page: Page,
+  host: Box,
+  fit: Fit,
+  name: string,
+  pid: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   await openCatalog(page, 'Jugadores');
   await page.locator('.roster-item', { hasText: name }).click();
   await closeCatalogPanel(page);
@@ -277,7 +386,14 @@ async function placeRealPlayer(page: Page, host: Box, fit: Fit, name: string, pi
   recordPlaced('players', name);
 }
 
-async function placeGenericByTitle(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
+async function placeGenericByTitle(
+  page: Page,
+  host: Box,
+  fit: Fit,
+  title: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   await openCatalog(page, 'Jugadores');
   // FASE C: sin botones "Jugador propio/rival"; la diferenciación de equipos es por COLOR,
   // y los genéricos ya no llevan `side` (solo el color distingue propio/rival).
@@ -292,7 +408,14 @@ async function placeGenericByTitle(page: Page, host: Box, fit: Fit, title: strin
   recordPlaced('players', title);
 }
 
-async function placeTrayPlayer(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
+async function placeTrayPlayer(
+  page: Page,
+  host: Box,
+  fit: Fit,
+  title: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   await openCatalog(page, 'Jugadores');
   await page.locator(`.tray-player[title="${title}"]`).click();
   await closeCatalogPanel(page);
@@ -303,7 +426,12 @@ async function placeTrayPlayer(page: Page, host: Box, fit: Fit, title: string, n
   recordPlaced('players', title);
 }
 
-async function placeDraw(page: Page, title: string, from: [number, number], to: [number, number]): Promise<void> {
+async function placeDraw(
+  page: Page,
+  title: string,
+  from: [number, number],
+  to: [number, number],
+): Promise<void> {
   const type = DRAW_TYPE[title];
   expect(type, `tipo de dibujo conocido: ${title}`).toBeTruthy();
   await useTool(page, title, 'Dibujo');
@@ -323,8 +451,16 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     const host = await hostBox(page);
     const fit = await fitMode(page);
     const items = [
-      'Balón', 'Fitball', 'Cono', 'BOSU', 'Banderín',
-      'Chino', 'Pica', 'Pértiga / poste', 'Maniquí individual', 'Barrera de maniquíes',
+      'Balón',
+      'Fitball',
+      'Cono',
+      'BOSU',
+      'Banderín',
+      'Chino',
+      'Pica',
+      'Pértiga / poste',
+      'Maniquí individual',
+      'Barrera de maniquíes',
     ];
     const cols = [0.2, 0.5, 0.8];
     const rows = [0.15, 0.33, 0.51, 0.69];
@@ -334,18 +470,33 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
       await placeMaterial(page, host, fit, items[i], cols[col], rows[row]);
       await placeText(page, host, fit, items[i], cols[col], rows[row] + 0.08);
     }
-    expect(loadManifest().materials.length, 'se colocaron los 10 materiales (1/2)').toBeGreaterThanOrEqual(10);
+    expect(
+      loadManifest().materials.length,
+      'se colocaron los 10 materiales (1/2)',
+    ).toBeGreaterThanOrEqual(10);
     await cleanScene(page);
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/catalogo-materiales-1.png` });
   });
 
-  test('catálogo de materiales (2/2) — 9 tipos restantes en 2 columnas, sin solapamiento', async ({ page }) => {
+  test('catálogo de materiales (2/2) — 9 tipos restantes en 2 columnas, sin solapamiento', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
     const host = await hostBox(page);
     const fit = await fitMode(page);
-    const items = ['Miniportería', 'Portería grande', 'Valla', 'Aro', 'Escalera', 'Minitrampolín', 'Peto', 'Chaleco lastrado', 'Mancuerna / pesa'];
+    const items = [
+      'Miniportería',
+      'Portería grande',
+      'Valla',
+      'Aro',
+      'Escalera',
+      'Minitrampolín',
+      'Peto',
+      'Chaleco lastrado',
+      'Mancuerna / pesa',
+    ];
     // 2 columnas anchas + 5 filas → etiquetas largas ("Chaleco lastrado", "Mancuerna / pesa") sin solaparse.
     const cols = [0.28, 0.72];
     const rows = [0.1, 0.26, 0.42, 0.58, 0.74];
@@ -355,20 +506,51 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
       await placeMaterial(page, host, fit, items[i], cols[col], rows[row]);
       await placeText(page, host, fit, items[i], cols[col], rows[row] + 0.08);
     }
-    expect(loadManifest().materials.length, 'se colocaron los 9 materiales (2/2)').toBeGreaterThanOrEqual(9);
+    expect(
+      loadManifest().materials.length,
+      'se colocaron los 9 materiales (2/2)',
+    ).toBeGreaterThanOrEqual(9);
     await cleanScene(page);
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/catalogo-materiales-2.png` });
   });
 
-  test('catálogo de jugadores — familias etiquetadas (reales, propio, rival, portero)', async ({ page }) => {
+  // El catálogo creció de 19 a 21. Ampliar la evidencia, nunca excluir los tipos nuevos del check.
+  test('material físico nuevo — gomas y balón medicinal con evidencia de su tipo real', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await seed(page);
+    await openBoard(page);
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
+    for (const [title, nx] of [
+      ['Gomas elásticas', 0.3],
+      ['Balón medicinal', 0.7],
+    ] as const) {
+      await placeMaterial(page, host, fit, title, nx, 0.4);
+      await placeText(page, host, fit, title, nx, 0.52);
+    }
+    await cleanScene(page);
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/catalogo-materiales-fisicos.png` });
+  });
+
+  test('catálogo de jugadores — familias etiquetadas (reales, propio, rival, portero)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
     const host = await hostBox(page);
     const fit = await fitMode(page);
     const spots: Array<[number, number]> = [
-      [0.2, 0.28], [0.5, 0.28], [0.8, 0.28],
-      [0.2, 0.6], [0.5, 0.6], [0.8, 0.6],
+      [0.2, 0.28],
+      [0.5, 0.28],
+      [0.8, 0.28],
+      [0.2, 0.6],
+      [0.5, 0.6],
+      [0.8, 0.6],
     ];
     await placeRealPlayer(page, host, fit, 'Marcos', 'p1', spots[0][0], spots[0][1]);
     await placeRealPlayer(page, host, fit, 'Pau', 'p2', spots[1][0], spots[1][1]);
@@ -386,7 +568,10 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
       ['Rojo', spots[5][0], spots[5][1] + 0.11],
     ];
     for (const [text, lx, ly] of labels) await placeText(page, host, fit, text, lx, ly);
-    expect(loadManifest().players.length, 'se colocaron los tipos de jugador').toBeGreaterThanOrEqual(5);
+    expect(
+      loadManifest().players.length,
+      'se colocaron los tipos de jugador',
+    ).toBeGreaterThanOrEqual(5);
 
     // Nombres visibles sin halo blanco (fase 10): ningún <text> lleva paint-order/stroke blanco.
     const html = await page.locator('.board-canvas svg').innerHTML();
@@ -414,8 +599,13 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     ];
     for (const [title, from, to, labelAt] of defs) await placeDraw(page, title, from, to);
     const shortLabels: Array<[string, number, number]> = [
-      ['Línea', 0.6, 0.1], ['Flecha', 0.6, 0.22], ['Doble', 0.6, 0.34], ['Curva izq', 0.6, 0.46],
-      ['Curva', 0.6, 0.58], ['Zigzag', 0.6, 0.7], ['Mano alzada', 0.6, 0.82],
+      ['Línea', 0.6, 0.1],
+      ['Flecha', 0.6, 0.22],
+      ['Doble', 0.6, 0.34],
+      ['Curva izq', 0.6, 0.46],
+      ['Curva', 0.6, 0.58],
+      ['Zigzag', 0.6, 0.7],
+      ['Mano alzada', 0.6, 0.82],
     ];
     for (const [text, lx, ly] of shortLabels) await placeText(page, host, fit, text, lx, ly);
     expect(loadManifest().draw.length, 'se dibujaron las líneas/flechas').toBeGreaterThanOrEqual(6);
@@ -423,7 +613,9 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/catalogo-lineas-flechas.png` });
   });
 
-  test('catálogo de figuras y texto — rect perímetro, rect rellena, elipse y texto multilínea', async ({ page }) => {
+  test('catálogo de figuras y texto — rect perímetro, rect rellena, elipse y texto multilínea', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
@@ -456,7 +648,9 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/catalogo-figuras-texto.png` });
   });
 
-  test('cobertura por tipos: cada material y cada herramienta de dibujo aparece en alguna escena', async ({ page }) => {
+  test('cobertura por tipos: cada material y cada herramienta de dibujo aparece en alguna escena', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
@@ -464,9 +658,11 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
-    const materialTitles = await page.locator('.side-panel-left .rail-btn').evaluateAll((els) =>
-      els.map((e) => (e as HTMLElement).getAttribute('title') ?? '').filter(Boolean)
-    );
+    const materialTitles = await page
+      .locator('.side-panel-left .rail-btn')
+      .evaluateAll((els) =>
+        els.map((e) => (e as HTMLElement).getAttribute('title') ?? '').filter(Boolean),
+      );
     await page.keyboard.press('Escape');
 
     await abrirHerramientas(page);
@@ -477,9 +673,11 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     // herramientas que CREAN cosas; antes esto no saltaba porque borrar no se ofrecía.
     const NON_DRAWING_TOOLS = ['Borrar elemento'];
     const drawTitles = (
-      await page.locator('.side-panel-left .rail-btn').evaluateAll((els) =>
-        els.map((e) => (e as HTMLElement).getAttribute('title') ?? '').filter(Boolean)
-      )
+      await page
+        .locator('.side-panel-left .rail-btn')
+        .evaluateAll((els) =>
+          els.map((e) => (e as HTMLElement).getAttribute('title') ?? '').filter(Boolean),
+        )
     ).filter((t) => !NON_DRAWING_TOOLS.includes(t));
 
     const placed = loadManifest();
@@ -487,16 +685,26 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     const missingDraw = drawTitles.filter((t) => !placed.draw.includes(t));
 
     expect(missingMaterials, 'materiales del catálogo no cubiertos en las capturas').toEqual([]);
-    expect(missingDraw, 'herramientas de dibujo del catálogo no cubiertas en las capturas').toEqual([]);
+    expect(missingDraw, 'herramientas de dibujo del catálogo no cubiertas en las capturas').toEqual(
+      [],
+    );
     expect(materialTitles.length, 'catálogo de materiales no vacío').toBeGreaterThanOrEqual(19);
     expect(drawTitles.length, 'catálogo de dibujo no vacío').toBeGreaterThanOrEqual(9);
-    expect(new Set(materialTitles).size, 'sin títulos de material duplicados').toBe(materialTitles.length);
+    expect(new Set(materialTitles).size, 'sin títulos de material duplicados').toBe(
+      materialTitles.length,
+    );
     expect(new Set(drawTitles).size, 'sin títulos de dibujo duplicados').toBe(drawTitles.length);
-    expect(placed.materials.length, 'manifiesto cubre todos los materiales').toBe(materialTitles.length);
-    expect(placed.draw.length, 'manifiesto cubre todas las herramientas de dibujo').toBe(drawTitles.length);
+    expect(placed.materials.length, 'manifiesto cubre todos los materiales').toBe(
+      materialTitles.length,
+    );
+    expect(placed.draw.length, 'manifiesto cubre todas las herramientas de dibujo').toBe(
+      drawTitles.length,
+    );
   });
 
-  test('NEGATIVO: un tipo incorrecto NO satisface la cobertura (balón ≠ cono)', async ({ page }) => {
+  test('NEGATIVO: un tipo incorrecto NO satisface la cobertura (balón ≠ cono)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
@@ -509,10 +717,12 @@ test.describe('Defecto 2 — escenas de catálogo (materiales / jugadores / dibu
     const totalBefore = await countTotal(page);
     // Colocar un BALÓN. La verificación exige el tipo 'ball' y fallaría si se creara otro.
     await placeMaterial(page, host, fit, 'Balón', 0.5, 0.5);
-    expect(await countType(page, 'ball') - ballBefore, 'el balón fue creado como tipo ball').toBe(1);
+    expect((await countType(page, 'ball')) - ballBefore, 'el balón fue creado como tipo ball').toBe(
+      1,
+    );
     // Un balón NO es un cono: la cobertura de 'cone' no puede satisfacerse con este elemento.
-    expect(await countType(page, 'cone') - coneBefore, 'el balón NO creó un cono').toBe(0);
-    expect(await countTotal(page) - totalBefore, 'se creó exactamente UN elemento').toBe(1);
+    expect((await countType(page, 'cone')) - coneBefore, 'el balón NO creó un cono').toBe(0);
+    expect((await countTotal(page)) - totalBefore, 'se creó exactamente UN elemento').toBe(1);
     // Y el manifiesto NO debe registrar 'Cono' por esta colocación (solo 'Balón').
     const m = loadManifest();
     expect(m.materials, 'el manifiesto solo registra el balón').toEqual(['Balón']);

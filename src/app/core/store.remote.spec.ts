@@ -116,6 +116,33 @@ const EX = (id: string, partial: Partial<Exercise> = {}): Exercise => ({
 describe('StoreService en modo remoto', () => {
   let store: StoreService;
 
+  it('espera confirmación de sesión y devuelve false con rollback al fallar', async () => {
+    const session: Session = {
+      id: 's1',
+      teamId: 'team-1',
+      title: 'Sesión',
+      date: '2026-10-13',
+      durationMinutes: 120,
+      notes: '',
+      tasks: [],
+      createdAt: 'now',
+      savedAt: 'now',
+    };
+    let rejectWrite!: (reason: Error) => void;
+    const pending = new Promise<Session>((_resolve, reject) => {
+      rejectWrite = reject;
+    });
+    const fake = makeFake({ saveSession: vi.fn().mockReturnValue(pending) });
+    await store.connectDataSource(fake, 'team-1');
+    const result = store.saveSession(session);
+    expect(store.pendingWrites()).toBe(1);
+    expect(store.sessions()).toHaveLength(1);
+    rejectWrite(new Error('No disponible'));
+    expect(await result).toBe(false);
+    expect(store.sessions()).toHaveLength(0);
+    expect(store.lastError()).toContain('No disponible');
+  });
+
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('entrenolab:seeded', '1');

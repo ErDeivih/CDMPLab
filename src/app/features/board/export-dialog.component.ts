@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
 import { input } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { CanvasFrame, FieldType } from '../../core/models';
+import { CanvasDocument, CanvasFrame, FieldType } from '../../core/models';
 import { renderBoardSvg } from '../../core/render';
 import { exportPng } from '../../core/canvas-export';
 
@@ -24,6 +24,7 @@ export class ExportDialogComponent implements OnInit {
   readonly grid = input(false);
   readonly guide = input<'none' | '2x2' | '3x3' | 'thirds' | 'lanes'>('none');
   readonly grass = input<'stripes' | 'plain' | 'checker'>('stripes');
+  readonly f7 = input<CanvasDocument['f7']>(null);
   readonly closed = output<void>();
 
   protected readonly name = signal('');
@@ -48,8 +49,9 @@ export class ExportDialogComponent implements OnInit {
         grid: this.grid(),
         guide: this.guide(),
         grass: this.grass(),
-      })
-    )
+        f7: this.f7(),
+      }),
+    ),
   );
 
   protected readonly size = computed(() => {
@@ -83,6 +85,7 @@ export class ExportDialogComponent implements OnInit {
         grid: this.grid(),
         guide: this.guide(),
         grass: this.grass(),
+        f7: this.f7(),
       });
       this.download(dataUrl, `${this.safeName()}.png`, false);
     } catch {
@@ -97,7 +100,9 @@ export class ExportDialogComponent implements OnInit {
   }
 
   private safeName(): string {
-    return (this.name() || this.title() || 'cdmplab').replace(/[^\w\-. ]+/g, '').trim() || 'cdmplab';
+    return (
+      (this.name() || this.title() || 'cdmplab').replace(/[^\w\-. ]+/g, '').trim() || 'cdmplab'
+    );
   }
 
   private download(url: string, name: string, revoke: boolean): void {

@@ -38,6 +38,7 @@ import type {
   TeamRequestStatus,
 } from './data-source';
 import { DataError } from './data-source';
+import { normalizeCanvas } from '../canvas';
 import {
   missingDeletionPreview,
   missingTeamDeletionPreview,
@@ -1221,6 +1222,27 @@ export class SupabaseRepository implements DataSource {
       }
     }
 
+    const mappedColors = (colors: Record<string, string> | undefined): Record<string, string> =>
+      Object.fromEntries(
+        Object.entries(colors ?? {}).map(([id, color]) => [playerIds.get(id) ?? id, color]),
+      );
+    const mappedCanvas = (raw: Exercise['canvas']): Exercise['canvas'] => {
+      // Los respaldos históricos v1 admiten un array plano, no un objeto con frames.
+      const canvas = Array.isArray(raw) ? normalizeCanvas(raw) : raw;
+      return canvas
+        ? {
+            ...canvas,
+            ...(canvas.playerColors ? { playerColors: mappedColors(canvas.playerColors) } : {}),
+            frames: canvas.frames.map((frame) => ({
+              ...frame,
+              elements: frame.elements.map((el) =>
+                el.playerId ? { ...el, playerId: playerIds.get(el.playerId) ?? el.playerId } : el,
+              ),
+            })),
+          }
+        : null;
+    };
+
     // 2. UN único payload con los ids deterministas y TODAS las referencias ya
     //    traducidas (parent_id, folder_id, exercise_id y los ids de tareas). La
     //    RPC valida el grafo completo y hace la escritura de forma atómica.
@@ -1260,7 +1282,7 @@ export class SupabaseRepository implements DataSource {
         rest_seconds: ex.restSeconds,
         is_template: ex.isTemplate,
         // El canvas pizarra se conserva íntegro (la RPC no lo altera).
-        canvas_data: (ex.canvas as unknown as Json) ?? null,
+        canvas_data: (mappedCanvas(ex.canvas) as unknown as Json) ?? null,
         thumbnail: ex.thumbnail,
       })),
       sessions: data.sessions.map((s) => ({
@@ -1279,6 +1301,18 @@ export class SupabaseRepository implements DataSource {
           tasks: s.tasks.map((t) => ({
             ...t,
             id: taskIds.get(`${s.id}:${t.id}`) as string,
+            playerColors: mappedColors(t.playerColors),
+            snapshot: t.snapshot
+              ? {
+                  ...t.snapshot,
+                  id: exerciseIds.get(t.snapshot.id) ?? t.snapshot.id,
+                  teamId,
+                  folderId: t.snapshot.folderId
+                    ? (folderIds.get(t.snapshot.folderId) ?? null)
+                    : null,
+                  canvas: mappedCanvas(t.snapshot.canvas),
+                }
+              : undefined,
           })),
         }),
         tasks: s.tasks.map((t, i) => ({

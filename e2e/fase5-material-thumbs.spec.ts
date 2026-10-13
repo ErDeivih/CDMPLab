@@ -17,12 +17,20 @@ const seed = () => {
 async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
 }
 
 test.describe('Fase 5 — miniaturas REALES de todos los materiales (sin icono genérico)', () => {
   for (const title of ['Escritorio']) {
-    test(`${title}: cada material muestra un <img> PNG o un <svg> gráfico real, nunca el símbolo genérico`, async ({ page }) => {
+    test(`${title}: cada material muestra un <img> PNG o un <svg> gráfico real, nunca el símbolo genérico`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 1366, height: 900 });
       await page.addInitScript(seed());
       await openClosed(page);
@@ -61,7 +69,9 @@ test.describe('Fase 5 — miniaturas REALES de todos los materiales (sin icono g
     });
   }
 
-  test('la miniatura SVG vectorial se dibuja de verdad (no vacía) y es reconocible', async ({ page }) => {
+  test('la miniatura SVG vectorial se dibuja de verdad (no vacía) y es reconocible', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.addInitScript(seed());
     await openClosed(page);
@@ -70,12 +80,20 @@ test.describe('Fase 5 — miniaturas REALES de todos los materiales (sin icono g
     const panel = page.locator('.side-panel-left.tools-panel-side');
     await expect(panel).toBeVisible();
 
-    // La Portería grande (goal) es vectorial y debe tener un <svg.mat-thumb-svg> con formas.
+    // El SVG compartido de la portería debe contener geometría real y tener caja visible.
     const vectorial = panel.locator('.tools-material-card', { hasText: 'Portería grande' }).first();
     const svg = vectorial.locator('svg.mat-thumb-svg');
     await expect(svg).toHaveCount(1);
     // Dentro del SVG hay al menos un elemento gráfico (circle/path/rect).
-    const nShapes = await svg.locator('circle, path, rect, text').count();
+    const nShapes = await svg
+      .locator('circle, path, rect, text, line, polygon, polyline, ellipse')
+      .count();
     expect(nShapes, 'el SVG vectorial dibuja una forma real').toBeGreaterThan(0);
+    const box = await svg.boundingBox();
+    expect(box?.width).toBeGreaterThan(0);
+    expect(box?.height).toBeGreaterThan(0);
+    const frame = await vectorial.locator('.mat-thumb').boundingBox();
+    expect(box!.width).toBeLessThanOrEqual(frame!.width);
+    expect(box!.height).toBeLessThanOrEqual(frame!.height);
   });
 });

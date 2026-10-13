@@ -224,6 +224,10 @@ export class StoreService {
     return base + suffix;
   }
 
+  sessionDesignContext(): string {
+    return this.key('session-design') + ':' + (this.activeTeam()?.id ?? 'none');
+  }
+
   // ---------- Modo remoto (conexión / hidratación / reset) ----------
 
   /**
@@ -1029,12 +1033,12 @@ export class StoreService {
     return this._sessions().filter((s) => s.teamId === teamId);
   }
 
-  saveSession(session: Session): void {
+  async saveSession(session: Session): Promise<boolean> {
     const ds = this.dataSource;
     const existing = this._sessions().find((s) => s.id === session.id);
     if (ds) {
       const base = existing ? { ...existing, ...session } : session;
-      this.applyRemote(
+      const result = await this.applyRemote(
         () => {
           this._sessions.update((list) => {
             const idx = list.findIndex((s) => s.id === session.id);
@@ -1056,15 +1060,16 @@ export class StoreService {
           });
         },
       );
-      return;
+      return result.ok;
     }
     this._sessions.update((list) => {
       const idx = list.findIndex((s) => s.id === session.id);
       const next =
         idx === -1 ? [...list, session] : list.map((s) => (s.id === session.id ? session : s));
       save(this.key(KEY_SESSIONS), next);
-      return next;
+      return this.storageError() ? list : next;
     });
+    return !this.storageError();
   }
 
   deleteSession(id: string): void {

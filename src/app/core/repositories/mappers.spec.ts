@@ -63,7 +63,12 @@ describe('mappers ejercicio ↔ canvas_data (campo F7)', () => {
   it('round-trip fila → modelo → fila conserva f7 (sin caer a full)', () => {
     const ex1 = exerciseFromRow(row());
     const insert = exerciseRowForInsert(ex1);
-    const ex2 = exerciseFromRow({ ...insert, created_at: 'now', updated_at: 'now', revision: ex1.revision ?? 0 });
+    const ex2 = exerciseFromRow({
+      ...insert,
+      created_at: 'now',
+      updated_at: 'now',
+      revision: ex1.revision ?? 0,
+    });
     expect((ex2.canvas as CanvasDocument).field).toBe('f7');
     // Igualdad del documento (excepto id de elementos, que no cambia aquí).
     expect(JSON.stringify(ex2.canvas)).toBe(JSON.stringify(CANVAS_F7));
@@ -85,30 +90,159 @@ describe('mappers ejercicio ↔ canvas_data (campo F7)', () => {
 
 describe('mappers de planificación de sesiones', () => {
   const base: Session = {
-    id: 's1', teamId: 'team1', title: '', date: '2026-10-08', durationMinutes: 120,
-    notes: '', number: 12, objectives: 'Defender por dentro', material: 'Balones',
-    attendance: [{ playerId: 'p1', playerName: 'Portero', status: 'Asiste', group: 'Agua', attitude: 'Buena', minutes: 110, notes: 'Sin molestias' }],
-    tasks: [{ id: 't1', exerciseId: 'e1', title: 'Rueda', durationMinutes: 16, material: '', sortOrder: 0, section: 'warmup', seriesCount: 2, minutesPerSeries: 8 }],
-    createdAt: 'c', savedAt: 'u',
+    id: 's1',
+    teamId: 'team1',
+    title: '',
+    date: '2026-10-08',
+    durationMinutes: 120,
+    notes: '',
+    number: 12,
+    objectives: 'Defender por dentro',
+    material: 'Balones',
+    attendance: [
+      {
+        playerId: 'p1',
+        playerName: 'Portero',
+        status: 'Asiste',
+        group: 'Agua',
+        attitude: 'Buena',
+        minutes: 110,
+        notes: 'Sin molestias',
+      },
+    ],
+    tasks: [
+      {
+        id: 't1',
+        exerciseId: 'e1',
+        title: 'Rueda',
+        durationMinutes: 16,
+        material: '',
+        sortOrder: 0,
+        section: 'warmup',
+        seriesCount: 2,
+        minutesPerSeries: 8,
+      },
+    ],
+    createdAt: 'c',
+    savedAt: 'u',
   };
   const row: SessionsRow = {
-    id: 's1', team_id: 'team1', title: '', date: '2026-10-08', duration_minutes: 120,
-    notes: '', revision: 1, created_at: 'c', updated_at: 'u',
+    id: 's1',
+    team_id: 'team1',
+    title: '',
+    date: '2026-10-08',
+    duration_minutes: 120,
+    notes: '',
+    revision: 1,
+    created_at: 'c',
+    updated_at: 'u',
   };
 
   it('conserva número, bloques, series y asistencia en el plan remoto', () => {
-    const loaded = sessionFromRow({ ...row, plan: sessionPlanToRow(base) }, base.tasks.map((t) => ({ id: t.id, exerciseId: t.exerciseId, title: t.title, durationMinutes: t.durationMinutes, material: t.material, sortOrder: t.sortOrder })));
+    const loaded = sessionFromRow(
+      { ...row, plan: sessionPlanToRow(base) },
+      base.tasks.map((t) => ({
+        id: t.id,
+        exerciseId: t.exerciseId,
+        title: t.title,
+        durationMinutes: t.durationMinutes,
+        material: t.material,
+        sortOrder: t.sortOrder,
+      })),
+    );
     expect(loaded.number).toBe(12);
     expect(loaded.objectives).toBe('Defender por dentro');
-    expect(loaded.tasks[0]).toMatchObject({ section: 'warmup', seriesCount: 2, minutesPerSeries: 8 });
-    expect(loaded.attendance?.[0]).toMatchObject({ playerId: 'p1', status: 'Asiste', minutes: 110 });
+    expect(loaded.tasks[0]).toMatchObject({
+      section: 'warmup',
+      seriesCount: 2,
+      minutesPerSeries: 8,
+    });
+    expect(loaded.attendance?.[0]).toMatchObject({
+      playerId: 'p1',
+      status: 'Asiste',
+      minutes: 110,
+    });
   });
 
   it('lee una sesión antigua sin plan sin inventar asistencia ni alterar tareas', () => {
-    const task = { id: 't1', exerciseId: null, title: 'Rueda', durationMinutes: 10, material: '', sortOrder: 0 };
+    const task = {
+      id: 't1',
+      exerciseId: null,
+      title: 'Rueda',
+      durationMinutes: 10,
+      material: '',
+      sortOrder: 0,
+    };
     const loaded = sessionFromRow(row, [task]);
     expect(loaded.tasks).toEqual([task]);
     expect(loaded.attendance).toEqual([]);
     expect(loaded.number).toBeNull();
+  });
+
+  it('preserva la ficha y el dibujo históricos aunque se borre el original', () => {
+    const snapshot: Exercise = {
+      id: 'e1',
+      teamId: 'team1',
+      folderId: null,
+      title: 'Original',
+      description: 'Claves',
+      explanation: 'Antes',
+      category: 'Técnica',
+      objectives: [],
+      materials: [],
+      durationMinutes: 8,
+      minPlayers: null,
+      maxPlayers: null,
+      loadMode: 'fixed',
+      seriesCount: null,
+      repetitionsCount: null,
+      workSeconds: null,
+      restSeconds: null,
+      isTemplate: false,
+      canvas: {
+        version: 2,
+        schemaVersion: 4,
+        field: 'half',
+        frames: [{ duration: 1000, elements: [{ id: 'ball', t: 'ball', x: 0.5, y: 0.5 }] }],
+      },
+      thumbnail: null,
+      savedAt: 'original',
+    };
+    const source: Session = {
+      ...base,
+      sheet: {
+        time: '19:00',
+        macrocycle: 'Competición',
+        mesocycle: 'Acumulación',
+        microcycle: 'MD -4',
+        preSession: 'Aviso',
+      },
+      tasks: [
+        {
+          ...base.tasks[0],
+          repetitions: 2,
+          restMinutes: 4,
+          development: 'Adaptación',
+          aspects: 'Cerrar dentro',
+          progression: 'Dos toques',
+          playerColors: { p1: '#8e44ad' },
+          snapshot,
+        },
+      ],
+    };
+    const loaded = sessionFromRow({ ...row, plan: sessionPlanToRow(source) }, [
+      { ...base.tasks[0], exerciseId: null, snapshot: undefined },
+    ]);
+    expect(loaded.sheet).toEqual(source.sheet);
+    expect(loaded.tasks[0]).toMatchObject({
+      repetitions: 2,
+      restMinutes: 4,
+      development: 'Adaptación',
+      playerColors: { p1: '#8e44ad' },
+    });
+    // La lectura normaliza el esquema histórico, como ya hace la pizarra; no pierde objetos.
+    expect(loaded.tasks[0].snapshot?.canvas?.frames).toEqual(snapshot.canvas?.frames);
+    expect(loaded.tasks[0].snapshot?.canvas?.field).toBe(snapshot.canvas?.field);
+    expect(loaded.tasks[0].snapshot?.explanation).toBe('Antes');
   });
 });

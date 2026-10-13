@@ -4082,8 +4082,9 @@ export class BoardComponent {
     this.saving.set(false);
     this.saved.set(true);
     this.sessionSvc.setDirty(false);
+    const destination = this.sessionSvc.session()?.returnRoute ?? '/library';
     this.sessionSvc.close();
-    if (navigate) setTimeout(() => this.router.navigate(['/library']), 250);
+    if (navigate) setTimeout(() => this.router.navigate([destination]), 250);
     return true;
   }
 

@@ -125,11 +125,27 @@ describe('SupabaseRepository.saveSession (RPC transaccional)', () => {
         duration_minutes: 60,
         notes: 'notas',
         plan: {
+          // Contrato ampliado: ficha y copias históricas viajan en el plan JSON existente.
+          sheet: { time: '', macrocycle: '', mesocycle: '', microcycle: '', preSession: '' },
           number: null,
           objectives: '',
           material: '',
           attendance: [],
-          tasks: { t1: { section: 'main', seriesCount: null, minutesPerSeries: null } },
+          tasks: {
+            t1: {
+              section: 'main',
+              seriesCount: null,
+              minutesPerSeries: null,
+              repetitions: 1,
+              restMinutes: 0,
+              development: '',
+              aspects: '',
+              progression: '',
+              dimensions: '',
+              playerColors: {},
+              snapshot: null,
+            },
+          },
         },
       },
       p_revision: null, // sesión nueva o sin revisión → la RPC inserta
@@ -295,6 +311,88 @@ function makeSessionWithTasks(overrides: Partial<Session> = {}): Session {
 }
 
 describe('SupabaseRepository.importLocalData', () => {
+  it('sigue importando un canvas v1 como array plano al remapear jugadores', async () => {
+    const { client, rpcMock } = makeClient({
+      rpc: async () => ({
+        data: {
+          created: { players: 0, folders: 0, exercises: 1, sessions: 0 },
+          skipped: { players: 0, folders: 0, exercises: 0, sessions: 0 },
+        },
+        error: null,
+      }),
+    });
+    const repo = new SupabaseRepository(client, 'user-1', 'team-1');
+    await repo.importLocalData('team-1', {
+      players: [],
+      folders: [],
+      exercises: [
+        makeExercise({
+          folderId: null,
+          canvas: [{ id: 'c', t: 'cone', x: 0.5, y: 0.5 }] as unknown as CanvasDocument,
+        }),
+      ],
+      sessions: [],
+    });
+    const payload = (rpcMock.mock.calls[0][1] as { p_payload: ImportPayload }).p_payload;
+    const canvas = payload.exercises[0]['canvas_data'] as unknown as CanvasDocument;
+    expect(canvas.frames[0].elements[0]).toMatchObject({ id: 'c', t: 'cone', x: 0.5, y: 0.5 });
+  });
+  it('remapea petos y referencias de jugador también dentro del histórico de la sesión', async () => {
+    const { client, rpcMock } = makeClient({
+      rpc: async () => ({
+        data: {
+          created: { players: 1, folders: 0, exercises: 1, sessions: 1 },
+          skipped: { players: 0, folders: 0, exercises: 0, sessions: 0 },
+        },
+        error: null,
+      }),
+    });
+    const repo = new SupabaseRepository(client, 'user-1', 'team-1');
+    const ex = makeExercise({
+      teamId: 'local-team',
+      folderId: null,
+      canvas: {
+        ...CANVAS,
+        playerColors: { 'j-1': '#8e44ad' },
+        frames: [
+          {
+            duration: 1000,
+            elements: [{ id: 'player', t: 'player', playerId: 'j-1', x: 0.5, y: 0.5 }],
+          },
+        ],
+      },
+    });
+    const session = makeSessionWithTasks({
+      tasks: [
+        {
+          id: 'task',
+          exerciseId: ex.id,
+          title: ex.title,
+          durationMinutes: 15,
+          material: '',
+          sortOrder: 0,
+          playerColors: { 'j-1': '#8e44ad' },
+          snapshot: ex,
+        },
+      ],
+    });
+    await repo.importLocalData('team-1', {
+      players: [makePlayer()],
+      folders: [],
+      exercises: [ex],
+      sessions: [session],
+    });
+    const payload = (rpcMock.mock.calls[0][1] as { p_payload: ImportPayload }).p_payload;
+    const taskId = payload.sessions[0].tasks![0]['id'];
+    const plan = payload.sessions[0].plan as {
+      tasks: Record<string, { playerColors: Record<string, string>; snapshot: Exercise }>;
+    };
+    const playerId = payload.players[0]['id'];
+    expect(plan.tasks[taskId].playerColors).toEqual({ [playerId]: '#8e44ad' });
+    expect(plan.tasks[taskId].snapshot.teamId).toBe('team-1');
+    expect(plan.tasks[taskId].snapshot.id).toBe(payload.exercises[0]['id']);
+    expect(plan.tasks[taskId].snapshot.canvas?.frames[0].elements[0].playerId).toBe(playerId);
+  });
   interface ImportTask {
     id: string;
     exercise_id: string | null;

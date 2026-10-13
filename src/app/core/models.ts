@@ -300,6 +300,15 @@ export interface SessionAttendance {
   attitude: string;
   minutes: number | null;
   notes: string;
+  position?: Position;
+}
+
+export interface SessionSheet {
+  time: string;
+  macrocycle: string;
+  mesocycle: string;
+  microcycle: string;
+  preSession: string;
 }
 
 export interface SessionTask {
@@ -312,6 +321,13 @@ export interface SessionTask {
   section?: SessionSection;
   seriesCount?: number | null;
   minutesPerSeries?: number | null;
+  repetitions?: number;
+  restMinutes?: number;
+  development?: string;
+  aspects?: string;
+  progression?: string;
+  dimensions?: string;
+  playerColors?: Record<string, string>;
   /** Copia de los datos del ejercicio al añadirlo (la sesión no cambia si se edita el original). */
   snapshot?: Exercise;
 }
@@ -327,6 +343,7 @@ export interface Session {
   objectives?: string;
   material?: string;
   attendance?: SessionAttendance[];
+  sheet?: SessionSheet;
   tasks: SessionTask[];
   createdAt: string;
   savedAt: string;

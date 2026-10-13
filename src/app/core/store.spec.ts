@@ -7,6 +7,30 @@ import { FIELD_BASE_SPECS } from './field';
 describe('StoreService', () => {
   let store: StoreService;
 
+  it('un fallo de cuota al guardar sesión no deja una sesión fantasma en memoria', async () => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new DOMException('QuotaExceededError');
+    };
+    try {
+      const ok = await store.saveSession({
+        id: 's',
+        teamId: 't',
+        title: 'Sin guardar',
+        date: '2026-10-13',
+        durationMinutes: 120,
+        notes: '',
+        tasks: [],
+        createdAt: 'now',
+        savedAt: 'now',
+      });
+      expect(ok).toBe(false);
+      expect(store.sessions()).toEqual([]);
+    } finally {
+      Storage.prototype.setItem = original;
+    }
+  });
+
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('entrenolab:seeded', '1');

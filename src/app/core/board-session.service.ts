@@ -8,6 +8,7 @@ export interface BoardSession {
   /** Metadatos del borrador IA (si se abre un borrador nuevo): inicializan el
    *  panel "Datos del ejercicio". Para un ejercicio existente no se usan. */
   meta?: DraftMeta | null;
+  returnRoute?: '/sessions';
 }
 
 /** Estado compartido entre la biblioteca y la pizarra cuando se está
@@ -24,8 +25,13 @@ export class BoardSessionService {
     this._dirty.set(v);
   }
 
-  open(exerciseId: string | null, doc: CanvasDocument | null, meta: DraftMeta | null = null): void {
-    this._session.set({ exerciseId, doc, meta });
+  open(
+    exerciseId: string | null,
+    doc: CanvasDocument | null,
+    meta: DraftMeta | null = null,
+    returnRoute?: '/sessions',
+  ): void {
+    this._session.set({ exerciseId, doc, meta, returnRoute });
     this._dirty.set(false);
   }
 

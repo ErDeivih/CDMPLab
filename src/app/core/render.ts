@@ -1764,7 +1764,7 @@ export function materialPreviewSvg(el: CanvasElement): string {
     cy = py(0.5, r);
   const w = el.t === 'minigoal' ? materialSize(el) * 3.4 : hw * r.w * 2.5,
     h = el.t === 'minigoal' ? materialSize(el) * 1.5 : hh * r.h * 2.5;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${cx - w / 2} ${cy - h / 2} ${w} ${h}">${elStr(centered, false, r, false, 1, 'full')}</svg>`;
+  return `<svg class="mat-thumb-svg" xmlns="http://www.w3.org/2000/svg" viewBox="${cx - w / 2} ${cy - h / 2} ${w} ${h}">${elStr(centered, false, r, false, 1, 'full')}</svg>`;
 }
 
 function selectionStr(elements: CanvasElement[], id: string, r: Geometry['rect']): string {

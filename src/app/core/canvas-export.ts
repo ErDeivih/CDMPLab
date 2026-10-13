@@ -34,6 +34,7 @@ export interface ExportPngOptions {
   grid?: boolean;
   guide?: 'none' | '2x2' | '3x3' | 'thirds' | 'lanes';
   grass?: 'stripes' | 'plain' | 'checker';
+  f7?: CanvasDocument['f7'];
 }
 
 /**
@@ -53,7 +54,7 @@ export function imageCargada(img: { complete: boolean; naturalWidth: number }): 
 export async function exportPng(
   fieldType: FieldType,
   elements: CanvasElement[],
-  opts: ExportPngOptions
+  opts: ExportPngOptions,
 ): Promise<string> {
   const svg = await inlineSvgAssets(
     renderBoardSvg(fieldType, elements, {
@@ -63,11 +64,12 @@ export async function exportPng(
       grid: opts.grid,
       guide: opts.guide,
       grass: opts.grass,
+      f7: opts.f7,
       transparent: opts.transparent,
     }).replace(
       'class="entrenolab-board"',
-      `width="${opts.width}" height="${opts.height}" class="entrenolab-board"`
-    )
+      `width="${opts.width}" height="${opts.height}" class="entrenolab-board"`,
+    ),
   );
   const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   const img = new Image();
@@ -106,6 +108,8 @@ export async function generateThumbnail(doc: CanvasDocument | null): Promise<str
       orientation: doc.orientation,
       grid: Boolean(doc.grid),
       guide: doc.guide ?? 'none',
+      grass: doc.grass ?? 'stripes',
+      f7: doc.f7,
     });
   } catch {
     return null;
