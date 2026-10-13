@@ -744,6 +744,8 @@ select {
 }
 
 .rail-btn.rail-row {
+  // Dejar el scroll vertical nativo, sin que robe el arrastre horizontal al campo.
+  touch-action: pan-y;
   width: 100%;
   height: auto;
   min-height: 38px;
@@ -787,6 +789,19 @@ select {
     cursor: not-allowed;
     background: transparent;
     color: #8a97a3;
+  }
+}
+.tools-material-card .mat-thumb {
+  // Agarre explícito: permite también arrastrar HACIA ARRIBA desde la hoja móvil.
+  // Fuera de la imagen, el catálogo mantiene su desplazamiento vertical nativo.
+  touch-action: none;
+}
+.material-touch-hint {
+  display: none;
+}
+@media (max-width: 980px) {
+  .material-touch-hint {
+    display: block;
   }
 }
 
@@ -1055,6 +1070,31 @@ select {
   .hurdle-variant svg {
     width: 100%;
     height: 100%;
+  }
+}
+.material-photo-variant.variant-swatch {
+  width: 72px;
+  min-height: 78px;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  gap: 3px;
+  border-radius: 8px;
+  background: #303941 !important;
+  img {
+    width: 44px;
+    height: 40px;
+    object-fit: contain;
+    pointer-events: none;
+  }
+  .variant-caption {
+    font-size: 10px;
+    line-height: 1.2;
+    color: #fff;
+    pointer-events: none;
   }
 }
 

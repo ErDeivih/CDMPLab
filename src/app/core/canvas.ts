@@ -132,6 +132,8 @@ const POINT_LIKE: ReadonlySet<string> = new Set([
   'fitball',
   'pica',
   'dumbbell',
+  'resistance_band',
+  'medicine_ball',
 ]);
 
 /** La base por defecto de los objetos puntuales/materiales/texto (Fase 3: el dueño
@@ -191,6 +193,15 @@ function emptyDoc(): CanvasDocument {
  *    versión. Idempotente: al reabrir (ya con version 4) no se vuelve a encoger.
  * Si el documento es inválido, devuelve un lienzo nuevo vacío (no rompe la carga).
  */
+function preserveLegacyTextSizes(frames: CanvasFrame[]): CanvasFrame[] {
+  return frames.map((f) => ({
+    ...f,
+    elements: f.elements.map((el) =>
+      el.t === 'text' && el.size === undefined ? { ...el, size: 2.25 } : el,
+    ),
+  }));
+}
+
 export function normalizeCanvas(raw: unknown): CanvasDocument {
   if (Array.isArray(raw)) {
     // v1: lista de elementos (legacy, nunca migrado → factor MATERIAL_SIZE_RATIO).
@@ -199,7 +210,7 @@ export function normalizeCanvas(raw: unknown): CanvasDocument {
       version: 2,
       schemaVersion: CANVAS_SCHEMA_VERSION,
       field: 'full',
-      frames: migrateSizes(frames, MATERIAL_SIZE_RATIO),
+      frames: preserveLegacyTextSizes(migrateSizes(frames, MATERIAL_SIZE_RATIO)),
     };
   }
 
@@ -226,6 +237,9 @@ export function normalizeCanvas(raw: unknown): CanvasDocument {
     if (factor !== 1) {
       frames = migrateSizes(frames, factor);
     }
+    // El nuevo tamaño predeterminado (1,4) solo afecta a textos NUEVOS. Un texto
+    // histórico sin tamaño explícito usaba 2,25; conservarlo al editar/reabrir.
+    frames = preserveLegacyTextSizes(frames);
     return {
       version: 2,
       schemaVersion: CANVAS_SCHEMA_VERSION,

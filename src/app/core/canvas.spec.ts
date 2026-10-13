@@ -8,6 +8,61 @@ function el(x: number, y: number): CanvasElement {
 }
 
 describe('normalizeCanvas (schemaVersion/migrador)', () => {
+  it('texto histórico sin tamaño conserva 2,25; nuevo texto explícito conserva 1,4', () => {
+    const v1 = normalizeCanvas([{ id: 'antiguo', t: 'text', v: 'Anterior' }]);
+    expect(v1.frames[0].elements[0].size).toBe(2.25);
+    expect(normalizeCanvas(v1).frames[0].elements[0].size).toBe(2.25);
+    const doc = normalizeCanvas({
+      version: 2,
+      schemaVersion: 5,
+      field: 'full',
+      frames: [
+        {
+          duration: 1000,
+          elements: [
+            { id: 'old', t: 'text', v: 'Anterior' },
+            { id: 'new', t: 'text', v: 'Nuevo', size: 1.4 },
+          ],
+        },
+      ],
+    });
+    expect(doc.frames[0].elements.map((e) => e.size)).toEqual([2.25, 1.4]);
+  });
+  it('conserva nuevas gomas y balón medicinal en un round-trip JSON', () => {
+    const source = {
+      version: 2,
+      schemaVersion: 5,
+      field: 'full',
+      frames: [
+        {
+          duration: 1000,
+          elements: [
+            {
+              id: 'g',
+              t: 'resistance_band',
+              x: 0.3,
+              y: 0.4,
+              assetKind: 'band_red',
+              asset: 'assets/tactical/band-red.png',
+              size: 0.78,
+            },
+            {
+              id: 'b',
+              t: 'medicine_ball',
+              x: 0.6,
+              y: 0.7,
+              assetKind: 'medicine_handles',
+              asset: 'assets/tactical/medicine-handles.png',
+              size: 0.51,
+            },
+          ],
+        },
+      ],
+    };
+    expect(normalizeCanvas(JSON.parse(JSON.stringify(source))).frames[0].elements).toEqual(
+      source.frames[0].elements,
+    );
+  });
   it('convierte un array v1 a un documento v2 con un único frame', () => {
     const doc = normalizeCanvas([el(0.3, 0.5), el(0.6, 0.5)]);
     expect(doc.schemaVersion).toBe(CANVAS_SCHEMA_VERSION);
@@ -67,7 +122,11 @@ describe('normalizeCanvas (schemaVersion/migrador)', () => {
   it('conserva los ids existentes (no los reemplaza)', () => {
     const a = el(0.2, 0.2);
     a.id = 'keep-me';
-    const doc = normalizeCanvas({ version: 2, field: 'half', frames: [{ duration: 500, elements: [a] }] });
+    const doc = normalizeCanvas({
+      version: 2,
+      field: 'half',
+      frames: [{ duration: 500, elements: [a] }],
+    });
     expect(doc.frames[0].elements[0].id).toBe('keep-me');
     expect(doc.field).toBe('half');
   });
@@ -101,9 +160,29 @@ describe('normalizeCanvas (schemaVersion/migrador)', () => {
       x2: 0.8,
       y2: 0.2,
     };
-    const fr: CanvasElement = { id: 'f', t: 'freehand', points: [[0.1, 0.2], [9, -3], [0.5, 0.5]] };
-    const ep: CanvasElement = { id: 'e', t: 'ellipse', x: 0.2, y: 0.2, w: 0.3, h: 0.2, fill: false };
-    const doc = normalizeCanvas({ version: 2, field: 'full', frames: [{ duration: 1000, elements: [el, fr, ep] }] });
+    const fr: CanvasElement = {
+      id: 'f',
+      t: 'freehand',
+      points: [
+        [0.1, 0.2],
+        [9, -3],
+        [0.5, 0.5],
+      ],
+    };
+    const ep: CanvasElement = {
+      id: 'e',
+      t: 'ellipse',
+      x: 0.2,
+      y: 0.2,
+      w: 0.3,
+      h: 0.2,
+      fill: false,
+    };
+    const doc = normalizeCanvas({
+      version: 2,
+      field: 'full',
+      frames: [{ duration: 1000, elements: [el, fr, ep] }],
+    });
     const ids = doc.frames[0].elements.map((e) => e.id);
     expect(ids).toContain('mix');
     expect(ids).toContain('f');
@@ -111,28 +190,71 @@ describe('normalizeCanvas (schemaVersion/migrador)', () => {
     const freehand = doc.frames[0].elements.find((e) => e.id === 'f')!;
     // La franja exterior es dominio válido [-0.05, 1.05]: un punto muy fuera se clampa al
     // borde de la franja (no a 0..1), para no "saltar" al límite del campo al guardar.
-    expect(freehand.points).toEqual([[0.1, 0.2], [1.05, -0.05], [0.5, 0.5]]);
+    expect(freehand.points).toEqual([
+      [0.1, 0.2],
+      [1.05, -0.05],
+      [0.5, 0.5],
+    ]);
   });
 
   it('la franja exterior es dominio persistente: un objeto en [-0.05,1.05] se conserva al normalizar (FASE 3)', () => {
-    const inStrip: CanvasElement = { id: 's', t: 'cone', x: -0.03, y: 1.04, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
-    const doc = normalizeCanvas({ version: 5, field: 'full', frames: [{ duration: 1000, elements: [inStrip] }] });
+    const inStrip: CanvasElement = {
+      id: 's',
+      t: 'cone',
+      x: -0.03,
+      y: 1.04,
+      assetKind: 'cone_red',
+      asset: '/assets/tactical/cone-red.png',
+    };
+    const doc = normalizeCanvas({
+      version: 5,
+      field: 'full',
+      frames: [{ duration: 1000, elements: [inStrip] }],
+    });
     const el = doc.frames[0].elements[0];
     expect(el.x, 'x < 0 dentro de la franja se conserva').toBeCloseTo(-0.03, 5);
     expect(el.y, 'y > 1 dentro de la franja se conserva').toBeCloseTo(1.04, 5);
     // Fuera del dominio (muy lejos) se clampa al borde de la franja, no a 0..1.
     const farOut = { id: 'o', t: 'cone', x: 9, y: -7 };
-    const doc2 = normalizeCanvas({ version: 5, field: 'full', frames: [{ duration: 1000, elements: [farOut] }] });
+    const doc2 = normalizeCanvas({
+      version: 5,
+      field: 'full',
+      frames: [{ duration: 1000, elements: [farOut] }],
+    });
     expect(doc2.frames[0].elements[0].x).toBeCloseTo(1.05, 5);
     expect(doc2.frames[0].elements[0].y).toBeCloseTo(-0.05, 5);
   });
 
   it('migra materiales: vector histórico, asset sin assetKind, assetKind válido y desconocido', () => {
     const vector: CanvasElement = { id: 'v', t: 'cone', x: 0.2, y: 0.2 }; // histórico: sin asset ni assetKind
-    const legacy: CanvasElement = { id: 'l', t: 'cone', x: 0.3, y: 0.3, asset: '/assets/tactical/cone-red.png' }; // asset sin assetKind
-    const valid: CanvasElement = { id: 'ok', t: 'cone', x: 0.4, y: 0.4, asset: '/assets/tactical/cone-blue.png', assetKind: 'cone_blue' };
-    const unknown: CanvasElement = { id: 'u', t: 'ring', x: 0.5, y: 0.5, asset: '/assets/tactical/esto-no-existe.png', assetKind: 'no-existe' };
-    const doc = normalizeCanvas({ version: 2, field: 'full', frames: [{ duration: 1000, elements: [vector, legacy, valid, unknown] }] });
+    const legacy: CanvasElement = {
+      id: 'l',
+      t: 'cone',
+      x: 0.3,
+      y: 0.3,
+      asset: '/assets/tactical/cone-red.png',
+    }; // asset sin assetKind
+    const valid: CanvasElement = {
+      id: 'ok',
+      t: 'cone',
+      x: 0.4,
+      y: 0.4,
+      asset: '/assets/tactical/cone-blue.png',
+      assetKind: 'cone_blue',
+    };
+    const unknown: CanvasElement = {
+      id: 'u',
+      t: 'ring',
+      x: 0.5,
+      y: 0.5,
+      asset: '/assets/tactical/esto-no-existe.png',
+      assetKind: 'no-existe',
+    };
+    const doc = normalizeCanvas({
+      version: 2,
+      field: 'full',
+      frames: [{ duration: 1000, elements: [vector, legacy, valid, unknown] }],
+    });
     const byId = (id: string) => doc.frames[0].elements.find((e) => e.id === id)!;
     expect(byId('v').asset).toBeUndefined(); // se conserva vectorial
     expect(byId('l').asset).toBe('/assets/tactical/cone-red.png'); // compat: asset se mantiene
@@ -144,12 +266,37 @@ describe('normalizeCanvas (schemaVersion/migrador)', () => {
   it('no descarta los materiales nuevos (flag/trampoline/target/net/vball) al normalizar', () => {
     const newOnes: CanvasElement[] = [
       { id: 'f', t: 'flag', x: 0.2, y: 0.2, asset: '/assets/tactical/flag.png', assetKind: 'flag' },
-      { id: 't', t: 'trampoline', x: 0.3, y: 0.3, asset: '/assets/tactical/trampoline.png', assetKind: 'trampoline' },
-      { id: 'g', t: 'target', x: 0.4, y: 0.4, asset: '/assets/tactical/target.png', assetKind: 'target' },
+      {
+        id: 't',
+        t: 'trampoline',
+        x: 0.3,
+        y: 0.3,
+        asset: '/assets/tactical/trampoline.png',
+        assetKind: 'trampoline',
+      },
+      {
+        id: 'g',
+        t: 'target',
+        x: 0.4,
+        y: 0.4,
+        asset: '/assets/tactical/target.png',
+        assetKind: 'target',
+      },
       { id: 'n', t: 'net', x: 0.5, y: 0.5, asset: '/assets/tactical/net.png', assetKind: 'net' },
-      { id: 'v', t: 'vball', x: 0.6, y: 0.6, asset: '/assets/tactical/ball-purple.png', assetKind: 'vball' },
+      {
+        id: 'v',
+        t: 'vball',
+        x: 0.6,
+        y: 0.6,
+        asset: '/assets/tactical/ball-purple.png',
+        assetKind: 'vball',
+      },
     ];
-    const doc = normalizeCanvas({ version: 2, field: 'full', frames: [{ duration: 1000, elements: newOnes }] });
+    const doc = normalizeCanvas({
+      version: 2,
+      field: 'full',
+      frames: [{ duration: 1000, elements: newOnes }],
+    });
     const ids = doc.frames[0].elements.map((e) => e.id);
     expect(ids).toEqual(['f', 't', 'g', 'n', 'v']);
     // Se conservan tipo, asset y assetKind (ninguno cae al fallback vectorial por ser "desconocido").
@@ -172,8 +319,22 @@ describe('normalizeCanvas (schemaVersion/migrador)', () => {
 
   it('guarda/carga el texto multilínea EXACTO (líneas vacías iniciales, finales y consecutivas)', () => {
     const v = '\nRondos 4v2\n\nConservación\n\nPase en superioridad\n';
-    const t: CanvasElement = { id: 't', t: 'text', x: 0.3, y: 0.3, v, size: 3, w: 0.3, h: 0.3, autoH: false };
-    const doc = normalizeCanvas({ version: 2, field: 'full', frames: [{ duration: 1000, elements: [t] }] });
+    const t: CanvasElement = {
+      id: 't',
+      t: 'text',
+      x: 0.3,
+      y: 0.3,
+      v,
+      size: 3,
+      w: 0.3,
+      h: 0.3,
+      autoH: false,
+    };
+    const doc = normalizeCanvas({
+      version: 2,
+      field: 'full',
+      frames: [{ duration: 1000, elements: [t] }],
+    });
     const out = doc.frames[0].elements.find((e) => e.id === 't')!;
     expect(out.t).toBe('text');
     // El contenido (con sus saltos) se conserva bit a bit.
@@ -185,11 +346,49 @@ describe('normalizeCanvas (schemaVersion/migrador)', () => {
   // ---------- Fase 4 — migración de tamaños (una sola vez, idempotente) ----------
 
   it('migra UNA vez el size de materiales/texto de un documento antiguo (schemaVersion < 4)', () => {
-    const cone: CanvasElement = { id: 'c', t: 'cone', x: 0.3, y: 0.3, size: 1.0, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
-    const pole: CanvasElement = { id: 'p', t: 'pole', x: 0.5, y: 0.5, size: 1.6, assetKind: 'pole', asset: '/assets/tactical/pole.png' };
-    const txt: CanvasElement = { id: 't', t: 'text', x: 0.2, y: 0.2, v: 'Hola', size: 3, w: 0.3, h: 0.14 };
-    const player: CanvasElement = { id: 'pl', t: 'player', x: 0.4, y: 0.5, n: 5, c: '#1a73e8', side: 'own' };
-    const raw = { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [cone, pole, txt, player] }] };
+    const cone: CanvasElement = {
+      id: 'c',
+      t: 'cone',
+      x: 0.3,
+      y: 0.3,
+      size: 1.0,
+      assetKind: 'cone_red',
+      asset: '/assets/tactical/cone-red.png',
+    };
+    const pole: CanvasElement = {
+      id: 'p',
+      t: 'pole',
+      x: 0.5,
+      y: 0.5,
+      size: 1.6,
+      assetKind: 'pole',
+      asset: '/assets/tactical/pole.png',
+    };
+    const txt: CanvasElement = {
+      id: 't',
+      t: 'text',
+      x: 0.2,
+      y: 0.2,
+      v: 'Hola',
+      size: 3,
+      w: 0.3,
+      h: 0.14,
+    };
+    const player: CanvasElement = {
+      id: 'pl',
+      t: 'player',
+      x: 0.4,
+      y: 0.5,
+      n: 5,
+      c: '#1a73e8',
+      side: 'own',
+    };
+    const raw = {
+      version: 2,
+      schemaVersion: 3,
+      field: 'full',
+      frames: [{ duration: 1000, elements: [cone, pole, txt, player] }],
+    };
 
     const doc = normalizeCanvas(raw);
     const byId = (id: string) => doc.frames[0].elements.find((e) => e.id === id)!;
@@ -202,9 +401,31 @@ describe('normalizeCanvas (schemaVersion/migrador)', () => {
   });
 
   it('la migración es IDEMPOTENTE: aplicar normalizeCanvas DOS veces no vuelve a encoger', () => {
-    const cone: CanvasElement = { id: 'c', t: 'cone', x: 0.3, y: 0.3, size: 1.0, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
-    const txt: CanvasElement = { id: 't', t: 'text', x: 0.2, y: 0.2, v: 'Hola', size: 3, w: 0.3, h: 0.14 };
-    const raw = { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [cone, txt] }] };
+    const cone: CanvasElement = {
+      id: 'c',
+      t: 'cone',
+      x: 0.3,
+      y: 0.3,
+      size: 1.0,
+      assetKind: 'cone_red',
+      asset: '/assets/tactical/cone-red.png',
+    };
+    const txt: CanvasElement = {
+      id: 't',
+      t: 'text',
+      x: 0.2,
+      y: 0.2,
+      v: 'Hola',
+      size: 3,
+      w: 0.3,
+      h: 0.14,
+    };
+    const raw = {
+      version: 2,
+      schemaVersion: 3,
+      field: 'full',
+      frames: [{ duration: 1000, elements: [cone, txt] }],
+    };
     const once = normalizeCanvas(raw);
     const twice = normalizeCanvas(once);
     // Al reabrir (ya con version 4), NO se vuelve a escalar.
@@ -215,28 +436,75 @@ describe('normalizeCanvas (schemaVersion/migrador)', () => {
   });
 
   it('conserva los valores explícitos de un documento YA migrado (schemaVersion >= 4)', () => {
-    const cone: CanvasElement = { id: 'c', t: 'cone', x: 0.3, y: 0.3, size: 0.75, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
-    const raw = { version: 2, schemaVersion: CANVAS_SCHEMA_VERSION, field: 'full', frames: [{ duration: 1000, elements: [cone] }] };
+    const cone: CanvasElement = {
+      id: 'c',
+      t: 'cone',
+      x: 0.3,
+      y: 0.3,
+      size: 0.75,
+      assetKind: 'cone_red',
+      asset: '/assets/tactical/cone-red.png',
+    };
+    const raw = {
+      version: 2,
+      schemaVersion: CANVAS_SCHEMA_VERSION,
+      field: 'full',
+      frames: [{ duration: 1000, elements: [cone] }],
+    };
     const doc = normalizeCanvas(raw);
     expect(doc.frames[0].elements[0].size).toBe(0.75);
   });
 
   it('Fase 3: migra los documentos v4 (ya a 0.75) al nuevo tamaño 0.60 UNA sola vez (idempotente)', () => {
-    const cone: CanvasElement = { id: 'c', t: 'cone', x: 0.3, y: 0.3, size: 0.75, assetKind: 'cone_red', asset: '/assets/tactical/cone-red.png' };
-    const raw = { version: 2, schemaVersion: 4, field: 'full', frames: [{ duration: 1000, elements: [cone] }] };
+    const cone: CanvasElement = {
+      id: 'c',
+      t: 'cone',
+      x: 0.3,
+      y: 0.3,
+      size: 0.75,
+      assetKind: 'cone_red',
+      asset: '/assets/tactical/cone-red.png',
+    };
+    const raw = {
+      version: 2,
+      schemaVersion: 4,
+      field: 'full',
+      frames: [{ duration: 1000, elements: [cone] }],
+    };
     const doc = normalizeCanvas(raw);
     expect(doc.schemaVersion).toBe(CANVAS_SCHEMA_VERSION);
     // 0.75 (base antigua) × 0.80 = 0.60 (nuevo tamaño base).
-    expect(doc.frames[0].elements[0].size).toBeCloseTo(0.75 * 0.80, 6);
+    expect(doc.frames[0].elements[0].size).toBeCloseTo(0.75 * 0.8, 6);
     // Reabrir (ya v5) NO vuelve a encoger.
     const twice = normalizeCanvas(doc);
-    expect(twice.frames[0].elements[0].size).toBeCloseTo(0.75 * 0.80, 6);
+    expect(twice.frames[0].elements[0].size).toBeCloseTo(0.75 * 0.8, 6);
   });
 
   it('no toca las líneas/flechas al migrar (solo tamaño de puntuales/materiales/texto)', () => {
-    const line: CanvasElement = { id: 'l', t: 'line', x1: 0.1, y1: 0.2, x2: 0.9, y2: 0.8, strokeWidth: 0.8 };
-    const arrow: CanvasElement = { id: 'a', t: 'arrow', x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.3, strokeWidth: 0.4 };
-    const raw = { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [line, arrow] }] };
+    const line: CanvasElement = {
+      id: 'l',
+      t: 'line',
+      x1: 0.1,
+      y1: 0.2,
+      x2: 0.9,
+      y2: 0.8,
+      strokeWidth: 0.8,
+    };
+    const arrow: CanvasElement = {
+      id: 'a',
+      t: 'arrow',
+      x1: 0.2,
+      y1: 0.3,
+      x2: 0.8,
+      y2: 0.3,
+      strokeWidth: 0.4,
+    };
+    const raw = {
+      version: 2,
+      schemaVersion: 3,
+      field: 'full',
+      frames: [{ duration: 1000, elements: [line, arrow] }],
+    };
     const doc = normalizeCanvas(raw);
     expect(doc.frames[0].elements[0].strokeWidth).toBe(0.8);
     expect(doc.frames[0].elements[1].strokeWidth).toBe(0.4);

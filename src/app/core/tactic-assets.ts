@@ -29,6 +29,7 @@ export type TacticalKind =
   | 'ladder'
   | 'ladder_yellow'
   | 'hurdle'
+  | 'hurdle_orange'
   | 'hurdle_low'
   | 'hurdle_high'
   | 'minigoal'
@@ -41,6 +42,15 @@ export type TacticalKind =
   | 'net'
   | 'vball'
   | 'dumbbell'
+  | 'dumbbell_metal'
+  | 'bosu_blue'
+  | 'kettlebell'
+  | 'weight_plate'
+  | 'band_yellow'
+  | 'band_red'
+  | 'medicine_ball'
+  | 'medicine_handles'
+  | 'bosu_small'
   | 'ball_football'
   | 'ball_vec';
 
@@ -82,7 +92,13 @@ export const TACTIC_ASSETS: TacticAsset[] = [
     label: 'Escalera (amarilla)',
     color: '#f6c945',
   },
-  { kind: 'hurdle', asset: `${P}hurdle.png`, label: 'Valla', color: '#e8edf2' },
+  { kind: 'hurdle', asset: `${P}hurdle.png`, label: 'Valla clásica', color: '#e8edf2' },
+  {
+    kind: 'hurdle_orange',
+    asset: `${P}hurdle-orange.png`,
+    label: 'Valla naranja',
+    color: '#e67e22',
+  },
   { kind: 'hurdle_low', asset: '', label: 'Valla baja', color: '#f6c945' },
   { kind: 'hurdle_high', asset: '', label: 'Valla alta', color: '#e67e22' },
   // FASE 4: miniportería VECTORIAL (ver nota de la escalera).
@@ -91,11 +107,35 @@ export const TACTIC_ASSETS: TacticAsset[] = [
   { kind: 'ring_flat', asset: `${P}ring-flat.png`, label: 'Aro plano', color: '#e67e22' },
   { kind: 'trampoline', asset: `${P}trampoline.png`, label: 'Minitrampolín', color: '#e8edf2' },
   { kind: 'pole', asset: `${P}pole.png`, label: 'Pértiga', color: '#30353b' },
-  { kind: 'disc', asset: '', label: 'BOSU', color: '#2c7be5' },
+  { kind: 'disc', asset: '', label: 'BOSU histórico', color: '#2c7be5' },
+  { kind: 'bosu_blue', asset: `${P}bosu-blue.png`, label: 'BOSU', color: '#2c7be5' },
+  { kind: 'bosu_small', asset: `${P}bosu-small.png`, label: 'BOSU pequeño', color: '#2c7be5' },
   { kind: 'target', asset: '', label: 'Chino', color: '#2c7be5' },
   { kind: 'net', asset: `${P}net.png`, label: 'Red / valla', color: '#e74c3c' },
   { kind: 'vball', asset: `${P}ball-purple.png`, label: 'Fitball', color: '#c98ab0' },
-  { kind: 'dumbbell', asset: '', label: 'Mancuerna / pesa', color: '#20242a' },
+  { kind: 'dumbbell', asset: '', label: 'Mancuerna histórica', color: '#20242a' },
+  {
+    kind: 'dumbbell_metal',
+    asset: `${P}dumbbell-metal.png`,
+    label: 'Mancuerna / pesa',
+    color: '#20242a',
+  },
+  { kind: 'kettlebell', asset: `${P}kettlebell.png`, label: 'Pesa rusa', color: '#55545d' },
+  { kind: 'weight_plate', asset: `${P}weight-plate.png`, label: 'Disco de peso', color: '#20242a' },
+  { kind: 'band_yellow', asset: `${P}band-yellow.png`, label: 'Goma naranja', color: '#e67e22' },
+  { kind: 'band_red', asset: `${P}band-red.png`, label: 'Goma roja', color: '#e74c3c' },
+  {
+    kind: 'medicine_ball',
+    asset: `${P}medicine-ball.png`,
+    label: 'Balón medicinal',
+    color: '#e67e22',
+  },
+  {
+    kind: 'medicine_handles',
+    asset: `${P}medicine-handles.png`,
+    label: 'Balón medicinal con asas',
+    color: '#20242a',
+  },
   { kind: 'ball_football', asset: `${P}ball.png`, label: 'Balón de fútbol', color: '#ffffff' },
   { kind: 'ball_vec', asset: '', label: 'Balón (vectorial)', color: '#ffffff' },
 ];
@@ -108,12 +148,12 @@ export function tacticAsset(kind: TacticalKind): TacticAsset | undefined {
 export function materialAsset(toolId: string): TacticAsset | undefined {
   const map: Record<string, TacticalKind> = {
     cone: 'cone_red',
-    marker: 'disc',
+    marker: 'bosu_blue',
     pole: 'pole',
     mannequin: 'mannequin',
     goal: 'goal',
     mannequin_row: 'mannequin_row',
-    hurdle: 'hurdle',
+    hurdle: 'hurdle_orange',
     ring: 'ring',
     ladder: 'ladder',
     minigoal: 'minigoal',
@@ -123,7 +163,9 @@ export function materialAsset(toolId: string): TacticAsset | undefined {
     target: 'target',
     net: 'net',
     vball: 'vball',
-    dumbbell: 'dumbbell',
+    dumbbell: 'dumbbell_metal',
+    resistance_band: 'band_yellow',
+    medicine_ball: 'medicine_ball',
   };
   const kind = map[toolId];
   return kind ? tacticAsset(kind) : undefined;
@@ -183,6 +225,17 @@ export const TACTICAL_SIZE: Record<string, number> = {
   fitball: 1.4,
   pica: 1.6,
   dumbbell: 1.2,
+  dumbbell_metal: 1.2,
+  bosu_blue: 1.1,
+  hurdle_orange: 1.35,
+  kettlebell: 0.85,
+  weight_plate: 0.8,
+  band_yellow: 1.3,
+  band_red: 1.3,
+  resistance_band: 1.3,
+  medicine_ball: 0.85,
+  medicine_handles: 0.85,
+  bosu_small: 0.7,
 };
 
 /** Fracción (0..1, sobre el lado LARGO de la imagen) del recuadro de contenido
@@ -198,6 +251,16 @@ export interface BBoxFrac {
 
 export const TACTICAL_BBOX: Record<string, BBoxFrac> = {
   // PNG
+  hurdle_orange: { w: 0.9375, h: 0.741 },
+  dumbbell_metal: { w: 0.9375, h: 0.414 },
+  kettlebell: { w: 0.777, h: 0.9375 },
+  weight_plate: { w: 0.9375, h: 0.932 },
+  band_yellow: { w: 0.9375, h: 0.435 },
+  band_red: { w: 0.9375, h: 0.574 },
+  medicine_ball: { w: 0.926, h: 0.9375 },
+  medicine_handles: { w: 0.9375, h: 0.905 },
+  bosu_blue: { w: 0.9375, h: 0.459 },
+  bosu_small: { w: 0.9375, h: 0.551 },
   cone_red: { w: 0.56, h: 1 },
   cone_yellow: { w: 0.56, h: 1 },
   cone_blue: { w: 0.56, h: 1 },

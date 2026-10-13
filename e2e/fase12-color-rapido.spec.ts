@@ -132,8 +132,9 @@ test('chinos con color previo y vallas baja/alta se colocan y conservan sus vari
     '#a855f7',
   );
   for (const [label, kind, y] of [
-    ['Valla baja', 'hurdle_low', 0.55],
-    ['Valla alta', 'hurdle_high', 0.7],
+    // Contrato nuevo: fotos realistas; baja/alta vectoriales quedan solo en documentos antiguos.
+    ['Valla naranja', 'hurdle_orange', 0.55],
+    ['Valla clásica', 'hurdle', 0.7],
   ] as const) {
     await page.getByRole('button', { name: label, exact: true }).click();
     const row = page
@@ -157,7 +158,7 @@ test('chinos con color previo y vallas baja/alta se colocan y conservan sus vari
     'data-color',
     '#a855f7',
   );
-  await expect(page.locator('.board-canvas [data-asset-kind="hurdle_low"]')).toHaveCount(1);
-  await expect(page.locator('.board-canvas [data-asset-kind="hurdle_high"]')).toHaveCount(1);
+  await expect(page.locator('.board-canvas [data-asset-kind="hurdle_orange"]')).toHaveCount(1);
+  await expect(page.locator('.board-canvas [data-asset-kind="hurdle"]')).toHaveCount(1);
   await expect(page.locator('.field-count')).toHaveText('3');
 });

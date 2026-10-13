@@ -170,6 +170,8 @@ export type ElementType =
   | 'ring'
   | 'ladder'
   | 'dumbbell'
+  | 'resistance_band'
+  | 'medicine_ball'
   | 'flag'
   | 'trampoline'
   | 'target'

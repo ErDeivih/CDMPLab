@@ -49,7 +49,9 @@ export function translateElement(el: CanvasElement, dx: number, dy: number): Can
     t === 'bosu' ||
     t === 'fitball' ||
     t === 'pica' ||
-    t === 'dumbbell'
+    t === 'dumbbell' ||
+    t === 'resistance_band' ||
+    t === 'medicine_ball'
   ) {
     out.x = tr(out.x, dx);
     out.y = tr(out.y, dy);

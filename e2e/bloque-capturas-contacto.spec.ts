@@ -337,7 +337,8 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     await seed(page);
     await openBoard(page);
     await openCat(page, 'Material');
-    await expect(page.locator('.tools-material-card')).toHaveCount(19);
+    // Dos entradas nuevas: gomas elásticas y balón medicinal.
+    await expect(page.locator('.tools-material-card')).toHaveCount(21);
     // El panel muestra el catálogo canónico (sin iconos genéricos). Momentáneamente
     // pude quedar abierto el panel de Propiedades; se cierra si existe.
     if (

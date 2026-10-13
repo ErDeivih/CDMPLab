@@ -222,6 +222,22 @@ export const CANONICAL_MATERIALS: readonly CanonicalMaterial[] = [
     help: 'Mancuerna o pesa',
     point: true,
   },
+  {
+    id: 'resistance_band',
+    title: 'Gomas elásticas',
+    group: 'Preparación física',
+    icon: 'gesture',
+    help: 'Gomas elásticas de resistencia',
+    point: true,
+  },
+  {
+    id: 'medicine_ball',
+    title: 'Balón medicinal',
+    group: 'Balones',
+    icon: 'sports_handball',
+    help: 'Balón medicinal con o sin asas',
+    point: true,
+  },
   // Retirados (compatibilidad): se ocultan, pero sus documentos siguen abriendo.
   {
     id: 'fitball',

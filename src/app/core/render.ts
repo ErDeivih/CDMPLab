@@ -12,7 +12,7 @@ import {
   goalBoxUnits,
 } from './field';
 import { f7Geometry } from './f7';
-import { materialBaseSize, materialHitFrac } from './tactic-assets';
+import { materialBaseSize, materialHitFrac, materialAsset } from './tactic-assets';
 
 // =============================================================
 // EntrenoLab — Render de la pizarra a SVG (funciones PURAS).
@@ -59,7 +59,7 @@ export function dashArray(lineStyle: string | undefined): string {
  *  base normalizado del tipo (TACTICAL_SIZE). Así los documentos antiguos sin
  *  `size` también se normalizan y ya no hay materiales diminutos. */
 export function materialSize(el: CanvasElement): number {
-  return el.size ?? materialBaseSize(el.assetKind ?? el.t);
+  return (el.size ?? materialBaseSize(el.assetKind ?? el.t)) * (el.t === 'minigoal' ? 1.2 : 1);
 }
 
 /**
@@ -173,10 +173,8 @@ export const BOARD_CANON_RECT = HORIZONTAL.rect;
 // (w/h) es lo bastante grande para que "Texto" y un par de líneas no desborden.
 // =============================================================
 
-/** Tamaño de fuente por defecto de un texto nuevo (unidades del viewBox 100×80).
- *  Fase 4: se redujo al 75 % del antiguo (3 → 2.25) para que los objetos de un
- *  solo toque aparezcan ~75 % de su tamaño anterior. */
-export const DEFAULT_TEXT_SIZE = 2.25;
+/** Tamaño de fuente de texto NUEVO: 1,4 (encargo 13/10/2026), no escala de material. */
+export const DEFAULT_TEXT_SIZE = 1.4;
 /** Ancho (normalizado 0..1) por defecto del cuadro de texto. */
 export const DEFAULT_TEXT_W = 0.3;
 /** Alto (normalizado 0..1) por defecto del cuadro de texto. */
@@ -723,6 +721,8 @@ export function hitTestElement(
       el.t === 'net' ||
       el.t === 'vball' ||
       el.t === 'dumbbell' ||
+      el.t === 'resistance_band' ||
+      el.t === 'medicine_ball' ||
       el.t === 'coachC' ||
       el.t === 'peto' ||
       el.t === 'chaleco' ||
@@ -882,6 +882,9 @@ function elStr(
   // (FASE 3 del encargo de materiales) y aquí es donde se decide qué se dibuja.
   field: FieldType = 'full',
 ): string {
+  if (!el.asset && (el.t === 'medicine_ball' || el.t === 'resistance_band')) {
+    el = { ...el, asset: materialAsset(el.t)?.asset };
+  }
   // La rotación histórica se conserva en el documento para compatibilidad, pero estos materiales
   // tienen un arriba físico: el cono apoya su base y picas/maniquíes permanecen de pie.
   if (FIXED_UPRIGHT_TYPES.has(el.t) && el.rot) el = { ...el, rot: 0 };
@@ -1254,7 +1257,8 @@ function elStr(
     case 'text': {
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
-      const size = el.size ?? DEFAULT_TEXT_SIZE;
+      // Documentos históricos sin tamaño explícito conservan su apariencia anterior.
+      const size = el.size ?? 2.25;
       const hasBox = !!(el.w && el.h);
       // El ancho del cuadro NO desborda el campo: como mucho hasta su borde derecho.
       const maxW = Math.max(size * 0.5, r.w - (el.x ?? 0) * r.w);
@@ -1748,6 +1752,19 @@ export function renderBoardSvg(
     `</g>` +
     `</svg>`
   );
+}
+
+/** Miniatura que comparte literalmente el render del objeto, sin copiar sus trazos. */
+export function materialPreviewSvg(el: CanvasElement): string {
+  const r = BOARD_CANON_RECT;
+  const centered = { ...el, x: 0.5, y: 0.5 };
+  // El encuadre de una miniatura no debe incluir el mínimo táctil del editor.
+  const { hw, hh } = materialHitHalfExtents(centered, r, 1, { x: 0, y: 0 }, false, 'full');
+  const cx = px(0.5, r),
+    cy = py(0.5, r);
+  const w = el.t === 'minigoal' ? materialSize(el) * 3.4 : hw * r.w * 2.5,
+    h = el.t === 'minigoal' ? materialSize(el) * 1.5 : hh * r.h * 2.5;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${cx - w / 2} ${cy - h / 2} ${w} ${h}">${elStr(centered, false, r, false, 1, 'full')}</svg>`;
 }
 
 function selectionStr(elements: CanvasElement[], id: string, r: Geometry['rect']): string {

@@ -15,6 +15,7 @@ import {
   DEFAULT_TEXT_H,
   HostRect,
   materialSize,
+  materialPreviewSvg,
   materialHitHalfExtents,
   MATERIAL_BOX,
   normalizedToPct,
@@ -125,6 +126,27 @@ function normToScreenPointFit(
 }
 
 describe('render', () => {
+  it('miniportería: aumento visual del 20 % compartido por dibujo y caja táctil', () => {
+    expect(materialSize({ id: 'mini', t: 'minigoal', size: 1 })).toBeCloseTo(1.2);
+    // Aislar la geometría visual: el mínimo táctil legado no es proporcional al objeto.
+    const a = materialHitHalfExtents({ id: 'a', t: 'minigoal', size: 2 }, undefined, 1, {
+      x: 0,
+      y: 0,
+    });
+    const b = materialHitHalfExtents({ id: 'b', t: 'minigoal', size: 1 }, undefined, 1, {
+      x: 0,
+      y: 0,
+    });
+    expect(a.hw).toBeCloseTo(b.hw * 2);
+  });
+  it('las miniaturas de porterías comparten el mismo contenido SVG que el objeto real', () => {
+    for (const t of ['goal', 'minigoal'] as const) {
+      const el: CanvasElement = { id: 'p', t, x: 0.5, y: 0.5, c: '#fff' };
+      const thumb = materialPreviewSvg(el);
+      const inner = thumb.slice(thumb.indexOf('>') + 1, thumb.lastIndexOf('</svg>'));
+      expect(renderBoardSvg('full', [el], {})).toContain(inner);
+    }
+  });
   it('el texto queda horizontal por pantalla en vertical y su hit-test sigue el cuadro visible', () => {
     const r = fieldGeometry('half', 'vertical').rect;
     const text: CanvasElement = {
@@ -1688,8 +1710,9 @@ describe('Fase 3/4 — trazo táctico fino y tamaño inicial reducido', () => {
   it('el tamaño del texto es un valor fijo (Fase 3 reduce materiales/players, no el texto) y "Texto" cabe en una línea', () => {
     // Decisión del dueño (Fase 3): se reducen los objetos puntuales/materiales/players a
     // MATERIAL_SIZE_RATIO (0.60), pero el TEXTO usa un tamaño tipográfico propio constante
-    // (2.25) para seguir siendo legible. Ya no se deriva de MATERIAL_SIZE_RATIO.
-    expect(DEFAULT_TEXT_SIZE).toBe(3 * 0.75);
+    // para que la fuente no se derive de MATERIAL_SIZE_RATIO.
+    // Encargo 13/10: nuevo texto a 1,4, independiente de la escala del material.
+    expect(DEFAULT_TEXT_SIZE).toBe(1.4);
     const boxW = DEFAULT_TEXT_W * 92;
     expect(wrapTextForBox('Texto', boxW, DEFAULT_TEXT_SIZE)).toEqual(['Texto']);
   });

@@ -92,7 +92,8 @@ test.describe('Fase 3 — texto usable', () => {
     await page.locator('.rail-btn[title="Texto"]').click();
     await page.mouse.click(...normToScreen(0.3, 0.3, box));
     const ta = page.locator('.studio-panel .inspector textarea');
-    await ta.fill('Rondos de pase y recepción');
+    // Tamaño inicial nuevo 1,4: una frase más larga sigue comprobando el wrap real.
+    await ta.fill('Rondos de pase y recepción con apoyos, movilidad y orientación corporal');
     await ta.dispatchEvent('change');
     // Se generó más de una línea (tspan) y el clipPath recorta el desbordamiento.
     const tsps = await page.evaluate(() => document.querySelectorAll('.board-canvas svg tspan').length);

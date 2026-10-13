@@ -313,7 +313,8 @@ test.describe('BLOQUE E — trazo por herramienta, clave versionada y migración
     // persistencia de variante con un material que SÍ las conserva (Cono, 6 colores).
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
-    await expect(page.locator('.tools-material-card')).toHaveCount(19);
+    // Dos entradas nuevas: gomas elásticas y balón medicinal.
+    await expect(page.locator('.tools-material-card')).toHaveCount(21);
     const coneCard = page.locator('.tools-material-card', { hasText: 'Cono' }).first();
     await coneCard.locator('.tools-material-variants .variant-swatch').nth(1).click();
 

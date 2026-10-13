@@ -40,6 +40,7 @@ import {
 } from '../../core/tactic-assets';
 import {
   renderBoardSvg,
+  materialPreviewSvg,
   hitTestElement,
   textColor as textColorFn,
   svgZigzag,
@@ -147,6 +148,8 @@ type Tool =
   | 'hurdle'
   | 'ring'
   | 'dumbbell'
+  | 'resistance_band'
+  | 'medicine_ball'
   | 'mannequin_row'
   | 'ladder_yellow'
   | 'ring_flat'
@@ -655,7 +658,7 @@ export class BoardComponent {
       </svg>`;
     } else {
       // Material: imagen PNG real o el mismo vector que el panel y el campo.
-      const kind = this.materialVariant()[a.tool] ?? this.defaultKindFor(a.tool);
+      const kind = this.selectedMaterialKind(a.tool);
       const asset = kind ? tacticAsset(kind) : undefined;
       if (asset?.asset) {
         html = `<img src="${asset.asset}" style="width:${size}px;height:${size}px;object-fit:contain" alt="">`;
@@ -1417,11 +1420,6 @@ export class BoardComponent {
       /* preferencia no crítica */
     }
     if (this.tool() === tool) this.drawColor.set(color);
-  }
-  protected hurdleVariantThumb(kind: TacticalKind): SafeHtml {
-    return this.sanitizer.bypassSecurityTrustHtml(
-      hurdleSvg(tacticAsset(kind)?.color, kind === 'hurdle_low' ? 'low' : 'high'),
-    );
   }
   /** E/Bloque E — preferencia de trazo (continuo/discontinuo) POR HERRAMIENTA de dibujo
    *  (Línea y Flecha independientes). Se persiste localmente bajo una clave CDMPLab
@@ -2513,10 +2511,18 @@ export class BoardComponent {
   private static readonly materialVariantKey = 'cdmplab:material-variant:v1';
   private loadMaterialVariants(): Record<string, TacticalKind> {
     try {
-      return JSON.parse(localStorage.getItem(BoardComponent.materialVariantKey) ?? '{}') as Record<
-        string,
-        TacticalKind
-      >;
+      const raw: unknown = JSON.parse(
+        localStorage.getItem(BoardComponent.materialVariantKey) ?? '{}',
+      );
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+      return Object.fromEntries(
+        Object.entries(raw).filter(
+          ([id, kind]) =>
+            MATERIALS.some((m) => m.id === id) &&
+            typeof kind === 'string' &&
+            this.variantKindsFor(id).includes(kind as TacticalKind),
+        ),
+      ) as Record<string, TacticalKind>;
     } catch {
       return {};
     }
@@ -2637,7 +2643,17 @@ export class BoardComponent {
       case 'cone':
         return ['cone_red', 'cone_yellow', 'cone_blue', 'cone_orange', 'cone_white', 'cone_blue2'];
       case 'hurdle':
-        return ['hurdle', 'hurdle_low', 'hurdle_high'];
+        // Las variantes vectoriales anteriores siguen renderizando ejercicios antiguos,
+        // pero el catálogo usa la fotografía nueva del dueño.
+        return ['hurdle_orange', 'hurdle'];
+      case 'dumbbell':
+        return ['dumbbell_metal', 'kettlebell', 'weight_plate'];
+      case 'resistance_band':
+        return ['band_yellow', 'band_red'];
+      case 'medicine_ball':
+        return ['medicine_ball', 'medicine_handles'];
+      case 'marker':
+        return ['bosu_blue', 'bosu_small'];
       default:
         // FASE 7: una única escalera, un único aro y un maniquí independiente de la
         // barrera. Se eliminan las variantes ring_flat/ladder_yellow/mannequin_row del
@@ -2650,11 +2666,14 @@ export class BoardComponent {
    *  La ruta es RELATIVA (sin `/` inicial) para ser compatible con el baseHref `/CDMPLab/`
    *  de GitHub Pages, sin tocar el render ni el inlining (que usa rutas absolutas). */
   protected materialThumbSrc(id: string): string | null {
-    const kind = this.materialVariant()[id] ?? this.defaultKindFor(id);
+    const kind = this.selectedMaterialKind(id);
     const asset = tacticAsset(kind)?.asset;
     return asset ? asset.replace(/^\//, '') : null;
   }
   protected setMaterialVariant(id: string, kind: TacticalKind): void {
+    if (!this.variantKindsFor(id).includes(kind)) return;
+    this.endBarPress();
+    this.barLongPressed = false;
     this.materialVariant.update((m) => {
       const next = { ...m, [id]: kind };
       try {
@@ -2672,6 +2691,9 @@ export class BoardComponent {
    *  material tiene PNG (no debe llegar aquí). Los colores por defecto coinciden con
    *  los que usa el render cuando el elemento no lleva color explícito. */
   protected materialVectorThumb(id: string): string {
+    if (id === 'goal' || id === 'minigoal') {
+      return materialPreviewSvg({ id: 'preview', t: id, x: 0.5, y: 0.5, c: '#ffffff' });
+    }
     if (id === 'hurdle') {
       const kind = this.materialVariant()[id] ?? 'hurdle';
       return hurdleSvg(
@@ -2768,11 +2790,24 @@ export class BoardComponent {
   }
 
   /** HTML seguro de la miniatura vectorial (usa el mismo sanitizador que el campo). */
+  private readonly materialThumbCache = new Map<string, SafeHtml>();
+  protected selectedMaterialKind(id: string): TacticalKind {
+    const saved = this.materialVariant()[id];
+    return saved && this.variantKindsFor(id).includes(saved) ? saved : this.defaultKindFor(id);
+  }
+  protected barVariantTitle(): string {
+    return this.barVariant() ? toolTitle(this.barVariant()!) : '';
+  }
   protected materialVectorThumbSafe(id: string): SafeHtml {
     const svg = this.materialVectorThumb(id);
-    return this.sanitizer.bypassSecurityTrustHtml(
+    const key = `${id}|${svg}`;
+    const cached = this.materialThumbCache.get(key);
+    if (cached) return cached;
+    const html = this.sanitizer.bypassSecurityTrustHtml(
       svg || `<span class="msi">${this.materialIcon(id)}</span>`,
     );
+    this.materialThumbCache.set(key, html);
+    return html;
   }
 
   /** Miniatura SVG de un campo base (solo las líneas, sin fichas) con la geometría REAL.
@@ -4326,6 +4361,8 @@ export class BoardComponent {
       case 'fitball':
       case 'pica':
       case 'dumbbell':
+      case 'resistance_band':
+      case 'medicine_ball':
         this.beginHistory();
         const armedBefore = this.armed();
         const id = armedBefore?.player
@@ -5074,8 +5111,7 @@ export class BoardComponent {
   private addAt(p: { x: number; y: number }): string | null {
     const t = this.tool();
     let el: CanvasElement | null = null;
-    const materialKind = (tool: string): TacticalKind =>
-      this.materialVariant()[tool] ?? this.defaultKindFor(tool);
+    const materialKind = (tool: string): TacticalKind => this.selectedMaterialKind(tool);
     const withMaterial = (e: CanvasElement, tool: string): CanvasElement => {
       const kind = materialKind(tool);
       const a = tacticAsset(kind);
@@ -5143,6 +5179,10 @@ export class BoardComponent {
         break;
       case 'dumbbell':
         el = withMaterial({ id: uid(), t: 'dumbbell', x: p.x, y: p.y, c: '#20242a' }, 'dumbbell');
+        break;
+      case 'resistance_band':
+      case 'medicine_ball':
+        el = withMaterial({ id: uid(), t, x: p.x, y: p.y }, t);
         break;
       case 'target':
         el = withMaterial(

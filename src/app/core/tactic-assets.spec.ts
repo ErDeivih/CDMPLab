@@ -22,7 +22,10 @@ describe('tactic-assets — manifiesto de material', () => {
   it('materialAsset asigna la herramienta al material correcto', () => {
     expect(materialAsset('cone')?.kind).toBe('cone_red');
     expect(materialAsset('ball')?.kind).toBe('ball_football');
-    expect(materialAsset('marker')?.kind).toBe('disc');
+    // Contrato nuevo: fotografía BOSU; `disc` queda como variante histórica compatible.
+    expect(materialAsset('marker')?.kind).toBe('bosu_blue');
+    expect(materialAsset('resistance_band')?.kind).toBe('band_yellow');
+    expect(materialAsset('medicine_ball')?.kind).toBe('medicine_ball');
     expect(materialAsset('no-existe')).toBeUndefined();
   });
 
@@ -41,8 +44,28 @@ describe('tactic-assets — manifiesto de material', () => {
     });
 
     it('los elementos de longitud de campo son MÁS grandes que los compactos', () => {
-      const pitchLength: string[] = ['pole', 'ladder', 'ladder_yellow', 'minigoal', 'mannequin_row', 'hurdle', 'flag', 'mannequin'];
-      const compact: string[] = ['cone_red', 'cone_yellow', 'cone_blue', 'cone_orange', 'cone_white', 'cone_blue2', 'disc', 'target', 'ring', 'vball'];
+      const pitchLength: string[] = [
+        'pole',
+        'ladder',
+        'ladder_yellow',
+        'minigoal',
+        'mannequin_row',
+        'hurdle',
+        'flag',
+        'mannequin',
+      ];
+      const compact: string[] = [
+        'cone_red',
+        'cone_yellow',
+        'cone_blue',
+        'cone_orange',
+        'cone_white',
+        'cone_blue2',
+        'disc',
+        'target',
+        'ring',
+        'vball',
+      ];
       for (const p of pitchLength) expect(TACTICAL_SIZE[p]).toBeGreaterThan(1);
       for (const c of compact) expect(TACTICAL_SIZE[c]).toBeLessThanOrEqual(1);
     });

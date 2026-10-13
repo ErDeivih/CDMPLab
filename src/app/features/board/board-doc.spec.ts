@@ -23,6 +23,21 @@ function frame(duration = 1000, ...els: CanvasElement[]): CanvasFrame {
 }
 
 describe('board-doc (operaciones puras del documento)', () => {
+  it('mueve gomas y balones medicinales sin perder su variante', () => {
+    for (const t of ['resistance_band', 'medicine_ball'] as const) {
+      const element = {
+        id: 'nuevo',
+        t,
+        x: 0.3,
+        y: 0.4,
+        assetKind: t === 'resistance_band' ? 'band_red' : 'medicine_handles',
+      };
+      const out = translateElement(element, 0.1, 0.2);
+      expect(out.x).toBeCloseTo(0.4);
+      expect(out.y).toBeCloseTo(0.6);
+      expect(out.assetKind).toBe(element.assetKind);
+    }
+  });
   it('añade un elemento a todos los frames (inmutable)', () => {
     const frames = [frame(1000, p('a', 0.2, 0.2))];
     const out = addElementToFrames(frames, p('b', 0.5, 0.5));

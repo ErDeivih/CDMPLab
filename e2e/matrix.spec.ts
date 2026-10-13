@@ -101,6 +101,8 @@ function isPointLike(t: string): boolean {
     t === 'mannequin_row' ||
     t === 'goal' ||
     t === 'dumbbell' ||
+    t === 'resistance_band' ||
+    t === 'medicine_ball' ||
     t === 'coachC' ||
     t === 'peto' ||
     t === 'chaleco' ||
@@ -296,8 +298,9 @@ const FAMILIES: Family[] = [
   { name: 'mannequin', tool: 'Maniquí individual', category: 'Material', draw: false, assetKind: 'mannequin', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'minigoal', tool: 'Miniportería', category: 'Material', draw: false, assetKind: 'minigoal', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'pole', tool: 'Pértiga / poste', category: 'Material', draw: false, assetKind: 'pole', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'marker', tool: 'BOSU', category: 'Material', draw: false, assetKind: 'disc', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'hurdle', tool: 'Valla', category: 'Material', draw: false, assetKind: 'hurdle', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  // Nuevas fotos y variantes, sin reescribir los documentos antiguos disc/hurdle.
+  { name: 'marker', tool: 'BOSU', category: 'Material', draw: false, assetKind: 'bosu_blue', variantKind: 'bosu_small', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
+  { name: 'hurdle', tool: 'Valla', category: 'Material', draw: false, assetKind: 'hurdle_orange', variantKind: 'hurdle', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
   { name: 'ring', tool: 'Aro', category: 'Material', draw: false, assetKind: 'ring', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'ladder', tool: 'Escalera', category: 'Material', draw: false, assetKind: 'ladder', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'flag', tool: 'Banderín', category: 'Material', draw: false, assetKind: 'flag', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
@@ -309,7 +312,10 @@ const FAMILIES: Family[] = [
   { name: 'pica', tool: 'Pica', category: 'Material', draw: false, caps: { movable: true, rotatable: false, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'goal', tool: 'Portería grande', category: 'Material', draw: false, assetKind: 'goal', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'mannequin_row', tool: 'Barrera de maniquíes', category: 'Material', draw: false, assetKind: 'mannequin_row', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'dumbbell', tool: 'Mancuerna / pesa', category: 'Material', draw: false, assetKind: 'dumbbell', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  // Contrato nuevo: foto de mancuerna como variante predeterminada; el SVG antiguo se conserva.
+  { name: 'dumbbell', tool: 'Mancuerna / pesa', category: 'Material', draw: false, assetKind: 'dumbbell_metal', variantKind: 'kettlebell', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
+  { name: 'resistance_band', tool: 'Gomas elásticas', category: 'Material', draw: false, assetKind: 'band_yellow', variantKind: 'band_red', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
+  { name: 'medicine_ball', tool: 'Balón medicinal', category: 'Material', draw: false, assetKind: 'medicine_ball', variantKind: 'medicine_handles', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
   { name: 'rect', tool: 'Rectángulo', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: true, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'ellipse', tool: 'Círculo / elipse', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: true, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
   { name: 'line', tool: 'Línea', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: true, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
@@ -1027,8 +1033,20 @@ for (const fam of FAMILIES) {
     if (c.resizable) {
       const isBox = fam.name === 'rect' || fam.name === 'zone' || fam.name === 'ellipse' || fam.name === 'text' || fam.name === 'freehand';
       if (isBox) {
-        const br = boxHandles(created).find((hh) => hh.key === 'br')!;
-        await dragHandle(page, [br.x, br.y], [br.x + 0.12, br.y + 0.1], box);
+        if (fam.name === 'text') {
+          // Contrato de texto corregido: las asas siguen el giro. No pulsar las
+          // esquinas antiguas sin rotar (eso tocaba césped y deseleccionaba).
+          const handles = page.locator('.reshandle');
+          const a = (await handles.nth(0).boundingBox())!, b = (await handles.nth(3).boundingBox())!;
+          const ax = a.x + a.width / 2, ay = a.y + a.height / 2;
+          const bx = b.x + b.width / 2, by = b.y + b.height / 2;
+          await page.mouse.move(bx, by); await page.mouse.down();
+          await page.mouse.move(ax + (bx - ax) * 1.25, ay + (by - ay) * 1.25, { steps: 10 });
+          await page.mouse.up();
+        } else {
+          const br = boxHandles(created).find((hh) => hh.key === 'br')!;
+          await dragHandle(page, [br.x, br.y], [br.x + 0.12, br.y + 0.1], box);
+        }
       } else {
         await setInspNum(page, 'Tamaño', '1.8');
       }
@@ -1110,8 +1128,16 @@ for (const fam of FAMILIES) {
       // Centro de la región de muestreo. Para un TEXTO con caja fija (autoH=false) los
       // glifos viven en la parte SUPERIOR de la caja (el centro geométrico queda bajo los
       // glifos y la región de muestreo no los alcanza): se muestrea sobre la zona del texto.
+      // Para texto girado, muestrear el glifo REAL visible (con sus transformaciones),
+      // no una posición inventada dentro del cuadro sin girar.
       const [ecx, ecy] = fam.name === 'text'
-        ? [(after.x ?? 0) + (after.w ?? 0) / 2, (after.y ?? 0) + Math.min(after.h ?? 0.14, 0.15) / 2]
+        ? await page.locator('.board-canvas [data-el-type="text"] tspan').first().evaluate((node, r) => {
+          const el = node as SVGGraphicsElement, root = el.closest('svg') as SVGSVGElement;
+          const b = el.getBBox();
+          const screen = new DOMPoint(b.x + b.width / 2, b.y + b.height / 2).matrixTransform(el.getScreenCTM()!);
+          const local = screen.matrixTransform(root.getScreenCTM()!.inverse());
+          return [(local.x - r.x) / r.w, (local.y - r.y) / r.h];
+        }, { x: 4, y: 10, w: 92, h: 92 * 68 / 105 })
         : elCenter(after);
       const changed = await pngRegionDiff(page, baseline!, withEl, ecx, ecy);
       expect(changed).toBeGreaterThan(0);

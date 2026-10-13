@@ -1083,6 +1083,9 @@
               />
             </div>
             <div class="tools-material-groups">
+              <p class="panel-hint material-touch-hint">
+                Arrastra la imagen al campo. Desliza sobre los nombres para recorrer la lista.
+              </p>
               @for (grp of materialGroupList(); track grp.label) {
                 <div class="tools-material-group">
                   <div class="tools-material-group-title">{{ grp.label }}</div>
@@ -1129,16 +1132,14 @@
                               [title]="variantAsset(k)?.label"
                               [attr.aria-label]="variantAsset(k)?.label"
                               [style.background]="variantAsset(k)?.color"
-                              [class.sel]="materialVariant()[t.id] === k"
+                              [class.sel]="selectedMaterialKind(t.id) === k"
                               (click)="setMaterialVariant(t.id, k)"
-                              [class.hurdle-variant]="t.id === 'hurdle'"
+                              [class.material-photo-variant]="t.id !== 'cone'"
+                              [attr.aria-pressed]="selectedMaterialKind(t.id) === k"
                             >
-                              @if (t.id === 'hurdle') {
-                                @if (k === 'hurdle') {
-                                  <img src="assets/tactical/hurdle.png" alt="" />
-                                } @else {
-                                  <span [innerHTML]="hurdleVariantThumb(k)"></span>
-                                }
+                              @if (t.id !== 'cone') {
+                                <img [src]="variantAsset(k)?.asset" alt="" />
+                                <span class="variant-caption">{{ variantAsset(k)?.label }}</span>
                               }
                             </button>
                           }
@@ -1504,7 +1505,7 @@
       (click)="$event.stopPropagation()"
       (keydown.escape)="closeBarVariant()"
     >
-      <div class="bar-variant-title">Variante de {{ activeToolTitle() }}</div>
+      <div class="bar-variant-title">Variante de {{ barVariantTitle() }}</div>
       <div class="bar-variant-list">
         @for (k of variantKindsFor(barVariant()!); track k) {
           <button
@@ -1512,9 +1513,16 @@
             [title]="variantAsset(k)?.label"
             [attr.aria-label]="variantAsset(k)?.label"
             [style.background]="variantAsset(k)?.color"
-            [class.sel]="materialVariant()[barVariant()!] === k"
+            [class.sel]="selectedMaterialKind(barVariant()!) === k"
+            [class.material-photo-variant]="barVariant() !== 'cone'"
+            [attr.aria-pressed]="selectedMaterialKind(barVariant()!) === k"
             (click)="pickBarVariant(barVariant()!, k)"
-          ></button>
+          >
+            @if (barVariant() !== 'cone') {
+              <img [src]="variantAsset(k)?.asset" alt="" />
+              <span class="variant-caption">{{ variantAsset(k)?.label }}</span>
+            }
+          </button>
         }
       </div>
     </div>
