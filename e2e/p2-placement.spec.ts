@@ -8,8 +8,26 @@ async function seed(page: Page): Promise<void> {
     const now = new Date().toISOString();
     const team = { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now };
     const players = [
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
+      {
+        id: 'p1',
+        teamId: 't1',
+        name: 'Marcos',
+        number: 2,
+        position: 'DF',
+        color: '#1a73e8',
+        active: true,
+        createdAt: now,
+      },
+      {
+        id: 'p2',
+        teamId: 't1',
+        name: 'Pau',
+        number: 10,
+        position: 'MF',
+        color: '#c0392b',
+        active: true,
+        createdAt: now,
+      },
     ];
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem('entrenolab:teams', JSON.stringify([team]));
@@ -23,14 +41,24 @@ async function seed(page: Page): Promise<void> {
 async function openJugadores(page: Page): Promise<void> {
   // FASE B (paneles persistentes): abrir Jugadores es IDEMPOTENTE: si ya está
   // desplegado (porque ya no se cierra al elegir un jugador) no lo re-togglea.
-  if (await page.locator('.side-panel-left').isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator('.side-panel-left')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
   await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   await expect(page.locator('.side-panel-left')).toBeVisible();
 }
 
 /** Replica el letterboxing del canvas (horizontal) para mapear norm (0..1) → pantalla. */
-function normToScreen(nx: number, ny: number, box: { x: number; y: number; width: number; height: number }): [number, number] {
+function normToScreen(
+  nx: number,
+  ny: number,
+  box: { x: number; y: number; width: number; height: number },
+): [number, number] {
   const rect = { x: 4, y: 10, w: 92, h: 92 / (105 / 68) };
   const s = Math.min(box.width / 100, box.height / 80);
   const offX = (box.width - 100 * s) / 2;
@@ -39,7 +67,9 @@ function normToScreen(nx: number, ny: number, box: { x: number; y: number; width
 }
 
 test.describe('Fase 2 — colocación humana (jugadores / materiales / genéricos)', () => {
-  test('tocar un jugador de plantilla ARMA la colocación y NO crea un elemento aún', async ({ page }) => {
+  test('tocar un jugador de plantilla ARMA la colocación y NO crea un elemento aún', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await openJugadores(page);
@@ -50,10 +80,15 @@ test.describe('Fase 2 — colocación humana (jugadores / materiales / genérico
     await expect(page.locator('.placement-hint')).toBeVisible();
     await expect(page.locator('.placement-hint')).toContainText('Toca el campo para colocar a');
     // FASE B (paneles persistentes): elegir un jugador NO cierra el panel Jugadores.
-    await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+    await expect(
+      page.locator('.side-panel-left'),
+      'el panel Jugadores permanece abierto',
+    ).toBeVisible();
   });
 
-  test('el clic sobre el campo coloca al jugador en la posición normalizada tocada', async ({ page }) => {
+  test('el clic sobre el campo coloca al jugador en la posición normalizada tocada', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -100,7 +135,9 @@ test.describe('Fase 2 — colocación humana (jugadores / materiales / genérico
     await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
   });
 
-  test('el tap sobre el propio material armado MANTIENE el modo de colocación continua (Fase 3)', async ({ page }) => {
+  test('el tap sobre el propio material armado MANTIENE el modo de colocación continua (Fase 3)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     await abrirHerramientas(page);
@@ -119,7 +156,9 @@ test.describe('Fase 2 — colocación humana (jugadores / materiales / genérico
     await expect(page.locator('.tools-caption-title')).toHaveText('Cono');
   });
 
-  test('un jugador de plantilla ya colocado sigue sin duplicarse (tarjeta deshabilitada)', async ({ page }) => {
+  test('un jugador de plantilla ya colocado sigue sin duplicarse (tarjeta deshabilitada)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -127,16 +166,19 @@ test.describe('Fase 2 — colocación humana (jugadores / materiales / genérico
     await page.locator('.side-panel-left .roster-item').first().click();
     await page.mouse.click(...normToScreen(0.4, 0.5, box));
     await expect(page.locator('.field-count')).toHaveText('1');
-    // Reabrir el panel: la tarjeta queda deshabilitada con "Ya está en el campo".
+    // El panel compacto conserva el nombre del jugador; el estado está en el título.
     await openJugadores(page);
     const first = page.locator('.side-panel-left .roster-item').first();
     await expect(first).toHaveClass(/tray-disabled/);
-    await expect(first.locator('.mini-name')).toHaveText('Ya está en el campo');
+    await expect(first.locator('.mini-name')).toHaveText('Marcos');
+    await expect(first).toHaveAttribute('title', 'Ya está en el campo');
     await first.click({ force: true });
     await expect(page.locator('.field-count')).toHaveText('1');
   });
 
-  test('tocar un material (Cono) arma la colocación; el clic lo coloca y SIGUE armado (Fase 3)', async ({ page }) => {
+  test('tocar un material (Cono) arma la colocación; el clic lo coloca y SIGUE armado (Fase 3)', async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -144,7 +186,9 @@ test.describe('Fase 2 — colocación humana (jugadores / materiales / genérico
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await page.locator('.rail-btn[title="Cono"]').click();
     await expect(page.locator('.field-count')).toHaveText('0'); // armado
-    await expect(page.locator('.placement-hint')).toContainText('Toca el campo para colocar a Cono');
+    await expect(page.locator('.placement-hint')).toContainText(
+      'Toca el campo para colocar a Cono',
+    );
     await page.mouse.click(...normToScreen(0.5, 0.5, box));
     await expect(page.locator('.field-count')).toHaveText('1');
     // Fase 3: la colocación es CONTINUA — el Cono sigue armado, no volvió a Seleccionar.
@@ -162,7 +206,9 @@ test.describe('Fase 2 — colocación humana (jugadores / materiales / genérico
     await openJugadores(page);
     await page.locator('.tray-player[title="Jugador Azul"]').click();
     await expect(page.locator('.field-count')).toHaveText('0'); // armado
-    await expect(page.locator('.placement-hint')).toContainText('Toca el campo para colocar a Jugador azul');
+    await expect(page.locator('.placement-hint')).toContainText(
+      'Toca el campo para colocar a Jugador azul',
+    );
     await page.mouse.click(...normToScreen(0.5, 0.5, box));
     await expect(page.locator('.field-count')).toHaveText('1');
   });
@@ -174,7 +220,9 @@ test.describe('Fase 2 — colocación humana (jugadores / materiales / genérico
     await openJugadores(page);
     await page.locator('.tray-player[title="Jugador Rojo"]').click();
     await expect(page.locator('.field-count')).toHaveText('0');
-    await expect(page.locator('.placement-hint')).toContainText('Toca el campo para colocar a Jugador rojo');
+    await expect(page.locator('.placement-hint')).toContainText(
+      'Toca el campo para colocar a Jugador rojo',
+    );
     await page.mouse.click(...normToScreen(0.5, 0.5, box));
     await expect(page.locator('.field-count')).toHaveText('1');
     await fillBoardTitle(page, 'P2');
@@ -221,17 +269,35 @@ test.describe('Fase 2 — colocación humana (jugadores / materiales / genérico
       const [tx, ty] = normToScreen(0.3, 0.4, box);
       const id = 71;
       const fire = (type: string, x: number, y: number) =>
-        page.evaluate(({ type, x, y, id }) => {
-          const el = document.querySelector('.side-panel-left .roster-item') as HTMLElement | null;
-          el?.dispatchEvent(new PointerEvent(type, {
-            bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: true,
-            button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y,
-          }));
-        }, { type, x, y, id });
+        page.evaluate(
+          ({ type, x, y, id }) => {
+            const el = document.querySelector(
+              '.side-panel-left .roster-item',
+            ) as HTMLElement | null;
+            el?.dispatchEvent(
+              new PointerEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                pointerId: id,
+                pointerType: 'touch',
+                isPrimary: true,
+                button: 0,
+                buttons: type === 'pointerup' ? 0 : 1,
+                clientX: x,
+                clientY: y,
+              }),
+            );
+          },
+          { type, x, y, id },
+        );
       // FASE B (táctil): solo un ARRASTRE completo del panel → campo coloca una unidad.
       await fire('pointerdown', startX, startY);
       for (let i = 1; i <= 8; i++) {
-        await fire('pointermove', startX + ((tx - startX) * i) / 8, startY + ((ty - startY) * i) / 8);
+        await fire(
+          'pointermove',
+          startX + ((tx - startX) * i) / 8,
+          startY + ((ty - startY) * i) / 8,
+        );
       }
       await fire('pointerup', tx, ty);
       await expect(page.locator('.field-count')).toHaveText('1');
