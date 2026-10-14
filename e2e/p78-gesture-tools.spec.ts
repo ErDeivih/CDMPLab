@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
@@ -16,7 +17,15 @@ type Pt = { x: number; y: number };
 type Fit = 'height' | 'contain';
 
 /** Forward norm→pantalla (la inversa de screenToNorm) para el campo en HORIZONTAL. */
-function normToScreen(nx: number, ny: number, host: Box, fit: Fit, panX = 0, panY = 0, zoom = 1): Pt {
+function normToScreen(
+  nx: number,
+  ny: number,
+  host: Box,
+  fit: Fit,
+  panX = 0,
+  panY = 0,
+  zoom = 1,
+): Pt {
   const s = fit === 'height' ? host.height / RECT.h : Math.min(host.width / VBW, host.height / VBH);
   const offX = (host.width - VBW * s) / 2;
   const offY = (host.height - VBH * s) / 2;
@@ -31,32 +40,64 @@ function normToScreen(nx: number, ny: number, host: Box, fit: Fit, panX = 0, pan
 
 async function seed(page: Page, opts: { fill?: 'fill' | 'contain' } = {}): Promise<void> {
   const { fill = 'fill' } = opts;
-  await page.addInitScript(({ fill }) => {
-    if (localStorage.getItem('entrenolab:seeded')) return;
-    const now = new Date().toISOString();
-    localStorage.setItem('entrenolab:seeded', '1');
-    // Modo de pantalla: '1' = Llenar pantalla (permite paneo con la herramienta Mano).
-    localStorage.setItem('entrenolab:board-fill', fill === 'fill' ? '1' : '0');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-    ]));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
-    localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
-    // Suprimir los hints flotantes (ayuda general y pista de "Llenar pantalla") para
-    // que no tapen el campo en las capturas.
-    localStorage.setItem('entrenolab:board-hints', '1');
-    localStorage.setItem('entrenolab:fill-hint', '1');
-  }, { fill });
+  await page.addInitScript(
+    ({ fill }) => {
+      if (localStorage.getItem('entrenolab:seeded')) return;
+      const now = new Date().toISOString();
+      localStorage.setItem('entrenolab:seeded', '1');
+      // Modo de pantalla: '1' = Llenar pantalla (permite paneo con la herramienta Mano).
+      localStorage.setItem('entrenolab:board-fill', fill === 'fill' ? '1' : '0');
+      localStorage.setItem(
+        'entrenolab:teams',
+        JSON.stringify([
+          { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now },
+        ]),
+      );
+      localStorage.setItem(
+        'entrenolab:players',
+        JSON.stringify([
+          {
+            id: 'p1',
+            teamId: 't1',
+            name: 'Marcos',
+            number: 2,
+            position: 'DF',
+            color: '#1a73e8',
+            active: true,
+            createdAt: now,
+          },
+        ]),
+      );
+      localStorage.setItem('entrenolab:folders', JSON.stringify([]));
+      localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
+      localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
+      // Suprimir los hints flotantes (ayuda general y pista de "Llenar pantalla") para
+      // que no tapen el campo en las capturas.
+      localStorage.setItem('entrenolab:board-hints', '1');
+      localStorage.setItem('entrenolab:fill-hint', '1');
+    },
+    { fill },
+  );
 }
 
 async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await page.waitForTimeout(200);
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.fill-hint-close').click();
   await expect(page.locator('.board-host')).toBeVisible();
 }
 
@@ -76,25 +117,35 @@ function fieldCount(page: Page): Promise<number> {
 }
 
 /** Despacha un PointerEvent sintético sobre `.board-host` (puntero táctil). */
-async function ptr(page: Page, type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel', x: number, y: number, pointerId: number, isPrimary = false): Promise<void> {
-  await page.evaluate(({ type, x, y, pointerId, isPrimary }) => {
-    const host = document.querySelector('.board-host') as HTMLElement | null;
-    if (!host) return;
-    const up = type === 'pointerup' || type === 'pointercancel';
-    host.dispatchEvent(
-      new PointerEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        pointerId,
-        pointerType: 'touch',
-        isPrimary,
-        clientX: x,
-        clientY: y,
-        button: 0,
-        buttons: up ? 0 : 1,
-      })
-    );
-  }, { type, x, y, pointerId, isPrimary });
+async function ptr(
+  page: Page,
+  type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+  x: number,
+  y: number,
+  pointerId: number,
+  isPrimary = false,
+): Promise<void> {
+  await page.evaluate(
+    ({ type, x, y, pointerId, isPrimary }) => {
+      const host = document.querySelector('.board-host') as HTMLElement | null;
+      if (!host) return;
+      const up = type === 'pointerup' || type === 'pointercancel';
+      host.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId,
+          pointerType: 'touch',
+          isPrimary,
+          clientX: x,
+          clientY: y,
+          button: 0,
+          buttons: up ? 0 : 1,
+        }),
+      );
+    },
+    { type, x, y, pointerId, isPrimary },
+  );
 }
 
 /** Un TAP táctil (down+up sin moverse) en (x,y). */
@@ -107,8 +158,12 @@ async function tap(page: Page, x: number, y: number, id = 7): Promise<void> {
 async function readView(page: Page): Promise<{ panX: number; panY: number; zoom: number }> {
   return page.locator('.board-canvas').evaluate((el) => {
     const t = (el as HTMLElement).style.transform;
-    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(t);
-    return m ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) } : { panX: 0, panY: 0, zoom: 1 };
+    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(
+      t,
+    );
+    return m
+      ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) }
+      : { panX: 0, panY: 0, zoom: 1 };
   });
 }
 
@@ -127,24 +182,32 @@ async function objectScreen(page: Page, selector: string): Promise<Pt> {
 
 /** Norm (0..1) de un elemento leído del `translate` de su <g> más cercano. */
 async function objectNorm(page: Page, selector: string): Promise<Pt> {
-  const v = await page.locator(selector).first().evaluate((el) => {
-    const g = el.closest('g');
-    const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(g?.getAttribute('transform') ?? '');
-    return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
-  });
+  const v = await page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const g = el.closest('g');
+      const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(
+        g?.getAttribute('transform') ?? '',
+      );
+      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
+    });
   expect(v, `el objeto (${selector}) debe estar renderizado con translate`).not.toBeNull();
   return { x: (v!.x - RECT.x) / RECT.w, y: (v!.y - RECT.y) / RECT.h };
 }
 
 /** Norm de un material <image> (asset PNG): el centro se codifica en x/y + width/height. */
 async function imageNorm(page: Page, selector: string): Promise<Pt> {
-  const v = await page.locator(selector).first().evaluate((el) => {
-    const w = parseFloat(el.getAttribute('width') ?? '0');
-    const h = parseFloat(el.getAttribute('height') ?? '0');
-    const x = parseFloat(el.getAttribute('x') ?? '0');
-    const y = parseFloat(el.getAttribute('y') ?? '0');
-    return { x: x + w / 2, y: y + h / 2 };
-  });
+  const v = await page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const w = parseFloat(el.getAttribute('width') ?? '0');
+      const h = parseFloat(el.getAttribute('height') ?? '0');
+      const x = parseFloat(el.getAttribute('x') ?? '0');
+      const y = parseFloat(el.getAttribute('y') ?? '0');
+      return { x: x + w / 2, y: y + h / 2 };
+    });
   return { x: (v.x - RECT.x) / RECT.w, y: (v.y - RECT.y) / RECT.h };
 }
 
@@ -157,7 +220,10 @@ async function placeComodinAt(page: Page, nx: number, ny: number): Promise<Pt> {
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
   // FASE B (paneles persistentes): elegir un jugador genérico NO cierra el panel.
-  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await expect(
+    page.locator('.side-panel-left'),
+    'el panel Jugadores permanece abierto',
+  ).toBeVisible();
   const host = await hostBox(page);
   const fit = await fitMode(page);
   const s = normToScreen(nx, ny, host, fit);
@@ -178,7 +244,12 @@ async function placeConeAt(page: Page, nx: number, ny: number): Promise<Pt> {
   const s = normToScreen(nx, ny, host, fit);
   await page.touchscreen.tap(s.x, s.y);
   await expect(page.locator('.field-count')).toHaveText('1');
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.studio-panel .panel-close').click();
     await expect(page.locator('.studio-panel')).toHaveCount(0);
   }
@@ -193,7 +264,10 @@ async function placeRosterAt(page: Page, nx: number, ny: number): Promise<void> 
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.side-panel-left .roster-item').first().click();
   // FASE B (paneles persistentes): elegir un jugador de plantilla NO cierra el panel.
-  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await expect(
+    page.locator('.side-panel-left'),
+    'el panel Jugadores permanece abierto',
+  ).toBeVisible();
   const host = await hostBox(page);
   const fit = await fitMode(page);
   const s = normToScreen(nx, ny, host, fit);
@@ -240,10 +314,12 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await tap(page, t.x, t.y, 8);
     await expect(page.locator(SEL)).not.toHaveCount(0);
     expect(await fieldCount(page), 'un tap corto NO duplica').toBe(1);
-    await expect(page.locator('.context-bar')).toHaveCount(0);   // nada se abre por long-press
+    await expect(page.locator('.context-bar')).toHaveCount(0); // nada se abre por long-press
   });
 
-  test('(b) mantener ~600 ms abre el menú contextual y pulsa Duplicar (una vez) con un solo Undo', async ({ page }) => {
+  test('(b) mantener ~600 ms abre el menú contextual y pulsa Duplicar (una vez) con un solo Undo', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
@@ -266,7 +342,9 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await expect(page.locator('.field-count'), 'el long-press solo abre el menú').toHaveText('1');
     // FASE 8 evidencia: la barra de contexto abierta por PULSACIÓN LARGA (Fase 3: el clic
     // derecho ya no la abre) con sus acciones Deshacer/Rehacer/girar/Duplicar/Eliminar.
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/barra-contexto-long-press.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/barra-contexto-long-press.png` });
     // Duplicar desde el menú contextual.
     await page.locator('.context-bar .ctx-btn[title="Duplicar"]').click();
     await expect(page.locator('.field-count')).toHaveText('2');
@@ -276,10 +354,14 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/long-press-duplicar.png` });
     // Una única deshacer vuelve a UN solo elemento (la colocación).
     await page.keyboard.press('Control+z');
-    await expect(page.locator('.field-count'), 'un solo Undo deshace la duplicación').toHaveText('1');
+    await expect(page.locator('.field-count'), 'un solo Undo deshace la duplicación').toHaveText(
+      '1',
+    );
   });
 
-  test('(f) un MATERIAL genérico (cono) TAMBIÉN abre el menú contextual y se duplica desde él', async ({ page }) => {
+  test('(f) un MATERIAL genérico (cono) TAMBIÉN abre el menú contextual y se duplica desde él', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
@@ -293,10 +375,15 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await ptr(page, 'pointerup', obj.x, obj.y, 10);
     await expect(page.locator('.context-bar')).toBeVisible();
     await page.locator('.context-bar .ctx-btn[title="Duplicar"]').click();
-    await expect(page.locator('.field-count'), 'el cono se duplica con la pulsación larga').toHaveText('2');
+    await expect(
+      page.locator('.field-count'),
+      'el cono se duplica con la pulsación larga',
+    ).toHaveText('2');
   });
 
-  test('(c) un arrastre ANTES de completar el tiempo CANCELA la duplicación y MUEVE el objeto', async ({ page }) => {
+  test('(c) un arrastre ANTES de completar el tiempo CANCELA la duplicación y MUEVE el objeto', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
@@ -313,17 +400,28 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await ptr(page, 'pointerup', down.x + 55, down.y + 34, 11);
     // Espera observable: el arrastre procesado mueve el objeto. Sin retardo fijo; si
     // quedara un timer de pulsación larga, se cancela por el move antes del umbral.
-    await expect.poll(async () => {
-      const n = await objectNorm(page, PLAYER);
-      return Math.abs(n.x - before.x) + Math.abs(n.y - before.y);
-    }, { timeout: 4000 }).toBeGreaterThan(0.005);
+    await expect
+      .poll(
+        async () => {
+          const n = await objectNorm(page, PLAYER);
+          return Math.abs(n.x - before.x) + Math.abs(n.y - before.y);
+        },
+        { timeout: 4000 },
+      )
+      .toBeGreaterThan(0.005);
     const after = await objectNorm(page, PLAYER);
     expect(await fieldCount(page), 'un arrastre NO duplica').toBe(1);
-    expect(Math.abs(after.x - before.x), 'el objeto se movió con el arrastre').toBeGreaterThan(0.005);
-    expect(Math.abs(after.y - before.y), 'el objeto se movió con el arrastre (y)').toBeGreaterThan(0.005);
+    expect(Math.abs(after.x - before.x), 'el objeto se movió con el arrastre').toBeGreaterThan(
+      0.005,
+    );
+    expect(Math.abs(after.y - before.y), 'el objeto se movió con el arrastre (y)').toBeGreaterThan(
+      0.005,
+    );
   });
 
-  test('(d) un SEGUNDO dedo cancela la pulsación larga y empieza el pinch (sin duplicar)', async ({ page }) => {
+  test('(d) un SEGUNDO dedo cancela la pulsación larga y empieza el pinch (sin duplicar)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     // Campo completo: el pinch central es determinista (en Llenar pantalla el zoom de un
     // spread corto variaba 1.10 vs >1.2 según el frame).
@@ -343,13 +441,19 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     // Espera observable: el pinch hace zoom (se procesó). El segundo dedo cancela el
     // temporizador de la pulsación larga (se limpia en pointerup), así que no hay
     // duplicación pendiente: verificamos el campo y el zoom, sin retardo fijo.
-    await expect.poll(async () => (await readView(page)).zoom, { timeout: 4000 }).toBeGreaterThan(1.05);
-    await expect(page.locator('.field-count'), 'el segundo dedo cancela la duplicación').toHaveText('1');
+    await expect
+      .poll(async () => (await readView(page)).zoom, { timeout: 4000 })
+      .toBeGreaterThan(1.05);
+    await expect(page.locator('.field-count'), 'el segundo dedo cancela la duplicación').toHaveText(
+      '1',
+    );
     const v = await readView(page);
     expect(v.zoom, 'el pinch sigue haciendo zoom').toBeGreaterThan(1.05);
   });
 
-  test('(e) un jugador de PLANTILLA NO se duplica y muestra "Este jugador ya está en el campo"', async ({ page }) => {
+  test('(e) un jugador de PLANTILLA NO se duplica y muestra "Este jugador ya está en el campo"', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
@@ -361,14 +465,20 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await expect.poll(() => page.locator('.context-bar').count(), { timeout: 2000 }).toBe(1);
     await ptr(page, 'pointerup', obj.x, obj.y, 14);
     await expect(page.locator('.context-bar')).toBeVisible();
-    await expect(page.locator('.field-count'), 'el jugador de plantilla NO se duplica').toHaveText('1');
+    await expect(page.locator('.field-count'), 'el jugador de plantilla NO se duplica').toHaveText(
+      '1',
+    );
     // Duplicar desde el menú contextual: un jugador de plantilla está BLOQUEADO.
     await page.locator('.context-bar .ctx-btn[title="Duplicar"]').click();
-    await expect(page.locator('.field-count'), 'el jugador de plantilla NO se duplica').toHaveText('1');
+    await expect(page.locator('.field-count'), 'el jugador de plantilla NO se duplica').toHaveText(
+      '1',
+    );
     await expect(page.locator('.board-notice')).toContainText('ya está en el campo');
   });
 
-  test('(g) herramienta "Mano": arrastrar SOBRE un objeto (a zoom>100%) PANEA la vista y NUNCA lo selecciona/mueve', async ({ page }) => {
+  test('(g) herramienta "Mano": arrastrar SOBRE un objeto (a zoom>100%) PANEA la vista y NUNCA lo selecciona/mueve', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
@@ -377,8 +487,10 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     // La herramienta "Mano" existe junto a "Seleccionar", con su aria-label.
     await expect(page.locator('.rail-btn[aria-label="Desplazar campo"]')).toBeVisible();
     // A zoom >100% hay contenido oculto que panear (el caso de uso del requisito).
-    const zz = page.locator('.studio-panel .field', { hasText: 'Zoom' }).locator('input[type="range"]');
-    await page.locator('button[aria-label="Propiedades"]').click();
+    const zz = page
+      .locator('.studio-panel .field', { hasText: 'Zoom' })
+      .locator('input[type="range"]');
+    await ensurePropsPanel(page);
     await zz.evaluate((input: HTMLInputElement) => {
       input.value = '2';
       input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -395,9 +507,13 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await expect(page.locator('.board-host')).toHaveClass(/cursor-grabbing/);
     await page.mouse.up();
     // FASE G: observable — el paneo se espera con expect.poll del panX (no un wait fijo).
-    await expect.poll(async () => Math.abs((await readView(page)).panX - v0.panX), { timeout: 5000 }).toBeGreaterThan(5);
+    await expect
+      .poll(async () => Math.abs((await readView(page)).panX - v0.panX), { timeout: 5000 })
+      .toBeGreaterThan(5);
     const v1 = await readView(page);
-    expect(Math.abs(v1.panX - v0.panX), 'la herramienta Mano PANEA (panX cambia)').toBeGreaterThan(5);
+    expect(Math.abs(v1.panX - v0.panX), 'la herramienta Mano PANEA (panX cambia)').toBeGreaterThan(
+      5,
+    );
     // El objeto NO se mueve ni se selecciona.
     const afterNorm = await objectNorm(page, PLAYER);
     expect(Math.abs(afterNorm.x - beforeNorm.x), 'el objeto no se mueve en x').toBeLessThan(0.005);
@@ -408,7 +524,9 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/mano-paneo-campo.png` });
   });
 
-  test('(h) papelera: soltar sobre ella ELIMINA (un solo Undo); moverse fuera antes de soltar NO elimina', async ({ page }) => {
+  test('(h) papelera: soltar sobre ella ELIMINA (un solo Undo); moverse fuera antes de soltar NO elimina', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
@@ -444,7 +562,10 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await page.mouse.move(obj2.x + 60, obj2.y - 20, { steps: 6 });
     await expect(page.locator('.board-trash')).not.toHaveClass(/trash-hot/);
     await page.mouse.up();
-    await expect(page.locator('.field-count'), 'moverse fuera antes de soltar NO elimina').toHaveText('1');
+    await expect(
+      page.locator('.field-count'),
+      'moverse fuera antes de soltar NO elimina',
+    ).toHaveText('1');
   });
 
   test('(i) Escape a mitad de un arrastre CANCELA el gesto: no borra en la papelera, el objeto vuelve a su sitio y el historial queda intacto', async ({
@@ -516,14 +637,18 @@ test.describe('Fases 7-9: pulsación larga abre el menú contextual, herramienta
     await expect(page.locator('.field-count'), 'no se duplica ni se borra nada').toHaveText('1');
   });
 
-  test('(extra) captura del tablero con la barra de herramientas (botón Mano visible)', async ({ page }) => {
+  test('(extra) captura del tablero con la barra de herramientas (botón Mano visible)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
     // Seleccionar la herramienta "Mano" para que aparezca activa en la barra inferior
     // y capturar el tablero completo (barra superior, campo y raíl de herramientas).
     await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
-    await expect(page.locator('.rail-btn[aria-label="Desplazar campo"]')).toHaveClass(/rail-active/);
+    await expect(page.locator('.rail-btn[aria-label="Desplazar campo"]')).toHaveClass(
+      /rail-active/,
+    );
     await page.screenshot({ path: `${SHOTS}/tablero-barra-herramientas.png` });
   });
 });

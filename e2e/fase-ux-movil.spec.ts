@@ -26,17 +26,24 @@ function normToScreen(nx: number, ny: number, host: Box, fit: Fit): Pt {
   const cyg = ny * RECT.h + RECT.y;
   const cx = offX + cxg * s;
   const cy = offY + cyg * s;
-  return { x: host.x + host.width / 2 + cx - host.width / 2, y: host.y + host.height / 2 + cy - host.height / 2 };
+  return {
+    x: host.x + host.width / 2 + cx - host.width / 2,
+    y: host.y + host.height / 2 + cy - host.height / 2,
+  };
 }
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem('entrenolab:board-fill', '1');
     localStorage.setItem('entrenolab:board-hints', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
     localStorage.setItem('entrenolab:players', JSON.stringify([]));
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
@@ -46,8 +53,16 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-canvas svg')).toBeVisible();
+  // Preparar los destinos de arrastre libres del inspector inicial.
+  await page.locator('.studio-panel .panel-close').click();
   for (const sel of ['.help-close', '.fill-hint-close']) {
-    if (await page.locator(sel).isVisible().catch(() => false)) await page.locator(sel).click();
+    if (
+      await page
+        .locator(sel)
+        .isVisible()
+        .catch(() => false)
+    )
+      await page.locator(sel).click();
   }
 }
 async function hostBox(page: Page): Promise<Box> {
@@ -70,26 +85,36 @@ async function cursorBtn(page: Page): Promise<Locator> {
 // `touch-helpers.ts` (UNA sola implementación reutilizada por los specs de FASE H y este).
 
 test.describe('FASE UX — comprobación móvil final (horizontal 844×390)', () => {
-  test('el panel no oculta su control X y la barra inferior sigue visible y operable', async ({ page }) => {
+  test('el panel no oculta su control X y la barra inferior sigue visible y operable', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 844, height: 390 });
-    await seed(page); await openBoard(page);
+    await seed(page);
+    await openBoard(page);
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
-    await expect(page.locator('.tools-panel-side .panel-close'), 'control X del panel visible').toBeVisible();
+    await expect(
+      page.locator('.tools-panel-side .panel-close'),
+      'control X del panel visible',
+    ).toBeVisible();
     const bar = await page.locator('.studio-tools').boundingBox();
     expect(bar).not.toBeNull();
     await (await cursorBtn(page)).click();
     await expect(await cursorBtn(page)).toHaveClass(/rail-active/);
   });
 
-  test('arrastrar Cono desde Material coloca exactamente UNA y el toque posterior no añade', async ({ page }) => {
+  test('arrastrar Cono desde Material coloca exactamente UNA y el toque posterior no añade', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 844, height: 390 });
-    await seed(page); await openBoard(page);
+    await seed(page);
+    await openBoard(page);
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
-    const host = await hostBox(page); const fit = await fitMode(page);
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
     const drop = normToScreen(0.7, 0.5, host, fit);
     await dragItemToField(page, '.rail-btn[title="Cono"]', drop);
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
@@ -100,47 +125,63 @@ test.describe('FASE UX — comprobación móvil final (horizontal 844×390)', ()
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
   });
 
-  test('arrastrar jugador genérico desde Jugadores coloca una y deja el panel abierto', async ({ page }) => {
+  test('arrastrar jugador genérico desde Jugadores coloca una y deja el panel abierto', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 844, height: 390 });
-    await seed(page); await openBoard(page);
+    await seed(page);
+    await openBoard(page);
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
-    const host = await hostBox(page); const fit = await fitMode(page);
-    await dragItemToField(page, '.tray-player[title="Jugador Azul"]', normToScreen(0.7, 0.5, host, fit));
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
+    await dragItemToField(
+      page,
+      '.tray-player[title="Jugador Azul"]',
+      normToScreen(0.7, 0.5, host, fit),
+    );
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(1);
     await expect(page.locator('.side-panel-left')).toBeVisible();
   });
 
   test('un toque corto táctil en Cono NO arma; tocar el campo deja 0', async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 });
-    await seed(page); await openBoard(page);
+    await seed(page);
+    await openBoard(page);
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
     const card = page.locator('.rail-btn[title="Cono"]');
     const cb = (await card.boundingBox())!;
-    const x = cb.x + cb.width / 2; const y = cb.y + cb.height / 2;
+    const x = cb.x + cb.width / 2;
+    const y = cb.y + cb.height / 2;
     await ptrItem(page, '.rail-btn[title="Cono"]', 'pointerdown', x, y, 51);
     await ptrItem(page, '.rail-btn[title="Cono"]', 'pointerup', x, y, 51);
     await expect(page.locator('.placement-hint')).toHaveCount(0);
-    const host = await hostBox(page); const fit = await fitMode(page);
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
     const p = normToScreen(0.7, 0.5, host, fit);
     await tapBoard(page, p.x, p.y);
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(0);
   });
 
-  test('un SEGUNDO dedo durante el arrastre de panel CANCELA (0 objetos, pizarra usable)', async ({ page }) => {
+  test('un SEGUNDO dedo durante el arrastre de panel CANCELA (0 objetos, pizarra usable)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 844, height: 390 });
-    await seed(page); await openBoard(page);
+    await seed(page);
+    await openBoard(page);
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.tools-panel-side')).toBeVisible();
-    const host = await hostBox(page); const fit = await fitMode(page);
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
     const drop = normToScreen(0.7, 0.5, host, fit);
     const card = page.locator('.rail-btn[title="Cono"]');
     const cb = (await card.boundingBox())!;
-    const sx = cb.x + cb.width / 2; const sy = cb.y + cb.height / 2;
+    const sx = cb.x + cb.width / 2;
+    const sy = cb.y + cb.height / 2;
     await ptrItem(page, '.rail-btn[title="Cono"]', 'pointerdown', sx, sy, 71);
     await ptrItem(page, '.rail-btn[title="Cono"]', 'pointermove', sx + 30, sy, 71);
     // Segundo dedo toca el campo → cancela (sin colocar).

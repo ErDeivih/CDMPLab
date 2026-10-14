@@ -18,7 +18,7 @@ import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import type { CanvasDocument, CanvasElement } from '../src/app/core/models';
 import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO } from '../src/app/core/tactic-assets';
-import { longPress, fillBoardTitle, toggleFillScreen } from './gesture-helpers';
+import { ensurePropsPanel, longPress, fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/final-board-gallery';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -270,7 +270,7 @@ async function openProps(page: Page): Promise<void> {
       .catch(() => false)
   )
     return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   await expect(page.locator('.studio-panel')).toBeVisible();
   await page.waitForTimeout(60);
 }

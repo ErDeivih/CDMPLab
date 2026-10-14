@@ -114,29 +114,23 @@ test.describe('FASE 3 — herramientas de la pizarra (grupo flotante)', () => {
     ).not.toBe('grupo-flotante');
   });
 
-  test('FASE 3.2b: «Herramientas» abre el menú de categorías y se cierra al elegir una', async ({
-    page,
-  }) => {
+  test('categorías directas: siempre visibles antes y después de elegir una', async ({ page }) => {
     await page.setViewportSize(ESCRITORIO);
     await seed(page);
     await abrirPizarra(page);
 
-    // Cerrado por defecto: las categorías NO están en el DOM.
-    await expect(page.locator('.tools-menu')).toHaveCount(0);
-    await expect(page.locator('.tools-cat')).toHaveCount(0);
-
-    await page.locator('.tools-toggle').click();
+    // David sustituye el desplegable: la expectativa anterior ya no es válida.
+    await expect(page.locator('.tools-toggle')).toHaveCount(0);
     const menu = page.locator('.tools-menu');
     await expect(menu).toBeVisible();
     await expect(menu.locator('.tools-cat')).toHaveCount(3);
-    await expect(page.locator('.tools-toggle')).toHaveAttribute('aria-expanded', 'true');
 
     // Elegir categoría abre su panel y CIERRA el menú (para no tapar la banda inferior del campo).
     await abrirHerramientas(page); // idempotente: ya estaba abierto
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
-    await expect(page.locator('.tools-menu')).toHaveCount(0);
-    await expect(page.locator('.tools-toggle')).toHaveAttribute('aria-expanded', 'false');
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('.tools-cat')).toHaveCount(3);
   });
 
   test('todas las herramientas siguen accesibles: Cursor, Mano, Jugadores, Material y Dibujo', async ({

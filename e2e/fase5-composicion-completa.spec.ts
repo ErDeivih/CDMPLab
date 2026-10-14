@@ -32,7 +32,12 @@ const RECT = { x: 4, y: 10, w: 92, h: 92 / (105 / 68) };
 const VBW = 100;
 const VBH = 80;
 
-function normToScreen(nx: number, ny: number, box: Box, fit: 'contain' | 'height' = 'contain'): [number, number] {
+function normToScreen(
+  nx: number,
+  ny: number,
+  box: Box,
+  fit: 'contain' | 'height' = 'contain',
+): [number, number] {
   const s = fit === 'height' ? box.height / RECT.h : Math.min(box.width / VBW, box.height / VBH);
   const offX = (box.width - VBW * s) / 2;
   const offY = (box.height - VBH * s) / 2;
@@ -47,27 +52,63 @@ function normToScreen(nx: number, ny: number, box: Box, fit: 'contain' | 'height
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-    ]));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Pau',
+          number: 10,
+          position: 'MF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
+    localStorage.setItem(
+      'entrenolab:folders',
+      JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]),
+    );
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
 
 async function dismissHelp(page: Page): Promise<void> {
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
 }
 
 async function openBoardDesktop(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
+  // Los destinos de esta composición requieren el campo libre.
+  await page.locator('.studio-panel .panel-close').click();
   await dismissHelp(page);
 }
 
@@ -88,7 +129,13 @@ async function deselect(page: Page): Promise<void> {
   await expect(page.locator('.rail-btn[title="Seleccionar y mover"]')).toHaveClass(/rail-active/);
 }
 
-async function placePlayer(page: Page, title: string, nx: number, ny: number, tray = false): Promise<void> {
+async function placePlayer(
+  page: Page,
+  title: string,
+  nx: number,
+  ny: number,
+  tray = false,
+): Promise<void> {
   await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   const isPlayerTool = title === 'Jugador propio' || title === 'Jugador rival';
@@ -114,7 +161,9 @@ async function placePlayer(page: Page, title: string, nx: number, ny: number, tr
 async function placeMaterial(page: Page, tool: string, nx: number, ny: number): Promise<void> {
   await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
-  const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${tool}"]`) });
+  const card = page.locator('.tools-material-card', {
+    has: page.locator(`.rail-btn[title="${tool}"]`),
+  });
   const variantCount = await card.locator('.variant-swatch').count();
   if (variantCount > 0) await card.locator('.variant-swatch').first().click();
   await card.locator(`.rail-btn[title="${tool}"]`).click();
@@ -126,9 +175,16 @@ async function placeMaterial(page: Page, tool: string, nx: number, ny: number): 
   await deselect(page);
 }
 
-async function dragDraw(page: Page, tool: string, from: [number, number], to: [number, number], fill?: boolean): Promise<void> {
+async function dragDraw(
+  page: Page,
+  tool: string,
+  from: [number, number],
+  to: [number, number],
+  fill?: boolean,
+): Promise<void> {
   await useTool(page, tool, 'Dibujo');
-  if (fill != null) await page.locator('.tools-caption .chip', { hasText: fill ? 'Relleno' : 'Perímetro' }).click();
+  if (fill != null)
+    await page.locator('.tools-caption .chip', { hasText: fill ? 'Relleno' : 'Perímetro' }).click();
   // FASE B: cerrar el panel Dibujo con la X (no desarma) antes de arrastrar sobre el campo.
   await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
   const box = await hostBox(page);
@@ -152,7 +208,13 @@ async function placeText(page: Page, nx: number, ny: number, value: string): Pro
   await ta.dispatchEvent('change');
   await ta.evaluate((el) => (el as HTMLElement).blur());
   // FASE G: observable — el texto se ha renderizado en el SVG antes de deseleccionar.
-  await expect.poll(async () => (await page.locator('.board-canvas svg').innerHTML()).includes(value.split('\n')[0]), { timeout: 4000 }).toBe(true);
+  await expect
+    .poll(
+      async () =>
+        (await page.locator('.board-canvas svg').innerHTML()).includes(value.split('\n')[0]),
+      { timeout: 4000 },
+    )
+    .toBe(true);
   await deselect(page);
 }
 
@@ -172,7 +234,9 @@ function pt(col: number, row: number): [number, number] {
   return [0.1 + col * 0.08, 0.16 + row * 0.09];
 }
 
-test('composición completa: cada familia presente en el modelo, nada seleccionado y sin paneles', async ({ page }) => {
+test('composición completa: cada familia presente en el modelo, nada seleccionado y sin paneles', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1366, height: 1000 });
   await seed(page);
   await openBoardDesktop(page);
@@ -184,11 +248,24 @@ test('composición completa: cada familia presente en el modelo, nada selecciona
 
   // 2) Materiales (cada familia puntual) en la fila 1-2 de la franja superior.
   const materials: Array<[string, number, number]> = [
-    ['Balón', 0, 1], ['Fitball', 1, 1], ['Cono', 2, 1], ['BOSU', 3, 1],
-    ['Banderín', 4, 1], ['Chino', 5, 1], ['Pica', 6, 1], ['Pértiga / poste', 7, 1],
-    ['Maniquí individual', 8, 1], ['Barrera de maniquíes', 9, 1],
-    ['Miniportería', 0, 2], ['Portería grande', 1, 2], ['Valla', 2, 2], ['Aro', 3, 2],
-    ['Escalera', 4, 2], ['Minitrampolín', 5, 2], ['Peto', 6, 2], ['Chaleco lastrado', 7, 2],
+    ['Balón', 0, 1],
+    ['Fitball', 1, 1],
+    ['Cono', 2, 1],
+    ['BOSU', 3, 1],
+    ['Banderín', 4, 1],
+    ['Chino', 5, 1],
+    ['Pica', 6, 1],
+    ['Pértiga / poste', 7, 1],
+    ['Maniquí individual', 8, 1],
+    ['Barrera de maniquíes', 9, 1],
+    ['Miniportería', 0, 2],
+    ['Portería grande', 1, 2],
+    ['Valla', 2, 2],
+    ['Aro', 3, 2],
+    ['Escalera', 4, 2],
+    ['Minitrampolín', 5, 2],
+    ['Peto', 6, 2],
+    ['Chaleco lastrado', 7, 2],
     ['Mancuerna / pesa', 8, 2],
   ];
   for (const [tool, c, r] of materials) await placeMaterial(page, tool, ...pt(c, r));
@@ -224,13 +301,50 @@ test('composición completa: cada familia presente en el modelo, nada selecciona
   await page.waitForURL('**/library');
   const els = await elements(page);
 
-  const familyTypes = ['line', 'arrow', 'doubleArrow', 'curve', 'dribble', 'freehand', 'rect', 'ellipse', 'text',
-    'player', 'ball', 'vball', 'cone', 'marker', 'flag', 'target', 'pica', 'pole', 'mannequin', 'mannequin_row',
-    'minigoal', 'goal', 'hurdle', 'ring', 'ladder', 'trampoline', 'peto', 'chaleco', 'dumbbell'];
+  const familyTypes = [
+    'line',
+    'arrow',
+    'doubleArrow',
+    'curve',
+    'dribble',
+    'freehand',
+    'rect',
+    'ellipse',
+    'text',
+    'player',
+    'ball',
+    'vball',
+    'cone',
+    'marker',
+    'flag',
+    'target',
+    'pica',
+    'pole',
+    'mannequin',
+    'mannequin_row',
+    'minigoal',
+    'goal',
+    'hurdle',
+    'ring',
+    'ladder',
+    'trampoline',
+    'peto',
+    'chaleco',
+    'dumbbell',
+  ];
   for (const t of familyTypes) {
-    expect(els.some((e) => e.t === t), `familia «${t}» presente en el modelo`).toBe(true);
+    expect(
+      els.some((e) => e.t === t),
+      `familia «${t}» presente en el modelo`,
+    ).toBe(true);
   }
   // Rival por COLOR (la diferenciación de equipos es por color, no por side) y genéricos sin rol especial.
-  expect(els.some((e) => e.t === 'player' && e.c === '#c0392b'), 'hay jugador RIVAL (por color rojo)').toBe(true);
-  expect(els.every((e) => e.t !== 'player' || e.type !== 'goalkeeper'), 'ningún genérico lleva rol de portero').toBe(true);
+  expect(
+    els.some((e) => e.t === 'player' && e.c === '#c0392b'),
+    'hay jugador RIVAL (por color rojo)',
+  ).toBe(true);
+  expect(
+    els.every((e) => e.t !== 'player' || e.type !== 'goalkeeper'),
+    'ningún genérico lleva rol de portero',
+  ).toBe(true);
 });

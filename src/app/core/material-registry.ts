@@ -233,7 +233,7 @@ export const CANONICAL_MATERIALS: readonly CanonicalMaterial[] = [
   {
     id: 'medicine_ball',
     title: 'Balón medicinal',
-    group: 'Balones',
+    group: 'Preparación física',
     icon: 'sports_handball',
     help: 'Balón medicinal con o sin asas',
     point: true,

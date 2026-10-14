@@ -32,7 +32,7 @@ import {
   fitMode,
   showCategory,
 } from './board-helpers';
-import { fillBoardTitle } from './gesture-helpers';
+import { ensurePropsPanel, fillBoardTitle } from './gesture-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -66,7 +66,7 @@ async function abrirPropiedades(page: Page): Promise<void> {
       .isVisible()
       .catch(() => false))
   ) {
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
   }
   await expect(page.locator('.studio-panel')).toBeVisible();
   await expect(page.locator('.field-gallery')).toBeVisible();

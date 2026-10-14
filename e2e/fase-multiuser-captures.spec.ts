@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
@@ -119,7 +120,7 @@ async function openProps(page: Page): Promise<void> {
       .catch(() => false)
   )
     return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   await expect(page.locator('.studio-panel')).toBeVisible();
   await page.waitForTimeout(60);
 }
@@ -241,6 +242,8 @@ test.describe('Fase multiusuario — capturas del estado actual', () => {
     await dismissHelp(page);
 
     // Captura "cerrada" con un jugador colocado. FASE B: el panel Jugadores PERMANECE
+    // El inspector abre por defecto: cerrarlo para esta captura de un solo panel.
+    await page.locator('.studio-panel .panel-close').click();
     // abierto tras tocar el jugador (persistencia), así que hay UN panel principal (el
     // lateral izquierdo), no cero.
     await abrirHerramientas(page);
@@ -288,6 +291,7 @@ test.describe('Fase multiusuario — capturas del estado actual', () => {
     await dismissHelp(page);
 
     // Cerrada: el campo es el protagonista.
+    await page.locator('.studio-panel .panel-close').click();
     const studio = (await page.locator('.studio').boundingBox())!;
     const field = (await page.locator('.studio-field').boundingBox())!;
     expect(field.width / studio.width).toBeGreaterThanOrEqual(0.9);
@@ -296,18 +300,18 @@ test.describe('Fase multiusuario — capturas del estado actual', () => {
     await page.waitForTimeout(150);
     await page.screenshot({ path: `${SHOTS}/board-movil-cerrado.png` });
 
-    // Material. CONTRATO ACTUALIZADO (fase shell+móvil): en móvil VERTICAL los cuatro paneles son
-    // una HOJA INFERIOR (55-60 % de alto, ancho completo, anclada abajo) precisamente porque un
-    // panel lateral deja el campo demasiado estrecho. Este test exigía un panel lateral de ≥80 % de
-    // alto: ese era el contrato anterior y dejó de ser válido por requisito explícito del encargo.
-    // El panel lateral se sigue comprobando en móvil HORIZONTAL (spec `fase-shell-movil`).
+    // Material: hoja inferior de 45vw para coexistir con Propiedades en el otro lado.
+    // Este encargo sustituye expresamente la hoja anterior de ancho completo.
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     await expect(await visibleMainPanels(page)).toBe(1);
     const f0 = (await page.locator('.studio-field').boundingBox())!;
     const mat = (await page.locator('.side-panel-left').boundingBox())!;
-    expect(mat.width, 'la hoja ocupa todo el ancho').toBeGreaterThanOrEqual(MOBILE.width - 2);
+    expect(mat.width, 'la hoja reserva el otro lado para Propiedades').toBeCloseTo(
+      MOBILE.width * 0.45,
+      0,
+    );
     expect(mat.height, 'alto máximo ~58 % de la pantalla').toBeLessThanOrEqual(
       MOBILE.height * 0.6 + 2,
     );
@@ -319,7 +323,7 @@ test.describe('Fase multiusuario — capturas del estado actual', () => {
     // Propiedades (derecha), solo ese panel visible.
     await page.keyboard.press('Escape');
     await page.waitForTimeout(60);
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     await expect(page.locator('.studio-panel')).toBeVisible();
     await expect(await visibleMainPanels(page)).toBe(1);
     await page.waitForTimeout(150);

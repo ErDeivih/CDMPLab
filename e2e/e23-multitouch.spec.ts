@@ -12,14 +12,63 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([
-      { id: 'e1', teamId: 't1', folderId: null, title: 'Rondos', description: '', explanation: '', category: 'Técnica', objectives: [], materials: [], durationMinutes: 12, minPlayers: 6, maxPlayers: 8, loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false, canvas: { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [] }], orientation: 'horizontal', grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a' }, thumbnail: null, savedAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:exercises',
+      JSON.stringify([
+        {
+          id: 'e1',
+          teamId: 't1',
+          folderId: null,
+          title: 'Rondos',
+          description: '',
+          explanation: '',
+          category: 'Técnica',
+          objectives: [],
+          materials: [],
+          durationMinutes: 12,
+          minPlayers: 6,
+          maxPlayers: 8,
+          loadMode: 'fixed',
+          seriesCount: null,
+          repetitionsCount: null,
+          workSeconds: null,
+          restSeconds: null,
+          isTemplate: false,
+          canvas: {
+            version: 2,
+            schemaVersion: 3,
+            field: 'full',
+            frames: [{ duration: 1000, elements: [] }],
+            orientation: 'horizontal',
+            grass: 'stripes',
+            lineColor: '#ffffff',
+            backgroundColor: '#31834a',
+          },
+          thumbnail: null,
+          savedAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
@@ -28,10 +77,22 @@ async function seed(page: Page): Promise<void> {
 async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) {
+  // El gesto se prueba con el campo libre, cerrando el inspector inicial.
+  await page.locator('.studio-panel .panel-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.help-close').click();
   }
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.fill-hint-close').click();
   }
 }
@@ -46,18 +107,27 @@ async function hostBox(page: Page): Promise<Box> {
 async function readView(page: Page): Promise<{ panX: number; panY: number; zoom: number }> {
   return page.locator('.board-canvas').evaluate((el) => {
     const t = (el as HTMLElement).style.transform;
-    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(t);
-    return m ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) } : { panX: 0, panY: 0, zoom: 1 };
+    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(
+      t,
+    );
+    return m
+      ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) }
+      : { panX: 0, panY: 0, zoom: 1 };
   });
 }
 
 /** Norm (0..1) de un elemento leído del `translate` de su <g> más cercano. */
 async function objectNorm(page: Page, selector: string): Promise<{ x: number; y: number }> {
-  const v = await page.locator(selector).first().evaluate((el) => {
-    const g = el.closest('g');
-    const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(g?.getAttribute('transform') ?? '');
-    return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
-  });
+  const v = await page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const g = el.closest('g');
+      const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(
+        g?.getAttribute('transform') ?? '',
+      );
+      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
+    });
   expect(v, `el objeto (${selector}) debe estar renderizado con translate`).not.toBeNull();
   return { x: (v!.x - RECT.x) / RECT.w, y: (v!.y - RECT.y) / RECT.h };
 }
@@ -87,46 +157,58 @@ async function ptr(
   y: number,
   pointerId: number,
   pointerType: PointerType = 'touch',
-  isPrimary = false
+  isPrimary = false,
 ): Promise<void> {
-  await page.evaluate(({ type, x, y, pointerId, pointerType, isPrimary }) => {
-    const host = document.querySelector('.board-host') as HTMLElement | null;
-    if (!host) return;
-    const up = type === 'pointerup' || type === 'pointercancel';
-    host.dispatchEvent(
-      new PointerEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        pointerId,
-        pointerType,
-        isPrimary,
-        clientX: x,
-        clientY: y,
-        button: 0,
-        buttons: up ? 0 : 1,
-      })
-    );
-  }, { type, x, y, pointerId, pointerType, isPrimary });
+  await page.evaluate(
+    ({ type, x, y, pointerId, pointerType, isPrimary }) => {
+      const host = document.querySelector('.board-host') as HTMLElement | null;
+      if (!host) return;
+      const up = type === 'pointerup' || type === 'pointercancel';
+      host.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId,
+          pointerType,
+          isPrimary,
+          clientX: x,
+          clientY: y,
+          button: 0,
+          buttons: up ? 0 : 1,
+        }),
+      );
+    },
+    { type, x, y, pointerId, pointerType, isPrimary },
+  );
 }
 
 /** Despacha un `lostpointercapture` sintético sobre `.board-host`. */
-async function lostCapture(page: Page, x: number, y: number, pointerId: number, pointerType: PointerType = 'touch'): Promise<void> {
-  await page.evaluate(({ x, y, pointerId, pointerType }) => {
-    const host = document.querySelector('.board-host') as HTMLElement | null;
-    if (!host) return;
-    host.dispatchEvent(
-      new PointerEvent('lostpointercapture', {
-        bubbles: true,
-        cancelable: true,
-        pointerId,
-        pointerType,
-        clientX: x,
-        clientY: y,
-        button: 0,
-        buttons: 0,
-      })
-    );
-  }, { x, y, pointerId, pointerType });
+async function lostCapture(
+  page: Page,
+  x: number,
+  y: number,
+  pointerId: number,
+  pointerType: PointerType = 'touch',
+): Promise<void> {
+  await page.evaluate(
+    ({ x, y, pointerId, pointerType }) => {
+      const host = document.querySelector('.board-host') as HTMLElement | null;
+      if (!host) return;
+      host.dispatchEvent(
+        new PointerEvent('lostpointercapture', {
+          bubbles: true,
+          cancelable: true,
+          pointerId,
+          pointerType,
+          clientX: x,
+          clientY: y,
+          button: 0,
+          buttons: 0,
+        }),
+      );
+    },
+    { x, y, pointerId, pointerType },
+  );
 }
 
 /** Un TAP táctil (down+up sin moverse) en (x,y). */
@@ -142,7 +224,10 @@ async function placeComodinAtCenter(page: Page): Promise<{ x: number; y: number 
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
   // FASE B (paneles persistentes): elegir un jugador de la plantilla NO cierra el panel.
-  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await expect(
+    page.locator('.side-panel-left'),
+    'el panel Jugadores permanece abierto',
+  ).toBeVisible();
   // FASE B (regla C): el panel persistente tapa el centro del host en móvil; se cierra por su
   // botón X (.panel-close) —que no desarma la colocación— para poder tocar correctamente.
   await page.locator('.side-panel-left .panel-close').click();
@@ -170,7 +255,9 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
 
   // ---------- DEFECTO 2: tres dedos ----------
 
-  test('D2-a: A+B pellizcan; C baja; A se levanta → el pinch termina SIN transferirse a C y sin salto', async ({ page }) => {
+  test('D2-a: A+B pellizcan; C baja; A se levanta → el pinch termina SIN transferirse a C y sin salto', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -224,7 +311,9 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     await ptr(page, 'pointerup', cx - 250, cy + 150, idB, 'touch');
   });
 
-  test('D2-b: A+B+C; pointercancel de un participante (B) → el pinch termina sin salto', async ({ page }) => {
+  test('D2-b: A+B+C; pointercancel de un participante (B) → el pinch termina sin salto', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -268,7 +357,9 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     await ptr(page, 'pointerup', cx + 300, cy - 90, idC, 'touch');
   });
 
-  test('D2-c: lostpointercapture de un participante → el pinch termina sin salto', async ({ page }) => {
+  test('D2-c: lostpointercapture de un participante → el pinch termina sin salto', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -291,9 +382,18 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     // Se pierde la captura de un participante (B): el pinch termina sin salto.
     await lostCapture(page, cx + 90, cy, idB, 'touch');
     const v = await readView(page);
-    expect(v.zoom, 'lostpointercapture del participante congela el zoom').toBeCloseTo(vPinch.zoom, 6);
-    expect(v.panX, 'lostpointercapture del participante congela el panX').toBeCloseTo(vPinch.panX, 6);
-    expect(v.panY, 'lostpointercapture del participante congela el panY').toBeCloseTo(vPinch.panY, 6);
+    expect(v.zoom, 'lostpointercapture del participante congela el zoom').toBeCloseTo(
+      vPinch.zoom,
+      6,
+    );
+    expect(v.panX, 'lostpointercapture del participante congela el panX').toBeCloseTo(
+      vPinch.panX,
+      6,
+    );
+    expect(v.panY, 'lostpointercapture del participante congela el panY').toBeCloseTo(
+      vPinch.panY,
+      6,
+    );
 
     await ptr(page, 'pointermove', cx - 250, cy + 120, idA, 'touch');
     await ptr(page, 'pointermove', cx + 300, cy - 90, idC, 'touch');
@@ -310,7 +410,9 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     await ptr(page, 'pointerup', cx + 300, cy - 90, idC, 'touch');
   });
 
-  test('D2-d: tras levantar los tres dedos, un tap coloca EXACTAMENTE un objeto', async ({ page }) => {
+  test('D2-d: tras levantar los tres dedos, un tap coloca EXACTAMENTE un objeto', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -346,7 +448,9 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     await expect(page.locator('.tools-caption-title')).toHaveText('Cono');
   });
 
-  test('D2-e: tras el pinch de 3 dedos, un arrastre de un dedo mueve el objeto correctamente', async ({ page }) => {
+  test('D2-e: tras el pinch de 3 dedos, un arrastre de un dedo mueve el objeto correctamente', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -372,8 +476,14 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
 
     // El objeto NO se movió durante el pinch de 3 dedos y NO se abre Propiedades.
     const midNorm = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
-    expect(Math.abs(midNorm.x - beforeNorm.x), 'el objeto no se mueve con el pinch (x)').toBeLessThan(0.005);
-    expect(Math.abs(midNorm.y - beforeNorm.y), 'el objeto no se mueve con el pinch (y)').toBeLessThan(0.005);
+    expect(
+      Math.abs(midNorm.x - beforeNorm.x),
+      'el objeto no se mueve con el pinch (x)',
+    ).toBeLessThan(0.005);
+    expect(
+      Math.abs(midNorm.y - beforeNorm.y),
+      'el objeto no se mueve con el pinch (y)',
+    ).toBeLessThan(0.005);
     await expect(page.locator('.studio-panel')).toHaveCount(0);
 
     // Un arrastre de UN dedo sobre el objeto lo mueve correctamente.
@@ -382,18 +492,31 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     await ptr(page, 'pointermove', objPos.x + 45, objPos.y + 28, 504, 'touch');
     await ptr(page, 'pointerup', objPos.x + 45, objPos.y + 28, 504, 'touch');
     // Espera observable: el objeto se mueve (su norm cambia respecto al inicio).
-    await expect.poll(async () => {
-      const n = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
-      return Math.abs(n.x - beforeNorm.x) + Math.abs(n.y - beforeNorm.y);
-    }, { timeout: 4000 }).toBeGreaterThan(0.005);
+    await expect
+      .poll(
+        async () => {
+          const n = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
+          return Math.abs(n.x - beforeNorm.x) + Math.abs(n.y - beforeNorm.y);
+        },
+        { timeout: 4000 },
+      )
+      .toBeGreaterThan(0.005);
     const afterNorm = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
-    expect(Math.abs(afterNorm.x - beforeNorm.x), 'el objeto se mueve tras el pinch (x)').toBeGreaterThan(0.005);
-    expect(Math.abs(afterNorm.y - beforeNorm.y), 'el objeto se mueve tras el pinch (y)').toBeGreaterThan(0.005);
+    expect(
+      Math.abs(afterNorm.x - beforeNorm.x),
+      'el objeto se mueve tras el pinch (x)',
+    ).toBeGreaterThan(0.005);
+    expect(
+      Math.abs(afterNorm.y - beforeNorm.y),
+      'el objeto se mueve tras el pinch (y)',
+    ).toBeGreaterThan(0.005);
   });
 
   // ---------- DEFECTO 3: solo dos punteros táctiles inician un pinch ----------
 
-  test('D3-a: mouse + touch NO es un pinch (zoom intacto); el ratón conserva su comportamiento inmediato', async ({ page }) => {
+  test('D3-a: mouse + touch NO es un pinch (zoom intacto); el ratón conserva su comportamiento inmediato', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -408,10 +531,13 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     // explícitamente la herramienta "Desplazar campo" (Mano).
     await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
     // Ratón baja sobre campo vacío y arrastra → PAN inmediato (comportamiento de Mano).
-    await ptr(page, 'pointerdown', cx - host.width * 0.30, cy, idMouse, 'mouse', true);
-    await ptr(page, 'pointermove', cx - host.width * 0.30 + 60, cy + 30, idMouse, 'mouse');
+    await ptr(page, 'pointerdown', cx - host.width * 0.3, cy, idMouse, 'mouse', true);
+    await ptr(page, 'pointermove', cx - host.width * 0.3 + 60, cy + 30, idMouse, 'mouse');
     const vDrag = await readView(page);
-    expect(Math.abs(vDrag.panX - v0.panX), 'el arrastre de ratón panea inmediatamente').toBeGreaterThan(5);
+    expect(
+      Math.abs(vDrag.panX - v0.panX),
+      'el arrastre de ratón panea inmediatamente',
+    ).toBeGreaterThan(5);
 
     // Un dedo TÁCTIL baja mientras el ratón sigue bajado: NO es un pinch.
     await ptr(page, 'pointerdown', cx + 60, cy + 40, idTouch, 'touch', false);
@@ -420,7 +546,7 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     expect(vTouch.panX, 'mouse+touch NO cambia el panX').toBeCloseTo(vDrag.panX, 6);
 
     await ptr(page, 'pointerup', cx + 60, cy + 40, idTouch, 'touch');
-    await ptr(page, 'pointerup', cx - host.width * 0.30 + 60, cy + 30, idMouse, 'mouse');
+    await ptr(page, 'pointerup', cx - host.width * 0.3 + 60, cy + 30, idMouse, 'mouse');
 
     const vFinal = await readView(page);
     expect(vFinal.zoom, 'zoom intacto al terminar').toBeCloseTo(v0.zoom, 4);
@@ -437,7 +563,9 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     expect(await fieldCount(page), 'sin historial, undo es no-op').toBe(0);
   });
 
-  test('D3-b: pen + touch NO es un pinch (zoom intacto); el lápiz conserva su comportamiento inmediato', async ({ page }) => {
+  test('D3-b: pen + touch NO es un pinch (zoom intacto); el lápiz conserva su comportamiento inmediato', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -452,10 +580,13 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     // arrastre de lápiz panea.
     await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
     // Lápiz baja sobre campo vacío y arrastra → PAN inmediato.
-    await ptr(page, 'pointerdown', cx - host.width * 0.30, cy, idPen, 'pen', true);
-    await ptr(page, 'pointermove', cx - host.width * 0.30 + 60, cy + 30, idPen, 'pen');
+    await ptr(page, 'pointerdown', cx - host.width * 0.3, cy, idPen, 'pen', true);
+    await ptr(page, 'pointermove', cx - host.width * 0.3 + 60, cy + 30, idPen, 'pen');
     const vDrag = await readView(page);
-    expect(Math.abs(vDrag.panX - v0.panX), 'el arrastre de lápiz panea inmediatamente').toBeGreaterThan(5);
+    expect(
+      Math.abs(vDrag.panX - v0.panX),
+      'el arrastre de lápiz panea inmediatamente',
+    ).toBeGreaterThan(5);
 
     // Dedo táctil baja con el lápiz bajado: NO es un pinch.
     await ptr(page, 'pointerdown', cx + 60, cy + 40, idTouch, 'touch', false);
@@ -464,7 +595,7 @@ test.describe('Multitáctil: pinch con dedos fijos (defecto 3 dedos) y solo dos 
     expect(vTouch.panX, 'pen+touch NO cambia el panX').toBeCloseTo(vDrag.panX, 6);
 
     await ptr(page, 'pointerup', cx + 60, cy + 40, idTouch, 'touch');
-    await ptr(page, 'pointerup', cx - host.width * 0.30 + 60, cy + 30, idPen, 'pen');
+    await ptr(page, 'pointerup', cx - host.width * 0.3 + 60, cy + 30, idPen, 'pen');
 
     const vFinal = await readView(page);
     expect(vFinal.zoom, 'zoom intacto al terminar').toBeCloseTo(v0.zoom, 4);

@@ -2,17 +2,21 @@ import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import { fieldGeometry, FIELD_LINE_WIDTH, F7_LINE_COLOR } from '../src/app/core/field';
-import { fillBoardTitle } from './gesture-helpers';
+import { ensurePropsPanel, fillBoardTitle } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/p2-half';
 fs.mkdirSync(SHOTS, { recursive: true });
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
     localStorage.setItem('entrenolab:players', JSON.stringify([]));
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
@@ -21,14 +25,25 @@ async function seed(page: Page): Promise<void> {
 }
 
 async function dismissHelp(page: Page): Promise<void> {
-  if (await page.locator('.help-close').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.help-close').click();
   }
 }
 
 async function openProps(page: Page): Promise<void> {
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
+  await ensurePropsPanel(page);
   // FASE G: el panel se espera con el `.toBeVisible()` siguiente (observable); sin wait fijo.
   await expect(page.locator('.studio-panel')).toBeVisible();
 }
@@ -37,7 +52,12 @@ type Geom = ReturnType<typeof fieldGeometry>;
 
 /** Mapea norm (0..1) → pantalla replicando el render real: letterboxing del SVG
  *  (preserveAspectRatio meet) + rect canónico del tipo de campo + rotación vertical. */
-function normToScreen(nx: number, ny: number, box: { x: number; y: number; width: number; height: number }, g: Geom): [number, number] {
+function normToScreen(
+  nx: number,
+  ny: number,
+  box: { x: number; y: number; width: number; height: number },
+  g: Geom,
+): [number, number] {
   const s = Math.min(box.width / g.vbW, box.height / g.vbH);
   const offX = (box.width - g.vbW * s) / 2;
   const offY = (box.height - g.vbH * s) / 2;
@@ -59,18 +79,28 @@ function normToScreen(nx: number, ny: number, box: { x: number; y: number; width
 }
 
 test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado', () => {
-  test('medio campo HORIZONTAL: bbox renderizado con proporción 52,5/68 (NO deformado)', async ({ page }) => {
+  test('medio campo HORIZONTAL: bbox renderizado con proporción 52,5/68 (NO deformado)', async ({
+    page,
+  }) => {
     await page.goto('/board');
     await dismissHelp(page);
     await openProps(page);
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('half');
-    await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="horizontal"]').click();
+    await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip[data-orient="horizontal"]')
+      .click();
     // FASE G: observable — esperamos a que el medio campo horizontal renderice con la
     // proporción 52,5/68 (no un wait fijo).
-    await expect.poll(async () => {
-      const b = await page.locator('.entrenolab-grass').boundingBox();
-      return b ? b.width / b.height : 0;
-    }, { timeout: 5000 }).toBeCloseTo(52.5 / 68, 1);
+    await expect
+      .poll(
+        async () => {
+          const b = await page.locator('.entrenolab-grass').boundingBox();
+          return b ? b.width / b.height : 0;
+        },
+        { timeout: 5000 },
+      )
+      .toBeCloseTo(52.5 / 68, 1);
     await expect(page.locator('.entrenolab-grass')).toBeVisible();
     const b = (await page.locator('.entrenolab-grass').boundingBox())!;
     expect(b, 'el medio campo debe renderizarse').not.toBeNull();
@@ -80,7 +110,9 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     await page.screenshot({ path: `${SHOTS}/half-horizontal.png` });
   });
 
-  test('medio campo VERTICAL (por defecto): bbox renderizado con proporción 68/52,5', async ({ page }) => {
+  test('medio campo VERTICAL (por defecto): bbox renderizado con proporción 68/52,5', async ({
+    page,
+  }) => {
     await page.goto('/board');
     await dismissHelp(page);
     await openProps(page);
@@ -88,10 +120,15 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('half');
     // FASE G: observable — esperamos a que el medio campo vertical renderice con la
     // proporción 68/52,5 (no un wait fijo).
-    await expect.poll(async () => {
-      const b = await page.locator('.entrenolab-grass').boundingBox();
-      return b ? b.width / b.height : 0;
-    }, { timeout: 5000 }).toBeCloseTo(68 / 52.5, 1);
+    await expect
+      .poll(
+        async () => {
+          const b = await page.locator('.entrenolab-grass').boundingBox();
+          return b ? b.width / b.height : 0;
+        },
+        { timeout: 5000 },
+      )
+      .toBeCloseTo(68 / 52.5, 1);
     await expect(page.locator('.entrenolab-grass')).toBeVisible();
     const b = (await page.locator('.entrenolab-grass').boundingBox())!;
     expect(b, 'el medio campo vertical debe renderizarse').not.toBeNull();
@@ -100,7 +137,9 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     await page.screenshot({ path: `${SHOTS}/half-vertical.png` });
   });
 
-  test('un punto norm colocado en el medio campo vertical se guarda en la misma norm (round-trip)', async ({ page }) => {
+  test('un punto norm colocado en el medio campo vertical se guarda en la misma norm (round-trip)', async ({
+    page,
+  }) => {
     await page.goto('/board');
     await dismissHelp(page);
     await openProps(page);
@@ -129,13 +168,17 @@ test.describe('Medio campo (52,5×68) — geometría dinámica y F7 preservado',
     expect(el.y).toBeCloseTo(0.35, 2);
   });
 
-  test('campo base F7 preservado: F7 perpendicular y líneas de fuera de juego sobre los laterales del área F11', async ({ page }) => {
+  test('campo base F7 preservado: F7 perpendicular y líneas de fuera de juego sobre los laterales del área F11', async ({
+    page,
+  }) => {
     await page.goto('/board');
     await dismissHelp(page);
     await openProps(page);
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('f7');
     // FASE G: observable — el SVG ya renderiza el medio campo F7 (apaisado, alto 46), no una espera fija.
-    await expect.poll(() => page.locator('.board-canvas svg').first().innerHTML(), { timeout: 5000 }).toContain('height="46"');
+    await expect
+      .poll(() => page.locator('.board-canvas svg').first().innerHTML(), { timeout: 5000 })
+      .toContain('height="46"');
     const svg = await page.locator('.board-canvas svg').first().innerHTML();
     // FASE 4/8b: el F7 usa el medio campo F11 APISAADO (68 m en X, 52,5 m en Y → 46 de alto).
     expect(svg).toContain('height="46"'); // rect del medio campo F11 (apaisado)

@@ -42,6 +42,8 @@ test.describe('Fase 1 — móvil en horizontal: la pizarra compacta es realmente
       await page.addInitScript(seed());
       await page.goto('/board');
       await expect(page.locator('.board-host')).toBeVisible();
+      // Medir el campo libre después de cerrar Propiedades, abierto por defecto.
+      await page.locator('.studio-panel .panel-close').click();
       if (
         await page
           .locator('.help-close')
@@ -54,7 +56,7 @@ test.describe('Fase 1 — móvil en horizontal: la pizarra compacta es realmente
       // Sin preferencia guardada → "Llenar pantalla" por defecto.
       await expect(page.locator('.board-host')).toHaveClass(/board-fill/);
 
-      // Sin panel de propiedades abierto inicialmente.
+      // El panel queda cerrado tras la acción explícita del usuario.
       await expect(page.locator('.studio-panel')).toHaveCount(0);
 
       // Alturas: cabecera compacta, barra inferior en una sola fila (cabe en la pantalla).

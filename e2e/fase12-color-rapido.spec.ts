@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas, showCategory } from './board-helpers';
 
@@ -122,9 +123,11 @@ test('chinos con color previo y vallas baja/alta se colocan y conservan sus vari
   await seed(page);
   await openBoard(page);
   await showCategory(page, 'Material');
-  await page.locator('.chino-colors [data-color="#a855f7"]').click();
-  const chino = page.locator('.tools-material-card').filter({ has: page.locator('.chino-colors') });
-  await chino.locator('.rail-row').click();
+  // Chino y pica tienen paleta propia; elegir color ya arma el chino.
+  await page
+    .getByRole('group', { name: 'Colores de Chino', exact: true })
+    .locator('[data-color="#a855f7"]')
+    .click();
   const host = (await page.locator('.board-host').boundingBox())!;
   await page.mouse.click(host.x + host.width * 0.65, host.y + host.height * 0.4);
   await expect(page.locator('.board-canvas [data-el-type="target"]')).toHaveAttribute(
@@ -137,16 +140,13 @@ test('chinos con color previo y vallas baja/alta se colocan y conservan sus vari
     ['Valla clásica', 'hurdle', 0.7],
   ] as const) {
     await page.getByRole('button', { name: label, exact: true }).click();
-    const row = page
-      .locator('.tools-material-card')
-      .filter({ has: page.getByRole('button', { name: label, exact: true }) });
-    await row.locator('.rail-row').click();
+    // La variante seleccionada basta: no se vuelve a pulsar el objeto padre.
     await page.mouse.click(host.x + host.width * 0.65, host.y + host.height * y);
     await expect(page.locator(`.board-canvas [data-asset-kind="${kind}"]`)).toHaveCount(1);
   }
   await expect(page.locator('.field-count')).toHaveText('3');
   await page.screenshot({ path: 'test-results/materiales-colores-rapidos.png' });
-  await page.getByRole('button', { name: 'Propiedades', exact: true }).click();
+  await ensurePropsPanel(page);
   await page
     .getByRole('textbox', { name: 'Título del ejercicio', exact: true })
     .fill('Materiales rápidos');

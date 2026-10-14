@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect } from '@playwright/test';
 import {
   seedBoard,
@@ -94,7 +95,7 @@ test('fotos: selector estable, todas las variantes, persistencia y PNG autoconte
   for (const title of ['Miniportería', 'Portería grande']) {
     await expect(page.locator(`.rail-row[title="${title}"] .mat-thumb-vector svg`)).toHaveCount(1);
   }
-  await page.getByRole('button', { name: 'Propiedades', exact: true }).click();
+  if (!(await page.locator('.studio-panel').isVisible())) await ensurePropsPanel(page);
   await page
     .getByRole('textbox', { name: 'Título del ejercicio', exact: true })
     .fill('Materiales nuevos');

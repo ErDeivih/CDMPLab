@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 // =============================================================
 // ESCALA DE MATERIALES POR CAMPO — medición real en píxeles.
 //
@@ -182,7 +183,7 @@ async function abrirPropiedades(page: Page): Promise<void> {
       .isVisible()
       .catch(() => false))
   ) {
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
   }
   await expect(page.locator('.studio-panel .field-gallery')).toBeVisible();
 }

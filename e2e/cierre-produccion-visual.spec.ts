@@ -139,6 +139,8 @@ async function seedBoard(page: Page): Promise<void> {
 }
 
 async function dismissHelp(page: Page): Promise<void> {
+  if (await page.locator('.studio-panel').isVisible())
+    await page.locator('.studio-panel .panel-close').click();
   for (const sel of ['.help-close', '.fill-hint-close']) {
     if (
       await page

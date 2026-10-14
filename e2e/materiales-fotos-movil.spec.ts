@@ -35,7 +35,7 @@ test('vertical: scroll nativo desde el nombre y arrastre hacia arriba desde la i
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await seedBoard(page);
-  await openBoard(page);
+  await openBoard(page, { keepProperties: true });
   await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).tap();
   const panel = page.locator('.tools-panel-side');
@@ -68,7 +68,9 @@ for (const [title, label, type, kind] of [
     page,
   }) => {
     await seedBoard(page);
-    await openBoard(page);
+    await openBoard(page, { keepProperties: true });
+    // El destino del arrastre está a la derecha: liberar ese panel explícitamente.
+    await page.locator('.side-panel-right .panel-close').tap();
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).tap();
     const card = page
@@ -82,7 +84,8 @@ for (const [title, label, type, kind] of [
     await expect(page.locator('.field-count')).toHaveText('0');
     const row = card.locator('.rail-row');
     await row.scrollIntoViewIfNeeded();
-    const b = (await row.boundingBox())!,
+    // Scroll nativo desde el nombre; arrastre deliberado desde la imagen.
+    const b = (await row.locator('.mat-thumb').boundingBox())!,
       host = await hostBox(page);
     const destination = normToScreen(0.75, 0.5, host, await fitMode(page));
     const cdp = await page.context().newCDPSession(page);

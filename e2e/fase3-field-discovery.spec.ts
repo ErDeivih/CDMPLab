@@ -29,7 +29,7 @@ function normToScreen(
   fit: 'height' | 'contain',
   panX = 0,
   panY = 0,
-  zoom = 1
+  zoom = 1,
 ): { x: number; y: number } {
   const s = fit === 'height' ? host.height / RECT.h : Math.min(host.width / VBW, host.height / VBH);
   const offX = (host.width - VBW * s) / 2;
@@ -52,7 +52,7 @@ function screenToNorm(
   fit: 'height' | 'contain',
   panX = 0,
   panY = 0,
-  zoom = 1
+  zoom = 1,
 ): { x: number; y: number } {
   const s = fit === 'height' ? host.height / RECT.h : Math.min(host.width / VBW, host.height / VBH);
   const offX = (host.width - VBW * s) / 2;
@@ -78,14 +78,63 @@ async function seed(page: Page): Promise<void> {
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem('entrenolab:orient-hint', '1'); // Fase 2: probar la pista sin el aviso de orientación
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([
-      { id: 'e1', teamId: 't1', folderId: null, title: 'Rondos', description: '', explanation: '', category: 'Técnica', objectives: [], materials: [], durationMinutes: 12, minPlayers: 6, maxPlayers: 8, loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false, canvas: { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [] }], orientation: 'horizontal', grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a' }, thumbnail: null, savedAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:exercises',
+      JSON.stringify([
+        {
+          id: 'e1',
+          teamId: 't1',
+          folderId: null,
+          title: 'Rondos',
+          description: '',
+          explanation: '',
+          category: 'Técnica',
+          objectives: [],
+          materials: [],
+          durationMinutes: 12,
+          minPlayers: 6,
+          maxPlayers: 8,
+          loadMode: 'fixed',
+          seriesCount: null,
+          repetitionsCount: null,
+          workSeconds: null,
+          restSeconds: null,
+          isTemplate: false,
+          canvas: {
+            version: 2,
+            schemaVersion: 3,
+            field: 'full',
+            frames: [{ duration: 1000, elements: [] }],
+            orientation: 'horizontal',
+            grass: 'stripes',
+            lineColor: '#ffffff',
+            backgroundColor: '#31834a',
+          },
+          thumbnail: null,
+          savedAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
@@ -94,7 +143,14 @@ async function seed(page: Page): Promise<void> {
 async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) {
+  // Los gestos hacia el borde derecho necesitan cerrar el inspector inicial.
+  await page.locator('.studio-panel .panel-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.help-close').click();
   }
 }
@@ -108,7 +164,9 @@ async function hostBox(page: Page): Promise<Box> {
 
 /** Ancho (px) real del canvas en "Llenar pantalla" (el que se definió con style.width). */
 async function canvasWidth(page: Page): Promise<number> {
-  return page.evaluate(() => parseFloat((document.querySelector('.board-canvas') as HTMLElement).style.width));
+  return page.evaluate(() =>
+    parseFloat((document.querySelector('.board-canvas') as HTMLElement).style.width),
+  );
 }
 
 /** Modo "Llenar pantalla" por defecto (móvil, sin preferencia guardada). */
@@ -156,7 +214,10 @@ async function panToGoal(page: Page, host: Box, goal: 'left' | 'right'): Promise
 
 /** `transform` computado del lienzo: el zoom y el pan REALMENTE aplicados. */
 async function canvasTransform(page: Page): Promise<string> {
-  return page.locator('.board-canvas').first().evaluate((el) => getComputedStyle(el).transform);
+  return page
+    .locator('.board-canvas')
+    .first()
+    .evaluate((el) => getComputedStyle(el).transform);
 }
 
 /**
@@ -178,7 +239,7 @@ async function waitCanvasQuieto(page: Page): Promise<void> {
         const b = await canvasTransform(page);
         return a === b;
       },
-      { message: 'el lienzo deja de moverse (vista aplicada)' }
+      { message: 'el lienzo deja de moverse (vista aplicada)' },
     )
     .toBe(true);
 }
@@ -187,7 +248,9 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
   test.use({ hasTouch: true });
 
   for (const [w, h] of MOBILE) {
-    test(`[${w}x${h}] inicialmente hay contenido oculto a BANDOS → ambos indicadores visibles`, async ({ page }) => {
+    test(`[${w}x${h}] inicialmente hay contenido oculto a BANDOS → ambos indicadores visibles`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
       await openClosed(page);
@@ -198,7 +261,9 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
       await expect(page.locator('.edge-pan-right')).toBeVisible();
     });
 
-    test(`[${w}x${h}] el indicador izquierdo está en el borde IZQUIERDO y el derecho en el DERECHO`, async ({ page }) => {
+    test(`[${w}x${h}] el indicador izquierdo está en el borde IZQUIERDO y el derecho en el DERECHO`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
       await openClosed(page);
@@ -210,14 +275,28 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
       const right = (await page.locator('.edge-pan-right').boundingBox())!;
       const centerX = host.x + host.width / 2;
       // El izquierdo está a la izquierda del centro; el derecho a la derecha.
-      expect(left.x + left.width / 2, 'centro del indicador izquierdo < centro del host').toBeLessThan(centerX);
-      expect(right.x + right.width / 2, 'centro del indicador derecho > centro del host').toBeGreaterThan(centerX);
+      expect(
+        left.x + left.width / 2,
+        'centro del indicador izquierdo < centro del host',
+      ).toBeLessThan(centerX);
+      expect(
+        right.x + right.width / 2,
+        'centro del indicador derecho > centro del host',
+      ).toBeGreaterThan(centerX);
       // Ambos pegados a su borde (cerca del borde correspondiente del host).
-      expect(Math.abs(left.x - host.x), 'indicador izquierdo junto al borde izquierdo').toBeLessThan(4);
-      expect(Math.abs(right.x + right.width - (host.x + host.width)), 'indicador derecho junto al borde derecho').toBeLessThan(4);
+      expect(
+        Math.abs(left.x - host.x),
+        'indicador izquierdo junto al borde izquierdo',
+      ).toBeLessThan(4);
+      expect(
+        Math.abs(right.x + right.width - (host.x + host.width)),
+        'indicador derecho junto al borde derecho',
+      ).toBeLessThan(4);
     });
 
-    test(`[${w}x${h}] panear (arrastre vacío) hacia la DERECHA revela la portería IZQUIERDA → el indicador IZQUIERDO desaparece`, async ({ page }) => {
+    test(`[${w}x${h}] panear (arrastre vacío) hacia la DERECHA revela la portería IZQUIERDA → el indicador IZQUIERDO desaparece`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
       await openClosed(page);
@@ -235,7 +314,9 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
       await expect(page.locator('.edge-pan-right')).toBeVisible();
     });
 
-    test(`[${w}x${h}] panear (arrastre vacío) hacia la IZQUIERDA revela la portería DERECHA → el indicador DERECHO desaparece`, async ({ page }) => {
+    test(`[${w}x${h}] panear (arrastre vacío) hacia la IZQUIERDA revela la portería DERECHA → el indicador DERECHO desaparece`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
       await openClosed(page);
@@ -252,7 +333,9 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
       await expect(page.locator('.edge-pan-left')).toBeVisible();
     });
 
-    test(`[${w}x${h}] en "Campo completo" los indicadores de contenido oculto desaparecen`, async ({ page }) => {
+    test(`[${w}x${h}] en "Campo completo" los indicadores de contenido oculto desaparecen`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
       await openClosed(page);
@@ -274,7 +357,9 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
     });
   }
 
-  test('colocar un objeto DESPUÉS de panear y moverlo aterriza en las coords normalizadas esperadas (round-trip)', async ({ page }) => {
+  test('colocar un objeto DESPUÉS de panear y moverlo aterriza en las coords normalizadas esperadas (round-trip)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -295,7 +380,10 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     await page.locator('.tray-player[title="Jugador Azul"]').click();
-    await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+    await expect(
+      page.locator('.side-panel-left'),
+      'el panel Jugadores permanece abierto',
+    ).toBeVisible();
     // Tras panear a la derecha, el punto S (y el posterior arrastre del objeto) cae bajo
     // el panel en móvil vertical; se cierra el panel con su X (no desarma la colocación)
     // antes del toque táctil.
@@ -311,9 +399,10 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
     // Fase 3: la colocación continua sigue armada tras el toque. Para mover el objeto
     // hay que pasar a "Seleccionar" (si no, arrastrar sobre él colocaría otro genérico).
     await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
-    expect(await canvasTransform(page), 'la vista no se mueve entre el toque de colocación y la medida (si se mueve, el objeto aparece desplazado del punto tocado)').toBe(
-      vistaAlTocar
-    );
+    expect(
+      await canvasTransform(page),
+      'la vista no se mueve entre el toque de colocación y la medida (si se mueve, el objeto aparece desplazado del punto tocado)',
+    ).toBe(vistaAlTocar);
 
     const circle = page.locator('.entrenolab-board circle[r="2.5"]').first();
     await circle.waitFor({ state: 'attached', timeout: 5000 });
@@ -323,13 +412,21 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
       const r = (el as SVGGraphicsElement).getBoundingClientRect();
       return { x: r.x, y: r.y, width: r.width, height: r.height };
     });
-    expect(Math.abs(cb.x + cb.width / 2 - S.x), 'centro X del elemento ≈ toque tras paneo').toBeLessThan(6);
-    expect(Math.abs(cb.y + cb.height / 2 - S.y), 'centro Y del elemento ≈ toque tras paneo').toBeLessThan(6);
+    expect(
+      Math.abs(cb.x + cb.width / 2 - S.x),
+      'centro X del elemento ≈ toque tras paneo',
+    ).toBeLessThan(6);
+    expect(
+      Math.abs(cb.y + cb.height / 2 - S.y),
+      'centro Y del elemento ≈ toque tras paneo',
+    ).toBeLessThan(6);
 
     // El norm almacenado en el modelo es el esperado (leído del translate del SVG).
     const pos = await circle.evaluate((el) => {
       const g = el.closest('g');
-      const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(g?.getAttribute('transform') ?? '');
+      const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(
+        g?.getAttribute('transform') ?? '',
+      );
       return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
     });
     expect(pos).not.toBeNull();
@@ -347,7 +444,9 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
 
     const pos2 = await circle.evaluate((el) => {
       const g = el.closest('g');
-      const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(g?.getAttribute('transform') ?? '');
+      const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(
+        g?.getAttribute('transform') ?? '',
+      );
       return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
     });
     expect(pos2).not.toBeNull();
@@ -362,7 +461,9 @@ test.describe('Fase 3 — descubribilidad del campo oculto en "Llenar pantalla" 
 test.describe('Fase 3 — pista única de recorrido del campo (helper)', () => {
   test.use({ hasTouch: true });
 
-  test('la pista aparece la primera vez, se auto-oculta y NO reaparece en una visita posterior', async ({ page }) => {
+  test('la pista aparece la primera vez, se auto-oculta y NO reaparece en una visita posterior', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -401,7 +502,9 @@ test.describe('Fase 3 — capturas (indicadores + pista y tras paneo)', () => {
   test.use({ hasTouch: true });
 
   for (const [w, h] of MOBILE) {
-    test(`captura ${w}x${h}: llenar pantalla (indicadores + pista) y tras paneo a una portería`, async ({ page }) => {
+    test(`captura ${w}x${h}: llenar pantalla (indicadores + pista) y tras paneo a una portería`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
       await openClosed(page);
@@ -411,7 +514,10 @@ test.describe('Fase 3 — capturas (indicadores + pista y tras paneo)', () => {
       await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
       await expect(page.locator('.side-panel-left')).toBeVisible();
       await page.locator('.tray-player[title="Jugador Azul"]').click();
-      await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+      await expect(
+        page.locator('.side-panel-left'),
+        'el panel Jugadores permanece abierto',
+      ).toBeVisible();
       // En móvil vertical el centro del campo queda bajo el panel y el paneo posterior
       // arrastra desde el borde izquierdo del host (bajo el panel): se cierra el panel con
       // su X (no desarma la colocación) antes de tocar el campo.

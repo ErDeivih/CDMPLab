@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 
@@ -84,6 +85,22 @@ async function expectNoHorizontalScroll(page: Page, selector: string): Promise<v
       : null;
   }, selector);
   expect(r, `scroll horizontal en ${selector}`).not.toBeNull();
+  if (r!.scroll > r!.client + 1) {
+    console.log(
+      'Controles que desbordan',
+      await page.locator(selector).evaluate((panel) => {
+        const edge = panel.getBoundingClientRect().right;
+        return Array.from(panel.querySelectorAll('*'))
+          .filter((el) => el.getBoundingClientRect().right > edge + 1)
+          .map((el) => ({
+            tag: el.tagName,
+            class: el.className,
+            width: el.getBoundingClientRect().width,
+            text: el.textContent?.trim().slice(0, 65),
+          }));
+      }),
+    );
+  }
   expect(r!.scroll).toBeLessThanOrEqual(r!.client + 1);
 }
 
@@ -176,7 +193,7 @@ test.describe('Responsive móvil (390×844)', () => {
     await page.mouse.click(cajaTexto.x + cajaTexto.width / 2, cajaTexto.y + cajaTexto.height / 2);
     // En móvil la creación NO auto-abre Propiedades (regresión cubierta por `e1-mobile-props`):
     // se abre explícitamente con el botón Propiedades para comprobar el inspector.
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     await expect(page.locator('.studio-panel')).toBeVisible();
     await expect(page.locator('.inspector')).toBeVisible();
     // Sin scroll horizontal en el panel.
@@ -212,7 +229,7 @@ test.describe('Panel de pizarra sin desbordamiento (escritorio)', () => {
       await seed(page);
       await page.goto('/board');
       // El panel de Propiedades ya no se abre por defecto (Fase 1): lo abrimos.
-      await page.locator('button[aria-label="Propiedades"]').click();
+      await ensurePropsPanel(page);
       await expect(page.locator('.studio-panel')).toBeVisible();
       await measureNoOverflow(page, '.studio-panel');
       await measureNoOverflow(page, '.studio-panel .field-grid2');
@@ -306,7 +323,7 @@ test.describe('Barra de herramientas no tapada por el panel', () => {
           .isVisible()
           .catch(() => false))
       ) {
-        await page.locator('button[aria-label="Propiedades"]').click();
+        await ensurePropsPanel(page);
         await expect(page.locator('.studio-panel')).toBeVisible();
       }
       expect(await overlapPanel(page), `botones detrás del panel a ${w}px`).toEqual([]);

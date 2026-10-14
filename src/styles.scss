@@ -301,6 +301,12 @@ select {
 .studio-panel .field-grid2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+.studio-panel .field-grid2 > *,
+.studio-panel .field-row > *,
+.studio-panel .field-grid > * {
+  min-width: 0;
+  max-width: 100%;
+}
 .studio-panel .field-row,
 .studio-panel .field-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -329,7 +335,7 @@ select {
 // Panel de la pizarra: sin desbordamiento horizontal en móvil (controles envuelven y se ajustan).
 @media (max-width: 700px) {
   .studio-panel .field-grid2 {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -622,6 +628,15 @@ select {
 // estado normal/hover/active/disabled/focus-visible legibles, y el "Eliminar"
 // conserva un matiz claramente destructivo pero legible.
 .studio-panel .inspector-actions .btn {
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: 36px;
+  padding: 6px 10px;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
   background: #263038;
   border-color: #3a454f;
   color: #e8edf2;
@@ -1563,8 +1578,55 @@ select {
   pointer-events: auto;
 }
 
+@media (max-width: 700px) and (orientation: portrait) {
+  // Dos hojas de 45vw: conservar el nombre legible junto a los cinco colores.
+  .studio .side-panel-left .roster-row {
+    .mini-avatar {
+      display: none;
+    }
+    .roster-item {
+      gap: 0;
+    }
+    .roster-color-menu {
+      gap: 2px;
+      .swatch {
+        width: 17px;
+        min-width: 17px;
+        &::before {
+          width: 13px;
+          height: 13px;
+        }
+      }
+    }
+  }
+}
+
 .tools-menu {
-  order: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+// Paletas grandes de trazos/figuras sin agrandar los colores de la plantilla.
+.studio-panel .inspector .swatch,
+.bar-variant-pop .swatch {
+  width: 44px;
+  height: 44px;
+}
+
+@media (max-width: 700px), (max-height: 480px) and (max-width: 1000px) {
+  .studio .side-panel-left {
+    left: 0;
+    right: auto;
+    width: min(340px, 45vw);
+    max-width: 45vw;
+  }
+  .studio .side-panel-right {
+    left: auto;
+    right: 0;
+    width: min(340px, 45vw);
+    max-width: 45vw;
+  }
 }
 
 // Botón que abre el menú de categorías: sustituye al tramo de categorías que la barra mostraba

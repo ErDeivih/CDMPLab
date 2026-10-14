@@ -59,7 +59,10 @@ export function dashArray(lineStyle: string | undefined): string {
  *  base normalizado del tipo (TACTICAL_SIZE). Así los documentos antiguos sin
  *  `size` también se normalizan y ya no hay materiales diminutos. */
 export function materialSize(el: CanvasElement): number {
-  return (el.size ?? materialBaseSize(el.assetKind ?? el.t)) * (el.t === 'minigoal' ? 1.2 : 1);
+  return (
+    (el.size ?? materialBaseSize(el.assetKind ?? el.t)) *
+    (el.t === 'minigoal' ? 1.26 : el.t === 'ball' ? 0.7 : 1)
+  );
 }
 
 /**
@@ -107,8 +110,8 @@ export function materialHitHalfExtents(
   // se hace AQUÍ, en unidades: norm X y norm Y escalan distinto (92 vs 59,6 unidades), así que
   // intercambiar los valores ya normalizados dejaría el dibujo a medio cubrir (medido: una
   // escalera grande en vertical quedaba con el eje largo en el sitio equivocado).
-  let hwU = cajaPorteria ? cajaPorteria.w / 2 : (MATERIAL_BOX * s * frac.w) / 2;
-  let hhU = cajaPorteria ? cajaPorteria.h / 2 : (MATERIAL_BOX * s * frac.h) / 2;
+  let hwU = cajaPorteria ? (cajaPorteria.w * 1.05) / 2 : (MATERIAL_BOX * s * frac.w) / 2;
+  let hhU = cajaPorteria ? (cajaPorteria.h * 1.05) / 2 : (MATERIAL_BOX * s * frac.h) / 2;
   // Hit-box = recuadro de contenido (bbox del material, con su proporción real via `frac`)
   // + margen EN PANTALLA por zoom. D1: la base es la caja REAL del objeto (así un poste
   // alto/estrecho conserva su caja vertical y un cono la suya), y el margen se convierte de
@@ -894,7 +897,11 @@ function elStr(
   // y, en documentos sin `size`, se usa el tamaño base normalizado del tipo.
   // EXCEPCIÓN (FASE 4 del encargo de materiales): los materiales de `SIEMPRE_VECTOR` ignoran su PNG
   // y usan el dibujo vectorial, que es reconocible a cualquier tamaño.
-  if (el.asset && !SIEMPRE_VECTOR.has(el.t) && !SIEMPRE_VECTOR.has(el.assetKind ?? '')) {
+  const photoChino = el.t === 'target' && el.assetKind === 'chino_photo';
+  if (
+    el.asset &&
+    (photoChino || (!SIEMPRE_VECTOR.has(el.t) && !SIEMPRE_VECTOR.has(el.assetKind ?? '')))
+  ) {
     // FASE 6: escala visual por campo (tamaño aparente constante). Se aplica SOLO en el
     // render; el `size` del documento no se re-escribe. `objectScale` es 1 en campo completo.
     const s = materialSize(el) * objectScale;
@@ -905,7 +912,13 @@ function elStr(
     // Compatibilidad con ejercicios antiguos que guardaron `/assets/...`:
     // se elimina la barra inicial para que el <base href> del despliegue mande.
     const assetHref = el.asset.replace(/^\/assets\//, 'assets/');
-    const img = `<image href="${assetHref}" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet" />`;
+    const c = /^#[0-9a-f]{6}$/i.test(el.c ?? '') ? el.c! : '#22c55e';
+    const filterId = `chino-photo-${el.id.replace(/[^a-z0-9_-]/gi, '')}`;
+    const channels = [1, 3, 5].map((start) => parseInt(c.slice(start, start + 2), 16) / 255);
+    const tone = photoChino
+      ? `<defs><filter id="${filterId}" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values="0"/><feComponentTransfer>${channels.map((channel, i) => `<feFunc${['R', 'G', 'B'][i]} type="table" tableValues="${channel * 0.2} ${channel * 0.85} ${channel * 0.85 + 0.15}"/>`).join('')}</feComponentTransfer></filter></defs>`
+      : '';
+    const img = `${tone}<image href="${assetHref}" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet"${photoChino ? ` filter="url(#${filterId})"` : ''} />`;
     return rotWrap(img, el.rot, x, y);
   }
   switch (el.t) {
@@ -916,9 +929,6 @@ function elStr(
       // −10 % pedido por el dueño (23/09/2026). El número, el nombre y el «POR» viajan dentro de
       // este grupo, así que encogen en la misma proporción sin tocar sus tamaños por separado.
       const s = materialSize(el) * objectScale * PLAYER_BALL_SIZE_FACTOR;
-      const ring = selected
-        ? ' stroke="#fff" stroke-width="0.5" stroke-dasharray="0.8,0.6"'
-        : ' stroke="#ffffff" stroke-width="0.6"';
       // Fase 8: el nombre y el número se CONTRARROTAN para permanecer derechos y
       // legibles aunque el jugador esté girado (±90°). El círculo (invariante bajo
       // rotación) conserva la transformación del elemento; el texto se compensa con
@@ -943,7 +953,7 @@ function elStr(
         textAngle !== 0 ? `<g transform="rotate(${-textAngle} 0 0)">${text}</g>` : text;
       const g =
         `<g transform="translate(${x} ${y}) scale(${s})">` +
-        `<circle r="2.5" fill="${c}"${ring}/>` +
+        `<circle r="2.5" fill="${c}"/>` +
         textGroup +
         `</g>`;
       return rotWrap(g, el.rot, x, y);
@@ -1210,8 +1220,8 @@ function elStr(
       const y = gy(el.y ?? 0);
       const s = materialSize(el) * objectScale;
       const caja = goalBoxUnits(field); // unidades del viewBox, misma escala física que el campo
-      const W = caja.w / s;
-      const H = caja.h / s;
+      const W = (caja.w * 1.05) / s;
+      const H = (caja.h * 1.05) / s;
       const grosor = Math.max(0.26, W * 0.055); // marco grueso en cualquier tamaño
       const x0 = -W / 2;
       const x1 = W / 2;
@@ -1632,7 +1642,7 @@ function guideSvg(
   } else if (guide === 'lanes') {
     for (const f of [0.5]) push([f, 0], [f, 1]);
   }
-  return `<g class="zone-guide" stroke="${lc}" stroke-width="0.5" stroke-dasharray="1.4,1.1" opacity="0.55">${lines.join('')}</g>`;
+  return `<g class="zone-guide" stroke="${lc}" stroke-width="0.2" stroke-dasharray="1.4,1.1" opacity="0.55">${lines.join('')}</g>`;
 }
 
 /** SVG completo de un frame (función pura: la geometría viaja explícita). */

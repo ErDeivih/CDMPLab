@@ -15,7 +15,7 @@ import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
-import { toggleFillScreen } from './gesture-helpers';
+import { ensurePropsPanel, toggleFillScreen } from './gesture-helpers';
 
 const OUT = 'docs/screenshots/bloque-capturas';
 fs.mkdirSync(OUT, { recursive: true });
@@ -248,7 +248,7 @@ test.describe('Bloque CAPTURAS — capturas de contacto de las features nuevas',
     await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(OUT, 'dos-medios-campos-horizontal.png') });
     // Vertical.
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     await expect(page.locator('.studio-panel')).toBeVisible();
     await page.locator('.studio-panel .chip[data-orient="vertical"]').click();
     await page.waitForTimeout(200);

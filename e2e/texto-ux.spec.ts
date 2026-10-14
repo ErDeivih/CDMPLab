@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect } from '@playwright/test';
 
 for (const orientation of ['horizontal', 'vertical'] as const) {
@@ -101,8 +102,7 @@ for (const orientation of ['horizontal', 'vertical'] as const) {
       .poll(async () => Number(await text.locator('text').getAttribute('font-size')))
       .toBeCloseTo(2.5, 1);
     await page.screenshot({ path: `test-results/texto-ux-${orientation}.png` });
-    if (!(await page.locator('.chip-icon-primary').isVisible()))
-      await page.getByRole('button', { name: 'Propiedades', exact: true }).click();
+    if (!(await page.locator('.chip-icon-primary').isVisible())) await ensurePropsPanel(page);
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
     await page.locator('.ex-card').first().locator('.ex-open-btn').click();

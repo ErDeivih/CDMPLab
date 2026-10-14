@@ -16,7 +16,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { longPress, toggleFillScreen } from './gesture-helpers';
+import { ensurePropsPanel, longPress, toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/fase1';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -35,7 +35,12 @@ const VBH = 80;
 const RECT = { x: 4, y: 10, w: 92, h: 92 / (105 / 68) };
 
 /** Forward norm→pantalla (inversa de screenToNorm), horizontal. */
-function normToScreen(nx: number, ny: number, box: Box, fit: 'contain' | 'height' = 'contain'): [number, number] {
+function normToScreen(
+  nx: number,
+  ny: number,
+  box: Box,
+  fit: 'contain' | 'height' = 'contain',
+): [number, number] {
   const s = fit === 'height' ? box.height / RECT.h : Math.min(box.width / VBW, box.height / VBH);
   const offX = (box.width - VBW * s) / 2;
   const offY = (box.height - VBH * s) / 2;
@@ -46,22 +51,56 @@ function normToScreen(nx: number, ny: number, box: Box, fit: 'contain' | 'height
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-    ]));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Pau',
+          number: 10,
+          position: 'MF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
+    localStorage.setItem(
+      'entrenolab:folders',
+      JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]),
+    );
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
 
 async function dismissHelp(page: Page): Promise<void> {
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
 }
 
 /** Escritorio: fuerza "Campo completo" para que el helper norm→pantalla (contain) coincida. */
@@ -69,7 +108,9 @@ async function openBoardDesktop(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await dismissHelp(page);
-  const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
+  const fill = await page
+    .locator('.board-host')
+    .evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
     await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
@@ -84,8 +125,14 @@ async function openBoardMobile(page: Page): Promise<void> {
 }
 
 async function openProps(page: Page): Promise<void> {
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
+  await ensurePropsPanel(page);
   await expect(page.locator('.studio-panel')).toBeVisible();
   await page.waitForTimeout(60);
 }
@@ -93,17 +140,22 @@ async function openProps(page: Page): Promise<void> {
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
   if (category) {
     // FASE B: el catálogo persiste abierto; solo se abre si su herramienta no está visible.
-    if (!(await page.locator(`.rail-btn[title="${title}"]`).isVisible().catch(() => false))) {
+    if (
+      !(await page
+        .locator(`.rail-btn[title="${title}"]`)
+        .isVisible()
+        .catch(() => false))
+    ) {
       await abrirHerramientas(page);
       await page.locator('.tools-cat', { hasText: category }).click();
     }
   }
   await page.locator(`.rail-btn[title="${title}"]`).click();
   // FASE B: minimizar el catálogo para que no cubra el campo al dibujar/colocar.
-  const panel = page.locator('.side-panel');
-  if (await panel.isVisible().catch(() => false)) {
-    const close = panel.first().locator('.panel-close');
-    if (await close.isVisible().catch(() => false)) await close.click();
+  // Ambos paneles pueden coexistir: liberar cada lado explícitamente.
+  for (const selector of ['.side-panel-left', '.side-panel-right']) {
+    const panel = page.locator(selector);
+    if (await panel.isVisible()) await panel.locator('.panel-close').click();
   }
 }
 
@@ -112,15 +164,26 @@ async function hostBox(page: Page): Promise<Box> {
 }
 
 /** Coloca un texto y lo deja SELECCIONADO (para que se vean manijas + línea). */
-async function placeTextSelected(page: Page, fit: 'contain' | 'height' = 'contain', nx = 0.5, ny = 0.45, value = 'Texto'): Promise<void> {
+async function placeTextSelected(
+  page: Page,
+  fit: 'contain' | 'height' = 'contain',
+  nx = 0.5,
+  ny = 0.45,
+  value = 'Texto',
+): Promise<void> {
   await useTool(page, 'Texto', 'Dibujo');
   const box = await hostBox(page);
   const [x, y] = normToScreen(nx, ny, box, fit);
   await page.mouse.click(x, y, { button: 'right' });
   // En móvil la creación NO auto-abre Propiedades (regresión cubierta por `e1-mobile-props`);
   // el editor del texto vive en el inspector, así que se abre explícitamente si hace falta.
-  if (!(await page.locator('.studio-panel .inspector textarea').isVisible().catch(() => false))) {
-    await page.locator('button[aria-label="Propiedades"]').click();
+  if (
+    !(await page
+      .locator('.studio-panel .inspector textarea')
+      .isVisible()
+      .catch(() => false))
+  ) {
+    await ensurePropsPanel(page);
   }
   const ta = page.locator('.studio-panel .inspector textarea');
   await ta.fill(value);
@@ -146,24 +209,33 @@ async function readHandleGeom(page: Page): Promise<{
     const text = svg?.querySelector('g.board-text text');
     const editRect = svg?.querySelector('.text-edit-rect');
     if (!svg || !text || !editRect) return null;
-    const num = (el: Element | null, attr: string) => Number((el?.getAttribute(attr) ?? '0'));
+    const num = (el: Element | null, attr: string) => Number(el?.getAttribute(attr) ?? '0');
     const b = (text as SVGGraphicsElement).getBBox();
     // Asas de redimensionado: rects blancos con borde de selección (#2563eb).
     // Su centro (x+1, y+1) es la esquina del cuadro; se devuelve el centro.
-    const resize = Array.from(svg.querySelectorAll('rect[fill="#ffffff"][stroke="#2563eb"]')).map((el) => ({
-      x: num(el, 'x') + 1,
-      y: num(el, 'y') + 1,
-    }));
+    const resize = Array.from(svg.querySelectorAll('rect[fill="#ffffff"][stroke="#2563eb"]')).map(
+      (el) => ({
+        x: num(el, 'x') + 1,
+        y: num(el, 'y') + 1,
+      }),
+    );
     // Círculos de contorno de selección (fill none + stroke #2563eb). El defecto
     // era un círculo así sobre el origen del texto; tras el fix no debe haber ninguno.
-    const outline = Array.from(svg.querySelectorAll('circle[fill="none"][stroke="#2563eb"]')).map((el) => ({
-      cx: num(el, 'cx'),
-      cy: num(el, 'cy'),
-      r: num(el, 'r'),
-    }));
+    const outline = Array.from(svg.querySelectorAll('circle[fill="none"][stroke="#2563eb"]')).map(
+      (el) => ({
+        cx: num(el, 'cx'),
+        cy: num(el, 'cy'),
+        r: num(el, 'r'),
+      }),
+    );
     return {
       rect: { x: b.x, y: b.y, w: b.width, h: b.height },
-      box: { x: num(editRect, 'x'), y: num(editRect, 'y'), w: num(editRect, 'width'), h: num(editRect, 'height') },
+      box: {
+        x: num(editRect, 'x'),
+        y: num(editRect, 'y'),
+        w: num(editRect, 'width'),
+        h: num(editRect, 'height'),
+      },
       resize,
       outline,
       rotHandles: svg.querySelectorAll('.rot-handle').length,
@@ -172,7 +244,16 @@ async function readHandleGeom(page: Page): Promise<{
 }
 
 /** ¿El segmento (x1,y1)-(x2,y2) intersecta el rectángulo? */
-function segIntersectsRect(x1: number, y1: number, x2: number, y2: number, rx: number, ry: number, rw: number, rh: number): boolean {
+function segIntersectsRect(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  rx: number,
+  ry: number,
+  rw: number,
+  rh: number,
+): boolean {
   const left = rx;
   const right = rx + rw;
   const top = ry;
@@ -182,7 +263,10 @@ function segIntersectsRect(x1: number, y1: number, x2: number, y2: number, rx: n
   const orient = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) =>
     (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
   const onSeg = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) =>
-    Math.min(ax, bx) <= cx && cx <= Math.max(ax, bx) && Math.min(ay, by) <= cy && cy <= Math.max(ay, by);
+    Math.min(ax, bx) <= cx &&
+    cx <= Math.max(ax, bx) &&
+    Math.min(ay, by) <= cy &&
+    cy <= Math.max(ay, by);
   const edges: Array<[number, number, number, number]> = [
     [left, top, right, top],
     [right, top, right, bottom],
@@ -203,7 +287,10 @@ function segIntersectsRect(x1: number, y1: number, x2: number, y2: number, rx: n
   return false;
 }
 
-function intersectRect(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) {
+function intersectRect(
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+) {
   const x = Math.max(a.x, b.x);
   const y = Math.max(a.y, b.y);
   const x2 = Math.min(a.x + a.w, b.x + b.w);
@@ -212,9 +299,24 @@ function intersectRect(a: { x: number; y: number; w: number; h: number }, b: { x
 }
 
 /** ¿El segmento ENTRA en el INTERIOR del rectángulo visible (permite tocar el borde)? */
-function segEntersRect(x1: number, y1: number, x2: number, y2: number, r: { x: number; y: number; w: number; h: number }): boolean {
+function segEntersRect(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  r: { x: number; y: number; w: number; h: number },
+): boolean {
   const e = 0.02;
-  return segIntersectsRect(x1, y1, x2, y2, r.x + e, r.y + e, Math.max(0, r.w - 2 * e), Math.max(0, r.h - 2 * e));
+  return segIntersectsRect(
+    x1,
+    y1,
+    x2,
+    y2,
+    r.x + e,
+    r.y + e,
+    Math.max(0, r.w - 2 * e),
+    Math.max(0, r.h - 2 * e),
+  );
 }
 
 type SelGeom = NonNullable<Awaited<ReturnType<typeof readHandleGeom>>>;
@@ -243,11 +345,17 @@ function assertTextSelectionClean(g: SelGeom): void {
   ];
   for (let i = 0; i < 4; i++) {
     const d = Math.hypot(resize[i].x - corners[i][0], resize[i].y - corners[i][1]);
-    expect(d, `la asa de redimensionado ${i} está en la esquina del cuadro, no sobre los glifos`).toBeLessThan(2);
+    expect(
+      d,
+      `la asa de redimensionado ${i} está en la esquina del cuadro, no sobre los glifos`,
+    ).toBeLessThan(2);
     // Y NO está en el centro del cuadro (donde se dibujan los glifos).
     const cx = box.x + box.w / 2;
     const cy = box.y + box.h / 2;
-    expect(Math.hypot(resize[i].x - cx, resize[i].y - cy), `la asa ${i} no está en el centro del texto`).toBeGreaterThan(Math.min(box.w, box.h) * 0.2);
+    expect(
+      Math.hypot(resize[i].x - cx, resize[i].y - cy),
+      `la asa ${i} no está en el centro del texto`,
+    ).toBeGreaterThan(Math.min(box.w, box.h) * 0.2);
   }
 
   // DECISIÓN DEL DUEÑO: la manija de rotación continua fue retirada → no debe existir.
@@ -268,7 +376,9 @@ test.describe('Fase 1 — selección de texto: geometría (sin manija de rotaci�
     { name: 'texto en el centro', nx: 0.4, ny: 0.45 },
     { name: 'texto pegado al borde superior', nx: 0.2, ny: 0.02 },
   ]) {
-    test(`la selección del texto NO pinta nada sobre los glifos (${placement.name})`, async ({ page }) => {
+    test(`la selección del texto NO pinta nada sobre los glifos (${placement.name})`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 1366, height: 900 });
       await seed(page);
       await openBoardDesktop(page);
@@ -340,12 +450,22 @@ test.describe('Fase 1 — capturas de la manija de rotación del texto (revisió
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/texto-corto-centro.png` });
   });
 
-  test('texto multilínea seleccionado pegado al borde superior (manija abajo)', async ({ page }) => {
+  test('texto multilínea seleccionado pegado al borde superior (manija abajo)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);
-    await placeTextSelected(page, 'contain', 0.22, 0.02, 'Rondos 4v2\nConservación\nPase en superioridad numérica');
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/texto-multilinea-superior.png` });
+    await placeTextSelected(
+      page,
+      'contain',
+      0.22,
+      0.02,
+      'Rondos 4v2\nConservación\nPase en superioridad numérica',
+    );
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/texto-multilinea-superior.png` });
   });
 
   test('texto multilínea seleccionado en la esquina superior-izquierda', async ({ page }) => {
@@ -364,11 +484,19 @@ test.describe('Fase 1 — capturas de la manija de rotación del texto (revisió
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/texto-multilinea-centro.png` });
   });
 
-  test('móvil (Llenar pantalla): texto largo seleccionado con la manija fuera del cuadro', async ({ page }) => {
+  test('móvil (Llenar pantalla): texto largo seleccionado con la manija fuera del cuadro', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openBoardMobile(page);
-    await placeTextSelected(page, 'height', 0.5, 0.42, 'Rondos 4v2 en superioridad\nConservación y pase al apoyo');
+    await placeTextSelected(
+      page,
+      'height',
+      0.5,
+      0.42,
+      'Rondos 4v2 en superioridad\nConservación y pase al apoyo',
+    );
     // En móvil el panel de Propiedades tapa el campo al seleccionar; se oculta
     // solo visualmente (la selección vive en el modelo y no se pierde) para
     // poder ver la manija sobre el campo.
@@ -407,14 +535,22 @@ test.describe('Fase 3 — el círculo azul sobre el texto ya NO se dibuja (revis
     await placeTextSelected(page, 'contain', 0.45, 0.5, 'Rondos 4v2\nConservación\nPase al apoyo');
     await hidePanels(page);
     await page.waitForTimeout(80);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS_E3}/texto-multilinea-centro.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS_E3}/texto-multilinea-centro.png` });
   });
 
   test('texto multilínea pegado al borde superior (manija abajo)', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);
-    await placeTextSelected(page, 'contain', 0.22, 0.02, 'Rondos 4v2\nConservación\nPase en superioridad numérica');
+    await placeTextSelected(
+      page,
+      'contain',
+      0.22,
+      0.02,
+      'Rondos 4v2\nConservación\nPase en superioridad numérica',
+    );
     await hidePanels(page);
     await page.waitForTimeout(80);
     await page.locator('.board-host').screenshot({ path: `${SHOTS_E3}/texto-borde-superior.png` });
@@ -441,7 +577,13 @@ test.describe('Fase 3 — el círculo azul sobre el texto ya NO se dibuja (revis
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openBoardMobile(page);
-    await placeTextSelected(page, 'height', 0.5, 0.42, 'Rondos 4v2 en superioridad\nConservación y pase al apoyo');
+    await placeTextSelected(
+      page,
+      'height',
+      0.5,
+      0.42,
+      'Rondos 4v2 en superioridad\nConservación y pase al apoyo',
+    );
     await hidePanels(page);
     await page.waitForTimeout(100);
     await page.locator('.board-host').screenshot({ path: `${SHOTS_E3}/movil-texto.png` });

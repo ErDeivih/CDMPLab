@@ -52,6 +52,10 @@ export type TacticalKind =
   | 'medicine_handles'
   | 'bosu_small'
   | 'ball_football'
+  | 'ball_tiro_red'
+  | 'ball_tiro_black'
+  | 'ball_tango'
+  | 'chino_photo'
   | 'ball_vec';
 
 export interface TacticAsset {
@@ -137,6 +141,25 @@ export const TACTIC_ASSETS: TacticAsset[] = [
     color: '#20242a',
   },
   { kind: 'ball_football', asset: `${P}ball.png`, label: 'Balón de fútbol', color: '#ffffff' },
+  {
+    kind: 'ball_tiro_red',
+    asset: `${P}ball-tiro-red.png`,
+    label: 'Balón Tiro rojo',
+    color: '#e74c3c',
+  },
+  {
+    kind: 'ball_tiro_black',
+    asset: `${P}ball-tiro-black.png`,
+    label: 'Balón Tiro blanco / negro',
+    color: '#ffffff',
+  },
+  { kind: 'ball_tango', asset: `${P}ball-tango.png`, label: 'Balón Tango', color: '#ffffff' },
+  {
+    kind: 'chino_photo',
+    asset: `${P}chino-photo-green.png`,
+    label: 'Chino fotografía',
+    color: '#22c55e',
+  },
   { kind: 'ball_vec', asset: '', label: 'Balón (vectorial)', color: '#ffffff' },
 ];
 
@@ -216,6 +239,12 @@ export const TACTICAL_SIZE: Record<string, number> = {
   net: 1.2,
   vball: 0.95,
   ball_football: 1.5,
+  // Igual diámetro visible que ball.png: los recortes nuevos ocupan el 93,75 %,
+  // mientras el original ocupaba el 64,9 %. La reducción del 30 % es de render.
+  ball_tiro_red: (1.5 * 0.649) / 0.9375,
+  ball_tiro_black: (1.5 * 0.649) / 0.9375,
+  ball_tango: (1.5 * 0.649) / 0.9375,
+  chino_photo: (0.62 * 0.81) / 0.9375,
   ball_vec: 1.0,
   // Vectoriales (por tipo de elemento)
   coachC: 1.3,
@@ -297,6 +326,10 @@ export const TACTICAL_BBOX: Record<string, BBoxFrac> = {
   net: { w: 1, h: 0.96 },
   vball: { w: 1, h: 1 },
   ball_football: { w: 0.649, h: 0.635 },
+  ball_tiro_red: { w: 0.92654, h: 0.9375 },
+  ball_tiro_black: { w: 0.935871, h: 0.9375 },
+  ball_tango: { w: 0.9375, h: 0.931708 },
+  chino_photo: { w: 0.9375, h: 0.569993 },
   ball_vec: { w: 0.5, h: 0.5 },
   // Vectoriales
   coachC: { w: 0.654, h: 0.654 },

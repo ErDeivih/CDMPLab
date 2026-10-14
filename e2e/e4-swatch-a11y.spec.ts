@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 
@@ -14,12 +15,13 @@ import { abrirHerramientas } from './board-helpers';
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem(
       'entrenolab:teams',
-      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }])
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
     );
     localStorage.setItem('entrenolab:players', JSON.stringify([]));
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
@@ -58,7 +60,7 @@ async function seed(page: Page): Promise<void> {
           thumbnail: null,
           savedAt: now,
         },
-      ])
+      ]),
     );
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
@@ -70,7 +72,12 @@ async function openBoard(page: Page): Promise<void> {
   await seed(page);
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.help-close').click();
   }
 }
@@ -87,7 +94,8 @@ async function unnamedVisible(page: Page): Promise<string[]> {
       const label = (el.getAttribute('aria-label') ?? '').trim();
       const text = (el.textContent ?? '').trim();
       const title = (el.getAttribute('title') ?? '').trim();
-      if (!label && !text && !title) bad.push(`<${el.tagName.toLowerCase()} class="${el.className}">`);
+      if (!label && !text && !title)
+        bad.push(`<${el.tagName.toLowerCase()} class="${el.className}">`);
     }
     return bad;
   });
@@ -100,7 +108,10 @@ async function expectEverythingNamed(page: Page, state: string): Promise<void> {
 }
 
 /** Un swatch debe tener `aria-label` y `title` no vacíos. */
-async function expectSwatchNamed(locator: ReturnType<Page['locator']>, state: string): Promise<void> {
+async function expectSwatchNamed(
+  locator: ReturnType<Page['locator']>,
+  state: string,
+): Promise<void> {
   const n = await locator.count();
   expect(n, `no hay swatches en ${state}`).toBeGreaterThan(0);
   for (let i = 0; i < n; i++) {
@@ -117,9 +128,11 @@ async function clickFieldCenter(page: Page): Promise<void> {
 }
 
 test.describe('Swatches de color — nombre accesible (aria-label + title)', () => {
-  test('Propiedades sin selección: el césped es único (sin swatches) y todo botón tiene nombre', async ({ page }) => {
+  test('Propiedades sin selección: el césped es único (sin swatches) y todo botón tiene nombre', async ({
+    page,
+  }) => {
     await openBoard(page);
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     await expect(page.locator('.studio-panel')).toBeVisible();
 
     // FASE 2: el césped es el oficial ÚNICO. Se retira el selector de color (y el de
@@ -135,14 +148,19 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await expectEverythingNamed(page, 'Propiedades sin selección');
   });
 
-  test('Propiedades con jugador: los swatches del Color del elemento están nombrados', async ({ page }) => {
+  test('Propiedades con jugador: los swatches del Color del elemento están nombrados', async ({
+    page,
+  }) => {
     await openBoard(page);
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await expect(page.locator('.side-panel-left')).toBeVisible();
     await page.locator('.tray-player[title="Jugador Azul"]').click();
     // FASE B (paneles persistentes): elegir jugador NO cierra el panel Jugadores.
-    await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+    await expect(
+      page.locator('.side-panel-left'),
+      'el panel Jugadores permanece abierto',
+    ).toBeVisible();
     await clickFieldCenter(page);
     await expect(page.locator('.field-count')).toHaveText('1');
     // Fase 3: la colocación es continua y NO auto-selecciona. Se DESARMA con Seleccionar
@@ -151,7 +169,9 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await clickFieldCenter(page);
     await expect(page.locator('.studio-panel')).toBeVisible();
 
-    const color = page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch');
+    const color = page
+      .locator('.studio-panel .inspector .field', { hasText: 'Color' })
+      .locator('.swatch');
     // La paleta ampliada conserva las nueve muestras originales y añade ocho tonos.
     await expect(color).toHaveCount(17);
     await expectSwatchNamed(color, 'Color del jugador');
@@ -172,7 +192,9 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await clickFieldCenter(page);
     await expect(page.locator('.studio-panel')).toBeVisible();
 
-    const color = page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch');
+    const color = page
+      .locator('.studio-panel .inspector .field', { hasText: 'Color' })
+      .locator('.swatch');
     await expect(color).toHaveCount(17);
     await expectSwatchNamed(color, 'Color del material');
     await expectEverythingNamed(page, 'material seleccionado');
@@ -187,13 +209,17 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await expect(page.locator('.field-count')).toHaveText('1');
     await expect(page.locator('.studio-panel')).toBeVisible();
 
-    const color = page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch');
+    const color = page
+      .locator('.studio-panel .inspector .field', { hasText: 'Color' })
+      .locator('.swatch');
     await expect(color).toHaveCount(17);
     await expectSwatchNamed(color, 'Color del texto');
     await expectEverythingNamed(page, 'texto seleccionado');
   });
 
-  test('Propiedades con figura (rectángulo): el Color del elemento está nombrado', async ({ page }) => {
+  test('Propiedades con figura (rectángulo): el Color del elemento está nombrado', async ({
+    page,
+  }) => {
     await openBoard(page);
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
@@ -211,7 +237,9 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await page.mouse.click(x + 20, y + 15);
     await expect(page.locator('.studio-panel')).toBeVisible();
 
-    const color = page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch');
+    const color = page
+      .locator('.studio-panel .inspector .field', { hasText: 'Color' })
+      .locator('.swatch');
     // Fase 10: la figura usa un único color (el relleno es del mismo color que el
     // perímetro), así que solo hay los swatches de "Color" (ya no "Color de relleno").
     // La paleta ampliada mantiene el blanco como opción y ofrece 17 tonos.
@@ -240,7 +268,9 @@ test.describe('Swatches de color — nombre accesible (aria-label + title)', () 
     await expectEverythingNamed(page, 'dibujo activo');
   });
 
-  test('Material: los swatches de variante están nombrados y todo botón tiene nombre', async ({ page }) => {
+  test('Material: los swatches de variante están nombrados y todo botón tiene nombre', async ({
+    page,
+  }) => {
     await openBoard(page);
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();

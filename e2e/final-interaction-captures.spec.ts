@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
-import { longPress } from './gesture-helpers';
+import { ensurePropsPanel, longPress } from './gesture-helpers';
 
 // =============================================================
 // Fase 12 — capturas finales de interacción + contact sheet.
@@ -57,11 +57,35 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Pau',
+          number: 10,
+          position: 'MF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
@@ -74,8 +98,20 @@ async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await expect(page.locator('.board-canvas svg')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.fill-hint-close').click();
 }
 
 async function useTool(page: Page, title: string, category?: string): Promise<void> {
@@ -92,7 +128,13 @@ async function openCat(page: Page, category: string): Promise<void> {
     Material: '.side-panel-left[aria-label="Herramientas de Material"]',
     Dibujo: '.side-panel-left[aria-label="Herramientas de Dibujo"]',
   };
-  if (await page.locator(probe[category]).isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator(probe[category])
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
   await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: category }).click();
   await expect(page.locator(probe[category])).toBeVisible();
@@ -130,7 +172,14 @@ async function hideOverlays(page: Page): Promise<void> {
 }
 
 /** Coloca un material usando el buscador del panel (filtra al tipo exacto). */
-async function placeMaterial(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
+async function placeMaterial(
+  page: Page,
+  host: Box,
+  fit: Fit,
+  title: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   await openCat(page, 'Material');
   const input = page.locator('.tools-search-input');
   await input.fill('');
@@ -142,7 +191,14 @@ async function placeMaterial(page: Page, host: Box, fit: Fit, title: string, nx:
 }
 
 /** Coloca un texto y escribe su contenido (multilínea). */
-async function placeText(page: Page, host: Box, fit: Fit, content: string, nx: number, ny: number): Promise<void> {
+async function placeText(
+  page: Page,
+  host: Box,
+  fit: Fit,
+  content: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   await useTool(page, 'Texto', 'Dibujo');
   const p = normToScreen(nx, ny, host, fit);
   await page.mouse.click(p.x, p.y);
@@ -156,7 +212,14 @@ async function placeText(page: Page, host: Box, fit: Fit, content: string, nx: n
 }
 
 /** Coloca un jugador genérico (Jugador propio / Jugador rival) desde la sección Herramientas. */
-async function placeJugador(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
+async function placeJugador(
+  page: Page,
+  host: Box,
+  fit: Fit,
+  title: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   await openCat(page, 'Jugadores');
   if (title === 'Jugador propio' || title === 'Jugador rival') {
     const chip = title === 'Jugador propio' ? 'Azul' : 'Rojo';
@@ -169,7 +232,14 @@ async function placeJugador(page: Page, host: Box, fit: Fit, title: string, nx: 
 }
 
 /** Coloca un jugador de la bandeja de genéricos (Portero / Portero). */
-async function placeTrayJugador(page: Page, host: Box, fit: Fit, title: string, nx: number, ny: number): Promise<void> {
+async function placeTrayJugador(
+  page: Page,
+  host: Box,
+  fit: Fit,
+  title: string,
+  nx: number,
+  ny: number,
+): Promise<void> {
   await openCat(page, 'Jugadores');
   await page.locator(`.tray-player[title="${title}"]`).click();
   const p = normToScreen(nx, ny, host, fit);
@@ -198,22 +268,33 @@ test.describe('Fase 12 — capturas finales de interacción', () => {
     await expect(page.locator('.field-count')).toHaveText('0');
     // DECISIÓN DEL DUEÑO (Fase 1): sin snapDots, sin Ayuda, sin Rejilla, sin inputs X/Y.
     expect(await page.locator('.snap-dot').count(), 'sin snap dots').toBe(0);
-    expect(await page.locator('.board-canvas svg .snap-dot').count(), 'sin snap dots en el SVG').toBe(0);
+    expect(
+      await page.locator('.board-canvas svg .snap-dot').count(),
+      'sin snap dots en el SVG',
+    ).toBe(0);
     expect(await page.locator('button[title="Ayuda"], .help-close').count(), 'sin ayuda').toBe(0);
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/campo-limpio-sin-snap.png` });
   });
 
-  test('medio campo vertical con proporción (portería arriba, línea de medio campo abajo)', async ({ page }) => {
+  test('medio campo vertical con proporción (portería arriba, línea de medio campo abajo)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
-    await page.locator('button[aria-label="Propiedades"]').click();
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('half');
+    await ensurePropsPanel(page);
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('half');
     await page.waitForTimeout(250);
     // Al escoger medio campo la orientación pasa a VERTICAL automáticamente.
     // (Decisión del dueño: se verifica por el valor estable data-orient y no por el
     //  texto visible, que ahora describe el RESULTADO: "Portería arriba".)
-    const orient = await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip-active').getAttribute('data-orient');
+    const orient = await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip-active')
+      .getAttribute('data-orient');
     expect(orient).toBe('vertical');
     await page.keyboard.press('Escape');
     await page.waitForTimeout(150);
@@ -224,18 +305,29 @@ test.describe('Fase 12 — capturas finales de interacción', () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
-    await page.locator('button[aria-label="Propiedades"]').click();
-    await page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select').selectOption('half');
-    await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="horizontal"]').click();
+    await ensurePropsPanel(page);
+    await page
+      .locator('.studio-panel .field', { hasText: 'Campo base' })
+      .locator('select')
+      .selectOption('half');
+    await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip[data-orient="horizontal"]')
+      .click();
     await page.waitForTimeout(250);
-    const orient = await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip-active').getAttribute('data-orient');
+    const orient = await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip-active')
+      .getAttribute('data-orient');
     expect(orient).toBe('horizontal');
     await page.keyboard.press('Escape');
     await page.waitForTimeout(150);
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/medio-campo-horizontal.png` });
   });
 
-  test('ejercicio final realista — rondo 5v2 + PNG exportado real sin controles', async ({ page }) => {
+  test('ejercicio final realista — rondo 5v2 + PNG exportado real sin controles', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
@@ -292,7 +384,9 @@ test.describe('Fase 12 — capturas finales de interacción', () => {
     fs.writeFileSync(`${SHOTS}/ejercicio-final-realista-exportado.png`, bytes);
   });
 
-  test('material seleccionado con barra de contexto y SIN asas de redimensionado (Fase 1)', async ({ page }) => {
+  test('material seleccionado con barra de contexto y SIN asas de redimensionado (Fase 1)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
@@ -305,7 +399,9 @@ test.describe('Fase 12 — capturas finales de interacción', () => {
     await expect(page.locator('.context-bar')).toBeVisible();
     // Fase 1: los materiales NO se redimensionan → sin asas.
     await expect(page.locator('.board-canvas svg .reshandle')).toHaveCount(0);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/material-seleccionado-bar.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/material-seleccionado-bar.png` });
   });
 
   test('línea con asas de extremo + barra de contexto', async ({ page }) => {
@@ -357,7 +453,10 @@ test.describe('Fase 12 — capturas finales de interacción', () => {
     await page.mouse.down();
     await page.mouse.move(b.x, b.y, { steps: 5 });
     await page.waitForTimeout(60);
-    await expect(page.locator('.board-canvas svg .board-preview'), 'preview visible antes de soltar').not.toHaveCount(0);
+    await expect(
+      page.locator('.board-canvas svg .board-preview'),
+      'preview visible antes de soltar',
+    ).not.toHaveCount(0);
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/preview-antes-soltar.png` });
     await page.mouse.up();
   });
@@ -396,16 +495,28 @@ test.describe('Fase 12 — capturas finales de interacción', () => {
     const fit = await fitMode(page);
     const p = normToScreen(0.5, 0.5, host, fit);
     await page.mouse.click(p.x, p.y);
-    if (!(await page.locator('.studio-panel').isVisible().catch(() => false))) {
-      await page.locator('button[aria-label="Propiedades"]').click();
+    if (
+      !(await page
+        .locator('.studio-panel')
+        .isVisible()
+        .catch(() => false))
+    ) {
+      await ensurePropsPanel(page);
     }
     await expect(page.locator('.studio-panel')).toBeVisible();
-    const zoomSlider = page.locator('.studio-panel .field', { hasText: 'Zoom' }).locator('input[type="range"]');
+    const zoomSlider = page
+      .locator('.studio-panel .field', { hasText: 'Zoom' })
+      .locator('input[type="range"]');
     await zoomSlider.evaluate((input) => {
       (input as HTMLInputElement).value = '2';
       (input as HTMLInputElement).dispatchEvent(new Event('change', { bubbles: true }));
     });
-    await page.keyboard.press('Escape'); // cerrar el panel de Propiedades
+    // La colocación continua puede consumir Escape antes de cerrar paneles.
+    // Liberar ambos lados con sus X para probar el paneo, no un toque en el catálogo.
+    for (const selector of ['.side-panel-left', '.side-panel-right']) {
+      const panel = page.locator(selector);
+      if (await panel.isVisible()) await panel.locator('.panel-close').click();
+    }
     await page.waitForTimeout(150);
     // Herramienta "Mano": arrastra para desplazar la vista.
     await page.locator('.rail-btn[title="Desplazar campo"]').click();
@@ -418,7 +529,8 @@ test.describe('Fase 12 — capturas finales de interacción', () => {
     await page.mouse.up();
     await page.waitForTimeout(100);
     // El pan ha desplazado la vista (panX no nulo en la transformación del canvas).
-    const transform = (await page.locator('.board-canvas').evaluate((el) => el.getAttribute('style') ?? '')) ?? '';
+    const transform =
+      (await page.locator('.board-canvas').evaluate((el) => el.getAttribute('style') ?? '')) ?? '';
     const m = /translate\(\s*(-?[\d.]+)px/.exec(transform);
     expect(m, 'el canvas lleva un translate definido').toBeTruthy();
     expect(parseFloat(m![1]), 'la vista fue paneada (panX != 0)').not.toBe(0);
@@ -485,39 +597,56 @@ test.describe('Fase 12 — contact sheet', () => {
   // Organizado por categorías (Campos, Materiales, Jugadores, Dibujo,
   // Selección/interacción, Móvil, Exportación final).
   const SECTIONS: Array<[string, Array<[string, string]>]> = [
-    ['Campos', [
-      ['campo-limpio-sin-snap', 'Campo limpio (sin snap dots)'],
-      ['medio-campo-vertical', 'Medio campo vertical (proporción)'],
-      ['medio-campo-horizontal', 'Medio campo opuesto (horizontal)'],
-      ['mano-paneado-zoom', 'Mano paneando vista con zoom'],
-    ]],
-    ['Materiales', [
-      ['catalogo-materiales-1', 'Catálogo de materiales (1/2)'],
-      ['catalogo-materiales-2', 'Catálogo de materiales (2/2)'],
-    ]],
-    ['Jugadores', [
-      ['catalogo-jugadores', 'Catálogo de jugadores (reales, propios, rivales, Portero, portero)'],
-    ]],
-    ['Dibujo', [
-      ['catalogo-lineas-flechas', 'Catálogo de líneas y flechas'],
-      ['catalogo-figuras-texto', 'Catálogo de figuras y texto'],
-      ['linea-extremos-bar', 'Línea con extremos + barra'],
-      ['curva-extremos-c1', 'Curva con extremos + C1'],
-      ['mano-alzada-caja', 'Mano alzada con caja'],
-      ['preview-antes-soltar', 'Preview antes de soltar'],
-      ['objeto-entrando-papelera', 'Objeto entrando en la papelera'],
-      ['texto-sin-halo', 'Texto sin halo blanco'],
-    ]],
-    ['Selección / interacción', [
-      ['material-seleccionado-bar', 'Material seleccionado + barra + asas'],
-    ]],
-    ['Móvil', [
-      ['movil-campo-max', 'Móvil: menús cerrados, campo máximo'],
-    ]],
-    ['Exportación final', [
-      ['ejercicio-final-realista', 'Ejercicio final realista (rondo 5v2)'],
-      ['ejercicio-final-realista-exportado', 'PNG exportado real (sin controles)'],
-    ]],
+    [
+      'Campos',
+      [
+        ['campo-limpio-sin-snap', 'Campo limpio (sin snap dots)'],
+        ['medio-campo-vertical', 'Medio campo vertical (proporción)'],
+        ['medio-campo-horizontal', 'Medio campo opuesto (horizontal)'],
+        ['mano-paneado-zoom', 'Mano paneando vista con zoom'],
+      ],
+    ],
+    [
+      'Materiales',
+      [
+        ['catalogo-materiales-1', 'Catálogo de materiales (1/2)'],
+        ['catalogo-materiales-2', 'Catálogo de materiales (2/2)'],
+      ],
+    ],
+    [
+      'Jugadores',
+      [
+        [
+          'catalogo-jugadores',
+          'Catálogo de jugadores (reales, propios, rivales, Portero, portero)',
+        ],
+      ],
+    ],
+    [
+      'Dibujo',
+      [
+        ['catalogo-lineas-flechas', 'Catálogo de líneas y flechas'],
+        ['catalogo-figuras-texto', 'Catálogo de figuras y texto'],
+        ['linea-extremos-bar', 'Línea con extremos + barra'],
+        ['curva-extremos-c1', 'Curva con extremos + C1'],
+        ['mano-alzada-caja', 'Mano alzada con caja'],
+        ['preview-antes-soltar', 'Preview antes de soltar'],
+        ['objeto-entrando-papelera', 'Objeto entrando en la papelera'],
+        ['texto-sin-halo', 'Texto sin halo blanco'],
+      ],
+    ],
+    [
+      'Selección / interacción',
+      [['material-seleccionado-bar', 'Material seleccionado + barra + asas']],
+    ],
+    ['Móvil', [['movil-campo-max', 'Móvil: menús cerrados, campo máximo']]],
+    [
+      'Exportación final',
+      [
+        ['ejercicio-final-realista', 'Ejercicio final realista (rondo 5v2)'],
+        ['ejercicio-final-realista-exportado', 'PNG exportado real (sin controles)'],
+      ],
+    ],
   ];
 
   const MOBILE_SHOTS: Array<[string, string]> = [
@@ -547,12 +676,15 @@ test.describe('Fase 12 — contact sheet', () => {
     parts.push(MOBILE_SHOTS.map(([f, label]) => fig(MOBILE, f, label)).join('\n'));
     parts.push('</section>');
 
-    const html = '<!doctype html><html><head><meta charset="utf-8">'
-      + '<style>body{font-family:sans-serif;margin:12px;background:#111;color:#eee}'
-      + 'h1{font-size:16px}h2{font-size:14px;color:#8a97a3;margin-top:20px;border-top:1px solid #333;padding-top:10px}'
-      + 'figure{display:inline-block;margin:10px;text-align:center;vertical-align:top}'
-      + 'figure img{max-width:480px;border:1px solid #555}figcaption{font-size:12px;margin-top:4px;max-width:480px}</style></head><body>'
-      + '<h1>CDMPLab · Contact sheet · e2e/shots</h1>' + parts.join('\n') + '</body></html>';
+    const html =
+      '<!doctype html><html><head><meta charset="utf-8">' +
+      '<style>body{font-family:sans-serif;margin:12px;background:#111;color:#eee}' +
+      'h1{font-size:16px}h2{font-size:14px;color:#8a97a3;margin-top:20px;border-top:1px solid #333;padding-top:10px}' +
+      'figure{display:inline-block;margin:10px;text-align:center;vertical-align:top}' +
+      'figure img{max-width:480px;border:1px solid #555}figcaption{font-size:12px;margin-top:4px;max-width:480px}</style></head><body>' +
+      '<h1>CDMPLab · Contact sheet · e2e/shots</h1>' +
+      parts.join('\n') +
+      '</body></html>';
     const file = path.resolve('e2e/shots/contact-sheet.html');
     fs.writeFileSync(file, html, 'utf8');
     await page.setViewportSize({ width: 1400, height: 900 });
@@ -562,4 +694,3 @@ test.describe('Fase 12 — contact sheet', () => {
     await page.screenshot({ path: 'e2e/shots/contact-sheet.png', fullPage: true });
   });
 });
-

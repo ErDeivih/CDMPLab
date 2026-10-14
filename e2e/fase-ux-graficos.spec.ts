@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { openBoard, hostBox, normToScreen, showCategory, fitMode } from './board-helpers';
 
@@ -151,7 +152,7 @@ test.describe('FASE 8B/8C — chino y portería grande', () => {
     // propiedades»), así que solo se pulsa si el campo de título no está visible.
     const titulo = page.locator('input[aria-label="Título del ejercicio"]');
     if (!(await titulo.isVisible().catch(() => false))) {
-      await page.locator('button[aria-label="Propiedades"]').first().click();
+      await ensurePropsPanel(page);
     }
     await titulo.fill('Chino y portería');
     await page.locator('.chip-icon-primary').click();

@@ -21,7 +21,7 @@ function normToScreen(
   fit: 'height' | 'contain',
   panX = 0,
   panY = 0,
-  zoom = 1
+  zoom = 1,
 ): { x: number; y: number } {
   const s = fit === 'height' ? host.height / RECT.h : Math.min(host.width / VBW, host.height / VBH);
   const offX = (host.width - VBW * s) / 2;
@@ -43,14 +43,63 @@ async function seed(page: Page): Promise<void> {
     // Fase 2: este spec prueba la pista de "Llenar pantalla" en aislamiento; se descarta
     // el aviso de orientación para que la pista sea la única visible.
     localStorage.setItem('entrenolab:orient-hint', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([
-      { id: 'e1', teamId: 't1', folderId: null, title: 'Rondos', description: '', explanation: '', category: 'Técnica', objectives: [], materials: [], durationMinutes: 12, minPlayers: 6, maxPlayers: 8, loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false, canvas: { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [] }], orientation: 'horizontal', grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a' }, thumbnail: null, savedAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:exercises',
+      JSON.stringify([
+        {
+          id: 'e1',
+          teamId: 't1',
+          folderId: null,
+          title: 'Rondos',
+          description: '',
+          explanation: '',
+          category: 'Técnica',
+          objectives: [],
+          materials: [],
+          durationMinutes: 12,
+          minPlayers: 6,
+          maxPlayers: 8,
+          loadMode: 'fixed',
+          seriesCount: null,
+          repetitionsCount: null,
+          workSeconds: null,
+          restSeconds: null,
+          isTemplate: false,
+          canvas: {
+            version: 2,
+            schemaVersion: 3,
+            field: 'full',
+            frames: [{ duration: 1000, elements: [] }],
+            orientation: 'horizontal',
+            grass: 'stripes',
+            lineColor: '#ffffff',
+            backgroundColor: '#31834a',
+          },
+          thumbnail: null,
+          savedAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
@@ -59,6 +108,8 @@ async function seed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
+  // Preparar el estado sin paneles que hace visible la pista de recorrido.
+  await page.locator('.studio-panel .panel-close').click();
   // Por defecto (móvil) el modo es "Llenar pantalla".
   await expect(page.locator('.board-host')).toHaveClass(/board-fill/);
 }
@@ -74,7 +125,13 @@ async function hostBox(page: Page): Promise<Box> {
  *  "Llenar pantalla". */
 async function visibleHints(page: Page): Promise<number> {
   let n = 0;
-  if (await page.locator('.fill-hint').isVisible().catch(() => false)) n += 1;
+  if (
+    await page
+      .locator('.fill-hint')
+      .isVisible()
+      .catch(() => false)
+  )
+    n += 1;
   return n;
 }
 
@@ -87,7 +144,10 @@ async function placeComodin(page: Page, nx: number, ny: number): Promise<{ x: nu
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
   // FASE B (paneles persistentes): elegir jugador NO cierra el panel Jugadores.
-  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await expect(
+    page.locator('.side-panel-left'),
+    'el panel Jugadores permanece abierto',
+  ).toBeVisible();
   // FASE B (regla C): en móvil vertical el panel persistente tapa el centro del campo;
   // lo cerramos con su botón X (.panel-close) para poder tocar el punto de colocación.
   await page.locator('.side-panel-left .panel-close').click();
@@ -102,31 +162,45 @@ async function placeComodin(page: Page, nx: number, ny: number): Promise<{ x: nu
 async function readView(page: Page): Promise<{ panX: number; panY: number; zoom: number }> {
   return page.locator('.board-canvas').evaluate((el) => {
     const t = (el as HTMLElement).style.transform;
-    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(t);
-    return m ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) } : { panX: 0, panY: 0, zoom: 1 };
+    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(
+      t,
+    );
+    return m
+      ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) }
+      : { panX: 0, panY: 0, zoom: 1 };
   });
 }
 
 /** Despacha un PointerEvent sintético sobre `.board-host` (dos dedos = pinch). */
-async function ptr(page: Page, type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel', x: number, y: number, pointerId: number, isPrimary = false): Promise<void> {
-  await page.evaluate(({ type, x, y, pointerId, isPrimary }) => {
-    const host = document.querySelector('.board-host') as HTMLElement | null;
-    if (!host) return;
-    const up = type === 'pointerup' || type === 'pointercancel';
-    host.dispatchEvent(
-      new PointerEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        pointerId,
-        pointerType: 'touch',
-        isPrimary,
-        clientX: x,
-        clientY: y,
-        button: 0,
-        buttons: up ? 0 : 1,
-      })
-    );
-  }, { type, x, y, pointerId, isPrimary });
+async function ptr(
+  page: Page,
+  type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+  x: number,
+  y: number,
+  pointerId: number,
+  isPrimary = false,
+): Promise<void> {
+  await page.evaluate(
+    ({ type, x, y, pointerId, isPrimary }) => {
+      const host = document.querySelector('.board-host') as HTMLElement | null;
+      if (!host) return;
+      const up = type === 'pointerup' || type === 'pointercancel';
+      host.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId,
+          pointerType: 'touch',
+          isPrimary,
+          clientX: x,
+          clientY: y,
+          button: 0,
+          buttons: up ? 0 : 1,
+        }),
+      );
+    },
+    { type, x, y, pointerId, isPrimary },
+  );
 }
 
 /** Gesto de dos dedos simétrico alrededor de (cx,cy), bajando con spread[0] y terminando en el último. */
@@ -148,7 +222,9 @@ async function twoFinger(page: Page, cx: number, cy: number, spreads: number[]):
 test.describe('D3 — los hints flotantes de móvil nunca se solapan (una sola pista a la vez)', () => {
   test.use({ hasTouch: true });
 
-  test('[390x844] estado inicial: la pista de "Llenar pantalla" es el único hint; al cerrarla, ninguno', async ({ page }) => {
+  test('[390x844] estado inicial: la pista de "Llenar pantalla" es el único hint; al cerrarla, ninguno', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openBoard(page);
@@ -169,7 +245,9 @@ test.describe('D3 — los hints flotantes de móvil nunca se solapan (una sola p
     expect(await visibleHints(page), 'con la pista cerrada no hay ningún hint').toBe(0);
   });
 
-  test('[390x844] la pista no tapa un objeto seleccionable ni bloquea el gesto de pellizco', async ({ page }) => {
+  test('[390x844] la pista no tapa un objeto seleccionable ni bloquea el gesto de pellizco', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openBoard(page);
@@ -198,8 +276,13 @@ test.describe('D3 — los hints flotantes de móvil nunca se solapan (una sola p
     await twoFinger(page, cx, cy, [120, 220]);
     const after = await readView(page);
     console.log(`[d3 pinch] zoom ${before.zoom.toFixed(2)} → ${after.zoom.toFixed(2)}`);
-    expect(after.zoom, 'el pellizco cambia el zoom con la pista visible').toBeGreaterThan(before.zoom);
-    expect(await page.locator('.studio-panel').count(), 'el pellizco no debe reabrir el inspector').toBe(0);
+    expect(after.zoom, 'el pellizco cambia el zoom con la pista visible').toBeGreaterThan(
+      before.zoom,
+    );
+    expect(
+      await page.locator('.studio-panel').count(),
+      'el pellizco no debe reabrir el inspector',
+    ).toBe(0);
 
     // Durante el pellizco solo se ve la pista (no hay banner de ayuda).
     await expect(page.locator('.fill-hint')).toBeVisible();
@@ -216,7 +299,9 @@ test.describe('D3 — los hints flotantes de móvil nunca se solapan (una sola p
     expect(await visibleHints(page), 'con la pista cerrada no hay ningún hint').toBe(0);
   });
 
-  test('[390x844] el descarte se persiste: al recargar no reaparece ningún hint', async ({ page }) => {
+  test('[390x844] el descarte se persiste: al recargar no reaparece ningún hint', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openBoard(page);

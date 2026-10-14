@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
@@ -7,33 +8,115 @@ fs.mkdirSync(SHOTS, { recursive: true });
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-      { id: 'p3', teamId: 't1', name: 'Dani', number: 1, position: 'GK', color: '#1a73e8', active: true, createdAt: now },
-    ]));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([
-      { id: 'e1', teamId: 't1', folderId: null, title: 'Rondos', description: 'Conservación', explanation: '', category: 'Técnica', objectives: [], materials: [], durationMinutes: 12, minPlayers: 6, maxPlayers: 8, loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false, canvas: { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [] }], orientation: 'horizontal', grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a' }, thumbnail: null, savedAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Pau',
+          number: 10,
+          position: 'MF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p3',
+          teamId: 't1',
+          name: 'Dani',
+          number: 1,
+          position: 'GK',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
+    localStorage.setItem(
+      'entrenolab:folders',
+      JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]),
+    );
+    localStorage.setItem(
+      'entrenolab:exercises',
+      JSON.stringify([
+        {
+          id: 'e1',
+          teamId: 't1',
+          folderId: null,
+          title: 'Rondos',
+          description: 'Conservación',
+          explanation: '',
+          category: 'Técnica',
+          objectives: [],
+          materials: [],
+          durationMinutes: 12,
+          minPlayers: 6,
+          maxPlayers: 8,
+          loadMode: 'fixed',
+          seriesCount: null,
+          repetitionsCount: null,
+          workSeconds: null,
+          restSeconds: null,
+          isTemplate: false,
+          canvas: {
+            version: 2,
+            schemaVersion: 3,
+            field: 'full',
+            frames: [{ duration: 1000, elements: [] }],
+            orientation: 'horizontal',
+            grass: 'stripes',
+            lineColor: '#ffffff',
+            backgroundColor: '#31834a',
+          },
+          thumbnail: null,
+          savedAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
 
 async function dismissHelp(page: Page): Promise<void> {
-  if (await page.locator('.help-close').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.help-close').click();
   }
 }
 
 /** Abre el panel de Propiedades (derecha), que ahora empieza cerrado. */
 async function openProps(page: Page): Promise<void> {
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
+  await ensurePropsPanel(page);
   await expect(page.locator('.studio-panel')).toBeVisible();
   await page.waitForTimeout(60);
 }
@@ -42,6 +125,8 @@ async function openProps(page: Page): Promise<void> {
 async function boardWithContent(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
+  // Liberar los puntos de colocación antes de componer la captura.
+  await page.locator('.studio-panel .panel-close').click();
   await dismissHelp(page);
 
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -112,7 +197,10 @@ test.describe('Fase 4 — capturas multi-anchura (pizarra con paneles de herrami
     await page.locator('.studio-panel [aria-label="Campo base"]').selectOption('f7');
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${SHOTS}/f7-base-horizontal.png` });
-    await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();
+    await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip[data-orient="vertical"]')
+      .click();
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${SHOTS}/f7-base-vertical.png` });
   });

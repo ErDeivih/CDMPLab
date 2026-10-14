@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 // =============================================================
 // FASE 4/1/7 (IA) — E2E del borrador determinista.
 //
@@ -37,9 +38,7 @@ const DRAFT = {
     { kind: 'cone_red', position: { x: 0.6, y: 0.6 } },
     { kind: 'pole', position: { x: 0.5, y: 0.8 } },
   ],
-  shapes: [
-    { kind: 'arrow', from: { x: 0.35, y: 0.25 }, to: { x: 0.65, y: 0.45 } },
-  ],
+  shapes: [{ kind: 'arrow', from: { x: 0.35, y: 0.25 }, to: { x: 0.65, y: 0.45 } }],
   texts: [{ position: { x: 0.5, y: 0.12 }, value: 'Salida de balón' }],
 };
 
@@ -72,10 +71,18 @@ async function injectDraft(page: Page): Promise<void> {
 }
 
 async function dismissHelp(page: Page): Promise<void> {
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
 }
 
-test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto-guarda, se consume y conserva al guardar', async ({ page }) => {
+test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto-guarda, se consume y conserva al guardar', async ({
+  page,
+}) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1366, height: 900 });
   await page.addInitScript(seed());
@@ -85,19 +92,23 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   await expect(page.locator('.board-host')).toBeVisible();
   await dismissHelp(page);
   // FASE G: observable — esperamos a que el borrador compile su composición (≥25 elementos).
-  await expect.poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 }).toBeGreaterThanOrEqual(25);
+  await expect
+    .poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 })
+    .toBeGreaterThanOrEqual(25);
 
   const total = Number(await page.locator('.field-count').innerText());
   expect(total, 'se abrió la composición del borrador').toBeGreaterThanOrEqual(25);
   await expect(page.locator('.board-canvas svg [data-el-type="player"]').first()).toHaveCount(1);
 
   // Abrir el panel de Propiedades para leer los metadatos del borrador.
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   await expect(page.locator('.studio-panel')).toBeVisible();
   // FASE G: los metadatos se esperan con los `toHaveValue`/`toBeChecked` siguientes (observables).
 
   // Metadatos en el panel "Datos del ejercicio" (por aria-label).
-  await expect(page.locator('[aria-label="Título del ejercicio"]')).toHaveValue('Salida de balón 4-3-3');
+  await expect(page.locator('[aria-label="Título del ejercicio"]')).toHaveValue(
+    'Salida de balón 4-3-3',
+  );
   await expect(page.locator('[aria-label="Descripción"]')).toHaveValue(/Posesión y salida limpia/);
   await expect(page.locator('[aria-label="Explicación"]')).toHaveValue(/Circular el balón/);
   // El material del borrador IA («2 miniporterías») llega al MODELO; el checklist del panel se
@@ -129,7 +140,9 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   await page.goto('/board/draft');
   await expect(page.locator('.board-host')).toBeVisible();
   // FASE G: observable — sin draft pendiente el board queda vacío (0).
-  await expect.poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 }).toBe(0);
+  await expect
+    .poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 })
+    .toBe(0);
   const emptyCount = Number(await page.locator('.field-count').innerText());
   expect(emptyCount, 'sin draft pendiente el borrador no se reabre').toBe(0);
 
@@ -139,7 +152,9 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   await expect(page.locator('.board-host')).toBeVisible();
   await dismissHelp(page);
   // FASE G: observable — esperamos a que el borrador compile (≥25) antes de guardar.
-  await expect.poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 }).toBeGreaterThanOrEqual(25);
+  await expect
+    .poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 })
+    .toBeGreaterThanOrEqual(25);
   await page.locator('.chip-icon-primary[aria-label="Guardar"]').click();
   await page.waitForURL('**/library');
   expect(await exercisesCount(page), 'guardar tras confirmación crea el ejercicio').toBe(1);
@@ -150,11 +165,15 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   await page.waitForURL('**/board');
   await expect(page.locator('.board-host')).toBeVisible();
   // FASE G: observable — esperamos a que los elementos del borrador se conserven (≥25).
-  await expect.poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 }).toBeGreaterThanOrEqual(25);
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await expect
+    .poll(async () => Number(await page.locator('.field-count').innerText()), { timeout: 5000 })
+    .toBeGreaterThanOrEqual(25);
+  await ensurePropsPanel(page);
   await expect(page.locator('.studio-panel')).toBeVisible();
   // FASE G: observable — el título guardado se espera con toHaveValue.
-  await expect(page.locator('[aria-label="Título del ejercicio"]')).toHaveValue('Salida de balón 4-3-3');
+  await expect(page.locator('[aria-label="Título del ejercicio"]')).toHaveValue(
+    'Salida de balón 4-3-3',
+  );
   const savedTitle = await page.locator('[aria-label="Título del ejercicio"]').inputValue();
   expect(savedTitle, 'el título guardado se conserva').toBe('Salida de balón 4-3-3');
   await expect(page.locator('[aria-label="Descripción"]')).toHaveValue(/Posesión y salida limpia/);
@@ -162,7 +181,12 @@ test('borrador IA determinista: abre con metadatos, se edita/deshace, no se auto
   // el checklist del panel se haya retirado por decisión del dueño: ya no hay checkbox que
   // comprobar, así que se comprueba el dato guardado.
   const guardado = await page.evaluate(
-    () => (JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]') as Array<{ materials?: string[] }>)[0],
+    () =>
+      (
+        JSON.parse(localStorage.getItem('entrenolab:exercises') ?? '[]') as Array<{
+          materials?: string[];
+        }>
+      )[0],
   );
   expect(
     (guardado?.materials ?? []).join(' '),

@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 
@@ -89,7 +90,7 @@ async function openProps(page: Page): Promise<void> {
       .catch(() => false)
   )
     return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   await expect(page.locator('.studio-panel')).toBeVisible();
   await page.waitForTimeout(60);
 }

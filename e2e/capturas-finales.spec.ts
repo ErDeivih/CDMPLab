@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
-import { longPress, toggleFillScreen } from './gesture-helpers';
+import { ensurePropsPanel, longPress, toggleFillScreen } from './gesture-helpers';
 
 // Capturas de esta versión (decidido por el dueño): los 8 resultados
 // campo/orientación, el selector abierto, propiedades de jugador y de
@@ -90,7 +90,7 @@ async function openBoard(page: Page, opts?: { keepFill?: boolean }): Promise<voi
 }
 
 async function setField(page: Page, field: string): Promise<void> {
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   await page
     .locator('.studio-panel .field', { hasText: 'Campo base' })
     .locator('select')
@@ -156,7 +156,7 @@ test.describe('Capturas finales de esta versión', () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openBoard(page);
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${SHOTS}/selector-campo-orientacion.png` });
   });
@@ -409,7 +409,7 @@ test.describe('Capturas finales de esta versión', () => {
       await longPress(page, cx, cy);
       await expect(page.locator('.context-bar')).toBeVisible();
       // Zoom al 150 % (sin cambiar la orientación persistida).
-      await page.locator('button[aria-label="Propiedades"]').click();
+      await ensurePropsPanel(page);
       const zoom = page
         .locator('.studio-panel .field', { hasText: 'Zoom' })
         .locator('input[type="range"]');

@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
@@ -222,7 +223,7 @@ async function openProps(page: Page): Promise<void> {
       .catch(() => false)
   )
     return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   await expect(page.locator('.studio-panel')).toBeVisible();
 }
 
@@ -305,9 +306,9 @@ test.describe(`Capturas del shell (${DIR})`, () => {
     // La misma vista, con el nombre que pide el encargo para el bottom sheet.
     await shot(page, 'movil-vertical-pizarra-bottom-sheet');
     // Y el panel minimizado a pestaña (el campo vuelve a verse entero).
-    await page.locator('.side-panel-left .panel-min').first().click();
-    await expect(page.locator('.panel-tab')).toBeVisible();
-    await shot(page, 'movil-vertical-panel-minimizado');
+    await page.locator('.side-panel-left .panel-close').first().click();
+    await expect(page.locator('.side-panel-left')).toHaveCount(0);
+    await shot(page, 'movil-vertical-panel-cerrado');
   });
 
   test('autenticación', async ({ page }) => {
@@ -438,7 +439,7 @@ function describe(f: string): string {
       'Panel de Material en móvil vertical (hoja inferior anclada sobre la navegación)',
     'movil-vertical-pizarra-bottom-sheet':
       'Hoja inferior de móvil vertical (el panel ocupa el ancho, como máximo el 58 % del alto y queda anclado por encima de la navegación)',
-    'movil-vertical-panel-minimizado':
+    'movil-vertical-panel-cerrado':
       'Panel minimizado a pestaña: el campo vuelve a verse entero y un toque restaura el panel',
     'contact-sheet': 'Hoja de contacto con todas las capturas de esta carpeta',
     'movil-vertical-mas': 'Hoja «Más» en móvil vertical',

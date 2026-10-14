@@ -16,7 +16,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { longPress, toggleFillScreen } from './gesture-helpers';
+import { ensurePropsPanel, longPress, toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/fase4-final';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -34,7 +34,12 @@ const VBH = 80;
 const RECT = { x: 4, y: 10, w: 92, h: 92 / (105 / 68) };
 
 /** Forward norm→pantalla (inversa de screenToNorm), horizontal. */
-function normToScreen(nx: number, ny: number, box: Box, fit: 'contain' | 'height' = 'contain'): [number, number] {
+function normToScreen(
+  nx: number,
+  ny: number,
+  box: Box,
+  fit: 'contain' | 'height' = 'contain',
+): [number, number] {
   const s = fit === 'height' ? box.height / RECT.h : Math.min(box.width / VBW, box.height / VBH);
   const offX = (box.width - VBW * s) / 2;
   const offY = (box.height - VBH * s) / 2;
@@ -48,23 +53,57 @@ async function seed(page: Page): Promise<void> {
     // NO guardar la semilla con `seeded` para que cada test (contexto nuevo)
     // arranque con localStorage vacío y la pista de "Llenar pantalla" (única)
     // aparezca en la primera visita deseada.
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem('entrenolab:orient-hint', '1'); // Fase 2: probar la pista sin el aviso de orientación
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-    ]));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Pau',
+          number: 10,
+          position: 'MF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
+    localStorage.setItem(
+      'entrenolab:folders',
+      JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]),
+    );
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
 
 async function dismissHelp(page: Page): Promise<void> {
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
 }
 
 /** Escritorio: fuerza "Campo completo" para que el helper norm→pantalla (contain) coincida. */
@@ -72,7 +111,9 @@ async function openBoardDesktop(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await dismissHelp(page);
-  const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
+  const fill = await page
+    .locator('.board-host')
+    .evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
     await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
@@ -83,12 +124,20 @@ async function openBoardDesktop(page: Page): Promise<void> {
 async function openBoardMobile(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
+  // Esta galería necesita el campo libre para mostrar pistas y gestos.
+  await page.locator('.studio-panel .panel-close').click();
   await dismissHelp(page);
 }
 
 async function openProps(page: Page): Promise<void> {
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
+  await ensurePropsPanel(page);
   await expect(page.locator('.studio-panel')).toBeVisible();
   await page.waitForTimeout(60);
 }
@@ -104,15 +153,26 @@ async function hostBox(page: Page): Promise<Box> {
 }
 
 /** Coloca un texto y lo deja SELECCIONADO (para que se vean manijas + línea). */
-async function placeTextSelected(page: Page, fit: 'contain' | 'height' = 'contain', nx = 0.5, ny = 0.45, value = 'Texto'): Promise<void> {
+async function placeTextSelected(
+  page: Page,
+  fit: 'contain' | 'height' = 'contain',
+  nx = 0.5,
+  ny = 0.45,
+  value = 'Texto',
+): Promise<void> {
   await useTool(page, 'Texto', 'Dibujo');
   const box = await hostBox(page);
   const [x, y] = normToScreen(nx, ny, box, fit);
   await page.mouse.click(x, y, { button: 'right' });
   // En móvil la creación NO auto-abre Propiedades (regresión cubierta por `e1-mobile-props`);
   // el editor del texto vive en el inspector, así que se abre explícitamente si hace falta.
-  if (!(await page.locator('.studio-panel .inspector textarea').isVisible().catch(() => false))) {
-    await page.locator('button[aria-label="Propiedades"]').click();
+  if (
+    !(await page
+      .locator('.studio-panel .inspector textarea')
+      .isVisible()
+      .catch(() => false))
+  ) {
+    await ensurePropsPanel(page);
   }
   const ta = page.locator('.studio-panel .inspector textarea');
   await ta.fill(value);
@@ -125,7 +185,9 @@ async function placeTextSelected(page: Page, fit: 'contain' | 'height' = 'contai
 async function placeTextClean(page: Page, nx: number, ny: number, value: string): Promise<void> {
   await placeTextSelected(page, 'contain', nx, ny, value);
   // Ajustar al contenido para que ningún cuadro deje una línea recortada.
-  const fitBtn = page.locator('.studio-panel .inspector-actions button', { hasText: 'Ajustar al contenido' });
+  const fitBtn = page.locator('.studio-panel .inspector-actions button', {
+    hasText: 'Ajustar al contenido',
+  });
   if (await fitBtn.isVisible().catch(() => false)) await fitBtn.click();
   await page.waitForTimeout(120);
   await page.keyboard.press('Escape');
@@ -148,7 +210,10 @@ async function placeComodin(page: Page, host: Box, nx = 0.5, ny = 0.3): Promise<
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
   // FASE B (paneles persistentes): elegir un jugador NO cierra el panel Jugadores.
-  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await expect(
+    page.locator('.side-panel-left'),
+    'el panel Jugadores permanece abierto',
+  ).toBeVisible();
   // FASE B: cerrar el panel con la X (no desarma la colocación) para que el tap en el
   // campo, en móvil retrato, no quede interceptado por el panel persistente.
   await page.locator('.side-panel-left .panel-close').click();
@@ -174,21 +239,30 @@ async function readHandleGeom(page: Page): Promise<{
     const text = svg?.querySelector('g.board-text text');
     const editRect = svg?.querySelector('.text-edit-rect');
     if (!svg || !text || !editRect) return null;
-    const num = (el: Element | null, attr: string) => Number((el?.getAttribute(attr) ?? '0'));
+    const num = (el: Element | null, attr: string) => Number(el?.getAttribute(attr) ?? '0');
     const b = (text as SVGGraphicsElement).getBBox();
     // Asas de redimensionado: rects blancos con borde de selección (#2563eb).
-    const resize = Array.from(svg.querySelectorAll('rect[fill="#ffffff"][stroke="#2563eb"]')).map((el) => ({
-      x: num(el, 'x') + 1,
-      y: num(el, 'y') + 1,
-    }));
-    const outline = Array.from(svg.querySelectorAll('circle[fill="none"][stroke="#2563eb"]')).map((el) => ({
-      cx: num(el, 'cx'),
-      cy: num(el, 'cy'),
-      r: num(el, 'r'),
-    }));
+    const resize = Array.from(svg.querySelectorAll('rect[fill="#ffffff"][stroke="#2563eb"]')).map(
+      (el) => ({
+        x: num(el, 'x') + 1,
+        y: num(el, 'y') + 1,
+      }),
+    );
+    const outline = Array.from(svg.querySelectorAll('circle[fill="none"][stroke="#2563eb"]')).map(
+      (el) => ({
+        cx: num(el, 'cx'),
+        cy: num(el, 'cy'),
+        r: num(el, 'r'),
+      }),
+    );
     return {
       rect: { x: b.x, y: b.y, w: b.width, h: b.height },
-      box: { x: num(editRect, 'x'), y: num(editRect, 'y'), w: num(editRect, 'width'), h: num(editRect, 'height') },
+      box: {
+        x: num(editRect, 'x'),
+        y: num(editRect, 'y'),
+        w: num(editRect, 'width'),
+        h: num(editRect, 'height'),
+      },
       resize,
       outline,
       rotHandles: svg.querySelectorAll('.rot-handle').length,
@@ -196,7 +270,16 @@ async function readHandleGeom(page: Page): Promise<{
   });
 }
 
-function segIntersectsRect(x1: number, y1: number, x2: number, y2: number, rx: number, ry: number, rw: number, rh: number): boolean {
+function segIntersectsRect(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  rx: number,
+  ry: number,
+  rw: number,
+  rh: number,
+): boolean {
   const left = rx;
   const right = rx + rw;
   const top = ry;
@@ -206,7 +289,10 @@ function segIntersectsRect(x1: number, y1: number, x2: number, y2: number, rx: n
   const orient = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) =>
     (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
   const onSeg = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) =>
-    Math.min(ax, bx) <= cx && cx <= Math.max(ax, bx) && Math.min(ay, by) <= cy && cy <= Math.max(ay, by);
+    Math.min(ax, bx) <= cx &&
+    cx <= Math.max(ax, bx) &&
+    Math.min(ay, by) <= cy &&
+    cy <= Math.max(ay, by);
   const edges: Array<[number, number, number, number]> = [
     [left, top, right, top],
     [right, top, right, bottom],
@@ -227,7 +313,10 @@ function segIntersectsRect(x1: number, y1: number, x2: number, y2: number, rx: n
   return false;
 }
 
-function intersectRect(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) {
+function intersectRect(
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+) {
   const x = Math.max(a.x, b.x);
   const y = Math.max(a.y, b.y);
   const x2 = Math.min(a.x + a.w, b.x + b.w);
@@ -240,7 +329,10 @@ function intersectRect(a: { x: number; y: number; w: number; h: number }, b: { x
  *  sustituye la antigua comprobación "fuera del bbox de glifos" (fragil: el leading
  *  de la fuente recortado al cuadro hacía coincidir las esquinas con el bbox) por
  *  una comprobación más robusta: asas en las esquinas, nunca sobre el centro. */
-function assertResizeCorners(box: { x: number; y: number; w: number; h: number }, resize: Array<{ x: number; y: number }>): void {
+function assertResizeCorners(
+  box: { x: number; y: number; w: number; h: number },
+  resize: Array<{ x: number; y: number }>,
+): void {
   const corners = [
     [box.x, box.y],
     [box.x + box.w, box.y],
@@ -249,17 +341,38 @@ function assertResizeCorners(box: { x: number; y: number; w: number; h: number }
   ];
   for (let i = 0; i < 4; i++) {
     const d = Math.hypot(resize[i].x - corners[i][0], resize[i].y - corners[i][1]);
-    expect(d, `la asa de redimensionado ${i} está en la esquina del cuadro, no sobre los glifos`).toBeLessThan(2);
+    expect(
+      d,
+      `la asa de redimensionado ${i} está en la esquina del cuadro, no sobre los glifos`,
+    ).toBeLessThan(2);
     const cx = box.x + box.w / 2;
     const cy = box.y + box.h / 2;
-    expect(Math.hypot(resize[i].x - cx, resize[i].y - cy), `la asa ${i} no está sobre el centro del texto`).toBeGreaterThan(Math.min(box.w, box.h) * 0.2);
+    expect(
+      Math.hypot(resize[i].x - cx, resize[i].y - cy),
+      `la asa ${i} no está sobre el centro del texto`,
+    ).toBeGreaterThan(Math.min(box.w, box.h) * 0.2);
   }
 }
 
 /** ¿El segmento ENTRA en el INTERIOR del rectángulo visible (permite tocar el borde)? */
-function segEntersRect(x1: number, y1: number, x2: number, y2: number, r: { x: number; y: number; w: number; h: number }): boolean {
+function segEntersRect(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  r: { x: number; y: number; w: number; h: number },
+): boolean {
   const e = 0.02;
-  return segIntersectsRect(x1, y1, x2, y2, r.x + e, r.y + e, Math.max(0, r.w - 2 * e), Math.max(0, r.h - 2 * e));
+  return segIntersectsRect(
+    x1,
+    y1,
+    x2,
+    y2,
+    r.x + e,
+    r.y + e,
+    Math.max(0, r.w - 2 * e),
+    Math.max(0, r.h - 2 * e),
+  );
 }
 
 /** Arrastra (arrastre de campo vacío = PANEAR la vista) hasta saturar el extremo que
@@ -323,7 +436,9 @@ test.describe('Fase 4 — revisión visual final (capturas)', () => {
     expect(rotHandles, 'sin manija de rotación continua').toBe(0);
     // Y no hay círculos de contorno de selección sobre el texto.
     expect(outline, 'no hay ningún círculo de selección sobre el texto').toHaveLength(0);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/texto-seleccionado-centro.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/texto-seleccionado-centro.png` });
   });
 
   // =====================================================================
@@ -334,7 +449,13 @@ test.describe('Fase 4 — revisión visual final (capturas)', () => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);
-    await placeTextSelected(page, 'contain', 0.22, 0.02, 'Rondos 4v2\nConservación\nPase en superioridad numérica');
+    await placeTextSelected(
+      page,
+      'contain',
+      0.22,
+      0.02,
+      'Rondos 4v2\nConservación\nPase en superioridad numérica',
+    );
     const g = await readHandleGeom(page);
     expect(g, 'deben existir el <text> y el cuadro punteado').toBeTruthy();
     const { box, resize, outline, rotHandles } = g!;
@@ -343,7 +464,9 @@ test.describe('Fase 4 — revisión visual final (capturas)', () => {
     assertResizeCorners(box, resize);
     expect(rotHandles, 'sin manija de rotación continua').toBe(0);
     expect(outline, 'no hay ningún círculo de selección sobre el texto').toHaveLength(0);
-    await page.locator('.board-host').screenshot({ path: `${SHOTS}/texto-seleccionado-superior.png` });
+    await page
+      .locator('.board-host')
+      .screenshot({ path: `${SHOTS}/texto-seleccionado-superior.png` });
   });
 
   // =====================================================================
@@ -358,7 +481,9 @@ test.describe('Fase 4 — revisión visual final (capturas)', () => {
     await openBoardDesktop(page);
     await placeTextSelected(page, 'contain', 0.42, 0.4, 'Rondos 4v2\nConservación\nPase al apoyo');
     // Ajustar al contenido → el cuadro queda EXACTAMENTE al texto (w/h con decimal).
-    const fitBtn = page.locator('.studio-panel .inspector-actions button', { hasText: 'Ajustar al contenido' });
+    const fitBtn = page.locator('.studio-panel .inspector-actions button', {
+      hasText: 'Ajustar al contenido',
+    });
     await expect(fitBtn).toBeVisible();
     await fitBtn.click();
     await page.waitForTimeout(150);
@@ -369,8 +494,12 @@ test.describe('Fase 4 — revisión visual final (capturas)', () => {
     await expect(wIn).toBeVisible();
     await expect(hIn).toBeVisible();
     // Tamaño (u.), contexto de rotación (±90° en el menú — Fase 3: clic derecho) y la acción.
-    await expect(page.locator('.studio-panel .inspector .field', { hasText: 'Tamaño (u.)' })).toBeVisible();
-    await expect(page.locator('.studio-panel .inspector .field', { hasText: 'Rotación (°)' })).toHaveCount(0);
+    await expect(
+      page.locator('.studio-panel .inspector .field', { hasText: 'Tamaño (u.)' }),
+    ).toBeVisible();
+    await expect(
+      page.locator('.studio-panel .inspector .field', { hasText: 'Rotación (°)' }),
+    ).toHaveCount(0);
     const editBox = await page.locator('.text-edit-rect').boundingBox();
     await longPress(page, editBox.x + editBox.width / 2, editBox.y + editBox.height / 2);
     await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toBeVisible();
@@ -384,7 +513,10 @@ test.describe('Fase 4 — revisión visual final (capturas)', () => {
     expect(oneDecimal(wVal), `Ancho "${wVal}" tiene como mucho UNA decimal`).toBe(true);
     expect(oneDecimal(hVal), `Alto "${hVal}" tiene como mucho UNA decimal`).toBe(true);
     // Y al menos una de las dos presenta un decimal (demuestra el redondeo).
-    expect(/[.,]\d/.test(wVal) || /[.,]\d/.test(hVal), 'al menos un porcentaje muestra un decimal').toBe(true);
+    expect(
+      /[.,]\d/.test(wVal) || /[.,]\d/.test(hVal),
+      'al menos un porcentaje muestra un decimal',
+    ).toBe(true);
     // Nada de decimales largos (más de 3 cifras tras la coma/punto).
     expect(wVal, 'sin decimales largos en Ancho').not.toMatch(/[,.]\d{4,}/);
     expect(hVal, 'sin decimales largos en Alto').not.toMatch(/[,.]\d{4,}/);
@@ -472,7 +604,12 @@ test.describe('Fase 4 — revisión visual final (capturas)', () => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);
-    await placeTextClean(page, 0.35, 0.3, 'Rondos 4v2\nConservación\nPase en superioridad numérica');
+    await placeTextClean(
+      page,
+      0.35,
+      0.3,
+      'Rondos 4v2\nConservación\nPase en superioridad numérica',
+    );
     await page.locator('.board-host').screenshot({ path: `${SHOTS}/texto-multilinea.png` });
   });
 });

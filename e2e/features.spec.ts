@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas, fitMode, normToScreen } from './board-helpers';
 import fs from 'node:fs';
-import { abrirAjustes, longPress, fillBoardTitle } from './gesture-helpers';
+import { ensurePropsPanel, abrirAjustes, longPress, fillBoardTitle } from './gesture-helpers';
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -108,10 +108,11 @@ async function useTool(page: Page, title: string): Promise<void> {
 /** Minimiza el catálogo lateral abierto (si lo hay) con su botón X: NO desarma la
  *  herramienta; deja el campo libre para dibujar/colocar. */
 async function closeCatalogPanelIfOpen(page: Page): Promise<void> {
-  const panel = page.locator('.side-panel');
-  if (await panel.isVisible().catch(() => false)) {
-    const close = panel.first().locator('.panel-close');
-    if (await close.isVisible().catch(() => false)) await close.click();
+  // Preparación explícita de campo libre: pueden coexistir dos paneles.
+  // No hacer isVisible sobre un locator múltiple ni ocultar su error con catch.
+  for (const side of ['.side-panel-left', '.side-panel-right']) {
+    const panel = page.locator(side);
+    if (await panel.isVisible()) await panel.locator('.panel-close').click();
   }
 }
 
@@ -124,7 +125,7 @@ async function openProps(page: Page): Promise<void> {
       .catch(() => false)
   )
     return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   // FASE G: el panel se espera con el `.toBeVisible()` siguiente (observable); sin wait fijo.
   await expect(page.locator('.studio-panel')).toBeVisible();
 }
@@ -1039,6 +1040,8 @@ test.describe('EntrenoLab funcionalidades', () => {
     await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
     await page.locator('.side-panel-left .tray-player[title="Jugador Azul"]').click();
     await expect(page.locator('.field-count')).toHaveText('1'); // aún no coloca: está armado
+    // El inspector abre por defecto; su X libera este destino de colocación.
+    await page.locator('.side-panel-right .panel-close').click();
     const boxM = (await page.locator('.board-host').boundingBox())!;
     await page.mouse.click(boxM.x + boxM.width * 0.8, boxM.y + boxM.height * 0.8);
     await expect(page.locator('.field-count')).toHaveText('2');
@@ -1711,7 +1714,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     // el clic se quedaba colgado sin completarse y el panel era IMPOSIBLE de cerrar. Con la
     // barra en 39 los paneles ganan. El orden importa: al revés el botón «Propiedades» ni existe
     // (es un @if mientras el menú contextual está abierto).
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     await expect(page.locator('.studio-panel')).toBeVisible();
     await longPress(page, centro.x, centro.y);
     await expect(page.locator('.context-bar')).toBeVisible();

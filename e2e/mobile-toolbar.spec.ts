@@ -128,7 +128,9 @@ async function openBoard(page: Page): Promise<void> {
 const CONTROLS: Array<[string, string]> = [
   ['Seleccionar', '.rail-btn[aria-label="Seleccionar y mover"]'],
   ['Mano', '.rail-btn[aria-label="Desplazar campo"]'],
-  ['Herramientas', '.tools-toggle'],
+  ['Jugadores', '.tools-cat[aria-label="Jugadores"]'],
+  ['Material', '.tools-cat[aria-label="Material"]'],
+  ['Dibujo', '.tools-cat[aria-label="Dibujo"]'],
 ];
 
 // Categorías del menú «Herramientas» (mismo objetivo táctil y misma fila entre ellas).
@@ -221,7 +223,7 @@ test.describe('Defecto 1 — grupo de herramientas móvil en una sola fila', () 
 
       // Captura con menús cerrados (el estado normal de la pizarra).
       await page.keyboard.press('Escape');
-      await page.locator('.tools-toggle').click();
+      await expect(page.locator('.tools-menu')).toBeVisible();
       await page.screenshot({ path: `${SHOTS}/${w}x${h}-una-fila.png` });
     });
   }

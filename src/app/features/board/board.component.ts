@@ -553,9 +553,7 @@ export class BoardComponent {
       this.closeToolPanel(); // pulsar de nuevo la categoría abierta la cierra
       return;
     }
-    // Un solo panel principal abierto: en móvil el inspector de Propiedades se
-    // oculta temporalmente (la selección vive en el modelo), y se cierran los demás.
-    if (this.isCompactViewport()) this.panelOpen.set(false);
+    // Solo un catálogo izquierdo; el inspector derecho conserva su estado.
     this.jugadoresOpen.set(false);
     this.exportMenuOpen.set(false);
     this.masOpen.set(false);
@@ -567,7 +565,6 @@ export class BoardComponent {
   }
   protected closeToolPanel(): void {
     this.panelCat.set(null);
-    this.olvidarMinimizado();
     // El panel es un overlay que tapa el campo: al elegir una herramienta hay que
     // retirarlo ANTES del siguiente clic (que coloca el elemento). Forzamos la
     // detección de cambios para que Angular no lo deje en el DOM un tick más.
@@ -588,6 +585,8 @@ export class BoardComponent {
   }
 
   protected activeToolTitle(): string {
+    if (this.tool() === 'arrow')
+      return this.lineStyleFor('arrow') === 'dashed' ? 'Movimiento sin balón' : 'Pase / golpeo';
     return toolTitle(this.tool());
   }
   protected readonly toolGroups: Array<{
@@ -607,7 +606,7 @@ export class BoardComponent {
       // Derivado de `TOOLS` por EXCLUSIÓN (fuente única): así una herramienta nueva
       // aparece sola en el panel. Antes era una lista de 10 ids escrita a mano, y por eso
       // "Borrar elemento" (`erase`) existía en TOOLS pero NO se ofrecía en ninguna parte.
-      items: TOOLS.filter((t) => !['select', 'hand', 'player'].includes(t.id)),
+      items: TOOLS.filter((t) => !['select', 'hand', 'player', 'erase'].includes(t.id)),
     },
   ];
 
@@ -908,9 +907,8 @@ export class BoardComponent {
   protected readonly estadoGuardado = computed(() =>
     this.saving() ? 'Guardando…' : this.saved() ? 'Guardado' : 'Guardar',
   );
-  // Fase 1: el campo es el protagonista. El panel de Propiedades (derecha) empieza
-  // CERRADO (incluso en escritorio); se abre desde su disparador o al seleccionar.
-  protected readonly panelOpen = signal(false);
+  // David pide Propiedades abierta por defecto e independiente del catálogo.
+  protected readonly panelOpen = signal(true);
   /** Panel de Jugadores (izquierda): plantilla + genéricos + herramientas de jugador. */
   protected readonly jugadoresOpen = signal(false);
   /** Menú "Exportar" (arriba). */
@@ -944,20 +942,13 @@ export class BoardComponent {
    *  `panelOpen` en `false` y REABRIERA el panel en vez de cerrarlo. Ahora la
    *  auto-apertura al seleccionar/crear la dispara explícitamente
    *  `openPropsPanel()` (ver `setSingleSelection`/`toggleSelect`), y cerrar con X
-   *  solo apaga `panelOpen` conservando la selección. En móvil solo puede haber UN
-   *  panel principal abierto a la vez: si otro está abierto, Propiedades se oculta
-   *  (sin perder la selección, que sigue viva en el modelo). */
+   *  solo apaga `panelOpen` conservando la selección. Los dos lados coexisten. */
   protected showPropsPanel(): boolean {
-    const otherOpen =
-      this.jugadoresOpen() || this.panelCat() !== null || this.exportMenuOpen() || this.masOpen();
-    if (this.isCompactViewport() && otherOpen) return false;
     return this.panelOpen();
   }
   /** Abre el panel de Propiedades (derecha) si no está, cerrando los menús. */
   protected openPropsPanel(): void {
     if (this.panelOpen()) return;
-    this.jugadoresOpen.set(false);
-    this.panelCat.set(null);
     this.exportMenuOpen.set(false);
     this.masOpen.set(false);
     this.panelOpen.set(true);
@@ -978,17 +969,17 @@ export class BoardComponent {
    *  de `togglePanel()`, no depende de `selectedElement()` ni se reabre. */
   protected closePropsPanel(): void {
     this.panelOpen.set(false);
-    this.olvidarMinimizado();
     this.cdr.detectChanges();
   }
   protected toggleJugadores(): void {
     if (this.jugadoresOpen()) {
       this.jugadoresOpen.set(false);
-      this.olvidarMinimizado();
       this.cdr.detectChanges();
       return;
     }
-    this.closeAllPanels();
+    this.panelCat.set(null);
+    this.exportMenuOpen.set(false);
+    this.masOpen.set(false);
     this.jugadoresOpen.set(true);
   }
   protected toggleExportMenu(): void {
@@ -1040,68 +1031,6 @@ export class BoardComponent {
     () => this.panelCat() !== null || this.jugadoresOpen() || this.panelOpen(),
   );
 
-  // ---------- Paneles: minimizar/restaurar (Fase 3) ----------
-  //
-  // El dueño ya decidió que los paneles NO se cierran al tocar fuera (solo con un control
-  // explícito). En móvil eso dejaba el campo muy justo, así que ahora se pueden MINIMIZAR a una
-  // pestaña estrecha (icono + nombre) sin perder el estado del panel: el campo vuelve a verse y
-  // operarse, y la pestaña lo devuelve tal cual estaba.
-  protected readonly panelMinimizado = signal(false);
-
-  /** Panel visible en este momento (solo puede haber uno de los cuatro en vista compacta). */
-  protected readonly panelActivo = computed<
-    'jugadores' | 'material' | 'dibujo' | 'propiedades' | null
-  >(() => {
-    if (this.jugadoresOpen()) return 'jugadores';
-    const cat = this.panelCat();
-    if (cat === 'material') return 'material';
-    if (cat === 'dibujo') return 'dibujo';
-    if (this.showPropsPanel()) return 'propiedades';
-    return null;
-  });
-
-  /** Etiqueta e icono de la pestaña minimizada de cada panel. */
-  protected readonly PANELES: Record<string, { label: string; icon: string }> = {
-    jugadores: { label: 'Jugadores', icon: 'groups' },
-    material: { label: 'Material', icon: 'sports_soccer' },
-    dibujo: { label: 'Dibujo', icon: 'draw' },
-    propiedades: { label: 'Propiedades', icon: 'tune' },
-  };
-
-  /** Metadatos del panel minimizado (null si no hay ninguno abierto). */
-  protected readonly panelTab = computed(() => {
-    const id = this.panelActivo();
-    return id ? this.PANELES[id] : null;
-  });
-
-  /** Qué panel se minimizó: hay que recordarlo para poder reabrirlo tal cual. */
-  private panelMinimizadoId: 'jugadores' | 'material' | 'dibujo' | 'propiedades' | null = null;
-
-  protected minimizarPanel(): void {
-    this.panelMinimizadoId = this.panelActivo();
-    this.panelMinimizado.set(true);
-  }
-
-  /**
-   * Reabre el panel minimizado. No basta con quitar la bandera: el clic en la pestaña cae FUERA
-   * del panel y los manejadores del lienzo cierran el panel de Propiedades al tocar fuera, así que
-   * se vuelve a abrir explícitamente el que estaba minimizado.
-   */
-  protected restaurarPanel(evt?: Event): void {
-    // El manejador de «clic fuera» del lienzo corre DESPUÉS de este (mismo clic, el ancestro va
-    // después del objetivo) y volvía a cerrar el panel de Propiedades: se corta la propagación.
-    evt?.stopPropagation();
-    const id = this.panelMinimizadoId ?? this.panelActivo();
-    this.panelMinimizado.set(false);
-    if (id === 'jugadores') this.jugadoresOpen.set(true);
-    else if (id === 'material' || id === 'dibujo') this.panelCat.set(id);
-    else if (id === 'propiedades') this.panelOpen.set(true);
-  }
-
-  /** Al cerrar un panel se olvida el estado minimizado: el siguiente se abre entero. */
-  private olvidarMinimizado(): void {
-    this.panelMinimizado.set(false);
-  }
   /** La pista de "Llenar pantalla" se muestra un único hint flotante: ya no depende
    *  de la ayuda inicial (retirada por el dueño), así que solo mira su propia señal. */
   protected readonly fillHintVisible = computed(
@@ -1419,7 +1348,11 @@ export class BoardComponent {
     } catch {
       /* preferencia no crítica */
     }
-    if (this.tool() === tool) this.drawColor.set(color);
+    this.endBarPress();
+    this.barLongPressed = false;
+    this.setTool(tool);
+    this.drawColor.set(color);
+    this.armForTool(tool);
   }
   /** E/Bloque E — preferencia de trazo (continuo/discontinuo) POR HERRAMIENTA de dibujo
    *  (Línea y Flecha independientes). Se persiste localmente bajo una clave CDMPLab
@@ -1955,7 +1888,6 @@ export class BoardComponent {
     // (botón X / volver a tocar la categoría). Aquí únicamente se cierran los popovers
     // transitorios (Propiedades y los menús superior Exportar/Más), que sí son de tipo
     // "desplegable" y no deben tapar el campo.
-    this.panelOpen.set(false);
     this.exportMenuOpen.set(false);
     this.masOpen.set(false);
     this.cdr.detectChanges();
@@ -2640,6 +2572,10 @@ export class BoardComponent {
   }
   protected variantKindsFor(id: string): TacticalKind[] {
     switch (id) {
+      case 'ball':
+        return ['ball_football', 'ball_tiro_red', 'ball_tiro_black', 'ball_tango'];
+      case 'target':
+        return ['target', 'chino_photo'];
       case 'cone':
         return ['cone_red', 'cone_yellow', 'cone_blue', 'cone_orange', 'cone_white', 'cone_blue2'];
       case 'hurdle':
@@ -2667,6 +2603,7 @@ export class BoardComponent {
    *  de GitHub Pages, sin tocar el render ni el inlining (que usa rutas absolutas). */
   protected materialThumbSrc(id: string): string | null {
     const kind = this.selectedMaterialKind(id);
+    if (kind === 'chino_photo') return null; // miniatura repintada con el render real
     const asset = tacticAsset(kind)?.asset;
     return asset ? asset.replace(/^\//, '') : null;
   }
@@ -2683,6 +2620,8 @@ export class BoardComponent {
       }
       return next;
     });
+    this.setTool(id as Tool);
+    this.armForTool(id as Tool);
   }
 
   /** Miniatura SVG REAL de un material VECTORIAL (sin PNG), dibujada con los MISMOS
@@ -2691,6 +2630,18 @@ export class BoardComponent {
    *  material tiene PNG (no debe llegar aquí). Los colores por defecto coinciden con
    *  los que usa el render cuando el elemento no lleva color explícito. */
   protected materialVectorThumb(id: string): string {
+    if (id === 'target' && this.selectedMaterialKind(id) === 'chino_photo') {
+      const asset = tacticAsset('chino_photo')!;
+      return materialPreviewSvg({
+        id: 'preview-chino',
+        t: 'target',
+        x: 0.5,
+        y: 0.5,
+        c: this.colorFor('target'),
+        assetKind: asset.kind,
+        asset: asset.asset,
+      });
+    }
     if (id === 'goal' || id === 'minigoal') {
       return materialPreviewSvg({ id: 'preview', t: id, x: 0.5, y: 0.5, c: '#ffffff' });
     }
@@ -2710,7 +2661,7 @@ export class BoardComponent {
       marker: '#3056d3',
       pica: '#ffffff',
     };
-    const c = id === 'target' ? this.colorFor('target') : (DEF[id] ?? '#e8edf2');
+    const c = id === 'target' || id === 'pica' ? this.colorFor(id) : (DEF[id] ?? '#e8edf2');
     let inner = '';
     switch (id) {
       case 'fitball':
@@ -3457,13 +3408,12 @@ export class BoardComponent {
       const panels = Array.from(
         hostEl?.closest('.studio')?.querySelectorAll('.side-panel, .studio-tools') ?? [],
       ).map((el) => el.getBoundingClientRect());
-      let position = { x: 0.5, y: 0.5 };
-      let bestDistance = -1;
+      const candidates: Array<{ x: number; y: number; screenX: number; screenY: number }> = [];
       for (let row = 0; row < 9; row++) {
         for (let col = 0; col < 9; col++) {
           const candidate = { x: 0.1 + col * 0.1, y: 0.1 + row * 0.1 };
+          const screen = this.normToScreenDisplay(candidate.x, candidate.y);
           if (hostRect) {
-            const screen = this.normToScreenDisplay(candidate.x, candidate.y);
             const x = screen.x + hostRect.left;
             const y = screen.y + hostRect.top;
             const padding = 24;
@@ -3482,17 +3432,30 @@ export class BoardComponent {
             )
               continue;
           }
-          const distance = Math.min(
-            ...occupied.map((e) => Math.hypot(e.x! - candidate.x, e.y! - candidate.y)),
-            1,
-          );
-          if (distance > bestDistance) {
-            position = candidate;
-            bestDistance = distance;
-          }
+          candidates.push({ ...candidate, screenX: screen.x, screenY: screen.y });
         }
       }
-      this.placePlayerElement(position, { ...this.rosterDragSpec(player).player!, c });
+      // Orden de lectura EN PANTALLA, también al girar el campo. Redondear evita
+      // que errores flotantes alteren el orden de una misma fila.
+      candidates.sort(
+        (a, b) =>
+          Math.round(a.screenY * 1000) - Math.round(b.screenY * 1000) || a.screenX - b.screenX,
+      );
+      const free = candidates.find((candidate) =>
+        occupied.every((e) => Math.hypot(e.x! - candidate.x, e.y! - candidate.y) >= 0.07),
+      );
+      if (!free) {
+        this.endHistory();
+        this.notify(
+          'No hay un hueco visible libre. Cierra un panel o aleja el zoom y vuelve a elegir el color.',
+        );
+        this.setTool('select');
+        return;
+      }
+      this.placePlayerElement(
+        { x: free.x, y: free.y },
+        { ...this.rosterDragSpec(player).player!, c },
+      );
     }
     this.endHistory();
     this.setTool('select');
@@ -5234,7 +5197,14 @@ export class BoardComponent {
         };
         break;
       case 'pica':
-        el = { id: uid(), t: 'pica', x: p.x, y: p.y, c: '#ffffff', size: materialBaseSize('pica') };
+        el = {
+          id: uid(),
+          t: 'pica',
+          x: p.x,
+          y: p.y,
+          c: this.colorFor('pica'),
+          size: materialBaseSize('pica'),
+        };
         break;
       case 'rect':
         el = { id: uid(), t: 'rect', x: p.x, y: p.y, w: 0.12, h: 0.1, c: 'rgba(255,255,255,0.10)' };

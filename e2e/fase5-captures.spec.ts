@@ -15,7 +15,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { longPress, fillBoardTitle, toggleFillScreen } from './gesture-helpers';
+import { ensurePropsPanel, longPress, fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/fase5';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -43,7 +43,7 @@ function normToScreen(
   fit: 'contain' | 'height' = 'contain',
   panX = 0,
   panY = 0,
-  zoom = 1
+  zoom = 1,
 ): [number, number] {
   const s = fit === 'height' ? box.height / RECT.h : Math.min(box.width / VBW, box.height / VBH);
   const offX = (box.width - VBW * s) / 2;
@@ -59,29 +59,65 @@ function normToScreen(
 
 async function seed(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith('entrenolab:')) localStorage.removeItem(k);
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-      { id: 'p2', teamId: 't1', name: 'Pau', number: 10, position: 'MF', color: '#c0392b', active: true, createdAt: now },
-    ]));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+        {
+          id: 'p2',
+          teamId: 't1',
+          name: 'Pau',
+          number: 10,
+          position: 'MF',
+          color: '#c0392b',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
+    localStorage.setItem(
+      'entrenolab:folders',
+      JSON.stringify([{ id: 'f1', teamId: 't1', parentId: null, name: 'Posesión' }]),
+    );
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
 
 async function dismissHelp(page: Page): Promise<void> {
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
 }
 
 async function openBoardDesktop(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await dismissHelp(page);
-  const fill = await page.locator('.board-host').evaluate((el) => el.classList.contains('board-fill'));
+  const fill = await page
+    .locator('.board-host')
+    .evaluate((el) => el.classList.contains('board-fill'));
   if (fill) {
     await toggleFillScreen(page);
     await expect(page.locator('.board-host')).not.toHaveClass(/board-fill/);
@@ -96,8 +132,14 @@ async function openBoardMobile(page: Page): Promise<void> {
 }
 
 async function openProps(page: Page): Promise<void> {
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
+  await ensurePropsPanel(page);
   await expect(page.locator('.studio-panel')).toBeVisible();
   await page.waitForTimeout(60);
 }
@@ -142,7 +184,9 @@ interface CanvasElement {
   [k: string]: unknown;
 }
 
-function canvasDoc(page: Page): Promise<{ field: string; frames: Array<{ elements: CanvasElement[] }> }> {
+function canvasDoc(
+  page: Page,
+): Promise<{ field: string; frames: Array<{ elements: CanvasElement[] }> }> {
   return page.evaluate(() => {
     const ex = JSON.parse(localStorage.getItem('entrenolab:exercises')!)[0];
     return ex.canvas;
@@ -162,7 +206,10 @@ function elCenter(el: CanvasElement): [number, number] {
     return [((el.x1 ?? 0) + (el.x2 ?? 0)) / 2, ((el.y1 ?? 0) + (el.y2 ?? 0)) / 2];
   }
   if (t === 'curve') {
-    return [((el.x1 ?? 0) + (el.c1x ?? (el.x2 ?? 0)) + (el.x2 ?? 0)) / 3, ((el.y1 ?? 0) + (el.c1y ?? (el.y2 ?? 0)) + (el.y2 ?? 0)) / 3];
+    return [
+      ((el.x1 ?? 0) + (el.c1x ?? el.x2 ?? 0) + (el.x2 ?? 0)) / 3,
+      ((el.y1 ?? 0) + (el.c1y ?? el.y2 ?? 0) + (el.y2 ?? 0)) / 3,
+    ];
   }
   return [el.x ?? 0, el.y ?? 0];
 }
@@ -170,15 +217,24 @@ function elCenter(el: CanvasElement): [number, number] {
 function visualBBox(el: CanvasElement): { x: number; y: number; w: number; h: number } {
   const t = el.t;
   if (t === 'arrow' || t === 'line' || t === 'dribble' || t === 'doubleArrow' || t === 'measure') {
-    const x1 = el.x1 ?? 0, y1 = el.y1 ?? 0, x2 = el.x2 ?? 0, y2 = el.y2 ?? 0;
+    const x1 = el.x1 ?? 0,
+      y1 = el.y1 ?? 0,
+      x2 = el.x2 ?? 0,
+      y2 = el.y2 ?? 0;
     return { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
   }
   if (t === 'curve') {
-    const x1 = el.x1 ?? 0, y1 = el.y1 ?? 0, x2 = el.x2 ?? 0, y2 = el.y2 ?? 0;
-    const cx = el.c1x ?? (x1 + x2) / 2, cy = el.c1y ?? (y1 + y2) / 2;
+    const x1 = el.x1 ?? 0,
+      y1 = el.y1 ?? 0,
+      x2 = el.x2 ?? 0,
+      y2 = el.y2 ?? 0;
+    const cx = el.c1x ?? (x1 + x2) / 2,
+      cy = el.c1y ?? (y1 + y2) / 2;
     return {
-      x: Math.min(x1, x2, cx), y: Math.min(y1, y2, cy),
-      w: Math.max(x1, x2, cx) - Math.min(x1, x2, cx), h: Math.max(y1, y2, cy) - Math.min(y1, y2, cy),
+      x: Math.min(x1, x2, cx),
+      y: Math.min(y1, y2, cy),
+      w: Math.max(x1, x2, cx) - Math.min(x1, x2, cx),
+      h: Math.max(y1, y2, cy) - Math.min(y1, y2, cy),
     };
   }
   return { x: el.x ?? 0, y: el.y ?? 0, w: el.w ?? 0, h: el.h ?? 0 };
@@ -196,7 +252,14 @@ async function deselect(page: Page): Promise<void> {
   await page.waitForTimeout(80);
 }
 
-async function placePlayer(page: Page, title: string, nx: number, ny: number, fit: 'contain' | 'height' = 'contain', tray = false): Promise<void> {
+async function placePlayer(
+  page: Page,
+  title: string,
+  nx: number,
+  ny: number,
+  fit: 'contain' | 'height' = 'contain',
+  tray = false,
+): Promise<void> {
   await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Jugadores' }).click();
   const isPlayerTool = title === 'Jugador propio' || title === 'Jugador rival';
@@ -216,14 +279,29 @@ async function placePlayer(page: Page, title: string, nx: number, ny: number, fi
   await page.mouse.click(x, y, { button: 'right' });
 }
 
-async function placeTrayPlayer(page: Page, title: string, nx: number, ny: number, fit: 'contain' | 'height' = 'contain'): Promise<void> {
+async function placeTrayPlayer(
+  page: Page,
+  title: string,
+  nx: number,
+  ny: number,
+  fit: 'contain' | 'height' = 'contain',
+): Promise<void> {
   await placePlayer(page, title, nx, ny, fit, true);
 }
 
-async function placeMaterial(page: Page, tool: string, nx: number, ny: number, fit: 'contain' | 'height' = 'contain', variantIndex?: number): Promise<void> {
+async function placeMaterial(
+  page: Page,
+  tool: string,
+  nx: number,
+  ny: number,
+  fit: 'contain' | 'height' = 'contain',
+  variantIndex?: number,
+): Promise<void> {
   await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Material' }).click();
-  const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${tool}"]`) });
+  const card = page.locator('.tools-material-card', {
+    has: page.locator(`.rail-btn[title="${tool}"]`),
+  });
   const variantCount = await card.locator('.variant-swatch').count();
   if (variantIndex != null && variantCount > 0) {
     await card.locator('.variant-swatch').nth(variantIndex).click();
@@ -237,7 +315,12 @@ async function placeMaterial(page: Page, tool: string, nx: number, ny: number, f
   await deselect(page);
 }
 
-async function dragDraw(page: Page, from: [number, number], to: [number, number], fit: 'contain' | 'height' = 'contain'): Promise<void> {
+async function dragDraw(
+  page: Page,
+  from: [number, number],
+  to: [number, number],
+  fit: 'contain' | 'height' = 'contain',
+): Promise<void> {
   const box = await hostBox(page);
   const [x1, y1] = normToScreen(from[0], from[1], box, fit);
   const [x2, y2] = normToScreen(to[0], to[1], box, fit);
@@ -247,18 +330,34 @@ async function dragDraw(page: Page, from: [number, number], to: [number, number]
   await page.mouse.up();
 }
 
-async function drawShape(page: Page, tool: string, from: [number, number], to: [number, number], colorIndex?: number, fill?: boolean, fit: 'contain' | 'height' = 'contain'): Promise<void> {
+async function drawShape(
+  page: Page,
+  tool: string,
+  from: [number, number],
+  to: [number, number],
+  colorIndex?: number,
+  fill?: boolean,
+  fit: 'contain' | 'height' = 'contain',
+): Promise<void> {
   await abrirHerramientas(page);
   await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
   await page.locator(`.rail-btn[title="${tool}"]`).click();
   if (colorIndex != null) await page.locator('.tools-caption .swatch').nth(colorIndex).click();
-  if (fill != null) await page.locator('.tools-caption .chip', { hasText: fill ? 'Relleno' : 'Perímetro' }).click();
+  if (fill != null)
+    await page.locator('.tools-caption .chip', { hasText: fill ? 'Relleno' : 'Perímetro' }).click();
   // FASE B: cerrar el panel Dibujo con la X (no desarma) antes de arrastrar sobre el campo.
   await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
   await dragDraw(page, from, to, fit);
 }
 
-async function placeText(page: Page, nx: number, ny: number, value: string, fit: 'contain' | 'height' = 'contain', select = false): Promise<void> {
+async function placeText(
+  page: Page,
+  nx: number,
+  ny: number,
+  value: string,
+  fit: 'contain' | 'height' = 'contain',
+  select = false,
+): Promise<void> {
   await useTool(page, 'Texto', 'Dibujo');
   // FASE B: cerrar el panel Dibujo con la X (no desarma) antes de tocar el campo.
   await page.locator('.side-panel-left.tools-panel-side .panel-close').click();
@@ -273,7 +372,12 @@ async function placeText(page: Page, nx: number, ny: number, value: string, fit:
   if (!select) await deselect(page);
 }
 
-async function selectAt(page: Page, nx: number, ny: number, fit: 'contain' | 'height' = 'contain'): Promise<void> {
+async function selectAt(
+  page: Page,
+  nx: number,
+  ny: number,
+  fit: 'contain' | 'height' = 'contain',
+): Promise<void> {
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
   const box = await hostBox(page);
   const [x, y] = normToScreen(nx, ny, box, fit);
@@ -282,7 +386,12 @@ async function selectAt(page: Page, nx: number, ny: number, fit: 'contain' | 'he
   await expect(page.locator('.inspector')).toBeVisible();
 }
 
-async function dragHandle(page: Page, from: [number, number], to: [number, number], fit: 'contain' | 'height' = 'contain'): Promise<void> {
+async function dragHandle(
+  page: Page,
+  from: [number, number],
+  to: [number, number],
+  fit: 'contain' | 'height' = 'contain',
+): Promise<void> {
   const box = await hostBox(page);
   const [fx, fy] = normToScreen(from[0], from[1], box, fit);
   const [tx, ty] = normToScreen(to[0], to[1], box, fit);
@@ -292,14 +401,24 @@ async function dragHandle(page: Page, from: [number, number], to: [number, numbe
   await page.mouse.up();
 }
 
-async function dragRotHandle(page: Page, el: CanvasElement, fit: 'contain' | 'height' = 'contain'): Promise<void> {
+async function dragRotHandle(
+  page: Page,
+  el: CanvasElement,
+  fit: 'contain' | 'height' = 'contain',
+): Promise<void> {
   const [ccx, ccy] = elCenter(el);
   const h = rotHandle(el);
   const tx = Math.min(0.92, Math.max(0.08, ccx + 0.2));
   await dragHandle(page, [h.x, h.y], [tx, ccy], fit);
 }
 
-async function dragMove(page: Page, nx: number, ny: number, delta: [number, number], fit: 'contain' | 'height' = 'contain'): Promise<void> {
+async function dragMove(
+  page: Page,
+  nx: number,
+  ny: number,
+  delta: [number, number],
+  fit: 'contain' | 'height' = 'contain',
+): Promise<void> {
   const box = await hostBox(page);
   const [x1, y1] = normToScreen(nx, ny, box, fit);
   const [x2, y2] = normToScreen(nx + delta[0], ny + delta[1], box, fit);
@@ -310,7 +429,9 @@ async function dragMove(page: Page, nx: number, ny: number, delta: [number, numb
 }
 
 async function setInspNum(page: Page, label: string, value: string): Promise<void> {
-  const input = page.locator('.studio-panel .inspector .field', { hasText: label }).locator('input');
+  const input = page
+    .locator('.studio-panel .inspector .field', { hasText: label })
+    .locator('input');
   await input.fill(value);
   await input.press('Tab');
 }
@@ -341,7 +462,7 @@ function f7OffsideX(): [number, number] {
   return [F7_RECT.x + p.offside[0] * F7_RECT.w, F7_RECT.x + p.offside[1] * F7_RECT.w];
 }
 function f11AreaSideX(): [number, number] {
-  const boxHW = (40.32 / 68) / 2;
+  const boxHW = 40.32 / 68 / 2;
   return [F7_RECT.x + (0.5 - boxHW) * F7_RECT.w, F7_RECT.x + (0.5 + boxHW) * F7_RECT.w];
 }
 
@@ -351,7 +472,9 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
   // =====================================================================
   // 1. Campo base F7 — geometría perpendicular F7 sobre medio campo F11.
   // =====================================================================
-  test('f7-horizontal, f7-vertical y f7-movil — F7 perpendicular sobre medio campo F11', async ({ page }) => {
+  test('f7-horizontal, f7-vertical y f7-movil — F7 perpendicular sobre medio campo F11', async ({
+    page,
+  }) => {
     // Horizontal.
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
@@ -384,12 +507,17 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
     // Las dos líneas azules caen en los laterales del área F11 (±0.05 tolerancia de píxel SVG).
     for (const bx of blueXs) {
       const hit = f11x.some((fx) => Math.abs(bx - fx) < 0.05);
-      expect(hit, `línea offside azul en x=${bx} aterriza en el lateral blanco del área F11`).toBe(true);
+      expect(hit, `línea offside azul en x=${bx} aterriza en el lateral blanco del área F11`).toBe(
+        true,
+      );
     }
     await page.screenshot({ path: `${SHOTS}/f7-horizontal.png` });
 
     // Vertical.
-    await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();
+    await page
+      .locator('.studio-panel .field', { hasText: 'Orientación' })
+      .locator('.chip[data-orient="vertical"]')
+      .click();
     await page.waitForTimeout(250);
     await page.screenshot({ path: `${SHOTS}/f7-vertical.png` });
 
@@ -450,7 +578,14 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);
-    await placeText(page, 0.22, 0.35, 'Conservación en superioridad numérica con apoyo del mediocentro', 'contain', true);
+    await placeText(
+      page,
+      0.22,
+      0.35,
+      'Conservación en superioridad numérica con apoyo del mediocentro',
+      'contain',
+      true,
+    );
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${SHOTS}/texto-largo-selected.png` });
     await deselect(page);
@@ -462,7 +597,14 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);
-    await placeText(page, 0.3, 0.3, 'Rondos 4v2\nConservación\nPase en superioridad numérica', 'contain', true);
+    await placeText(
+      page,
+      0.3,
+      0.3,
+      'Rondos 4v2\nConservación\nPase en superioridad numérica',
+      'contain',
+      true,
+    );
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${SHOTS}/texto-multilinea-selected.png` });
     await deselect(page);
@@ -473,7 +615,9 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
   // =====================================================================
   // 4. Texto idéntico tras guardar + reabrir.
   // =====================================================================
-  test('texto-tras-guardar-reabrir — el texto es idéntico tras guardar y reabrir', async ({ page }) => {
+  test('texto-tras-guardar-reabrir — el texto es idéntico tras guardar y reabrir', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);
@@ -496,7 +640,9 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
   // =====================================================================
   // 5. PNG exportado SIN marco de edición (sin rect punteado).
   // =====================================================================
-  test('png-sin-marco-edicion — el PNG exportado no lleva rectángulo punteado de edición', async ({ page }) => {
+  test('png-sin-marco-edicion — el PNG exportado no lleva rectángulo punteado de edición', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);
@@ -514,13 +660,19 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
       const svg = document.querySelector('.entrenolab-board')!;
       return svg.querySelector('.text-edit-rect, .text-edit') !== null;
     });
-    expect(svgHasEditRect, 'el render de la pizarra no debe conservar un rect de edición').toBe(false);
+    expect(svgHasEditRect, 'el render de la pizarra no debe conservar un rect de edición').toBe(
+      false,
+    );
   });
 
   // =====================================================================
   // 6. Móvil — campo cerrado (llenar pantalla).
   // =====================================================================
-  for (const [w, h] of [[360, 800], [390, 844], [430, 932]] as Array<[number, number]>) {
+  for (const [w, h] of [
+    [360, 800],
+    [390, 844],
+    [430, 932],
+  ] as Array<[number, number]>) {
     test(`movil-cerrado-${w} — el campo llena el espacio usable`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: h });
       await seed(page);
@@ -532,7 +684,10 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
       await expect(page.locator('.side-panel-left')).toBeVisible();
       await page.locator('.tray-player[title="Jugador Azul"]').click();
       // FASE B (paneles persistentes): elegir un jugador NO cierra el panel Jugadores.
-      await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+      await expect(
+        page.locator('.side-panel-left'),
+        'el panel Jugadores permanece abierto',
+      ).toBeVisible();
       // FASE B: cerrar el panel con la X (no desarma) para que el tap en el campo
       // (móvil retrato, centro bajo el panel) no quede interceptado.
       await page.locator('.side-panel-left .panel-close').click();
@@ -612,17 +767,34 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
   // =====================================================================
   // 8. Hoja de contactos — materiales a tamaño normalizado.
   // =====================================================================
-  test('materiales-escala-normalizada — todos los materiales a su tamaño base normalizado', async ({ page }) => {
+  test('materiales-escala-normalizada — todos los materiales a su tamaño base normalizado', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);
     const xs = [0.12, 0.31, 0.5, 0.69, 0.88];
     const ys = [0.13, 0.36, 0.59, 0.82];
     const recipe: Array<[string, number]> = [
-      ['Balón', 0], ['Fitball', 0], ['Cono', 0], ['BOSU', 0], ['Banderín', 0],
-      ['Chino', 0], ['Pica', 0], ['Pértiga / poste', 0], ['Maniquí individual', 0], ['Barrera de maniquíes', 0],
-      ['Miniportería', 0], ['Portería grande', 0], ['Valla', 0], ['Aro', 0], ['Escalera', 0],
-      ['Minitrampolín', 0], ['Peto', 0], ['Chaleco lastrado', 0], ['Mancuerna / pesa', 0],
+      ['Balón', 0],
+      ['Fitball', 0],
+      ['Cono', 0],
+      ['BOSU', 0],
+      ['Banderín', 0],
+      ['Chino', 0],
+      ['Pica', 0],
+      ['Pértiga / poste', 0],
+      ['Maniquí individual', 0],
+      ['Barrera de maniquíes', 0],
+      ['Miniportería', 0],
+      ['Portería grande', 0],
+      ['Valla', 0],
+      ['Aro', 0],
+      ['Escalera', 0],
+      ['Minitrampolín', 0],
+      ['Peto', 0],
+      ['Chaleco lastrado', 0],
+      ['Mancuerna / pesa', 0],
     ];
     for (let i = 0; i < recipe.length; i++) {
       const [tool] = recipe[i];
@@ -637,7 +809,9 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
   // =====================================================================
   // 9. Ejercicio completo — jugadores + materiales + formas + texto multilínea.
   // =====================================================================
-  test('ejercicio-completo — jugadores, materiales, línea, flecha, curva, zigzag, zona, círculo, rectángulo, texto multilínea', async ({ page }) => {
+  test('ejercicio-completo — jugadores, materiales, línea, flecha, curva, zigzag, zona, círculo, rectángulo, texto multilínea', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);
@@ -670,7 +844,9 @@ test.describe('Fase 5 — capturas obligatorias (geom F7, líneas finas, texto, 
   // 10. Antes / después — el "después" de mover + rotar + redimensionar.
   // (El "antes" se captura en fase4; aquí el objeto claramente transformado.)
   // =====================================================================
-  test('antes-despues-objeto — objeto movido, rotado (±90° barra) y redimensionado', async ({ page }) => {
+  test('antes-despues-objeto — objeto movido, rotado (±90° barra) y redimensionado', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoardDesktop(page);

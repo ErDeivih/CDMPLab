@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { longPress } from './gesture-helpers';
+import { ensurePropsPanel, longPress } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/e1-mobile-props';
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -127,6 +127,8 @@ async function openClosed(page: Page): Promise<void> {
   await expect(page.locator('.board-host')).toBeVisible();
   // FASE G: observable — el campo se ha renderizado (SVG presente), no una espera fija.
   await expect(page.locator('.board-canvas svg')).toBeVisible();
+  // Preparar el escenario cerrado: Propiedades ahora se abre por defecto.
+  await page.locator('.studio-panel .panel-close').click();
   if (
     await page
       .locator('.help-close')
@@ -441,7 +443,7 @@ test.describe('E1 — el panel Propiedades NO bloquea el movimiento en móvil (�
       }
 
       // ---- 5. Pulsar el botón "Propiedades" → se abre el inspector correcto ----
-      await page.locator('button[aria-label="Propiedades"]').click();
+      await ensurePropsPanel(page);
       await expect(page.locator('.studio-panel')).toBeVisible();
       // Fase 6: el inspector ya NO ofrece el control numérico "Rotación (°)".
       expect(

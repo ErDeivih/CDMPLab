@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 // A2/A3/A4 — CAMBIO DE CAMPO (contrato nuevo tras la corrección urgente del dueño).
 //
 // QUÉ CAMBIÓ Y POR QUÉ: antes, cambiar de un campo completo a uno de media extensión CON objetos
@@ -31,7 +32,7 @@ async function openProps(page: Page): Promise<void> {
       .isVisible()
       .catch(() => false))
   ) {
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
   }
   await expect(page.locator('.studio-panel')).toBeVisible();
 }

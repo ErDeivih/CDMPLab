@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 
 const colors = ['#1a73e8', '#c0392b', '#f6c945', '#e67e22', '#8e44ad', '#ec4899'];
@@ -92,7 +93,7 @@ for (const type of ['rect', 'cone'] as const) {
     await page.keyboard.press('Control+y');
     await expect.poll(() => order(page)).toEqual(back);
     if (!(await page.locator('.chip-icon-primary').isVisible())) {
-      await page.getByRole('button', { name: 'Propiedades', exact: true }).click();
+      await ensurePropsPanel(page);
     }
     await save();
     await expect.poll(() => order(page)).toEqual(back);

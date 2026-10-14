@@ -147,6 +147,41 @@ test('PDF: dibujos en todos los bloques, cinco columnas y más de cinco ejercici
   expect(await sheet.locator('.toolbar').isVisible()).toBe(false);
 });
 
+test('ficha compacta de cinco ejercicios principales: dos páginas con dibujos en los tres bloques', async ({
+  page,
+}) => {
+  await seed(page, true);
+  await page.addInitScript(() => {
+    const sessions = JSON.parse(localStorage.getItem('entrenolab:sessions')!);
+    sessions[0].tasks = sessions[0].tasks
+      .filter(
+        (task: { section: string; sortOrder: number }) =>
+          task.section !== 'main' || task.sortOrder <= 5,
+      )
+      .map((task: Record<string, unknown>) => ({
+        ...task,
+        progression: '',
+        material: '',
+      }));
+    localStorage.setItem('entrenolab:sessions', JSON.stringify(sessions));
+  });
+  await page.goto('/sessions');
+  const popup = page.waitForEvent('popup');
+  await page.getByTitle('Ver PDF').click();
+  const sheet = await popup;
+  await expect(sheet.locator('.diagram')).toHaveCount(7);
+  await expect(sheet.locator('.crest img')).toBeVisible();
+  await sheet.waitForFunction(() =>
+    Array.from(document.images).every((img) => img.complete && img.naturalWidth > 0),
+  );
+  const pdf = await sheet.pdf({
+    path: 'output/pdf/ficha-sesion-formato-club.pdf',
+    preferCSSPageSize: true,
+    printBackground: true,
+  });
+  expect(pdf.toString('latin1').match(/\/Type\s*\/Page\b/g)?.length).toBe(2);
+});
+
 test('crear, dibujar y volver no pierde la sesión; petos e indicaciones persisten', async ({
   page,
 }) => {

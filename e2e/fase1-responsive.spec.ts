@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
@@ -102,6 +103,8 @@ async function seed(page: Page): Promise<void> {
 async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
+  // Este escenario mide el campo con todos los paneles cerrados por el usuario.
+  await page.locator('.studio-panel .panel-close').click();
   // Descartar la ayuda (no debe cubrir el campo de forma permanente).
   if (
     await page
@@ -338,7 +341,7 @@ test.describe('Fase 1 — utilidad responsive real (campo protagonista)', () => 
     await openClosed(page);
 
     // Panel derecho (Propiedades).
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     const field = (await page.locator('.studio-field').boundingBox())!;
     const panel = (await page.locator('.studio-panel').boundingBox())!;
     expect(panel.width).toBeLessThan(field.width);

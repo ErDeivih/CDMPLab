@@ -2,8 +2,13 @@ import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
 import type { CanvasDocument, CanvasElement } from '../src/app/core/models';
-import { TACTICAL_SIZE, MATERIAL_SIZE_RATIO, tacticAsset, TacticalKind } from '../src/app/core/tactic-assets';
-import { fillBoardTitle } from './gesture-helpers';
+import {
+  TACTICAL_SIZE,
+  MATERIAL_SIZE_RATIO,
+  tacticAsset,
+  TacticalKind,
+} from '../src/app/core/tactic-assets';
+import { ensurePropsPanel, fillBoardTitle } from './gesture-helpers';
 
 // =============================================================
 // Matriz HONESTA por familia: TODA herramienta de creación de
@@ -67,14 +72,21 @@ function elCenter(el: CanvasElement): [number, number] {
     // el centroide (incl. c1 doblado hacia abajo) cae FUERA de la curva y un clic ahí no
     // la selecciona (regresión Fase 5: curve_right se dobla hacia abajo, +0.14).
     return [
-      0.25 * (el.x1 ?? 0) + 0.5 * (el.c1x ?? (el.x1 ?? 0) / 2 + (el.x2 ?? 0) / 2) + 0.25 * (el.x2 ?? 0),
-      0.25 * (el.y1 ?? 0) + 0.5 * (el.c1y ?? (el.y1 ?? 0) / 2 + (el.y2 ?? 0) / 2) + 0.25 * (el.y2 ?? 0),
+      0.25 * (el.x1 ?? 0) +
+        0.5 * (el.c1x ?? (el.x1 ?? 0) / 2 + (el.x2 ?? 0) / 2) +
+        0.25 * (el.x2 ?? 0),
+      0.25 * (el.y1 ?? 0) +
+        0.5 * (el.c1y ?? (el.y1 ?? 0) / 2 + (el.y2 ?? 0) / 2) +
+        0.25 * (el.y2 ?? 0),
     ];
   }
   if (t === 'freehand') {
     const pts = el.points ?? [];
     if (!pts.length) return [el.x ?? 0, el.y ?? 0];
-    return [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length];
+    return [
+      pts.reduce((a, p) => a + p[0], 0) / pts.length,
+      pts.reduce((a, p) => a + p[1], 0) / pts.length,
+    ];
   }
   return [el.x ?? 0, el.y ?? 0];
 }
@@ -120,21 +132,37 @@ function visualBBox(el: CanvasElement): { x: number; y: number; w: number; h: nu
     return { x: (el.x ?? 0) - hs, y: (el.y ?? 0) - hs, w: hs * 2, h: hs * 2 };
   }
   if (t === 'arrow' || t === 'line' || t === 'dribble' || t === 'doubleArrow' || t === 'measure') {
-    const x1 = el.x1 ?? 0, y1 = el.y1 ?? 0, x2 = el.x2 ?? 0, y2 = el.y2 ?? 0;
+    const x1 = el.x1 ?? 0,
+      y1 = el.y1 ?? 0,
+      x2 = el.x2 ?? 0,
+      y2 = el.y2 ?? 0;
     return { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
   }
   if (t === 'curve') {
-    const x1 = el.x1 ?? 0, y1 = el.y1 ?? 0, x2 = el.x2 ?? 0, y2 = el.y2 ?? 0;
+    const x1 = el.x1 ?? 0,
+      y1 = el.y1 ?? 0,
+      x2 = el.x2 ?? 0,
+      y2 = el.y2 ?? 0;
     const cx = el.c1x ?? (x1 + x2) / 2;
     const cy = el.c1y ?? (y1 + y2) / 2;
-    return { x: Math.min(x1, x2, cx), y: Math.min(y1, y2, cy), w: Math.max(x1, x2, cx) - Math.min(x1, x2, cx), h: Math.max(y1, y2, cy) - Math.min(y1, y2, cy) };
+    return {
+      x: Math.min(x1, x2, cx),
+      y: Math.min(y1, y2, cy),
+      w: Math.max(x1, x2, cx) - Math.min(x1, x2, cx),
+      h: Math.max(y1, y2, cy) - Math.min(y1, y2, cy),
+    };
   }
   if (t === 'freehand') {
     const pts = el.points ?? [];
     if (!pts.length) return { x: el.x ?? 0, y: el.y ?? 0, w: 0, h: 0 };
     const xs = pts.map((p) => p[0]);
     const ys = pts.map((p) => p[1]);
-    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    return {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      w: Math.max(...xs) - Math.min(...xs),
+      h: Math.max(...ys) - Math.min(...ys),
+    };
   }
   return { x: el.x ?? 0, y: el.y ?? 0, w: el.w ?? 0, h: el.h ?? 0 };
 }
@@ -148,7 +176,10 @@ function visualBBox(el: CanvasElement): { x: number; y: number; w: number; h: nu
  * reescriben para usar esta API; la manija ya NO debe existir en el DOM.
  */
 async function rotateViaBar(page: Page, deg: 90 | -90): Promise<void> {
-  const sel = deg === 90 ? '[aria-label="Girar 90° a la derecha"]' : '[aria-label="Girar 90° a la izquierda"]';
+  const sel =
+    deg === 90
+      ? '[aria-label="Girar 90° a la derecha"]'
+      : '[aria-label="Girar 90° a la izquierda"]';
   await page.locator('.context-bar').waitFor({ state: 'visible' });
   await page.locator(`.context-bar ${sel}`).click();
   await page.waitForTimeout(80);
@@ -163,8 +194,10 @@ function boxHandles(el: CanvasElement): Array<{ x: number; y: number; key: strin
     if (!pts.length) return [];
     const xs = pts.map((p) => p[0]);
     const ys = pts.map((p) => p[1]);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const minX = Math.min(...xs),
+      maxX = Math.max(...xs);
+    const minY = Math.min(...ys),
+      maxY = Math.max(...ys);
     return [
       { x: minX, y: minY, key: 'tl' },
       { x: maxX, y: minY, key: 'tr' },
@@ -173,7 +206,10 @@ function boxHandles(el: CanvasElement): Array<{ x: number; y: number; key: strin
     ];
   }
   if (t !== 'rect' && t !== 'zone' && t !== 'ellipse' && t !== 'text') return [];
-  const x = el.x ?? 0, y = el.y ?? 0, w = el.w ?? 0, h = el.h ?? 0;
+  const x = el.x ?? 0,
+    y = el.y ?? 0,
+    w = el.w ?? 0,
+    h = el.h ?? 0;
   return [
     { x, y, key: 'tl' },
     { x: x + w, y, key: 'tr' },
@@ -192,7 +228,15 @@ function freehandBBoxWidth(points: [number, number][] | undefined): number {
 /** Extremos (x1/x2 y, en curvas, c1) en coords normalizadas. */
 function segHandles(el: CanvasElement): Array<{ x: number; y: number; key: string }> {
   const t = el.t;
-  if (!(t === 'line' || t === 'arrow' || t === 'curve' || t === 'doubleArrow' || t === 'measure' || t === 'dribble')) return [];
+  if (!(
+    t === 'line' ||
+    t === 'arrow' ||
+    t === 'curve' ||
+    t === 'doubleArrow' ||
+    t === 'measure' ||
+    t === 'dribble'
+  ))
+    return [];
   const hs = [
     { x: el.x1 ?? 0, y: el.y1 ?? 0, key: 'x1' },
     { x: el.x2 ?? 0, y: el.y2 ?? 0, key: 'x2' },
@@ -233,8 +277,14 @@ async function useTool(page: Page, title: string, category?: string): Promise<vo
 
 /** Abre el panel Propiedades (derecha), que empieza cerrado (Fase 1). */
 async function openProps(page: Page): Promise<void> {
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
+  await ensurePropsPanel(page);
   // FASE G: el panel se espera con el `.toBeVisible()` siguiente (observable); sin wait fijo.
   await expect(page.locator('.studio-panel')).toBeVisible();
 }
@@ -254,7 +304,9 @@ async function reopen(page: Page): Promise<void> {
 }
 
 async function canvas(page: Page): Promise<CanvasDocument> {
-  const ex = JSON.parse((await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!)[0];
+  const ex = JSON.parse(
+    (await page.evaluate(() => localStorage.getItem('entrenolab:exercises')))!,
+  )[0];
   return ex.canvas;
 }
 
@@ -291,40 +343,576 @@ interface Family {
 // (Tamaño); los jugadores no tienen control de tamaño.
 // `supportsVariants` solo en cono/maniquí/escalera/aro (hot-swap real de assetKind).
 const FAMILIES: Family[] = [
-  { name: 'player', tool: 'Jugador propio', category: 'Jugadores', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'player', tool: 'Jugador rival', category: 'Jugadores', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'cone', tool: 'Cono', category: 'Material', draw: false, assetKind: 'cone_red', variantKind: 'cone_yellow', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
-  { name: 'ball', tool: 'Balón', category: 'Material', draw: false, assetKind: 'ball_football', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'mannequin', tool: 'Maniquí individual', category: 'Material', draw: false, assetKind: 'mannequin', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'minigoal', tool: 'Miniportería', category: 'Material', draw: false, assetKind: 'minigoal', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'pole', tool: 'Pértiga / poste', category: 'Material', draw: false, assetKind: 'pole', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  {
+    name: 'player',
+    tool: 'Jugador propio',
+    category: 'Jugadores',
+    draw: false,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: true,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'player',
+    tool: 'Jugador rival',
+    category: 'Jugadores',
+    draw: false,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: true,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'cone',
+    tool: 'Cono',
+    category: 'Material',
+    draw: false,
+    assetKind: 'cone_red',
+    variantKind: 'cone_yellow',
+    caps: {
+      movable: true,
+      rotatable: false,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: true,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'ball',
+    tool: 'Balón',
+    category: 'Material',
+    draw: false,
+    assetKind: 'ball_football',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'mannequin',
+    tool: 'Maniquí individual',
+    category: 'Material',
+    draw: false,
+    assetKind: 'mannequin',
+    caps: {
+      movable: true,
+      rotatable: false,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'minigoal',
+    tool: 'Miniportería',
+    category: 'Material',
+    draw: false,
+    assetKind: 'minigoal',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'pole',
+    tool: 'Pértiga / poste',
+    category: 'Material',
+    draw: false,
+    assetKind: 'pole',
+    caps: {
+      movable: true,
+      rotatable: false,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
   // Nuevas fotos y variantes, sin reescribir los documentos antiguos disc/hurdle.
-  { name: 'marker', tool: 'BOSU', category: 'Material', draw: false, assetKind: 'bosu_blue', variantKind: 'bosu_small', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
-  { name: 'hurdle', tool: 'Valla', category: 'Material', draw: false, assetKind: 'hurdle_orange', variantKind: 'hurdle', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
-  { name: 'ring', tool: 'Aro', category: 'Material', draw: false, assetKind: 'ring', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'ladder', tool: 'Escalera', category: 'Material', draw: false, assetKind: 'ladder', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'flag', tool: 'Banderín', category: 'Material', draw: false, assetKind: 'flag', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'trampoline', tool: 'Minitrampolín', category: 'Material', draw: false, assetKind: 'trampoline', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'target', tool: 'Chino', category: 'Material', draw: false, assetKind: 'target', caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'vball', tool: 'Fitball', category: 'Material', draw: false, assetKind: 'vball', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'peto', tool: 'Peto', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'chaleco', tool: 'Chaleco lastrado', category: 'Material', draw: false, caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'pica', tool: 'Pica', category: 'Material', draw: false, caps: { movable: true, rotatable: false, resizable: false, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'goal', tool: 'Portería grande', category: 'Material', draw: false, assetKind: 'goal', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'mannequin_row', tool: 'Barrera de maniquíes', category: 'Material', draw: false, assetKind: 'mannequin_row', caps: { movable: true, rotatable: false, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
+  {
+    name: 'marker',
+    tool: 'BOSU',
+    category: 'Material',
+    draw: false,
+    assetKind: 'bosu_blue',
+    variantKind: 'bosu_small',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: true,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'hurdle',
+    tool: 'Valla',
+    category: 'Material',
+    draw: false,
+    assetKind: 'hurdle_orange',
+    variantKind: 'hurdle',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: true,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'ring',
+    tool: 'Aro',
+    category: 'Material',
+    draw: false,
+    assetKind: 'ring',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'ladder',
+    tool: 'Escalera',
+    category: 'Material',
+    draw: false,
+    assetKind: 'ladder',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'flag',
+    tool: 'Banderín',
+    category: 'Material',
+    draw: false,
+    assetKind: 'flag',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'trampoline',
+    tool: 'Minitrampolín',
+    category: 'Material',
+    draw: false,
+    assetKind: 'trampoline',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'target',
+    tool: 'Chino',
+    category: 'Material',
+    draw: false,
+    assetKind: 'target',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: true,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'vball',
+    tool: 'Fitball',
+    category: 'Material',
+    draw: false,
+    assetKind: 'vball',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'peto',
+    tool: 'Peto',
+    category: 'Material',
+    draw: false,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: true,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'chaleco',
+    tool: 'Chaleco lastrado',
+    category: 'Material',
+    draw: false,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'pica',
+    tool: 'Pica',
+    category: 'Material',
+    draw: false,
+    caps: {
+      movable: true,
+      rotatable: false,
+      resizable: false,
+      colorable: true,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'goal',
+    tool: 'Portería grande',
+    category: 'Material',
+    draw: false,
+    assetKind: 'goal',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'mannequin_row',
+    tool: 'Barrera de maniquíes',
+    category: 'Material',
+    draw: false,
+    assetKind: 'mannequin_row',
+    caps: {
+      movable: true,
+      rotatable: false,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
   // Contrato nuevo: foto de mancuerna como variante predeterminada; el SVG antiguo se conserva.
-  { name: 'dumbbell', tool: 'Mancuerna / pesa', category: 'Material', draw: false, assetKind: 'dumbbell_metal', variantKind: 'kettlebell', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
-  { name: 'resistance_band', tool: 'Gomas elásticas', category: 'Material', draw: false, assetKind: 'band_yellow', variantKind: 'band_red', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
-  { name: 'medicine_ball', tool: 'Balón medicinal', category: 'Material', draw: false, assetKind: 'medicine_ball', variantKind: 'medicine_handles', caps: { movable: true, rotatable: true, resizable: false, colorable: false, editableEndpoints: false, editableText: false, supportsVariants: true, duplicable: true, exportable: true } },
-  { name: 'rect', tool: 'Rectángulo', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: true, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'ellipse', tool: 'Círculo / elipse', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: true, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'line', tool: 'Línea', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: true, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'arrow', tool: 'Flecha (movimiento)', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: true, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'doubleArrow', tool: 'Flecha doble sentido', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: true, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'curve', tool: 'Curva derecha', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: true, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'dribble', tool: 'Conducción (zigzag)', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: false, colorable: true, editableEndpoints: true, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'freehand', tool: 'Dibujo a mano alzada', category: 'Dibujo', draw: true, caps: { movable: true, rotatable: true, resizable: true, colorable: true, editableEndpoints: false, editableText: false, supportsVariants: false, duplicable: true, exportable: true } },
-  { name: 'text', tool: 'Texto', category: 'Dibujo', draw: false, caps: { movable: true, rotatable: true, resizable: true, colorable: true, editableEndpoints: false, editableText: true, supportsVariants: false, duplicable: true, exportable: true } },
+  {
+    name: 'dumbbell',
+    tool: 'Mancuerna / pesa',
+    category: 'Material',
+    draw: false,
+    assetKind: 'dumbbell_metal',
+    variantKind: 'kettlebell',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: true,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'resistance_band',
+    tool: 'Gomas elásticas',
+    category: 'Material',
+    draw: false,
+    assetKind: 'band_yellow',
+    variantKind: 'band_red',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: true,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'medicine_ball',
+    tool: 'Balón medicinal',
+    category: 'Material',
+    draw: false,
+    assetKind: 'medicine_ball',
+    variantKind: 'medicine_handles',
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: false,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: true,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'rect',
+    tool: 'Rectángulo',
+    category: 'Dibujo',
+    draw: true,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: true,
+      colorable: true,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'ellipse',
+    tool: 'Círculo / elipse',
+    category: 'Dibujo',
+    draw: true,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: true,
+      colorable: true,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'line',
+    tool: 'Línea',
+    category: 'Dibujo',
+    draw: true,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: true,
+      editableEndpoints: true,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'arrow',
+    tool: 'Flecha (movimiento)',
+    category: 'Dibujo',
+    draw: true,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: true,
+      editableEndpoints: true,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'doubleArrow',
+    tool: 'Flecha doble sentido',
+    category: 'Dibujo',
+    draw: true,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: true,
+      editableEndpoints: true,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'curve',
+    tool: 'Curva derecha',
+    category: 'Dibujo',
+    draw: true,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: true,
+      editableEndpoints: true,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'dribble',
+    tool: 'Conducción (zigzag)',
+    category: 'Dibujo',
+    draw: true,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: false,
+      colorable: true,
+      editableEndpoints: true,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'freehand',
+    tool: 'Dibujo a mano alzada',
+    category: 'Dibujo',
+    draw: true,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: true,
+      colorable: true,
+      editableEndpoints: false,
+      editableText: false,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
+  {
+    name: 'text',
+    tool: 'Texto',
+    category: 'Dibujo',
+    draw: false,
+    caps: {
+      movable: true,
+      rotatable: true,
+      resizable: true,
+      colorable: true,
+      editableEndpoints: false,
+      editableText: true,
+      supportsVariants: false,
+      duplicable: true,
+      exportable: true,
+    },
+  },
 ];
 
 function assertModelEl(el: CanvasElement, fam: Family): void {
@@ -344,9 +932,14 @@ function assertModelEl(el: CanvasElement, fam: Family): void {
   // Fase 4: el tamaño inicial se reduce a 0.75 × la base antigua.
   const sizeKey = fam.assetKind ?? fam.name;
   if (TACTICAL_SIZE[sizeKey] !== undefined) {
-    expect(el.size, `tamaño base normalizado de ${sizeKey}`).toBeCloseTo(TACTICAL_SIZE[sizeKey] * MATERIAL_SIZE_RATIO, 5);
+    expect(el.size, `tamaño base normalizado de ${sizeKey}`).toBeCloseTo(
+      TACTICAL_SIZE[sizeKey] * MATERIAL_SIZE_RATIO,
+      5,
+    );
   }
-  const coords = [el.x, el.y, el.x1, el.y1, el.w, el.h].filter((v): v is number => typeof v === 'number');
+  const coords = [el.x, el.y, el.x1, el.y1, el.w, el.h].filter(
+    (v): v is number => typeof v === 'number',
+  );
   for (const c of coords) {
     expect(c).toBeGreaterThanOrEqual(-0.001);
     expect(c).toBeLessThanOrEqual(1.001);
@@ -359,7 +952,9 @@ const stripId = ({ id: _id, ...rest }: CanvasElement): Omit<CanvasElement, 'id'>
 // Sección A — Matriz completa (crear/edit/persistir) — HONESTA
 // =============================================================
 for (const fam of FAMILIES) {
-  test(`matriz completa: familia «${fam.tool}» (${fam.name}) crea, edita y persiste con igualdad de modelo`, async ({ page }) => {
+  test(`matriz completa: familia «${fam.tool}» (${fam.name}) crea, edita y persiste con igualdad de modelo`, async ({
+    page,
+  }) => {
     await seed(page);
     const box = (await page.locator('.board-host').boundingBox())!;
 
@@ -372,7 +967,9 @@ for (const fam of FAMILIES) {
       await page.mouse.move(box.x + box.width * 0.52, box.y + box.height * 0.58, { steps: 4 });
       await page.mouse.up();
     } else {
-      await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.5, { button: 'right' });
+      await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.5, {
+        button: 'right',
+      });
     }
     await expect(page.locator('.field-count')).toHaveText('1');
 
@@ -424,28 +1021,85 @@ for (const fam of FAMILIES) {
 // =============================================================
 // Invariante del jugador de Plantilla: con playerId no se duplica.
 // =============================================================
-test('invariante: un jugador de la plantilla (playerId) no se puede duplicar ni como propio ni como rival', async ({ page }) => {
+test('invariante: un jugador de la plantilla (playerId) no se puede duplicar ni como propio ni como rival', async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     const now = new Date().toISOString();
     const team = { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now };
     localStorage.setItem('entrenolab:seeded', '1');
     localStorage.setItem('entrenolab:teams', JSON.stringify([team]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([{ id: 'pl1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now }]));
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'pl1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([
-      {
-        id: 'e1', teamId: 't1', folderId: null, title: 'Jugada', description: '', explanation: '', category: 'Táctica',
-        objectives: [], materials: [], durationMinutes: 10, minPlayers: 2, maxPlayers: 5, loadMode: 'fixed',
-        seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false,
-        canvas: {
-          version: 2, schemaVersion: 3, field: 'half',
-          frames: [{ duration: 1000, elements: [{ id: 'el1', t: 'player', x: 0.5, y: 0.5, n: 2, c: '#1a73e8', side: 'own', playerId: 'pl1', label: 'Marcos' }] }],
-          orientation: 'horizontal', grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a',
+    localStorage.setItem(
+      'entrenolab:exercises',
+      JSON.stringify([
+        {
+          id: 'e1',
+          teamId: 't1',
+          folderId: null,
+          title: 'Jugada',
+          description: '',
+          explanation: '',
+          category: 'Táctica',
+          objectives: [],
+          materials: [],
+          durationMinutes: 10,
+          minPlayers: 2,
+          maxPlayers: 5,
+          loadMode: 'fixed',
+          seriesCount: null,
+          repetitionsCount: null,
+          workSeconds: null,
+          restSeconds: null,
+          isTemplate: false,
+          canvas: {
+            version: 2,
+            schemaVersion: 3,
+            field: 'half',
+            frames: [
+              {
+                duration: 1000,
+                elements: [
+                  {
+                    id: 'el1',
+                    t: 'player',
+                    x: 0.5,
+                    y: 0.5,
+                    n: 2,
+                    c: '#1a73e8',
+                    side: 'own',
+                    playerId: 'pl1',
+                    label: 'Marcos',
+                  },
+                ],
+              },
+            ],
+            orientation: 'horizontal',
+            grass: 'stripes',
+            lineColor: '#ffffff',
+            backgroundColor: '#31834a',
+          },
+          thumbnail: null,
+          savedAt: now,
         },
-        thumbnail: null, savedAt: now,
-      },
-    ]));
+      ]),
+    );
   });
   await page.goto('/library');
   await reopen(page);
@@ -465,7 +1119,13 @@ test('invariante: un jugador de la plantilla (playerId) no se puede duplicar ni 
 // Sección B — Gestos reales (manijas, extremos, papelera, undo)
 // =============================================================
 
-async function drawShape(page: Page, tool: string, from: [number, number], to: [number, number], box: Box): Promise<void> {
+async function drawShape(
+  page: Page,
+  tool: string,
+  from: [number, number],
+  to: [number, number],
+  box: Box,
+): Promise<void> {
   await useTool(page, tool, 'Dibujo');
   const [x1, y1] = normToScreen(from[0], from[1], box);
   const [x2, y2] = normToScreen(to[0], to[1], box);
@@ -486,23 +1146,37 @@ async function selectAt(page: Page, nx: number, ny: number, box: Box): Promise<v
 
 /** Rellena un input numérico del inspector (por su etiqueta) y lo confirma. */
 async function setInspNum(page: Page, label: string, value: string): Promise<void> {
-  const input = page.locator('.studio-panel .inspector .field', { hasText: label }).locator('input');
+  const input = page
+    .locator('.studio-panel .inspector .field', { hasText: label })
+    .locator('input');
   await input.fill(value);
   await input.press('Tab');
 }
 
 /** Pulsa un chip del inspector (por su texto) dentro del campo con la etiqueta dada. */
 async function setInspChip(page: Page, label: string, chipText: string): Promise<void> {
-  await page.locator('.studio-panel .inspector .field', { hasText: label }).locator('.chip', { hasText: chipText }).click();
+  await page
+    .locator('.studio-panel .inspector .field', { hasText: label })
+    .locator('.chip', { hasText: chipText })
+    .click();
 }
 
 /** Pulsa el swatch de color el índice indicado del campo Color. */
 async function setInspColor(page: Page, index: number): Promise<void> {
-  await page.locator('.studio-panel .inspector .field', { hasText: 'Color' }).locator('.swatch').nth(index).click();
+  await page
+    .locator('.studio-panel .inspector .field', { hasText: 'Color' })
+    .locator('.swatch')
+    .nth(index)
+    .click();
 }
 
 /** Arrastra una manija (por coordenada normalizada) hasta un destino normalizado. */
-async function dragHandle(page: Page, from: [number, number], to: [number, number], box: Box): Promise<void> {
+async function dragHandle(
+  page: Page,
+  from: [number, number],
+  to: [number, number],
+  box: Box,
+): Promise<void> {
   const [fx, fy] = normToScreen(from[0], from[1], box);
   const [tx, ty] = normToScreen(to[0], to[1], box);
   await page.mouse.move(fx, fy);
@@ -511,7 +1185,9 @@ async function dragHandle(page: Page, from: [number, number], to: [number, numbe
   await page.mouse.up();
 }
 
-test('asas de extremo: arrastrar el extremo x2 de una línea cambia el modelo y un solo Ctrl+Z deshace', async ({ page }) => {
+test('asas de extremo: arrastrar el extremo x2 de una línea cambia el modelo y un solo Ctrl+Z deshace', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -554,7 +1230,9 @@ test('asas de extremo: arrastrar el extremo x2 de una línea cambia el modelo y 
   expect(undone.y2).toBeCloseTo(0.66, 1);
 });
 
-test('asas de extremo: arrastrar el extremo x2 de una flecha curva cambia el modelo', async ({ page }) => {
+test('asas de extremo: arrastrar el extremo x2 de una flecha curva cambia el modelo', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -584,7 +1262,9 @@ test('asas de extremo: arrastrar el extremo x2 de una flecha curva cambia el mod
 // DECISIÓN DEL DUEÑO (Fase 6): la rotación continua por manija fue retirada; ahora
 // es ±90° desde la barra de contexto. El rectángulo se gira EXACTAMENTE +90° con la
 // barra y un solo Ctrl+Z lo deshace.
-test('barra de contexto: Girar +90° rota el elemento a un múltiplo de 90 y un solo Ctrl+Z deshace', async ({ page }) => {
+test('barra de contexto: Girar +90° rota el elemento a un múltiplo de 90 y un solo Ctrl+Z deshace', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -619,7 +1299,9 @@ test('barra de contexto: Girar +90° rota el elemento a un múltiplo de 90 y un 
 });
 
 // Contrato anterior: el cono podía tumbarse. Ahora permanece erguido y no ofrece giro.
-test('barra de contexto: el cono no ofrece rotación y conserva su posición erguida', async ({ page }) => {
+test('barra de contexto: el cono no ofrece rotación y conserva su posición erguida', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -640,7 +1322,9 @@ test('barra de contexto: el cono no ofrece rotación y conserva su posición erg
 });
 
 // Rotación de una LÍNEA por la barra ±90°.
-test('barra de contexto: Girar +90° de una línea cambia rot a 90 en el modelo', async ({ page }) => {
+test('barra de contexto: Girar +90° de una línea cambia rot a 90 en el modelo', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -660,7 +1344,9 @@ test('barra de contexto: Girar +90° de una línea cambia rot a 90 en el modelo'
 });
 
 // Rotación de un TEXTO por la barra ±90°.
-test('barra de contexto: Girar +90° de un texto cambia rot a 90 y el texto persiste', async ({ page }) => {
+test('barra de contexto: Girar +90° de un texto cambia rot a 90 y el texto persiste', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -737,7 +1423,10 @@ test('pica erguida: se re-selecciona desde su centro y se mueve', async ({ page 
   // El contrato antiguo permitía tumbarla +90°; esa acción ya no aparece.
   await reopen(page);
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
-  await longPress(page, ...normToScreen(...elCenter(created), (await page.locator('.board-host').boundingBox())!));
+  await longPress(
+    page,
+    ...normToScreen(...elCenter(created), (await page.locator('.board-host').boundingBox())!),
+  );
   await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
   await page.keyboard.press('Escape');
 
@@ -759,7 +1448,9 @@ test('pica erguida: se re-selecciona desde su centro y se mueve', async ({ page 
   expect(Math.abs((moved.y ?? 0) - (created.y ?? 0))).toBeGreaterThan(0.01);
 });
 
-test('manija de control c1 de una curva: arrastrarla solo cambia c1x/c1y (no rot ni extremos)', async ({ page }) => {
+test('manija de control c1 de una curva: arrastrarla solo cambia c1x/c1y (no rot ni extremos)', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -790,7 +1481,9 @@ test('manija de control c1 de una curva: arrastrarla solo cambia c1x/c1y (no rot
   expect(dragged.y2).toBeCloseTo(first.y2!, 1);
 });
 
-test('barra de contexto: Girar +90° de una curva rota (solo rot, sin tocar c1 ni extremos)', async ({ page }) => {
+test('barra de contexto: Girar +90° de una curva rota (solo rot, sin tocar c1 ni extremos)', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -816,7 +1509,9 @@ test('barra de contexto: Girar +90° de una curva rota (solo rot, sin tocar c1 n
   expect(rotated.x2).toBeCloseTo(before.x2!, 1);
 });
 
-test('soltar un elemento sobre la papelera es una sola acción de undo (un Ctrl+Z lo restaura)', async ({ page }) => {
+test('soltar un elemento sobre la papelera es una sola acción de undo (un Ctrl+Z lo restaura)', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -839,7 +1534,9 @@ test('soltar un elemento sobre la papelera es una sola acción de undo (un Ctrl+
   await expect(page.locator('.field-count')).toHaveText('1');
 });
 
-test('la barra persistente muestra Deshacer/Rehacer con la animación cerrada y funcionan', async ({ page }) => {
+test('la barra persistente muestra Deshacer/Rehacer con la animación cerrada y funcionan', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -873,7 +1570,9 @@ test('la barra persistente muestra Deshacer/Rehacer con la animación cerrada y 
   await expect(page.locator('.field-count')).toHaveText('0');
 });
 
-test('coherencia vertical: un jugador junto a la portería izquierda conserva el modelo al cambiar a vertical y reabrir', async ({ page }) => {
+test('coherencia vertical: un jugador junto a la portería izquierda conserva el modelo al cambiar a vertical y reabrir', async ({
+  page,
+}) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -892,7 +1591,10 @@ test('coherencia vertical: un jugador junto a la portería izquierda conserva el
 
   await reopen(page);
   await openProps(page);
-  await page.locator('.studio-panel .field', { hasText: 'Orientación' }).locator('.chip[data-orient="vertical"]').click();
+  await page
+    .locator('.studio-panel .field', { hasText: 'Orientación' })
+    .locator('.chip[data-orient="vertical"]')
+    .click();
   await page.waitForTimeout(250);
   expect((await singleEl(page)).x).toBeCloseTo(h.x, 2);
   expect((await singleEl(page)).y).toBeCloseTo(h.y, 2);
@@ -924,36 +1626,47 @@ async function exportPngBuf(page: Page): Promise<Buffer> {
 }
 
 /** Cuenta píxeles distintos entre dos PNG en la región centrada en (nx, ny) normalizado. */
-async function pngRegionDiff(page: Page, a: Buffer, b: Buffer, nx: number, ny: number): Promise<number> {
-  return await page.evaluate(async ({ a, b, nx, ny }) => {
-    const load = (b64: string) =>
-      new Promise<HTMLCanvasElement>((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          const c = document.createElement('canvas');
-          c.width = img.width;
-          c.height = img.height;
-          c.getContext('2d')!.drawImage(img, 0, 0);
-          resolve(c);
-        };
-        img.src = 'data:image/png;base64,' + b64;
-      });
-    const [ca, cb] = await Promise.all([load(a), load(b)]);
-    const W = ca.width, H = ca.height;
-    const sx = Math.round(((nx * 92 + 4) / 100) * W);
-    const sy = Math.round(((ny * (92 / (105 / 68)) + 10) / 80) * H);
-    const ctxA = ca.getContext('2d')!;
-    const ctxB = cb.getContext('2d')!;
-    let changed = 0;
-    for (let dy = -70; dy <= 70; dy += 3) {
-      for (let dx = -70; dx <= 70; dx += 3) {
-        const pa = ctxA.getImageData(sx + dx, sy + dy, 1, 1).data;
-        const pb = ctxB.getImageData(sx + dx, sy + dy, 1, 1).data;
-        if (Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) + Math.abs(pa[2] - pb[2]) > 60) changed++;
+async function pngRegionDiff(
+  page: Page,
+  a: Buffer,
+  b: Buffer,
+  nx: number,
+  ny: number,
+): Promise<number> {
+  return await page.evaluate(
+    async ({ a, b, nx, ny }) => {
+      const load = (b64: string) =>
+        new Promise<HTMLCanvasElement>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = img.width;
+            c.height = img.height;
+            c.getContext('2d')!.drawImage(img, 0, 0);
+            resolve(c);
+          };
+          img.src = 'data:image/png;base64,' + b64;
+        });
+      const [ca, cb] = await Promise.all([load(a), load(b)]);
+      const W = ca.width,
+        H = ca.height;
+      const sx = Math.round(((nx * 92 + 4) / 100) * W);
+      const sy = Math.round(((ny * (92 / (105 / 68)) + 10) / 80) * H);
+      const ctxA = ca.getContext('2d')!;
+      const ctxB = cb.getContext('2d')!;
+      let changed = 0;
+      for (let dy = -70; dy <= 70; dy += 3) {
+        for (let dx = -70; dx <= 70; dx += 3) {
+          const pa = ctxA.getImageData(sx + dx, sy + dy, 1, 1).data;
+          const pb = ctxB.getImageData(sx + dx, sy + dy, 1, 1).data;
+          if (Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) + Math.abs(pa[2] - pb[2]) > 60)
+            changed++;
+        }
       }
-    }
-    return changed;
-  }, { a: a.toString('base64'), b: b.toString('base64'), nx, ny });
+      return changed;
+    },
+    { a: a.toString('base64'), b: b.toString('base64'), nx, ny },
+  );
 }
 
 // =============================================================
@@ -963,12 +1676,20 @@ async function pngRegionDiff(page: Page, a: Buffer, b: Buffer, nx: number, ny: n
 // =============================================================
 
 /** Coloca un material eligiendo ANTES la variante (si aplica) y devuelve el modelo. */
-async function placeElement(page: Page, fam: Family, box: Box, nx = 0.5, ny = 0.5): Promise<CanvasElement> {
+async function placeElement(
+  page: Page,
+  fam: Family,
+  box: Box,
+  nx = 0.5,
+  ny = 0.5,
+): Promise<CanvasElement> {
   if (fam.caps.supportsVariants && fam.variantKind) {
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: fam.category! }).click();
     // Elegir la variante (swatch índice 1 = la primera NO por defecto) ANTES de colocar.
-    const card = page.locator('.tools-material-card', { has: page.locator(`.rail-btn[title="${fam.tool}"]`) });
+    const card = page.locator('.tools-material-card', {
+      has: page.locator(`.rail-btn[title="${fam.tool}"]`),
+    });
     await card.locator('.variant-swatch').nth(1).click();
     await page.locator(`.rail-btn[title="${fam.tool}"]`).click();
     const [x, y] = normToScreen(nx, ny, box);
@@ -993,7 +1714,9 @@ async function placeElement(page: Page, fam: Family, box: Box, nx = 0.5, ny = 0.
 }
 
 for (const fam of FAMILIES) {
-  test(`capacidades de «${fam.tool}» (${fam.name}): cada capacidad declarada se ejecuta de verdad`, async ({ page }) => {
+  test(`capacidades de «${fam.tool}» (${fam.name}): cada capacidad declarada se ejecuta de verdad`, async ({
+    page,
+  }) => {
     await seed(page);
     await page.goto('/board');
     const box = (await page.locator('.board-host').boundingBox())!;
@@ -1019,28 +1742,45 @@ for (const fam of FAMILIES) {
     //    Va primero porque no cambia la geometría (solo rot), luego las asas siguen.
     if (c.rotatable) {
       // Fase 3: el menú contextual se abre por PULSACIÓN LARGA sobre el elemento.
-      await longPress(page, ...normToScreen(cx, cy, (await page.locator('.board-host').boundingBox())!));
-  await rotateViaBar(page, 90);
+      await longPress(
+        page,
+        ...normToScreen(cx, cy, (await page.locator('.board-host').boundingBox())!),
+      );
+      await rotateViaBar(page, 90);
       // La antigua manija de rotación continua ya NO debe existir (decisión del dueño).
       expect(await page.locator('.rot-handle').count(), 'sin manija de rotación continua').toBe(0);
       expect(await page.locator('.rot-line').count(), 'sin línea de conexión de rotación').toBe(0);
     } else if (['cone', 'pole', 'pica', 'mannequin', 'mannequin_row'].includes(fam.name)) {
-      await longPress(page, ...normToScreen(cx, cy, (await page.locator('.board-host').boundingBox())!));
+      await longPress(
+        page,
+        ...normToScreen(cx, cy, (await page.locator('.board-host').boundingBox())!),
+      );
       await expect(page.locator('.context-bar')).toBeVisible();
-      await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
+      await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(
+        0,
+      );
     }
     // 2) REDIMENSIÓN real: cajas → arrastrar asa br; materiales → input Tamaño.
     if (c.resizable) {
-      const isBox = fam.name === 'rect' || fam.name === 'zone' || fam.name === 'ellipse' || fam.name === 'text' || fam.name === 'freehand';
+      const isBox =
+        fam.name === 'rect' ||
+        fam.name === 'zone' ||
+        fam.name === 'ellipse' ||
+        fam.name === 'text' ||
+        fam.name === 'freehand';
       if (isBox) {
         if (fam.name === 'text') {
           // Contrato de texto corregido: las asas siguen el giro. No pulsar las
           // esquinas antiguas sin rotar (eso tocaba césped y deseleccionaba).
           const handles = page.locator('.reshandle');
-          const a = (await handles.nth(0).boundingBox())!, b = (await handles.nth(3).boundingBox())!;
-          const ax = a.x + a.width / 2, ay = a.y + a.height / 2;
-          const bx = b.x + b.width / 2, by = b.y + b.height / 2;
-          await page.mouse.move(bx, by); await page.mouse.down();
+          const a = (await handles.nth(0).boundingBox())!,
+            b = (await handles.nth(3).boundingBox())!;
+          const ax = a.x + a.width / 2,
+            ay = a.y + a.height / 2;
+          const bx = b.x + b.width / 2,
+            by = b.y + b.height / 2;
+          await page.mouse.move(bx, by);
+          await page.mouse.down();
           await page.mouse.move(ax + (bx - ax) * 1.25, ay + (by - ay) * 1.25, { steps: 10 });
           await page.mouse.up();
         } else {
@@ -1058,7 +1798,12 @@ for (const fam of FAMILIES) {
       const moved = created.x2 ?? 0.6;
       await dragHandle(page, [x2.x, x2.y], [moved + 0.12, x2.y + 0.08], box);
       if (fam.name === 'curve' && created.c1x != null) {
-        await dragHandle(page, [created.c1x, created.c1y], [created.c1x + 0.1, created.c1y + 0.06], box);
+        await dragHandle(
+          page,
+          [created.c1x, created.c1y],
+          [created.c1x + 0.1, created.c1y + 0.06],
+          box,
+        );
       }
     }
     // 4) COLOR real: swatch índice 6 (#111111). Se usa NEGRO (y no el verde #1f7a4d
@@ -1072,7 +1817,11 @@ for (const fam of FAMILIES) {
     }
     // 5) TEXTO editable real.
     if (c.editableText) {
-      const edit = page.locator('.studio-panel .inspector textarea, .studio-panel .inspector input[aria-label="Distancia"]').first();
+      const edit = page
+        .locator(
+          '.studio-panel .inspector textarea, .studio-panel .inspector input[aria-label="Distancia"]',
+        )
+        .first();
       await edit.fill(fam.name === 'measure' ? '20 m' : 'Rondos 4v2\nConservación');
       await edit.dispatchEvent('change');
     }
@@ -1088,7 +1837,8 @@ for (const fam of FAMILIES) {
       expect(Math.abs(after.rot!)).toBeGreaterThan(0);
     }
     if (c.resizable) {
-      const isBox = fam.name === 'rect' || fam.name === 'zone' || fam.name === 'ellipse' || fam.name === 'text';
+      const isBox =
+        fam.name === 'rect' || fam.name === 'zone' || fam.name === 'ellipse' || fam.name === 'text';
       if (isBox) {
         expect(after.w).toBeGreaterThan((created.w ?? 0) + 0.03);
         expect(after.h).toBeGreaterThan((created.h ?? 0) + 0.03);
@@ -1096,7 +1846,7 @@ for (const fam of FAMILIES) {
         // Mano alzada: la escala es PROPORCIONAL (reescala los puntos), no un caja w/h.
         expect(after.points, 'el trazo rescalado debe conservar sus puntos').toBeTruthy();
         expect(freehandBBoxWidth(after.points as [number, number][])).toBeGreaterThan(
-          freehandBBoxWidth(created.points as [number, number][]) + 0.03
+          freehandBBoxWidth(created.points as [number, number][]) + 0.03,
         );
       } else {
         expect(after.size).toBeCloseTo(1.8, 1);
@@ -1130,15 +1880,26 @@ for (const fam of FAMILIES) {
       // glifos y la región de muestreo no los alcanza): se muestrea sobre la zona del texto.
       // Para texto girado, muestrear el glifo REAL visible (con sus transformaciones),
       // no una posición inventada dentro del cuadro sin girar.
-      const [ecx, ecy] = fam.name === 'text'
-        ? await page.locator('.board-canvas [data-el-type="text"] tspan').first().evaluate((node, r) => {
-          const el = node as SVGGraphicsElement, root = el.closest('svg') as SVGSVGElement;
-          const b = el.getBBox();
-          const screen = new DOMPoint(b.x + b.width / 2, b.y + b.height / 2).matrixTransform(el.getScreenCTM()!);
-          const local = screen.matrixTransform(root.getScreenCTM()!.inverse());
-          return [(local.x - r.x) / r.w, (local.y - r.y) / r.h];
-        }, { x: 4, y: 10, w: 92, h: 92 * 68 / 105 })
-        : elCenter(after);
+      const [ecx, ecy] =
+        fam.name === 'text'
+          ? await page
+              .locator('.board-canvas [data-el-type="text"] tspan')
+              .first()
+              .evaluate(
+                (node, r) => {
+                  const el = node as SVGGraphicsElement,
+                    root = el.closest('svg') as SVGSVGElement;
+                  const b = el.getBBox();
+                  const screen = new DOMPoint(
+                    b.x + b.width / 2,
+                    b.y + b.height / 2,
+                  ).matrixTransform(el.getScreenCTM()!);
+                  const local = screen.matrixTransform(root.getScreenCTM()!.inverse());
+                  return [(local.x - r.x) / r.w, (local.y - r.y) / r.h];
+                },
+                { x: 4, y: 10, w: 92, h: (92 * 68) / 105 },
+              )
+          : elCenter(after);
       const changed = await pngRegionDiff(page, baseline!, withEl, ecx, ecy);
       expect(changed).toBeGreaterThan(0);
     }

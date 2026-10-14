@@ -37,7 +37,7 @@ import {
 } from './render';
 import { CanvasElement } from './models';
 import { hurdleSvg } from './material-registry';
-import { MATERIAL_SIZE_RATIO, TACTICAL_SIZE } from './tactic-assets';
+import { MATERIAL_SIZE_RATIO, TACTICAL_SIZE, materialHitFrac } from './tactic-assets';
 import { fieldGeometry, F7_LINE_COLOR, OFFICIAL_PITCH_COLOR, goalBoxUnits } from './field';
 
 function mkPlayer(id: string, x: number, y: number, n = 9): CanvasElement {
@@ -126,8 +126,46 @@ function normToScreenPointFit(
 }
 
 describe('render', () => {
-  it('miniportería: aumento visual del 20 % compartido por dibujo y caja táctil', () => {
-    expect(materialSize({ id: 'mini', t: 'minigoal', size: 1 })).toBeCloseTo(1.2);
+  it('todos los balones reducen el 30 % en render sin reducir a los jugadores', () => {
+    expect(materialSize({ id: 'b', t: 'ball', size: 1 })).toBeCloseTo(0.7);
+    expect(materialSize({ id: 'p', t: 'player', size: 1 })).toBe(1);
+    for (const assetKind of ['ball_football', 'ball_tiro_red', 'ball_tiro_black', 'ball_tango']) {
+      const size = materialSize({ id: 'b', t: 'ball', assetKind });
+      const frac = materialHitFrac(assetKind);
+      expect(size * Math.max(frac.w, frac.h)).toBeCloseTo(0.9 * 0.649 * 0.7, 5);
+    }
+  });
+  it('chino fotográfico conserva transparencia y color sin sustituir el vector histórico', () => {
+    const photo: CanvasElement = {
+      id: 'foto',
+      t: 'target',
+      x: 0.5,
+      y: 0.5,
+      c: '#e74c3c',
+      asset: 'assets/tactical/chino-photo-green.png',
+      assetKind: 'chino_photo',
+    };
+    const svg = renderBoardSvg('full', [photo], {});
+    expect(svg).toContain('href="assets/tactical/chino-photo-green.png"');
+    expect(svg).toContain('filter="url(#chino-photo-foto)"');
+    expect(svg).toContain('<feFuncR');
+    expect(renderBoardSvg('full', [{ ...photo, assetKind: 'target' }], {})).not.toContain(
+      'chino-photo-green.png',
+    );
+  });
+  it('el jugador seleccionado no lleva el halo blanco discontinuo', () => {
+    const player: CanvasElement = { id: 'p', t: 'player', x: 0.5, y: 0.5, c: '#c0392b' };
+    const selected = renderBoardSvg('full', [player], { selectedId: 'p' });
+    expect(selected).not.toContain('stroke-dasharray="0.8,0.6"');
+    expect(selected).toContain('fill="#c0392b"');
+    for (const svg of [selected, renderBoardSvg('full', [player], {})]) {
+      const circle = svg.match(/<circle r="2.5"[^>]*>/)?.[0];
+      expect(circle).toBeDefined();
+      expect(circle).not.toContain('stroke=');
+    }
+  });
+  it('miniportería: 20 % previo más 5 % adicional, compartido por dibujo y caja táctil', () => {
+    expect(materialSize({ id: 'mini', t: 'minigoal', size: 1 })).toBeCloseTo(1.26);
     // Aislar la geometría visual: el mínimo táctil legado no es proporcional al objeto.
     const a = materialHitHalfExtents({ id: 'a', t: 'minigoal', size: 2 }, undefined, 1, {
       x: 0,
@@ -461,6 +499,7 @@ describe('render', () => {
   it('renders a 3x3 zone guide but not a "none" guide', () => {
     const withGuide = renderBoardSvg('full', [], { guide: '3x3' });
     expect(withGuide).toContain('class="zone-guide"');
+    expect(withGuide).toContain('class="zone-guide" stroke="#ffffff" stroke-width="0.2"');
     const none = renderBoardSvg('full', [], { guide: 'none' });
     expect(none).not.toContain('zone-guide');
   });
@@ -2080,15 +2119,15 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
         return fondo!.w * escala;
       };
       const anchoF11 = ancho('full');
-      expect(anchoF11, 'F11: 7,32 m').toBeCloseTo((7.32 * 92) / 105, 1);
+      expect(anchoF11, 'F11: 7,32 m más el 5 % pedido').toBeCloseTo((7.32 * 92 * 1.05) / 105, 1);
       // En F7 la portería DIBUJADA es la del medio campo F11 que sirve de fondo (el diseño F7 dibuja
       // zonas, no una portería propia), así que la de material usa la MISMA anchura para coincidir.
       expect(ancho('f7'), 'F7: la portería visible es la del F11').toBeCloseTo(
-        (7.32 * 92) / 105,
+        (7.32 * 92 * 1.05) / 105,
         1,
       );
       expect(ancho('futsal'), 'fútbol sala: 3 m (mucho más estrecha)').toBeCloseTo(
-        (3 * 92) / 105,
+        (3 * 92 * 1.05) / 105,
         1,
       );
       expect(ancho('futsal'), 'la de fútbol sala es la menor').toBeLessThan(anchoF11);
@@ -2157,11 +2196,11 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       // La caja se devuelve NORMALIZADA (0..1): para compararla con la geometría hay que volver a
       // unidades multiplicando por el rect del campo.
       expect(conCampo.hw * 2 * R.w, 'ancho de la caja = ancho reglamentario').toBeCloseTo(
-        dibujo.w,
+        dibujo.w * 1.05,
         5,
       );
       expect(conCampo.hh * 2 * R.h, 'alto de la caja = alto reglamentario').toBeCloseTo(
-        dibujo.h,
+        dibujo.h * 1.05,
         5,
       );
       // Y en fútbol sala la caja (y el dibujo) son más pequeños.
@@ -2169,7 +2208,7 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       expect(enFutsal.hw * 2 * R.w, 'portería de fútbol sala más estrecha').toBeLessThan(
         conCampo.hw * 2 * R.w,
       );
-      expect(enFutsal.hw * 2 * R.w).toBeCloseTo(goalBoxUnits('futsal').w, 5);
+      expect(enFutsal.hw * 2 * R.w).toBeCloseTo(goalBoxUnits('futsal').w * 1.05, 5);
       // Sin campo se conserva el comportamiento histórico (compatibilidad de llamadas antiguas).
       const sinCampo = materialHitHalfExtents(porteria, R, 1);
       expect(sinCampo.hw).toBeGreaterThan(0);

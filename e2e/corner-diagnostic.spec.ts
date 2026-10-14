@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 // FASE 1 — arcos de córner. Genera capturas en primer plano de las CUATRO esquinas
 // y del campo completo, en horizontal y vertical. Para acercar una esquina se usa la
 // herramienta "Mano" (comportamiento real de paneo a zoom >100%), sin esperas fijas.
@@ -21,7 +22,10 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
     localStorage.setItem('entrenolab:players', JSON.stringify([]));
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
@@ -54,7 +58,15 @@ async function fitMode(page: Page): Promise<Fit> {
 }
 
 /** Forward norm→pantalla (la inversa de screenToNorm) para el campo en HORIZONTAL. */
-function normToScreen(nx: number, ny: number, host: Box, fit: Fit, panX = 0, panY = 0, zoom = 1): Pt {
+function normToScreen(
+  nx: number,
+  ny: number,
+  host: Box,
+  fit: Fit,
+  panX = 0,
+  panY = 0,
+  zoom = 1,
+): Pt {
   const s = fit === 'height' ? host.height / RECT.h : Math.min(host.width / VBW, host.height / VBH);
   const offX = (host.width - VBW * s) / 2;
   const offY = (host.height - VBH * s) / 2;
@@ -71,14 +83,20 @@ function normToScreen(nx: number, ny: number, host: Box, fit: Fit, panX = 0, pan
 async function readView(page: Page): Promise<{ panX: number; panY: number; zoom: number }> {
   return page.locator('.board-canvas').evaluate((el) => {
     const t = (el as HTMLElement).style.transform;
-    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(t);
-    return m ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) } : { panX: 0, panY: 0, zoom: 1 };
+    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(
+      t,
+    );
+    return m
+      ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) }
+      : { panX: 0, panY: 0, zoom: 1 };
   });
 }
 
 async function setZoom(page: Page, z: number): Promise<void> {
-  await page.locator('button[aria-label="Propiedades"]').click();
-  const zoomSlider = page.locator('.studio-panel .field', { hasText: 'Zoom' }).locator('input[type="range"]');
+  await ensurePropsPanel(page);
+  const zoomSlider = page
+    .locator('.studio-panel .field', { hasText: 'Zoom' })
+    .locator('input[type="range"]');
   await zoomSlider.evaluate((input: HTMLInputElement, val) => {
     input.value = val;
     input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -89,13 +107,17 @@ async function setZoom(page: Page, z: number): Promise<void> {
 }
 
 async function setOrientation(page: Page, o: 'horizontal' | 'vertical'): Promise<void> {
-  await page.locator('button[aria-label="Propiedades"]').click();
-  await page.locator('.studio-panel .chip', { hasText: o === 'horizontal' ? 'Porterías izquierda y derecha' : 'Porterías arriba y abajo' }).click();
+  await ensurePropsPanel(page);
+  await page
+    .locator('.studio-panel .chip', {
+      hasText: o === 'horizontal' ? 'Porterías izquierda y derecha' : 'Porterías arriba y abajo',
+    })
+    .click();
   await page.locator('.studio-panel .panel-close').click();
 }
 
 async function setField(page: Page, field: string): Promise<void> {
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   await page.locator('.studio-panel select[aria-label="Campo base"]').selectOption(field);
   await page.locator('.studio-panel .panel-close').click();
 }
@@ -119,15 +141,23 @@ async function centerCorner(page: Page, nx: number, ny: number): Promise<void> {
   await page.mouse.move(ox + dx, oy + dy, { steps: 8 });
   await page.mouse.up();
   // Espera observable: panX/panY cambiaron hacia el objetivo.
-  await expect.poll(async () => {
-    const nv = await readView(page);
-    return Math.abs(nv.panX - v.panX) + Math.abs(nv.panY - v.panY);
-  }, { timeout: 4000 }).toBeGreaterThan(1);
+  await expect
+    .poll(
+      async () => {
+        const nv = await readView(page);
+        return Math.abs(nv.panX - v.panX) + Math.abs(nv.panY - v.panY);
+      },
+      { timeout: 4000 },
+    )
+    .toBeGreaterThan(1);
 }
 
 async function captureCorners(page: Page, prefix: string): Promise<void> {
   const corners: Array<[number, number]> = [
-    [0, 0], [1, 0], [0, 1], [1, 1],
+    [0, 0],
+    [1, 0],
+    [0, 1],
+    [1, 1],
   ];
   for (const [i, [nx, ny]] of corners.entries()) {
     await centerCorner(page, nx, ny);
@@ -136,7 +166,9 @@ async function captureCorners(page: Page, prefix: string): Promise<void> {
 }
 
 test.describe('FASE 1 — capturas de córneres', () => {
-  test('campo completo horizontal: campo completo y 4 esquinas en primer plano (zoom 2.4)', async ({ page }) => {
+  test('campo completo horizontal: campo completo y 4 esquinas en primer plano (zoom 2.4)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openClosed(page);
@@ -148,7 +180,9 @@ test.describe('FASE 1 — capturas de córneres', () => {
     await captureCorners(page, 'h');
   });
 
-  test('campo completo vertical: campo completo y 4 esquinas en primer plano (zoom 2.4)', async ({ page }) => {
+  test('campo completo vertical: campo completo y 4 esquinas en primer plano (zoom 2.4)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openClosed(page);

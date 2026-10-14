@@ -25,7 +25,7 @@ import {
   normToScreen,
   showCategory,
 } from './board-helpers';
-import { longPress, toggleFillScreen } from './gesture-helpers';
+import { ensurePropsPanel, longPress, toggleFillScreen } from './gesture-helpers';
 
 /** El cono sigue ofreciendo acciones, pero no puede tumbarse. */
 const CTX_BUTTONS = ['Duplicar', 'Eliminar'];
@@ -124,7 +124,7 @@ const ESCENARIOS: Escenario[] = [
           .isVisible()
           .catch(() => false))
       ) {
-        await page.locator('button[aria-label="Propiedades"]').click();
+        await ensurePropsPanel(page);
       }
       await expect(page.locator('.studio-panel')).toBeVisible();
     },
@@ -251,7 +251,7 @@ test.describe('AUDITORÍA — papelera, undo y redo', () => {
             .isVisible()
             .catch(() => false))
         ) {
-          await page.locator('button[aria-label="Propiedades"]').click();
+          await ensurePropsPanel(page);
         }
         await expect(page.locator('.studio-panel')).toBeVisible();
       }

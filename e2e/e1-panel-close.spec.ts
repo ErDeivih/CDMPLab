@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 
@@ -63,7 +64,7 @@ test.describe('Panel Propiedades: la X cierra en un toque y conserva la selecci�
       await expect(page.locator('.field-count')).toHaveText('1');
       if (W <= 700) {
         // Móvil: la creación no auto-abre el panel → lo abrimos con el disparador explícito.
-        await page.locator('button[aria-label="Propiedades"]').click();
+        await ensurePropsPanel(page);
       }
       await expect(page.locator('.studio-panel')).toBeVisible();
       const ta = page.locator('.studio-panel .inspector textarea');
@@ -82,7 +83,7 @@ test.describe('Panel Propiedades: la X cierra en un toque y conserva la selecci�
       await expect(page.locator(SELECTION_MARKER)).not.toHaveCount(0);
 
       // Reabrir con el disparador Propiedades: vuelve a mostrar el MISMO objeto.
-      await page.locator('button[aria-label="Propiedades"]').click();
+      await ensurePropsPanel(page);
       await expect(page.locator('.studio-panel')).toBeVisible();
       const taReopened = page.locator('.studio-panel .inspector textarea');
       await expect(taReopened).toBeVisible();

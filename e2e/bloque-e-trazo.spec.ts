@@ -10,7 +10,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import type { CanvasDocument } from '../src/app/core/models';
-import { toggleFillScreen } from './gesture-helpers';
+import { ensurePropsPanel, toggleFillScreen } from './gesture-helpers';
 
 const VBW = 100;
 const VBH = 80;
@@ -138,7 +138,7 @@ function canvasDoc(page: Page): Promise<CanvasDocument> {
 }
 
 async function openProps(page: Page): Promise<void> {
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   await expect(
     page.locator('.studio-panel input[aria-label="Título del ejercicio"]'),
   ).toBeVisible();

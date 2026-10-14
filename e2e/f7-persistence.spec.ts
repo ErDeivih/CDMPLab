@@ -1,7 +1,12 @@
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
-import { fillBoardTitle, abrirAjustes, toggleFillScreen } from './gesture-helpers';
+import {
+  ensurePropsPanel,
+  fillBoardTitle,
+  abrirAjustes,
+  toggleFillScreen,
+} from './gesture-helpers';
 
 // =============================================================
 // FASE 0 — persistencia del campo F7 (transversal sobre medio campo F11).
@@ -54,6 +59,9 @@ async function openBoardClean(page: Page): Promise<void> {
   await page.waitForURL('**/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await expect(page.locator('.board-canvas svg')).toBeVisible();
+  // Fixture de campo libre: el nuevo estado inicial del inspector es abierto.
+  if (await page.locator('.studio-panel').isVisible())
+    await page.locator('.studio-panel .panel-close').click();
   if (
     await page
       .locator('.help-close')
@@ -84,7 +92,7 @@ async function savedExercise(page: Page): Promise<any> {
 
 async function currentField(page: Page): Promise<string> {
   // Campo seleccionado en el panel de Propiedades (interacción visible).
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   const sel = page.locator('.studio-panel .field', { hasText: 'Campo base' }).locator('select');
   await sel.waitFor({ state: 'visible' });
   // FASE G: observable — esperamos a que el select tenga el valor seleccionado.
@@ -114,7 +122,7 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await openBoardClean(page);
 
     // Seleccionar F7 → el SVG renderiza las marcas azules F7.
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     await page
       .locator('.studio-panel .field', { hasText: 'Campo base' })
       .locator('select')
@@ -162,7 +170,7 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await seed(page);
     await page.goto('/board');
     await openBoardClean(page);
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     await page
       .locator('.studio-panel .field', { hasText: 'Campo base' })
       .locator('select')
@@ -219,7 +227,7 @@ test.describe('FASE 0 — el terreno F7 sobrevive a guardar/reabrir, duplicar y 
     await seed(page);
     await page.goto('/board');
     await openBoardClean(page);
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     await page
       .locator('.studio-panel .field', { hasText: 'Campo base' })
       .locator('select')

@@ -90,10 +90,17 @@ export async function seedBoard(page: Page, opts: { players?: boolean } = {}): P
   }, withPlayers);
 }
 
-export async function openBoard(page: Page): Promise<void> {
+export async function openBoard(
+  page: Page,
+  opts: { keepProperties?: boolean } = {},
+): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await expect(page.locator('.board-canvas svg')).toBeVisible();
+  // Fixture de campo libre: la app abre Propiedades por defecto. Las pruebas
+  // del estado inicial/coexistencia optan por conservarlo explícitamente.
+  if (!opts.keepProperties && (await page.locator('.studio-panel').isVisible()))
+    await page.locator('.studio-panel .panel-close').click();
   for (const sel of ['.help-close', '.fill-hint-close']) {
     if (
       await page
@@ -169,23 +176,14 @@ export async function hideOverlays(page: Page): Promise<void> {
 }
 
 /**
- * FASE 3 — abre el menú «Herramientas» (categorías) del grupo flotante del tablero.
- *
- * CAMBIO DE CONTRATO VISUAL DECLARADO: la barra inferior del tablero se sustituyó por un grupo
- * flotante anclado a la esquina inferior izquierda, así que el campo recupera los 57 px de alto que
- * la barra reservaba. Las tres categorías (Jugadores/Material/Dibujo) ya NO están siempre en el DOM:
- * viven en el menú que abre el botón «Herramientas», y el menú se cierra solo al elegir categoría
- * (para no tapar la banda inferior del campo mientras se coloca). Por eso pulsar un `.tools-cat`
- * exige abrir el menú antes: el código de la app es el correcto según el encargo y lo que cambió es
- * el contrato del DOM, de modo que se actualizan las pruebas, no la app.
- *
- * Es idempotente (si ya está abierto no hace nada) y consulta el DOM real, no una variable.
+ * Conserva el nombre del helper histórico para sus consumidores, pero comprueba
+ * el contrato nuevo: las tres categorías están disponibles directamente, sin
+ * desplegar Herramientas. No cambia el estado de ningún panel.
  */
 export async function abrirHerramientas(page: Page): Promise<void> {
-  const menu = page.locator('.tools-menu');
-  if (await menu.isVisible().catch(() => false)) return;
-  await page.locator('.tools-toggle').click();
-  await menu.waitFor({ state: 'visible' });
+  // Contrato actualizado por David: categorías directas, sin desplegable.
+  await expect(page.locator('.tools-menu')).toBeVisible();
+  await expect(page.locator('.tools-cat')).toHaveCount(3);
 }
 
 /** Selecciona una herramienta de Dibujo por su título. */

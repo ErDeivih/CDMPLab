@@ -17,7 +17,7 @@ function normToScreen(
   fit: 'height' | 'contain',
   panX = 0,
   panY = 0,
-  zoom = 1
+  zoom = 1,
 ): { x: number; y: number } {
   const s = fit === 'height' ? host.height / RECT.h : Math.min(host.width / VBW, host.height / VBH);
   const offX = (host.width - VBW * s) / 2;
@@ -39,7 +39,7 @@ function screenToNorm(
   fit: 'height' | 'contain',
   panX = 0,
   panY = 0,
-  zoom = 1
+  zoom = 1,
 ): { x: number; y: number } {
   const s = fit === 'height' ? host.height / RECT.h : Math.min(host.width / VBW, host.height / VBH);
   const offX = (host.width - VBW * s) / 2;
@@ -62,14 +62,63 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([
-      { id: 'e1', teamId: 't1', folderId: null, title: 'Rondos', description: '', explanation: '', category: 'Técnica', objectives: [], materials: [], durationMinutes: 12, minPlayers: 6, maxPlayers: 8, loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false, canvas: { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [] }], orientation: 'horizontal', grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a' }, thumbnail: null, savedAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:exercises',
+      JSON.stringify([
+        {
+          id: 'e1',
+          teamId: 't1',
+          folderId: null,
+          title: 'Rondos',
+          description: '',
+          explanation: '',
+          category: 'Técnica',
+          objectives: [],
+          materials: [],
+          durationMinutes: 12,
+          minPlayers: 6,
+          maxPlayers: 8,
+          loadMode: 'fixed',
+          seriesCount: null,
+          repetitionsCount: null,
+          workSeconds: null,
+          restSeconds: null,
+          isTemplate: false,
+          canvas: {
+            version: 2,
+            schemaVersion: 3,
+            field: 'full',
+            frames: [{ duration: 1000, elements: [] }],
+            orientation: 'horizontal',
+            grass: 'stripes',
+            lineColor: '#ffffff',
+            backgroundColor: '#31834a',
+          },
+          thumbnail: null,
+          savedAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
   });
 }
@@ -78,10 +127,22 @@ async function seed(page: Page): Promise<void> {
 async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) {
+  // El pinch se prueba después de cerrar explícitamente el inspector inicial.
+  await page.locator('.studio-panel .panel-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.help-close').click();
   }
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.fill-hint-close').click();
   }
 }
@@ -96,8 +157,12 @@ async function hostBox(page: Page): Promise<Box> {
 async function readView(page: Page): Promise<{ panX: number; panY: number; zoom: number }> {
   return page.locator('.board-canvas').evaluate((el) => {
     const t = (el as HTMLElement).style.transform;
-    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(t);
-    return m ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) } : { panX: 0, panY: 0, zoom: 1 };
+    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(
+      t,
+    );
+    return m
+      ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) }
+      : { panX: 0, panY: 0, zoom: 1 };
   });
 }
 
@@ -105,11 +170,16 @@ async function readView(page: Page): Promise<{ panX: number; panY: number; zoom:
  *  de su <g>. El translate es la posición CANÓNICA (norm) del elemento — el pan/zoom de
  *  la vista viven en el `.board-canvas`, no en el elemento. */
 async function readComodinNorm(page: Page): Promise<{ nx: number; ny: number }> {
-  const v = await page.locator('.entrenolab-board circle[r="2.5"]').first().evaluate((el) => {
-    const g = el.closest('g');
-    const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(g?.getAttribute('transform') ?? '');
-    return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
-  });
+  const v = await page
+    .locator('.entrenolab-board circle[r="2.5"]')
+    .first()
+    .evaluate((el) => {
+      const g = el.closest('g');
+      const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(
+        g?.getAttribute('transform') ?? '',
+      );
+      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
+    });
   expect(v, 'el Portero debe estar renderizado').not.toBeNull();
   return { nx: (v!.x - RECT.x) / RECT.w, ny: (v!.y - RECT.y) / RECT.h };
 }
@@ -117,25 +187,35 @@ async function readComodinNorm(page: Page): Promise<{ nx: number; ny: number }> 
 /** Despacha un PointerEvent sintético sobre `.board-host`. Un gesto real de dos toques no
  *  puede generarse con `page.touchscreen` (solo un dedo), así que usamos dos `pointerId`
  *  distintos para demostrar el pinch multi-táctil. */
-async function ptr(page: Page, type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel', x: number, y: number, pointerId: number, isPrimary = false): Promise<void> {
-  await page.evaluate(({ type, x, y, pointerId, isPrimary }) => {
-    const host = document.querySelector('.board-host') as HTMLElement | null;
-    if (!host) return;
-    const up = type === 'pointerup' || type === 'pointercancel';
-    host.dispatchEvent(
-      new PointerEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        pointerId,
-        pointerType: 'touch',
-        isPrimary,
-        clientX: x,
-        clientY: y,
-        button: 0,
-        buttons: up ? 0 : 1,
-      })
-    );
-  }, { type, x, y, pointerId, isPrimary });
+async function ptr(
+  page: Page,
+  type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+  x: number,
+  y: number,
+  pointerId: number,
+  isPrimary = false,
+): Promise<void> {
+  await page.evaluate(
+    ({ type, x, y, pointerId, isPrimary }) => {
+      const host = document.querySelector('.board-host') as HTMLElement | null;
+      if (!host) return;
+      const up = type === 'pointerup' || type === 'pointercancel';
+      host.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId,
+          pointerType: 'touch',
+          isPrimary,
+          clientX: x,
+          clientY: y,
+          button: 0,
+          buttons: up ? 0 : 1,
+        }),
+      );
+    },
+    { type, x, y, pointerId, isPrimary },
+  );
 }
 
 /** Gesto de dos dedos simétrico alrededor de (cx,cy). `spreads` = distancias (px) entre los
@@ -166,7 +246,10 @@ async function placeComodinAtCenter(page: Page): Promise<{ cx: number; cy: numbe
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
   // FASE B (paneles persistentes): elegir un jugador de la plantilla NO cierra el panel.
-  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await expect(
+    page.locator('.side-panel-left'),
+    'el panel Jugadores permanece abierto',
+  ).toBeVisible();
   // FASE B (regla C): el panel persistente tapa el centro del host en móvil; se cierra por su
   // botón X (.panel-close) —que no desarma la colocación— para poder tocar correctamente.
   await page.locator('.side-panel-left .panel-close').click();
@@ -177,7 +260,12 @@ async function placeComodinAtCenter(page: Page): Promise<{ cx: number; cy: numbe
   // posteriores (mover/panear) no coloquen un segundo genérico.
   await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   // Se auto-abre Propiedades con el Portero; cerrarlo para dejar el campo libre.
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.studio-panel .panel-close').click();
     await expect(page.locator('.studio-panel')).toHaveCount(0);
   }
@@ -195,7 +283,9 @@ async function mouseDrag(page: Page, x: number, y: number, dx: number, dy: numbe
 test.describe('pinch-to-zoom real (dos dedos) en la pizarra', () => {
   test.use({ hasTouch: true });
 
-  test('pellizcar hacia FUERA aumenta el zoom y hacia DENTRO lo reduce (ratio de distancia)', async ({ page }) => {
+  test('pellizcar hacia FUERA aumenta el zoom y hacia DENTRO lo reduce (ratio de distancia)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -209,7 +299,10 @@ test.describe('pinch-to-zoom real (dos dedos) en la pizarra', () => {
     await expect(page.locator('.dirty-dot')).toHaveCount(0);
     // Fase 3: deshacer/rehacer viven en el menú contextual; sin historial Ctrl+Z es un no-op.
     await page.keyboard.press('Control+z');
-    expect(await page.locator('.entrenolab-board [data-el-type]').count(), 'sin elementos, undo es no-op').toBe(0);
+    expect(
+      await page.locator('.entrenolab-board [data-el-type]').count(),
+      'sin elementos, undo es no-op',
+    ).toBe(0);
 
     // Dos dedos bajan juntos (spread 80), se SEPARAN (spread 220) y se vuelven a JUNTAR (spread 60).
     const idA = 101;
@@ -235,10 +328,15 @@ test.describe('pinch-to-zoom real (dos dedos) en la pizarra', () => {
     await expect(page.locator('.dirty-dot')).toHaveCount(0);
     // Fase 3: deshacer/rehacer viven en el menú contextual; sin historial Ctrl+Z es un no-op.
     await page.keyboard.press('Control+z');
-    expect(await page.locator('.entrenolab-board [data-el-type]').count(), 'tras pinch, undo es no-op').toBe(0);
+    expect(
+      await page.locator('.entrenolab-board [data-el-type]').count(),
+      'tras pinch, undo es no-op',
+    ).toBe(0);
   });
 
-  test('el punto de campo bajo el punto medio NO se desplaza durante el zoom (ancla del pinch)', async ({ page }) => {
+  test('el punto de campo bajo el punto medio NO se desplaza durante el zoom (ancla del pinch)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -256,12 +354,20 @@ test.describe('pinch-to-zoom real (dos dedos) en la pizarra', () => {
     const after = await readView(page);
     expect(after.zoom, 'el pinch debe haber cambiado el zoom').toBeGreaterThan(before.zoom);
     const normAfter = screenToNorm(cx, cy, host, fit, after.panX, after.panY, after.zoom);
-    console.log(`[pinch-ancla] norm antes=(${normBefore.x.toFixed(4)},${normBefore.y.toFixed(4)}) después=(${normAfter.x.toFixed(4)},${normAfter.y.toFixed(4)}) zoom ${before.zoom.toFixed(2)}→${after.zoom.toFixed(2)}`);
-    expect(Math.abs(normAfter.x - normBefore.x), 'norm X del punto medio estable').toBeLessThan(0.02);
-    expect(Math.abs(normAfter.y - normBefore.y), 'norm Y del punto medio estable').toBeLessThan(0.02);
+    console.log(
+      `[pinch-ancla] norm antes=(${normBefore.x.toFixed(4)},${normBefore.y.toFixed(4)}) después=(${normAfter.x.toFixed(4)},${normAfter.y.toFixed(4)}) zoom ${before.zoom.toFixed(2)}→${after.zoom.toFixed(2)}`,
+    );
+    expect(Math.abs(normAfter.x - normBefore.x), 'norm X del punto medio estable').toBeLessThan(
+      0.02,
+    );
+    expect(Math.abs(normAfter.y - normBefore.y), 'norm Y del punto medio estable').toBeLessThan(
+      0.02,
+    );
   });
 
-  test('un objeto bajo el gesto NO se mueve/rota/redimensiona durante el pinch', async ({ page }) => {
+  test('un objeto bajo el gesto NO se mueve/rota/redimensiona durante el pinch', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -271,17 +377,23 @@ test.describe('pinch-to-zoom real (dos dedos) en la pizarra', () => {
     // Los dedos caen FUERA del objeto (spread 120) y se separan hasta 220: el objeto queda
     // bajo el punto medio, pero ningún dedo lo toca. No debe moverse ni abrir el inspector.
     await twoFinger(page, cx, cy, [120, 220]);
-    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir el inspector').toBe(0);
+    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir el inspector').toBe(
+      0,
+    );
 
     const afterView = await readView(page);
     expect(afterView.zoom, 'el pinch debe haber cambiado el zoom').toBeGreaterThan(1.5);
     const after = await readComodinNorm(page);
-    console.log(`[pinch-objeto] antes=(${before.nx.toFixed(4)},${before.ny.toFixed(4)}) después=(${after.nx.toFixed(4)},${after.ny.toFixed(4)})`);
+    console.log(
+      `[pinch-objeto] antes=(${before.nx.toFixed(4)},${before.ny.toFixed(4)}) después=(${after.nx.toFixed(4)},${after.ny.toFixed(4)})`,
+    );
     expect(Math.abs(after.nx - before.nx), 'x del objeto intacto tras pinch').toBeLessThan(0.005);
     expect(Math.abs(after.ny - before.ny), 'y del objeto intacto tras pinch').toBeLessThan(0.005);
   });
 
-  test('pointercancel deja la pizarra usable: un dedo que se libera no deja un arrastre fantasma', async ({ page }) => {
+  test('pointercancel deja la pizarra usable: un dedo que se libera no deja un arrastre fantasma', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -309,10 +421,15 @@ test.describe('pinch-to-zoom real (dos dedos) en la pizarra', () => {
     await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
     await mouseDrag(page, cx - host.width * 0.32, cy + host.height * 0.1, 60, 30);
     const v1 = await readView(page);
-    expect(v1.panX, 'el paneo de un dedo sigue funcionando tras el pinch cancelado').not.toBeCloseTo(v0.panX, 6);
+    expect(
+      v1.panX,
+      'el paneo de un dedo sigue funcionando tras el pinch cancelado',
+    ).not.toBeCloseTo(v0.panX, 6);
   });
 
-  test('tras el pinch, el PAN de un dedo y el MOVIMIENTO de un objeto siguen funcionando', async ({ page }) => {
+  test('tras el pinch, el PAN de un dedo y el MOVIMIENTO de un objeto siguen funcionando', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -322,25 +439,46 @@ test.describe('pinch-to-zoom real (dos dedos) en la pizarra', () => {
     // Pinch de acercar (los dedos caen fuera del objeto → no lo toca, el inspector queda cerrado).
     await twoFinger(page, cx, cy, [120, 220]);
     expect((await readView(page)).zoom, 'zoom tras pinch').toBeGreaterThan(1.5);
-    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir el inspector').toBe(0);
+    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir el inspector').toBe(
+      0,
+    );
 
     // 1) PAN de un dedo (campo vacío): FASE 5 — panear requiere la herramienta "Mano".
     await page.locator('.rail-btn[aria-label="Desplazar campo"]').click();
     const panBefore = await readView(page);
     await mouseDrag(page, cx - host.width * 0.32, cy + host.height * 0.1, 55, 25);
     const panAfter = await readView(page);
-    expect(Math.abs(panAfter.panX - panBefore.panX), 'panX cambió tras arrastrar vacío').toBeGreaterThan(5);
+    expect(
+      Math.abs(panAfter.panX - panBefore.panX),
+      'panX cambió tras arrastrar vacío',
+    ).toBeGreaterThan(5);
     // Volver a Seleccionar para mover el objeto.
     await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
 
     // 2) MOVIMIENTO de un objeto de un dedo.
     const beforeNorm = await readComodinNorm(page);
-    const objScreen = normToScreen(beforeNorm.nx, beforeNorm.ny, host, 'height', panAfter.panX, panAfter.panY, panAfter.zoom);
+    const objScreen = normToScreen(
+      beforeNorm.nx,
+      beforeNorm.ny,
+      host,
+      'height',
+      panAfter.panX,
+      panAfter.panY,
+      panAfter.zoom,
+    );
     await mouseDrag(page, objScreen.x, objScreen.y, 40, 24);
     const afterNorm = await readComodinNorm(page);
-    console.log(`[pinch-uso] objeto antes=(${beforeNorm.nx.toFixed(4)},${beforeNorm.ny.toFixed(4)}) después=(${afterNorm.nx.toFixed(4)},${afterNorm.ny.toFixed(4)})`);
-    expect(Math.abs(afterNorm.nx - beforeNorm.nx), 'el objeto se MUEVE con un dedo tras el pinch').toBeGreaterThan(0.005);
-    expect(Math.abs(afterNorm.ny - beforeNorm.ny), 'el objeto se MUEVE con un dedo tras el pinch (y)').toBeGreaterThan(0.005);
+    console.log(
+      `[pinch-uso] objeto antes=(${beforeNorm.nx.toFixed(4)},${beforeNorm.ny.toFixed(4)}) después=(${afterNorm.nx.toFixed(4)},${afterNorm.ny.toFixed(4)})`,
+    );
+    expect(
+      Math.abs(afterNorm.nx - beforeNorm.nx),
+      'el objeto se MUEVE con un dedo tras el pinch',
+    ).toBeGreaterThan(0.005);
+    expect(
+      Math.abs(afterNorm.ny - beforeNorm.ny),
+      'el objeto se MUEVE con un dedo tras el pinch (y)',
+    ).toBeGreaterThan(0.005);
     // Mover un objeto SÍ es una edición real: marca el ejercicio como modificado.
     await expect(page.locator('.dirty-dot')).toHaveCount(1);
   });

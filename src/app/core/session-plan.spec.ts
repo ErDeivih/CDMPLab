@@ -26,6 +26,20 @@ const session: Session = {
 };
 
 describe('sesiones: tiempos y fechas reales', () => {
+  it('ficha club: escudo autocontenido, temporada y semana de la fecha de sesión', () => {
+    const crest = 'data:image/png;base64,aGVsbG8=';
+    const html = sessionSheetHtml(session, 'Juvenil B', {}, crest);
+    expect(html).toContain('TEMPORADA 2026/27');
+    expect(html).toContain('12 oct - 18 oct');
+    expect(html).toContain('Escudo C.D.M. Pizarrales');
+    expect(html).toContain(crest);
+    expect(sessionSheetHtml(session, 'Equipo', {}, 'https://evil.test/logo.png')).not.toContain(
+      'https://evil',
+    );
+    expect(sessionSheetHtml({ ...session, date: '2026-05-01' }, 'Equipo')).toContain(
+      'TEMPORADA 2025/26',
+    );
+  });
   it('incluye descansos entre repeticiones, no al terminar', () => {
     expect(taskMinutes({ ...task, repetitions: 2, restMinutes: 4 })).toBe(20);
     expect(taskMinutes({ ...task, seriesCount: 2, repetitions: 2, restMinutes: 1 })).toBe(35);
@@ -69,7 +83,7 @@ describe('ficha segura de sesión', () => {
     expect(html.match(/class="diagram"/g)).toHaveLength(3);
     expect(html).toContain('<th>Ej. 5</th>');
     expect(html).toContain('Vuelta a la calma');
-    expect(html).toContain('Tiempo previsto: 120 min');
+    expect(html).toContain('TIEMPO PREVISTO: 120′');
   });
   it('los grupos no pierden nombres, ni confunden porteros lesionados con presentes', () => {
     const s: Session = {

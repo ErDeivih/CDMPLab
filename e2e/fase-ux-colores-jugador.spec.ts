@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { openBoard, hostBox, normToScreen, showCategory, fitMode } from './board-helpers';
 
@@ -127,7 +128,7 @@ async function colorFichaEnPantalla(page: Page): Promise<string> {
 }
 
 async function guardar(page: Page, titulo: string): Promise<void> {
-  await page.locator('button[aria-label="Propiedades"]').first().click();
+  await ensurePropsPanel(page);
   await page.locator('input[aria-label="Título del ejercicio"]').fill(titulo);
   await page.locator('.chip-icon-primary').click();
   await page.waitForURL('**/library');

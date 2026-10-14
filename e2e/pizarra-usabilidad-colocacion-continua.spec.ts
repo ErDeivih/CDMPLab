@@ -16,7 +16,7 @@ import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas, expectPanelLibreDelGrupo } from './board-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
-import { longPress, fillBoardTitle, toggleFillScreen } from './gesture-helpers';
+import { ensurePropsPanel, longPress, fillBoardTitle, toggleFillScreen } from './gesture-helpers';
 
 const SHOTS = 'e2e/shots/pizarra-usabilidad';
 const DOC_SHOTS = 'docs/screenshots/pizarra-usabilidad';
@@ -83,6 +83,8 @@ async function openBoard(page: Page): Promise<void> {
   await expect(page.locator('.board-host')).toBeVisible();
   // Espera observable: el lienzo del tablero se ha renderizado (SVG del campo presente).
   await expect(page.locator('.board-canvas svg')).toBeVisible();
+  // Escenario de gestos/colocación con el campo libre del inspector inicial.
+  await page.locator('.studio-panel .panel-close').click();
   for (const sel of ['.help-close', '.fill-hint-close']) {
     if (
       await page
@@ -474,7 +476,7 @@ test.describe('Pizarra — usabilidad (colocación continua, formaciones, pan/se
     await openBoard(page);
 
     // Zoom >100% (contenido oculto para panear). Se abre Propiedades → Zoom slider.
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     const zz = page
       .locator('.studio-panel .field', { hasText: 'Zoom' })
       .locator('input[type="range"]');

@@ -341,22 +341,7 @@
       }
     </div>
 
-    @if (panelMinimizado() && panelTab(); as tab) {
-      <!-- Pestaña estrecha del panel minimizado: el campo vuelve a verse y operarse, y un solo
-           toque devuelve el panel tal cual estaba (no se pierde nada de su estado). -->
-      <button
-        type="button"
-        class="panel-tab"
-        [attr.aria-label]="'Abrir panel de ' + tab.label"
-        aria-controls="panel-minimizado"
-        (click)="restaurarPanel($event)"
-      >
-        <span class="msi" aria-hidden="true">{{ tab.icon }}</span>
-        <span class="panel-tab-nombre">{{ tab.label }}</span>
-        <span class="msi panel-tab-flecha" aria-hidden="true">chevron_right</span>
-      </button>
-    }
-    @if (showPropsPanel() && !panelMinimizado()) {
+    @if (showPropsPanel()) {
       <aside
         class="side-panel studio-panel side-panel-right"
         role="dialog"
@@ -364,14 +349,6 @@
       >
         <div class="panel-head">
           <h3 class="panel-title">Propiedades</h3>
-          <button
-            class="panel-min"
-            aria-label="Minimizar panel de Propiedades"
-            title="Minimizar"
-            (click)="minimizarPanel()"
-          >
-            <span class="msi">collapse_content</span>
-          </button>
           <button class="panel-close" aria-label="Cerrar panel" (click)="closePropsPanel()">
             <span class="msi">close</span>
           </button>
@@ -890,18 +867,10 @@
       </aside>
     }
 
-    @if (jugadoresOpen() && !panelMinimizado()) {
+    @if (jugadoresOpen()) {
       <aside class="side-panel side-panel-left" role="dialog" aria-label="Jugadores">
         <div class="panel-head">
           <h3 class="panel-title">Jugadores</h3>
-          <button
-            class="panel-min"
-            aria-label="Minimizar panel de Jugadores"
-            title="Minimizar"
-            (click)="minimizarPanel()"
-          >
-            <span class="msi">collapse_content</span>
-          </button>
           <button class="panel-close" aria-label="Cerrar panel" (click)="toggleJugadores()">
             <span class="msi">close</span>
           </button>
@@ -1046,7 +1015,7 @@
       </aside>
     }
 
-    @if (panelCat() && !panelMinimizado()) {
+    @if (panelCat()) {
       <aside
         class="side-panel side-panel-left tools-panel-side"
         role="dialog"
@@ -1059,14 +1028,6 @@
           @case ('material') {
             <div class="panel-head">
               <div class="tools-panel-title">Material</div>
-              <button
-                class="panel-min"
-                aria-label="Minimizar panel de Material"
-                title="Minimizar"
-                (click)="minimizarPanel()"
-              >
-                <span class="msi">collapse_content</span>
-              </button>
               <button class="panel-close" aria-label="Cerrar panel" (click)="closeToolPanel()">
                 <span class="msi">close</span>
               </button>
@@ -1138,31 +1099,37 @@
                               [attr.aria-pressed]="selectedMaterialKind(t.id) === k"
                             >
                               @if (t.id !== 'cone') {
-                                <img [src]="variantAsset(k)?.asset" alt="" />
+                                @if (variantAsset(k)?.asset) {
+                                  <img [src]="variantAsset(k)?.asset" alt="" />
+                                } @else {
+                                  <span class="msi" [style.color]="colorFor(t.id)"
+                                    >radio_button_checked</span
+                                  >
+                                }
                                 <span class="variant-caption">{{ variantAsset(k)?.label }}</span>
                               }
                             </button>
                           }
                         </div>
                       }
-                      @if (t.id === 'target') {
+                      @if (t.id === 'target' || t.id === 'pica') {
                         <div
                           class="tools-material-variants chino-colors"
                           role="group"
-                          aria-label="Colores de Chino"
+                          [attr.aria-label]="'Colores de ' + t.title"
                         >
                           @for (c of chinoColors; track c) {
                             <button
                               class="variant-swatch"
                               [style.background]="c"
-                              [class.sel]="colorFor('target') === c"
+                              [class.sel]="colorFor(t.id) === c"
                               [attr.data-color]="c"
-                              [attr.aria-pressed]="colorFor('target') === c"
-                              [attr.aria-label]="'Chino ' + chinoColorName(c)"
-                              [title]="'Chino ' + chinoColorName(c)"
-                              (click)="pickMaterialColor('target', c)"
+                              [attr.aria-pressed]="colorFor(t.id) === c"
+                              [attr.aria-label]="t.title + ' ' + chinoColorName(c)"
+                              [title]="t.title + ' ' + chinoColorName(c)"
+                              (click)="pickMaterialColor(t.id, c)"
                             >
-                              @if (colorFor('target') === c) {
+                              @if (colorFor(t.id) === c) {
                                 <span class="msi" aria-hidden="true">check</span>
                               }
                             </button>
@@ -1178,14 +1145,6 @@
           @case ('dibujo') {
             <div class="panel-head">
               <div class="tools-panel-title">Dibujo y formas</div>
-              <button
-                class="panel-min"
-                aria-label="Minimizar panel de Material"
-                title="Minimizar"
-                (click)="minimizarPanel()"
-              >
-                <span class="msi">collapse_content</span>
-              </button>
               <button class="panel-close" aria-label="Cerrar panel" (click)="closeToolPanel()">
                 <span class="msi">close</span>
               </button>
@@ -1205,7 +1164,9 @@
                   (contextmenu)="openBarVariant($event, t.id)"
                 >
                   <span class="msi">{{ t.icon }}</span>
-                  <span class="rail-label">{{ t.title }}</span>
+                  <span class="rail-label">{{
+                    t.id === 'arrow' ? 'Flecha: pase / golpeo' : t.title
+                  }}</span>
                 </button>
               }
             </div>
@@ -1363,27 +1324,6 @@
         <span class="msi">pan_tool</span>
       </button>
       <div class="tools-sep"></div>
-      <!-- FASE 3: botón flotante «Herramientas». Sustituye al tramo de categorías que la
-           barra inferior mostraba SIEMPRE y que costaba 57 px de alto de layout. Es un
-           `toggle` con `aria-expanded`/`aria-controls` sobre el menú de categorías. -->
-      <button
-        class="tools-toggle"
-        type="button"
-        [class.cat-active]="herramientasOpen()"
-        [attr.aria-expanded]="herramientasOpen()"
-        aria-controls="tools-menu"
-        aria-label="Herramientas"
-        title="Herramientas"
-        (click)="toggleHerramientas()"
-      >
-        <span class="msi tools-cat-icon" aria-hidden="true">handyman</span>
-        <span class="tools-cat-label">Herramientas</span>
-      </button>
-    </div>
-    <!-- Menú de categorías (solo existe en el DOM mientras está abierto: cerrado no se
-         puede tabular ni pulsar). Se cierra solo al elegir categoría, para no tapar la
-         banda inferior del campo mientras se colocan objetos. -->
-    @if (herramientasOpen()) {
       <div class="tools-menu" id="tools-menu" role="group" aria-label="Categorías">
         <button
           class="tools-cat"
@@ -1416,7 +1356,7 @@
           <span class="tools-cat-label">Dibujo</span>
         </button>
       </div>
-    }
+    </div>
     <div class="tools-caption" [class.tools-caption-color]="isColorTool()">
       <span class="tools-caption-title">{{ activeToolTitle() }}</span>
       <!-- Bloque E: trazo Continuo/Discontinuo por HERRAMIENTA (se elige antes de dibujar y cada
@@ -1439,7 +1379,7 @@
             (click)="setToolLineStyle(tool(), 'solid')"
             aria-label="Trazo continuo"
           >
-            Continuo
+            {{ tool() === 'arrow' ? 'Pase / golpeo' : 'Continuo' }}
           </button>
           <button
             class="chip"
@@ -1447,7 +1387,7 @@
             (click)="setToolLineStyle(tool(), 'dashed')"
             aria-label="Trazo discontinuo"
           >
-            Discontinuo
+            {{ tool() === 'arrow' ? 'Sin balón' : 'Discontinuo' }}
           </button>
         </div>
       }
@@ -1519,7 +1459,13 @@
             (click)="pickBarVariant(barVariant()!, k)"
           >
             @if (barVariant() !== 'cone') {
-              <img [src]="variantAsset(k)?.asset" alt="" />
+              @if (variantAsset(k)?.asset) {
+                <img [src]="variantAsset(k)?.asset" alt="" />
+              } @else {
+                <span class="msi" [style.color]="colorFor(barVariant()!)"
+                  >radio_button_checked</span
+                >
+              }
               <span class="variant-caption">{{ variantAsset(k)?.label }}</span>
             }
           </button>

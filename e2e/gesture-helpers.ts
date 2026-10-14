@@ -1,5 +1,17 @@
 import { expect, type Page } from '@playwright/test';
 
+/** Propiedades abre por defecto y coexiste con los catálogos. Abrir es idempotente:
+ *  las pruebas no deben esperar un botón «Propiedades» cuando ya muestra «Cerrar».
+ *  Si una prueba ocultó un overlay para medir el lienzo, se reabre por la UI real. */
+export async function ensurePropsPanel(page: Page): Promise<void> {
+  const panel = page.locator('.studio-panel');
+  if (await panel.isVisible()) return;
+  const close = page.locator('.studio-top button[aria-label="Cerrar propiedades"]');
+  if (await close.isVisible()) await close.click();
+  await page.locator('.studio-top button[aria-label="Propiedades"]').click();
+  await expect(panel).toBeVisible();
+}
+
 /**
  * FASE 3: el menú contextual de la pizarra se abre exclusivamente por PULSACIÓN LARGA
  * (el clic derecho fue retirado). Mantiene el botón pulsado ~600 ms (> el umbral de
@@ -83,7 +95,13 @@ export async function abrirAjustes(page: Page): Promise<void> {
  * otro «Más» en su barra inferior (`.nav-mas`) y en móvil los dos existen en el DOM.
  */
 export async function abrirMasPizarra(page: Page): Promise<void> {
-  if (await page.locator('.top-pop-mas').isVisible().catch(() => false)) return;
+  if (
+    await page
+      .locator('.top-pop-mas')
+      .isVisible()
+      .catch(() => false)
+  )
+    return;
   await page.locator('.studio-top button[aria-label="Más"]').click();
   await expect(page.locator('.top-pop-mas')).toBeVisible();
 }

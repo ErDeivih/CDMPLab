@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas, expectPanelLibreDelGrupo } from './board-helpers';
 import fs from 'node:fs';
@@ -88,6 +89,8 @@ function vigilarConsola(page: Page): string[] {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-canvas svg')).toBeVisible();
+  // Preparación de estas pruebas de campo: la app abre Propiedades por defecto.
+  await page.locator('.studio-panel .panel-close').click();
   for (const sel of ['.help-close', '.fill-hint-close']) {
     if (
       await page
@@ -640,7 +643,7 @@ test.describe('Fase shell+móvil — barra superior eliminada y cuenta reubicada
     );
   });
 
-  test('12-15. los cuatro paneles se abren, MINIMIZAN y recuperan; vertical usa hoja inferior', async ({
+  test('12-15. los cuatro paneles se abren, cierran y reabren sin controles de minimizar', async ({
     page,
   }) => {
     await page.setViewportSize(VIEWPORTS.movilH);
@@ -674,7 +677,9 @@ test.describe('Fase shell+móvil — barra superior eliminada y cuenta reubicada
       },
       {
         nombre: 'Propiedades',
-        abrir: () => page.locator('button[aria-label="Propiedades"]').click(),
+        abrir: async () => {
+          if (!(await page.locator('.studio-panel').isVisible())) await ensurePropsPanel(page);
+        },
         panel: '.studio-panel',
       },
     ];
@@ -692,12 +697,11 @@ test.describe('Fase shell+móvil — barra superior eliminada y cuenta reubicada
       const host = (await page.locator('.board-host').boundingBox())!;
       expect(host.width, `${p.nombre}: queda campo a la derecha`).toBeGreaterThan(0);
 
-      await panel.locator('.panel-min').first().click();
-      await expect(panel, `${p.nombre}: minimizado`).toHaveCount(0);
-      const tab = page.locator('.panel-tab');
-      await expect(tab, `${p.nombre}: pestaña para reabrir`).toBeVisible();
-      await expect(tab).toContainText(p.nombre);
-      await tab.click();
+      await expect(panel.locator('.panel-min')).toHaveCount(0);
+      await panel.locator('.panel-close').first().click();
+      await expect(panel, `${p.nombre}: cerrado`).toHaveCount(0);
+      await expect(page.locator('.panel-tab')).toHaveCount(0);
+      await p.abrir();
       await expect(page.locator(p.panel), `${p.nombre}: recuperado`).toBeVisible();
 
       await page.locator(`${p.panel} .panel-close`).first().click();
@@ -705,7 +709,7 @@ test.describe('Fase shell+móvil — barra superior eliminada y cuenta reubicada
     }
   });
 
-  test('15b. vertical: el panel es una hoja inferior por encima de la navegación', async ({
+  test('15b. vertical: los paneles comparten el ancho y se cierran con su aspa', async ({
     page,
   }) => {
     await page.setViewportSize(VIEWPORTS.movilV);
@@ -726,9 +730,7 @@ test.describe('Fase shell+móvil — barra superior eliminada y cuenta reubicada
         .catch(() => false),
       'la nav inferior no se muestra en la pizarra',
     ).toBe(false);
-    expect(c.width, 'ocupa el ancho de la pantalla').toBeGreaterThanOrEqual(
-      VIEWPORTS.movilV.width - 2,
-    );
+    expect(c.width, 'deja sitio al panel derecho').toBeCloseTo(VIEWPORTS.movilV.width * 0.45, 0);
     expect(c.height, 'alto máximo ~58 %').toBeLessThanOrEqual(VIEWPORTS.movilV.height * 0.6 + 2);
     // La hoja llega hasta el final del ÁREA DISPONIBLE. FASE 3: la barra inferior ya no existe (el
     // grupo de herramientas flota), pero su franja está RESERVADA (`--reserva-grupo-herramientas`)
@@ -741,10 +743,11 @@ test.describe('Fase shell+móvil — barra superior eliminada y cuenta reubicada
     ).toBeLessThanOrEqual(2);
 
     // Y también minimiza/recupera en vertical.
-    await panel.locator('.panel-min').first().click();
+    await expect(panel.locator('.panel-min')).toHaveCount(0);
+    await panel.locator('.panel-close').first().click();
     await expect(panel).toHaveCount(0);
-    await expect(page.locator('.panel-tab')).toBeVisible();
-    await page.locator('.panel-tab').click();
+    await expect(page.locator('.panel-tab')).toHaveCount(0);
+    await page.locator('.tools-cat[aria-label="Material"]').click();
     await expect(panel).toBeVisible();
   });
 });

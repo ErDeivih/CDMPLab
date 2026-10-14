@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
 
@@ -29,7 +30,7 @@ async function openProps(page: Page): Promise<void> {
       .catch(() => false)
   )
     return;
-  await page.locator('button[aria-label="Propiedades"]').click();
+  await ensurePropsPanel(page);
   // FASE G: el panel se espera con el `.toBeVisible()` siguiente (observable); sin wait fijo.
   await expect(page.locator('.studio-panel')).toBeVisible();
 }

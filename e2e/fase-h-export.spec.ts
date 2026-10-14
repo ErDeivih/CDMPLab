@@ -9,8 +9,16 @@
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
 import fs from 'node:fs';
-import { fillBoardTitle } from './gesture-helpers';
-import { seedBoard, openBoard, hostBox, fitMode, fieldCount, normToScreen, showCategory } from './board-helpers';
+import { ensurePropsPanel, fillBoardTitle } from './gesture-helpers';
+import {
+  seedBoard,
+  openBoard,
+  hostBox,
+  fitMode,
+  fieldCount,
+  normToScreen,
+  showCategory,
+} from './board-helpers';
 
 const OUT = 'docs/screenshots/fase-h';
 fs.mkdirSync(OUT, { recursive: true });
@@ -18,7 +26,8 @@ fs.mkdirSync(OUT, { recursive: true });
 const TITLE = 'Rondo de posesión';
 
 async function clickNorm(page: Page, nx: number, ny: number): Promise<void> {
-  const host = await hostBox(page); const fit = await fitMode(page);
+  const host = await hostBox(page);
+  const fit = await fitMode(page);
   const p = normToScreen(nx, ny, host, fit);
   await page.mouse.click(p.x, p.y);
 }
@@ -27,19 +36,26 @@ async function closePanel(page: Page): Promise<void> {
   if (await close.isVisible().catch(() => false)) await close.first().click();
 }
 async function drawLine(page: Page, from: [number, number], to: [number, number]): Promise<void> {
-  const host = await hostBox(page); const fit = await fitMode(page);
+  const host = await hostBox(page);
+  const fit = await fitMode(page);
   const a = normToScreen(from[0], from[1], host, fit);
   const b = normToScreen(to[0], to[1], host, fit);
-  await page.mouse.move(a.x, a.y); await page.mouse.down();
-  await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 5 });
+  await page.mouse.up();
 }
 
 test.describe('FASE H — exportación PNG con el título', () => {
-  test('guarda, reabre y exporta: título saneado, dimensiones y sin controles', async ({ page }) => {
+  test('guarda, reabre y exporta: título saneado, dimensiones y sin controles', async ({
+    page,
+  }) => {
     test.setTimeout(180_000);
     await page.setViewportSize({ width: 1366, height: 768 });
-    await seedBoard(page); await openBoard(page);
-    const host = await hostBox(page); const fit = await fitMode(page);
+    await seedBoard(page);
+    await openBoard(page);
+    const host = await hostBox(page);
+    const fit = await fitMode(page);
 
     // Contenido: 2 jugadores genéricos + 1 material + 1 línea + 1 rectángulo.
     await showCategory(page, 'Jugadores');
@@ -71,7 +87,9 @@ test.describe('FASE H — exportación PNG con el título', () => {
     await fillBoardTitle(page, TITLE);
     await page.locator('.chip-icon-primary').click();
     await page.waitForURL('**/library');
-    const savedTitle = await page.evaluate(() => JSON.parse(localStorage.getItem('entrenolab:exercises')!)[0].title);
+    const savedTitle = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('entrenolab:exercises')!)[0].title,
+    );
     expect(savedTitle, 'el ejercicio guarda el título').toBe(TITLE);
 
     // …REABRIR y exportar desde el ejercicio guardado.
@@ -80,8 +98,10 @@ test.describe('FASE H — exportación PNG con el título', () => {
     await page.waitForURL('**/board');
     await expect.poll(() => fieldCount(page), { timeout: 5000 }).toBe(5);
     // Título conservado al reabrir.
-    await page.locator('button[aria-label="Propiedades"]').click();
-    await expect(page.locator('.studio-panel input[aria-label="Título del ejercicio"]')).toHaveValue(TITLE);
+    await ensurePropsPanel(page);
+    await expect(
+      page.locator('.studio-panel input[aria-label="Título del ejercicio"]'),
+    ).toHaveValue(TITLE);
 
     // Deseleccionar y exportar.
     await page.keyboard.press('Escape');
@@ -95,18 +115,23 @@ test.describe('FASE H — exportación PNG con el título', () => {
     const suggested = download.suggestedFilename();
     console.log(`[fase-h export] nombre sugerido = "${suggested}"`);
     expect(suggested, 'extensión PNG').toMatch(/\.png$/i);
-    expect(suggested.toLowerCase(), 'el nombre sugerido contiene el título saneado').toContain('rondo');
+    expect(suggested.toLowerCase(), 'el nombre sugerido contiene el título saneado').toContain(
+      'rondo',
+    );
     expect(suggested, 'el nombre no lleva acentos/espacios crudos').not.toContain('ó');
     expect(suggested, 'sin espacios').not.toContain(' ');
 
     // 3) Dimensiones válidas del PNG (IHDR 1600×1280, campo horizontal).
     const buf = fs.readFileSync((await download.path())!);
     expect(buf.subarray(0, 4).toString('hex')).toBe('89504e47');
-    const w = buf.readUInt32BE(16); const h = buf.readUInt32BE(20);
+    const w = buf.readUInt32BE(16);
+    const h = buf.readUInt32BE(20);
     expect(w, 'ancho válido').toBe(1600);
     expect(h, 'alto válido').toBe(1280);
     fs.writeFileSync(`${OUT}/ejercicio-exportado.png`, buf);
-    expect(fs.statSync(`${OUT}/ejercicio-exportado.png`).size, 'PNG con contenido').toBeGreaterThan(2000);
+    expect(fs.statSync(`${OUT}/ejercicio-exportado.png`).size, 'PNG con contenido').toBeGreaterThan(
+      2000,
+    );
 
     // 4) El SVG fuente del PNG CONTIENE el contenido (campo + jugadores + material + línea + rect).
     const svg = await page.locator('.entrenolab-board').innerHTML();

@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
-import { abrirHerramientas } from './board-helpers';
-import { longPress } from './gesture-helpers';
+import { abrirHerramientas, showCategory } from './board-helpers';
+import { ensurePropsPanel, longPress } from './gesture-helpers';
 
 // Rect canónico de contenido (largo→X, ancho→Y) de un campo 105×68 en el viewBox 100×80.
 const RECT = { x: 4, y: 10, w: 92, h: (92 * 68) / 105 };
@@ -11,7 +11,15 @@ type Box = { x: number; y: number; width: number; height: number };
 type Pt = { x: number; y: number };
 type Fit = 'height' | 'contain';
 
-function normToScreen(nx: number, ny: number, host: Box, fit: Fit, panX = 0, panY = 0, zoom = 1): Pt {
+function normToScreen(
+  nx: number,
+  ny: number,
+  host: Box,
+  fit: Fit,
+  panX = 0,
+  panY = 0,
+  zoom = 1,
+): Pt {
   const s = fit === 'height' ? host.height / RECT.h : Math.min(host.width / VBW, host.height / VBH);
   const offX = (host.width - VBW * s) / 2;
   const offY = (host.height - VBH * s) / 2;
@@ -29,10 +37,25 @@ async function seed(page: Page): Promise<void> {
     if (localStorage.getItem('entrenolab:seeded')) return;
     const now = new Date().toISOString();
     localStorage.setItem('entrenolab:seeded', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-    ]));
+    localStorage.setItem(
+      'entrenolab:teams',
+      JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]),
+    );
+    localStorage.setItem(
+      'entrenolab:players',
+      JSON.stringify([
+        {
+          id: 'p1',
+          teamId: 't1',
+          name: 'Marcos',
+          number: 2,
+          position: 'DF',
+          color: '#1a73e8',
+          active: true,
+          createdAt: now,
+        },
+      ]),
+    );
     localStorage.setItem('entrenolab:folders', JSON.stringify([]));
     localStorage.setItem('entrenolab:exercises', JSON.stringify([]));
     localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
@@ -46,8 +69,22 @@ async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
   await expect(page.locator('.board-canvas svg')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) await page.locator('.help-close').click();
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) await page.locator('.fill-hint-close').click();
+  // Preparar el escenario de selección con el campo libre.
+  await page.locator('.studio-panel .panel-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.help-close').click();
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.locator('.fill-hint-close').click();
   await expect(page.locator('.board-host')).toBeVisible();
 }
 
@@ -68,9 +105,10 @@ function fieldCount(page: Page): Promise<number> {
 
 /** Arma y usa una herramienta de dibujo desde el panel "Dibujo". */
 async function useDrawTool(page: Page, title: string): Promise<void> {
-  await abrirHerramientas(page);
-  await page.locator('.tools-cat', { hasText: 'Dibujo' }).click();
+  // El catálogo persiste: no alternarlo a cerrado al cambiar de herramienta.
+  await showCategory(page, 'Dibujo');
   await page.locator(`.rail-btn[title="${title}"]`).click();
+  await page.locator('.side-panel-left .panel-close').click();
 }
 
 /** Dibuja en UN gesto (mouse) desde (nx0,ny0) a (nx1,ny1). */
@@ -108,7 +146,10 @@ async function placeComodin(page: Page, nx: number, ny: number): Promise<void> {
   await page.locator('.tray-player[title="Jugador Azul"]').click();
   // FASE B (paneles persistentes): elegir un jugador genérico NO cierra el panel;
   // el panel Jugadores permanece abierto (se cierra solo explícitamente).
-  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await expect(
+    page.locator('.side-panel-left'),
+    'el panel Jugadores permanece abierto',
+  ).toBeVisible();
   await page.mouse.click(pos.x, pos.y); // coloca (tool player armado)
   await page.locator('.rail-btn[aria-label="Seleccionar y mover"]').click();
   await selectAt(page, nx, ny);
@@ -140,15 +181,18 @@ async function hideOverlays(page: Page): Promise<void> {
 
 /** Rotación (grados) del envoltorio `rotate(r …)` del elemento, subiendo por el DOM. */
 async function elementRot(page: Page, selector: string): Promise<number> {
-  const v = await page.locator(selector).first().evaluate((el) => {
-    let g = el.closest('g') as Element | null;
-    while (g) {
-      const m = /rotate\((-?[\d.]+)/.exec(g.getAttribute('transform') ?? '');
-      if (m) return { r: parseFloat(m[1]) };
-      g = g.parentElement;
-    }
-    return { r: 0 };
-  });
+  const v = await page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      let g = el.closest('g') as Element | null;
+      while (g) {
+        const m = /rotate\((-?[\d.]+)/.exec(g.getAttribute('transform') ?? '');
+        if (m) return { r: parseFloat(m[1]) };
+        g = g.parentElement;
+      }
+      return { r: 0 };
+    });
   return v.r;
 }
 
@@ -165,33 +209,52 @@ async function firstRot(page: Page): Promise<number> {
 }
 
 /** Geometría de un <rect> del SVG (modelo: x/y/w/h en viewBox canónico). */
-async function rectGeom(page: Page, selector: string): Promise<{ x: number; y: number; w: number; h: number }> {
-  return page.locator(selector).first().evaluate((el) => ({
-    x: parseFloat(el.getAttribute('x') ?? '0'),
-    y: parseFloat(el.getAttribute('y') ?? '0'),
-    w: parseFloat(el.getAttribute('width') ?? '0'),
-    h: parseFloat(el.getAttribute('height') ?? '0'),
-  }));
+async function rectGeom(
+  page: Page,
+  selector: string,
+): Promise<{ x: number; y: number; w: number; h: number }> {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((el) => ({
+      x: parseFloat(el.getAttribute('x') ?? '0'),
+      y: parseFloat(el.getAttribute('y') ?? '0'),
+      w: parseFloat(el.getAttribute('width') ?? '0'),
+      h: parseFloat(el.getAttribute('height') ?? '0'),
+    }));
 }
 
 /** Extremos de una <line> del SVG. */
-async function lineEnds(page: Page, selector: string): Promise<{ x1: number; y1: number; x2: number; y2: number }> {
-  return page.locator(selector).first().evaluate((el) => ({
-    x1: parseFloat(el.getAttribute('x1') ?? '0'),
-    y1: parseFloat(el.getAttribute('y1') ?? '0'),
-    x2: parseFloat(el.getAttribute('x2') ?? '0'),
-    y2: parseFloat(el.getAttribute('y2') ?? '0'),
-  }));
+async function lineEnds(
+  page: Page,
+  selector: string,
+): Promise<{ x1: number; y1: number; x2: number; y2: number }> {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((el) => ({
+      x1: parseFloat(el.getAttribute('x1') ?? '0'),
+      y1: parseFloat(el.getAttribute('y1') ?? '0'),
+      x2: parseFloat(el.getAttribute('x2') ?? '0'),
+      y2: parseFloat(el.getAttribute('y2') ?? '0'),
+    }));
 }
 
 /** Puntos (string) de un <polyline>. */
 async function polyPoints(page: Page, selector: string): Promise<string> {
-  return page.locator(selector).first().getAttribute('points').then((p) => p ?? '');
+  return page
+    .locator(selector)
+    .first()
+    .getAttribute('points')
+    .then((p) => p ?? '');
 }
 
 /** Tamaño (ancho de la caja) de un <image> de material. */
 async function imageWidth(page: Page, selector: string): Promise<number> {
-  return page.locator(selector).first().evaluate((el) => parseFloat(el.getAttribute('width') ?? '0'));
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((el) => parseFloat(el.getAttribute('width') ?? '0'));
 }
 
 // La preview del gesto de dibujo tiene su propio grupo con clase estable
@@ -209,7 +272,9 @@ const VIEWPORTS: Array<[number, number]> = [
 
 test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionado', () => {
   for (const [W, H] of VIEWPORTS) {
-    test(`dibujo en un gesto + barra de contexto + ±90° + sin manija de rotación ni "Rotación (°)" @ ${W}×${H}`, async ({ page }) => {
+    test(`dibujo en un gesto + barra de contexto + ±90° + sin manija de rotación ni "Rotación (°)" @ ${W}×${H}`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: W, height: H });
       await seed(page);
       await openClosed(page);
@@ -217,7 +282,12 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       // FASE B (paneles persistentes): el panel Dibujo permanece abierto tras elegir la
       // herramienta y, en móvil, tapa el punto de inicio del dibujo. Se cierra con su X
       // (no desarma la herramienta) antes de empezar el gesto.
-      if (await page.locator('.side-panel-left .panel-close').isVisible().catch(() => false)) {
+      if (
+        await page
+          .locator('.side-panel-left .panel-close')
+          .isVisible()
+          .catch(() => false)
+      ) {
         await page.locator('.side-panel-left .panel-close').click();
       }
       await expect(page.locator('.field-count')).toHaveText('0');
@@ -241,7 +311,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       // Bloque D2: el menú contextual tiene 8 acciones (Deshacer, Rehacer, girar ±45° izq/der,
       // girar ±90° izq/der, Duplicar, Eliminar).
       await expect(page.locator('.context-bar .ctx-btn')).toHaveCount(8);
-      await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toBeVisible();
+      await expect(
+        page.locator('.context-bar [aria-label="Girar 90° a la derecha"]'),
+      ).toBeVisible();
       await expect(page.locator('.context-bar [aria-label="Duplicar"]')).toBeVisible();
       await expect(page.locator('.context-bar [aria-label="Eliminar"]')).toBeVisible();
 
@@ -259,15 +331,25 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       // El inspector ya NO ofrece "Rotación (°)". En escritorio el panel puede quedar
       // abierto tras el clic derecho de selección (botón "Cerrar propiedades"), así que
       // solo se abre si no está ya visible.
-      if (!(await page.locator('.studio-panel').isVisible().catch(() => false))) {
-        await page.locator('button[aria-label="Propiedades"]').click();
+      if (
+        !(await page
+          .locator('.studio-panel')
+          .isVisible()
+          .catch(() => false))
+      ) {
+        await ensurePropsPanel(page);
       }
       await expect(page.locator('.studio-panel')).toBeVisible();
-      expect(await page.locator('.studio-panel .inspector .field', { hasText: 'Rotación' }).count(), 'sin control numérico Rotación (°)').toBe(0);
+      expect(
+        await page.locator('.studio-panel .inspector .field', { hasText: 'Rotación' }).count(),
+        'sin control numérico Rotación (°)',
+      ).toBe(0);
     });
   }
 
-  test('D2: ±45° en la barra de contexto produce rotación exacta (45/315) y un solo Undo', async ({ page }) => {
+  test('D2: ±45° en la barra de contexto produce rotación exacta (45/315) y un solo Undo', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
@@ -301,7 +383,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
     await expect.poll(() => firstRot(page), { timeout: 4000 }).toBeCloseTo(315, 0);
   });
 
-  test('D2: el DOBLE CLIC de ratón abre el menú contextual sobre el elemento y no duplica/mueve', async ({ page }) => {
+  test('D2: el DOBLE CLIC de ratón abre el menú contextual sobre el elemento y no duplica/mueve', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await seed(page);
     await openClosed(page);
@@ -354,16 +438,22 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.move(to.x, to.y, { steps: 5 });
       await page.mouse.up();
       // FASE G: observable — el rectángulo crece (w) en el SVG.
-      await expect.poll(async () => (await rectGeom(page, rectSel)).w, { timeout: 4000 }).toBeGreaterThan(before.w + 2);
+      await expect
+        .poll(async () => (await rectGeom(page, rectSel)).w, { timeout: 4000 })
+        .toBeGreaterThan(before.w + 2);
       const after = await rectGeom(page, rectSel);
       expect(after.w).toBeGreaterThan(before.w + 2);
       expect(after.h).toBeGreaterThan(before.h + 2);
       // Un solo Undo vuelve al tamaño previo.
       await page.keyboard.press('Control+z');
-      await expect.poll(async () => (await rectGeom(page, rectSel)).w, { timeout: 4000 }).toBeCloseTo(before.w, 0);
+      await expect
+        .poll(async () => (await rectGeom(page, rectSel)).w, { timeout: 4000 })
+        .toBeCloseTo(before.w, 0);
     });
 
-    test('línea: asas en AMBOS extremos → mueve el final (x2,y2), un solo Undo', async ({ page }) => {
+    test('línea: asas en AMBOS extremos → mueve el final (x2,y2), un solo Undo', async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 1366, height: 768 });
       await seed(page);
       await openClosed(page);
@@ -386,15 +476,21 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.up();
       await page.keyboard.press('Escape'); // deseleccionar: el trazo deja de estar seleccionado
       // FASE G: observable — el extremo x2 del trazo DESeleccionado se mueve.
-      await expect.poll(async () => (await lineEnds(page, lineSel)).x2, { timeout: 4000 }).toBeGreaterThan(before.x2 + 2);
+      await expect
+        .poll(async () => (await lineEnds(page, lineSel)).x2, { timeout: 4000 })
+        .toBeGreaterThan(before.x2 + 2);
       const after = await lineEnds(page, lineSel);
       expect(after.x2).toBeGreaterThan(before.x2 + 2);
       expect(after.y2).toBeGreaterThan(before.y2 + 2);
       await page.keyboard.press('Control+z');
-      await expect.poll(async () => (await lineEnds(page, lineSel)).x2, { timeout: 4000 }).toBeCloseTo(before.x2, 0);
+      await expect
+        .poll(async () => (await lineEnds(page, lineSel)).x2, { timeout: 4000 })
+        .toBeCloseTo(before.x2, 0);
     });
 
-    test('curva: extremos + punto de control (C1) → mover C1 cambia la curvatura', async ({ page }) => {
+    test('curva: extremos + punto de control (C1) → mover C1 cambia la curvatura', async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 1366, height: 768 });
       await seed(page);
       await openClosed(page);
@@ -416,7 +512,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.move(to.x, to.y, { steps: 4 });
       await page.mouse.up();
       // FASE G: observable — el atributo `d` de la curva cambia (C1 movido).
-      await expect.poll(async () => (await page.locator(pathSel).first().getAttribute('d')), { timeout: 4000 }).not.toBe(beforeD);
+      await expect
+        .poll(async () => await page.locator(pathSel).first().getAttribute('d'), { timeout: 4000 })
+        .not.toBe(beforeD);
       const afterD = await page.locator(pathSel).first().getAttribute('d');
       expect(afterD, 'la curva cambió (C1 se movió)').not.toBe(beforeD);
     });
@@ -448,7 +546,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       expect(after, 'la nube de puntos se reescaló').not.toBe(before);
     });
 
-    test('material (cono): NO se puede redimensionar (Fase 1 — sin asas, size constante)', async ({ page }) => {
+    test('material (cono): NO se puede redimensionar (Fase 1 — sin asas, size constante)', async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 1366, height: 768 });
       await seed(page);
       await openClosed(page);
@@ -476,7 +576,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       expect(after, 'el material no se redimensiona (size constante)').toBe(before);
     });
 
-    test('rotar-then-redimensionar y redimensionar-then-rotar funcionan (rect)', async ({ page }) => {
+    test('rotar-then-redimensionar y redimensionar-then-rotar funcionan (rect)', async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 1366, height: 768 });
       await seed(page);
       await openClosed(page);
@@ -505,7 +607,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await page.mouse.move(to.x, to.y, { steps: 4 });
       await page.mouse.up();
       // FASE G: observable — el rect rotado crece en w tras redimensionar.
-      await expect.poll(async () => (await rectGeom(page, rectSel)).w, { timeout: 4000 }).toBeGreaterThan(beforeRotResize.w + 10);
+      await expect
+        .poll(async () => (await rectGeom(page, rectSel)).w, { timeout: 4000 })
+        .toBeGreaterThan(beforeRotResize.w + 10);
       const afterRotResize = await rectGeom(page, rectSel);
       // Creció respecto al ancho previo a redimensionar (y la rotación se conserva).
       expect(afterRotResize.w).toBeGreaterThan(beforeRotResize.w + 10);
@@ -516,7 +620,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
   test.describe('capturas Fase 6 (revisión visual)', () => {
     test.use({ viewport: { width: 1366, height: 768 } });
 
-    test('material con barra de contexto y SIN cuadro de redimensionado (Fase 1)', async ({ page }) => {
+    test('material con barra de contexto y SIN cuadro de redimensionado (Fase 1)', async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 1366, height: 768 });
       await seed(page);
       await openClosed(page);
@@ -525,7 +631,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await expect(page.locator('.context-bar')).toBeVisible();
       // Fase 1: los materiales NO se redimensionan → sin asas.
       await expect(page.locator('.board-canvas svg .reshandle')).toHaveCount(0);
-      await page.locator('.board-host').screenshot({ path: 'e2e/shots/p56-selection/material-seleccionado-bar.png' });
+      await page
+        .locator('.board-host')
+        .screenshot({ path: 'e2e/shots/p56-selection/material-seleccionado-bar.png' });
     });
 
     test('jugador seleccionado con cuadro + asas', async ({ page }) => {
@@ -536,10 +644,14 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await selectAt(page, 0.45, 0.5);
       await expect(page.locator('.context-bar')).toBeVisible();
       await expect(page.locator('.board-canvas svg .reshandle')).toHaveCount(4);
-      await page.locator('.board-host').screenshot({ path: 'e2e/shots/p56-selection/jugador-seleccionado.png' });
+      await page
+        .locator('.board-host')
+        .screenshot({ path: 'e2e/shots/p56-selection/jugador-seleccionado.png' });
     });
 
-    test('línea con asas de extremo + curva con extremos+C1 + mano alzada con caja', async ({ page }) => {
+    test('línea con asas de extremo + curva con extremos+C1 + mano alzada con caja', async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 1366, height: 768 });
       await seed(page);
       await openClosed(page);
@@ -549,7 +661,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await selectAt(page, 0.25, 0.36);
       await expect(page.locator('.context-bar')).toBeVisible();
       await expect(page.locator('.board-canvas svg .reshandle')).toHaveCount(2);
-      await page.locator('.board-host').screenshot({ path: 'e2e/shots/p56-selection/linea-extremos.png' });
+      await page
+        .locator('.board-host')
+        .screenshot({ path: 'e2e/shots/p56-selection/linea-extremos.png' });
       await page.keyboard.press('Escape'); // cerrar barra/panel de la línea antes de dibujar la curva
       await page.waitForTimeout(80);
 
@@ -559,7 +673,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await selectAt(page, 0.625, 0.445); // punto medio exacto de la curva (bend +0.14)
       await expect(page.locator('.context-bar')).toBeVisible();
       await expect(page.locator('.board-canvas svg .reshandle')).toHaveCount(3);
-      await page.locator('.board-host').screenshot({ path: 'e2e/shots/p56-selection/curva-extremos-c1.png' });
+      await page
+        .locator('.board-host')
+        .screenshot({ path: 'e2e/shots/p56-selection/curva-extremos-c1.png' });
 
       // Mano alzada.
       await useDrawTool(page, 'Dibujo a mano alzada');
@@ -567,7 +683,9 @@ test.describe('Fase 6 — selección, barra de contexto (±90°) y redimensionad
       await selectAt(page, 0.6, 0.62);
       await expect(page.locator('.context-bar')).toBeVisible();
       await expect(page.locator('.board-canvas svg .reshandle')).toHaveCount(4);
-      await page.locator('.board-host').screenshot({ path: 'e2e/shots/p56-selection/mano-alzada-caja.png' });
+      await page
+        .locator('.board-host')
+        .screenshot({ path: 'e2e/shots/p56-selection/mano-alzada-caja.png' });
     });
   });
 });

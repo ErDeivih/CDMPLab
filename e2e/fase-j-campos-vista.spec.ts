@@ -13,7 +13,7 @@
 // =============================================================
 import { test, expect, Page } from '@playwright/test';
 import { seedBoard, openBoard, hostBox, fieldCount, showCategory } from './board-helpers';
-import { abrirMasPizarra } from './gesture-helpers';
+import { ensurePropsPanel, abrirMasPizarra } from './gesture-helpers';
 
 type Box = { x: number; y: number; width: number; height: number };
 
@@ -36,7 +36,7 @@ async function abrePanel(page: Page): Promise<void> {
       .isVisible()
       .catch(() => false))
   ) {
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
   }
   await expect(page.locator('.studio-panel')).toBeVisible();
 }

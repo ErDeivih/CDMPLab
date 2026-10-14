@@ -111,14 +111,15 @@ test.describe('FASE 5 — paneles de la pizarra en móvil', () => {
     // 6) Sigue abierto hasta que el usuario lo minimice o cierre.
     await page.waitForTimeout(400);
     await expect(panel, 'el panel sigue abierto sin que nadie lo cierre').toBeVisible();
-    await panel.locator('.panel-min').first().click();
+    await expect(panel.locator('.panel-min')).toHaveCount(0);
+    await panel.locator('.panel-close').first().click();
     await expect(panel).toHaveCount(0);
-    await expect(page.locator('.panel-tab'), 'minimizado → pestaña para recuperarlo').toBeVisible();
-    await page.locator('.panel-tab').click();
+    await expect(page.locator('.panel-tab')).toHaveCount(0);
+    await showCategory(page, 'Material');
     await expect(panel, 'se recupera tal cual estaba').toBeVisible();
   });
 
-  test('vertical 390×844: hoja inferior acotada, con cabecera/tabs/cierre y minimizable', async ({
+  test('vertical 390×844: hoja inferior de ancho compartido, cierre explícito y sin minimizar', async ({
     page,
   }) => {
     await page.setViewportSize(MOVIL_V);
@@ -134,7 +135,8 @@ test.describe('FASE 5 — paneles de la pizarra en móvil', () => {
     console.log(
       `[fase5-v] panel=${JSON.stringify(caja)} main=${JSON.stringify(main)} grupo=${JSON.stringify(grupo)}`,
     );
-    expect(caja.width, 'ocupa el ancho').toBeGreaterThanOrEqual(MOVIL_V.width - 2);
+    // Nuevo contrato: ambos paneles coexisten también en vertical, sin solaparse.
+    expect(caja.width).toBeCloseTo(MOVIL_V.width * 0.45, 0);
     expect(caja.height, 'no ocupa más de lo necesario (~58 %)').toBeLessThanOrEqual(
       MOVIL_V.height * 0.6 + 2,
     );
@@ -150,11 +152,12 @@ test.describe('FASE 5 — paneles de la pizarra en móvil', () => {
     // menú se cierra al elegir). Lo que debe seguir visible con el panel abierto es el GRUPO flotante
     // —permite volver al Cursor sin cerrar el panel—, que flota por encima del panel.
     await expect(page.locator('.tools-persist')).toBeVisible();
-    await expect(page.locator('.tools-toggle')).toBeVisible();
+    await expect(page.locator('.tools-cat')).toHaveCount(3);
     await expect(page.locator('.rail-btn[aria-label="Seleccionar y mover"]')).toBeVisible();
-    await panel.locator('.panel-min').first().click();
+    await expect(panel.locator('.panel-min')).toHaveCount(0);
+    await panel.locator('.panel-close').first().click();
     await expect(panel).toHaveCount(0);
-    await page.locator('.panel-tab').click();
+    await showCategory(page, 'Material');
     await expect(panel).toBeVisible();
   });
 
@@ -172,6 +175,9 @@ test.describe('FASE 5 — paneles de la pizarra en móvil', () => {
     await cono.click();
     const cerrar = page.locator('.side-panel-left .panel-close');
     if (await cerrar.isVisible().catch(() => false)) await cerrar.first().click();
+    // El inspector ahora abre por defecto: cerrar explícitamente para colocar
+    // también en su zona de pantalla, sin cambiar la herramienta armada.
+    await page.locator('.side-panel-right .panel-close').click();
     const host = await hostBox(page);
     const fit = await fitMode(page);
     for (const [nx, ny] of [

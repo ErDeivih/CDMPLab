@@ -18,7 +18,15 @@ type Fit = 'height' | 'contain';
 
 /** Forward norm→pantalla (la inversa de screenToNorm) para el campo en HORIZONTAL.
  *  `fit` = 'height' (llenar pantalla) | 'contain' (campo completo). */
-function normToScreen(nx: number, ny: number, host: Box, fit: Fit, panX = 0, panY = 0, zoom = 1): Pt {
+function normToScreen(
+  nx: number,
+  ny: number,
+  host: Box,
+  fit: Fit,
+  panX = 0,
+  panY = 0,
+  zoom = 1,
+): Pt {
   const s = fit === 'height' ? host.height / RECT.h : Math.min(host.width / VBW, host.height / VBH);
   const offX = (host.width - VBW * s) / 2;
   const offY = (host.height - VBH * s) / 2;
@@ -31,33 +39,96 @@ function normToScreen(nx: number, ny: number, host: Box, fit: Fit, panX = 0, pan
   return { x: host.x + ox + panX + zoom * (cx - ox), y: host.y + oy + panY + zoom * (cy - oy) };
 }
 
-async function seed(page: Page, opts: { orientation?: 'horizontal' | 'vertical' } = {}): Promise<void> {
+async function seed(
+  page: Page,
+  opts: { orientation?: 'horizontal' | 'vertical' } = {},
+): Promise<void> {
   const { orientation = 'horizontal' } = opts;
-  await page.addInitScript(({ orientation }) => {
-    if (localStorage.getItem('entrenolab:seeded')) return;
-    const now = new Date().toISOString();
-    localStorage.setItem('entrenolab:seeded', '1');
-    // Móvil: modo "Llenar pantalla" (fill) por defecto; fijarlo explícitamente.
-    localStorage.setItem('entrenolab:board-fill', '1');
-    // Fase 2: este spec prueba la pista de "Llenar pantalla" en aislamiento; se descarta
-    // el aviso de orientación para que la pista sea la única visible.
-    localStorage.setItem('entrenolab:orient-hint', '1');
-    localStorage.setItem('entrenolab:teams', JSON.stringify([{ id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now }]));
-    localStorage.setItem('entrenolab:players', JSON.stringify([
-      { id: 'p1', teamId: 't1', name: 'Marcos', number: 2, position: 'DF', color: '#1a73e8', active: true, createdAt: now },
-    ]));
-    localStorage.setItem('entrenolab:folders', JSON.stringify([]));
-    localStorage.setItem('entrenolab:exercises', JSON.stringify([
-      { id: 'e1', teamId: 't1', folderId: null, title: 'Rondos', description: '', explanation: '', category: 'Técnica', objectives: [], materials: [], durationMinutes: 12, minPlayers: 6, maxPlayers: 8, loadMode: 'fixed', seriesCount: null, repetitionsCount: null, workSeconds: null, restSeconds: null, isTemplate: false, canvas: { version: 2, schemaVersion: 3, field: 'full', frames: [{ duration: 1000, elements: [] }], orientation, grass: 'stripes', lineColor: '#ffffff', backgroundColor: '#31834a' }, thumbnail: null, savedAt: now },
-    ]));
-    localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
-  }, { orientation });
+  await page.addInitScript(
+    ({ orientation }) => {
+      if (localStorage.getItem('entrenolab:seeded')) return;
+      const now = new Date().toISOString();
+      localStorage.setItem('entrenolab:seeded', '1');
+      // Móvil: modo "Llenar pantalla" (fill) por defecto; fijarlo explícitamente.
+      localStorage.setItem('entrenolab:board-fill', '1');
+      // Fase 2: este spec prueba la pista de "Llenar pantalla" en aislamiento; se descarta
+      // el aviso de orientación para que la pista sea la única visible.
+      localStorage.setItem('entrenolab:orient-hint', '1');
+      localStorage.setItem(
+        'entrenolab:teams',
+        JSON.stringify([
+          { id: 't1', name: 'Primer Equipo', accentColor: '#3056d3', createdAt: now },
+        ]),
+      );
+      localStorage.setItem(
+        'entrenolab:players',
+        JSON.stringify([
+          {
+            id: 'p1',
+            teamId: 't1',
+            name: 'Marcos',
+            number: 2,
+            position: 'DF',
+            color: '#1a73e8',
+            active: true,
+            createdAt: now,
+          },
+        ]),
+      );
+      localStorage.setItem('entrenolab:folders', JSON.stringify([]));
+      localStorage.setItem(
+        'entrenolab:exercises',
+        JSON.stringify([
+          {
+            id: 'e1',
+            teamId: 't1',
+            folderId: null,
+            title: 'Rondos',
+            description: '',
+            explanation: '',
+            category: 'Técnica',
+            objectives: [],
+            materials: [],
+            durationMinutes: 12,
+            minPlayers: 6,
+            maxPlayers: 8,
+            loadMode: 'fixed',
+            seriesCount: null,
+            repetitionsCount: null,
+            workSeconds: null,
+            restSeconds: null,
+            isTemplate: false,
+            canvas: {
+              version: 2,
+              schemaVersion: 3,
+              field: 'full',
+              frames: [{ duration: 1000, elements: [] }],
+              orientation,
+              grass: 'stripes',
+              lineColor: '#ffffff',
+              backgroundColor: '#31834a',
+            },
+            thumbnail: null,
+            savedAt: now,
+          },
+        ]),
+      );
+      localStorage.setItem('entrenolab:sessions', JSON.stringify([]));
+    },
+    { orientation },
+  );
 }
 
 async function openClosed(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
-  if (await page.locator('.help-close').isVisible().catch(() => false)) {
+  await page.locator('.studio-panel .panel-close').click();
+  if (
+    await page
+      .locator('.help-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.help-close').click();
   }
   // La pista de recorrido solo aparece TRAS descartar la ayuda (un tick después), así que
@@ -67,7 +138,12 @@ async function openClosed(page: Page): Promise<void> {
   } catch {
     /* la pista puede no llegar a mostrarse en algunos estados */
   }
-  if (await page.locator('.fill-hint-close').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.fill-hint-close')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.fill-hint-close').click();
   }
   // Dejar la pizarra limpia de hints.
@@ -79,6 +155,8 @@ async function openClosed(page: Page): Promise<void> {
 async function openBoard(page: Page): Promise<void> {
   await page.goto('/board');
   await expect(page.locator('.board-host')).toBeVisible();
+  // Aislar los hints exige cerrar el inspector que abre por defecto.
+  await page.locator('.studio-panel .panel-close').click();
   await expect(page.locator('.board-host')).toHaveClass(/board-fill/);
 }
 
@@ -97,8 +175,12 @@ async function fitMode(page: Page): Promise<Fit> {
 async function readView(page: Page): Promise<{ panX: number; panY: number; zoom: number }> {
   return page.locator('.board-canvas').evaluate((el) => {
     const t = (el as HTMLElement).style.transform;
-    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(t);
-    return m ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) } : { panX: 0, panY: 0, zoom: 1 };
+    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)\s*scale\(\s*(-?[\d.]+)\s*\)/.exec(
+      t,
+    );
+    return m
+      ? { panX: parseFloat(m[1]), panY: parseFloat(m[2]), zoom: parseFloat(m[3]) }
+      : { panX: 0, panY: 0, zoom: 1 };
   });
 }
 
@@ -127,24 +209,32 @@ async function objectScreen(page: Page, selector: string): Promise<Pt> {
 
 /** Norm (0..1) de un elemento leído del `translate` de su <g> (posición canónica). */
 async function objectNorm(page: Page, selector: string): Promise<Pt> {
-  const v = await page.locator(selector).first().evaluate((el) => {
-    const g = el.closest('g');
-    const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(g?.getAttribute('transform') ?? '');
-    return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
-  });
+  const v = await page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const g = el.closest('g');
+      const m = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(
+        g?.getAttribute('transform') ?? '',
+      );
+      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
+    });
   expect(v, `el objeto (${selector}) debe estar renderizado con translate`).not.toBeNull();
   return { x: (v!.x - RECT.x) / RECT.w, y: (v!.y - RECT.y) / RECT.h };
 }
 
 /** Norm de un material <image> (asset PNG): centro en x/y + width/height del <image>. */
 async function imageNorm(page: Page, selector: string): Promise<Pt> {
-  const v = await page.locator(selector).first().evaluate((el) => {
-    const w = parseFloat(el.getAttribute('width') ?? '0');
-    const h = parseFloat(el.getAttribute('height') ?? '0');
-    const x = parseFloat(el.getAttribute('x') ?? '0');
-    const y = parseFloat(el.getAttribute('y') ?? '0');
-    return { x: x + w / 2, y: y + h / 2 };
-  });
+  const v = await page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const w = parseFloat(el.getAttribute('width') ?? '0');
+      const h = parseFloat(el.getAttribute('height') ?? '0');
+      const x = parseFloat(el.getAttribute('x') ?? '0');
+      const y = parseFloat(el.getAttribute('y') ?? '0');
+      return { x: x + w / 2, y: y + h / 2 };
+    });
   return { x: (v.x - RECT.x) / RECT.w, y: (v.y - RECT.y) / RECT.h };
 }
 
@@ -157,30 +247,46 @@ function fieldCount(page: Page): Promise<number> {
  *  retirada por el dueño (decisión Fase 1), así que el único hint es la pista de recorrido. */
 async function visibleHints(page: Page): Promise<number> {
   let n = 0;
-  if (await page.locator('.fill-hint').isVisible().catch(() => false)) n += 1;
+  if (
+    await page
+      .locator('.fill-hint')
+      .isVisible()
+      .catch(() => false)
+  )
+    n += 1;
   return n;
 }
 
 /** Despacha un PointerEvent sintético sobre `.board-host` (touch). */
-async function ptr(page: Page, type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel', x: number, y: number, pointerId: number, isPrimary = false): Promise<void> {
-  await page.evaluate(({ type, x, y, pointerId, isPrimary }) => {
-    const host = document.querySelector('.board-host') as HTMLElement | null;
-    if (!host) return;
-    const up = type === 'pointerup' || type === 'pointercancel';
-    host.dispatchEvent(
-      new PointerEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        pointerId,
-        pointerType: 'touch',
-        isPrimary,
-        clientX: x,
-        clientY: y,
-        button: 0,
-        buttons: up ? 0 : 1,
-      })
-    );
-  }, { type, x, y, pointerId, isPrimary });
+async function ptr(
+  page: Page,
+  type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+  x: number,
+  y: number,
+  pointerId: number,
+  isPrimary = false,
+): Promise<void> {
+  await page.evaluate(
+    ({ type, x, y, pointerId, isPrimary }) => {
+      const host = document.querySelector('.board-host') as HTMLElement | null;
+      if (!host) return;
+      const up = type === 'pointerup' || type === 'pointercancel';
+      host.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId,
+          pointerType: 'touch',
+          isPrimary,
+          clientX: x,
+          clientY: y,
+          button: 0,
+          buttons: up ? 0 : 1,
+        }),
+      );
+    },
+    { type, x, y, pointerId, isPrimary },
+  );
 }
 
 async function tap(page: Page, x: number, y: number, id = 7): Promise<void> {
@@ -214,7 +320,10 @@ async function placeComodinAt(page: Page, nx: number, ny: number, expectCount = 
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
   // FASE B (paneles persistentes): elegir un jugador de la plantilla NO cierra el panel.
-  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await expect(
+    page.locator('.side-panel-left'),
+    'el panel Jugadores permanece abierto',
+  ).toBeVisible();
   // FASE B (regla C): en móvil el panel persistente tapa el centro del campo; se cierra por
   // su botón X (.panel-close) —que no desarma la colocación— para poder tocar el punto.
   await page.locator('.side-panel-left .panel-close').click();
@@ -224,7 +333,12 @@ async function placeComodinAt(page: Page, nx: number, ny: number, expectCount = 
   const s = normToScreen(nx, ny, host, fit);
   await page.touchscreen.tap(s.x, s.y);
   await expect(page.locator('.field-count')).toHaveText(String(expectCount));
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.studio-panel .panel-close').click();
     await expect(page.locator('.studio-panel')).toHaveCount(0);
   }
@@ -238,7 +352,10 @@ async function placeComodinAtCenter(page: Page, expectCount = 1): Promise<Pt> {
   await expect(page.locator('.side-panel-left')).toBeVisible();
   await page.locator('.tray-player[title="Jugador Azul"]').click();
   // FASE B (paneles persistentes): elegir un jugador de la plantilla NO cierra el panel.
-  await expect(page.locator('.side-panel-left'), 'el panel Jugadores permanece abierto').toBeVisible();
+  await expect(
+    page.locator('.side-panel-left'),
+    'el panel Jugadores permanece abierto',
+  ).toBeVisible();
   // FASE B (regla C): el panel persistente tapa el centro del host en móvil; se cierra por su
   // botón X (.panel-close) —que no desarma la colocación— para poder tocar correctamente.
   await page.locator('.side-panel-left .panel-close').click();
@@ -246,7 +363,12 @@ async function placeComodinAtCenter(page: Page, expectCount = 1): Promise<Pt> {
   const host = await hostBox(page);
   await page.touchscreen.tap(host.x + host.width / 2, host.y + host.height / 2);
   await expect(page.locator('.field-count')).toHaveText(String(expectCount));
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.studio-panel .panel-close').click();
     await expect(page.locator('.studio-panel')).toHaveCount(0);
   }
@@ -267,7 +389,12 @@ async function placeConeAt(page: Page, nx: number, ny: number, expectCount = 1):
   const s = normToScreen(nx, ny, host, fit);
   await page.touchscreen.tap(s.x, s.y);
   await expect(page.locator('.field-count')).toHaveText(String(expectCount));
-  if (await page.locator('.studio-panel').isVisible().catch(() => false)) {
+  if (
+    await page
+      .locator('.studio-panel')
+      .isVisible()
+      .catch(() => false)
+  ) {
     await page.locator('.studio-panel .panel-close').click();
     await expect(page.locator('.studio-panel')).toHaveCount(0);
   }
@@ -291,7 +418,9 @@ function sha256(path: string): string {
 test.describe('D2 — capturas obligatorias del pinch (DEFECT 2)', () => {
   test.use({ hasTouch: true });
 
-  test('1. pinch-antes / pinch-despues: mismo campo antes y después, zoom CLARAMENTE distinto y verificado geométricamente', async ({ page }) => {
+  test('1. pinch-antes / pinch-despues: mismo campo antes y después, zoom CLARAMENTE distinto y verificado geométricamente', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -329,13 +458,18 @@ test.describe('D2 — capturas obligatorias del pinch (DEFECT 2)', () => {
 
     // --- VERIFICACIÓN GEOMÉTRICA del zoom (no basta con que las imágenes difieran) ---
     const zoomRatio = afterView.zoom / beforeView.zoom;
-    console.log(`[d2-antes/después] zoom ${beforeView.zoom.toFixed(2)}→${afterView.zoom.toFixed(2)} (ratio ${zoomRatio.toFixed(2)}); grass w ${beforeGrass.width.toFixed(0)}→${afterGrass.width.toFixed(0)}`);
+    console.log(
+      `[d2-antes/después] zoom ${beforeView.zoom.toFixed(2)}→${afterView.zoom.toFixed(2)} (ratio ${zoomRatio.toFixed(2)}); grass w ${beforeGrass.width.toFixed(0)}→${afterGrass.width.toFixed(0)}`,
+    );
     expect(zoomRatio, 'el pinch debe multiplicar el zoom ≥ 1.8×').toBeGreaterThan(1.8);
     expect(afterView.zoom, 'zoom acotado (máx 300%)').toBeLessThanOrEqual(3.01);
     // El área del campo (bbox del césped) crece con el ratio de zoom: comparación geométrica.
     const grassRatio = afterGrass.width / beforeGrass.width;
     expect(grassRatio, 'el ancho del campo crece con el pinch').toBeGreaterThan(1.5);
-    expect(Math.abs(grassRatio - zoomRatio), 'el área del campo crece proporcional al zoom').toBeLessThan(0.25);
+    expect(
+      Math.abs(grassRatio - zoomRatio),
+      'el área del campo crece proporcional al zoom',
+    ).toBeLessThan(0.25);
 
     // --- Las dos capturas NO pueden ser idénticas (una imagen byte-idéntica no prueba el pinch) ---
     expect(afterView.zoom, 'zoom distinto del inicial').not.toBeCloseTo(beforeView.zoom, 2);
@@ -349,15 +483,23 @@ test.describe('D2 — capturas obligatorias del pinch (DEFECT 2)', () => {
     //     verifica en e-pinch-zoom.test 1, sobre una pizarra limpia; aquí hay objetos colocados.) ---
     const comodinAfter = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
     const coneAfter = await imageNorm(page, '.board-canvas svg image[href*="cone"]');
-    expect(Math.abs(comodinAfter.x - comodinBefore.x), 'el Portero no se mueve en x').toBeLessThan(0.005);
-    expect(Math.abs(comodinAfter.y - comodinBefore.y), 'el Portero no se mueve en y').toBeLessThan(0.005);
+    expect(Math.abs(comodinAfter.x - comodinBefore.x), 'el Portero no se mueve en x').toBeLessThan(
+      0.005,
+    );
+    expect(Math.abs(comodinAfter.y - comodinBefore.y), 'el Portero no se mueve en y').toBeLessThan(
+      0.005,
+    );
     expect(Math.abs(coneAfter.x - coneBefore.x), 'el cono no se mueve en x').toBeLessThan(0.005);
     expect(Math.abs(coneAfter.y - coneBefore.y), 'el cono no se mueve en y').toBeLessThan(0.005);
     expect(afterCount, 'ningún elemento creado/borrado por el pinch').toBe(beforeCount);
-    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir Propiedades').toBe(0);
+    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir Propiedades').toBe(
+      0,
+    );
   });
 
-  test('2. pinch-sobre-objeto: ambos dedos sobre/pegados al objeto → el objeto queda INTACTO y el zoom cambia', async ({ page }) => {
+  test('2. pinch-sobre-objeto: ambos dedos sobre/pegados al objeto → el objeto queda INTACTO y el zoom cambia', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -379,11 +521,15 @@ test.describe('D2 — capturas obligatorias del pinch (DEFECT 2)', () => {
 
     const afterView = await readView(page);
     const afterNorm = await objectNorm(page, '.entrenolab-board circle[r="2.5"]');
-    console.log(`[d2-objeto] zoom ${afterView.zoom.toFixed(2)}; norm antes=(${beforeNorm.x.toFixed(4)},${beforeNorm.y.toFixed(4)}) después=(${afterNorm.x.toFixed(4)},${afterNorm.y.toFixed(4)})`);
+    console.log(
+      `[d2-objeto] zoom ${afterView.zoom.toFixed(2)}; norm antes=(${beforeNorm.x.toFixed(4)},${beforeNorm.y.toFixed(4)}) después=(${afterNorm.x.toFixed(4)},${afterNorm.y.toFixed(4)})`,
+    );
     expect(afterView.zoom, 'el pinch debe haber cambiado el zoom').toBeGreaterThan(1.2);
     expect(Math.abs(afterNorm.x - beforeNorm.x), 'x del objeto intacto').toBeLessThan(0.005);
     expect(Math.abs(afterNorm.y - beforeNorm.y), 'y del objeto intacto').toBeLessThan(0.005);
-    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir Propiedades').toBe(0);
+    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir Propiedades').toBe(
+      0,
+    );
     expect(await fieldCount(page), 'ni crear ni borrar elementos').toBe(beforeCount);
 
     const path = `${SHOTS}/pinch-sobre-objeto.png`;
@@ -392,7 +538,9 @@ test.describe('D2 — capturas obligatorias del pinch (DEFECT 2)', () => {
     expect(fs.existsSync(path), 'captura pinch-sobre-objeto').toBe(true);
   });
 
-  test('3. pinch-con-herramienta-armada: Cono armado + pinch → NO se crea nada, la herramienta sigue armada', async ({ page }) => {
+  test('3. pinch-con-herramienta-armada: Cono armado + pinch → NO se crea nada, la herramienta sigue armada', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openClosed(page);
@@ -406,10 +554,21 @@ test.describe('D2 — capturas obligatorias del pinch (DEFECT 2)', () => {
     // Pinch sobre campo vacío con la herramienta Cono armada.
     await twoFinger(page, cx, cy, [80, 220]);
     expect(await fieldCount(page), 'el pinch NO debe crear ningún cono').toBe(0);
-    expect(await page.locator('.placement-hint').count(), 'la herramienta debe seguir armada tras el pinch').toBe(1);
-    await expect(page.locator('.placement-hint'), 'la pista indica la colocación del Cono').toBeVisible();
-    await expect(page.locator('.placement-hint'), 'la pista indica la colocación del Cono').toContainText('Cono');
-    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir Propiedades').toBe(0);
+    expect(
+      await page.locator('.placement-hint').count(),
+      'la herramienta debe seguir armada tras el pinch',
+    ).toBe(1);
+    await expect(
+      page.locator('.placement-hint'),
+      'la pista indica la colocación del Cono',
+    ).toBeVisible();
+    await expect(
+      page.locator('.placement-hint'),
+      'la pista indica la colocación del Cono',
+    ).toContainText('Cono');
+    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir Propiedades').toBe(
+      0,
+    );
     expect((await readView(page)).zoom, 'el pinch debe haber hecho zoom').toBeGreaterThan(1.2);
 
     // Captura del área del campo COMPLETA (incluye el banner "Cono" armado en la parte
@@ -420,7 +579,9 @@ test.describe('D2 — capturas obligatorias del pinch (DEFECT 2)', () => {
     expect(fs.existsSync(path), 'captura pinch-con-herramienta-armada').toBe(true);
   });
 
-  test('4. movil-hint-unico: [390x844] SOLO un hint flotante (la pista de recorrido), sin ayuda general', async ({ page }) => {
+  test('4. movil-hint-unico: [390x844] SOLO un hint flotante (la pista de recorrido), sin ayuda general', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await openBoard(page);
@@ -439,7 +600,9 @@ test.describe('D2 — capturas obligatorias del pinch (DEFECT 2)', () => {
     expect(fs.existsSync(path), 'captura movil-hint-unico').toBe(true);
   });
 
-  test('5. vertical-pinch: pellizco en orientación VERTICAL (el zoom cambia y el objeto no se mueve)', async ({ page }) => {
+  test('5. vertical-pinch: pellizco en orientación VERTICAL (el zoom cambia y el objeto no se mueve)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page, { orientation: 'vertical' });
     await openClosed(page);
@@ -457,7 +620,9 @@ test.describe('D2 — capturas obligatorias del pinch (DEFECT 2)', () => {
     console.log(`[d2-vertical] zoom ${afterView.zoom.toFixed(2)}`);
     expect(afterView.zoom, 'el pinch vertical debe cambiar el zoom').toBeGreaterThan(1.2);
     expect(afterCount, 'ningún elemento se crea/borra en vertical').toBe(beforeCount);
-    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir Propiedades').toBe(0);
+    expect(await page.locator('.studio-panel').count(), 'el pinch no debe abrir Propiedades').toBe(
+      0,
+    );
 
     const path = `${SHOTS}/vertical-pinch.png`;
     await page.waitForTimeout(60);

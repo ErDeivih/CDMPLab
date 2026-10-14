@@ -1095,14 +1095,14 @@
     .side-panel-left,
     .studio-panel {
       left: 0;
-      right: 0;
+      right: auto;
       top: auto;
       // FASE 3: la hoja se ancla ENCIMA del grupo flotante (franja reservada), no en el borde de la
       // pantalla; sin esto el grupo tapaba la esquina inferior izquierda de la hoja.
       bottom: var(--reserva-grupo-herramientas, 96px);
-      width: auto;
+      width: 45vw;
       // Sin esto, un max-width de otro bloque dejaba la hoja a 320 px en vez de a todo el ancho.
-      max-width: none;
+      max-width: 45vw;
       max-height: 58%;
       overflow-y: auto;
       overscroll-behavior: contain;
@@ -1110,6 +1110,10 @@
       border-right: none;
       border-top: 1px solid #262e35;
       border-radius: 14px 14px 0 0;
+    }
+    .studio-panel {
+      left: auto;
+      right: 0;
     }
   }
 }

@@ -1,3 +1,4 @@
+import { ensurePropsPanel } from './gesture-helpers';
 import { test, expect, Page } from '@playwright/test';
 import { abrirHerramientas } from './board-helpers';
 import fs from 'node:fs';
@@ -180,7 +181,7 @@ test.describe('Capturas baseline', () => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await page.goto('/board');
-    await page.locator('button[aria-label="Propiedades"]').click();
+    await ensurePropsPanel(page);
     await expect(page.locator('.studio-panel [aria-label="Campo base"]')).toBeVisible();
 
     const combos: Array<[string, string]> = [
