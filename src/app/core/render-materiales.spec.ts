@@ -228,7 +228,7 @@ describe('FASE 4 — un PNG antiguo NO puede volver a pintar estos materiales', 
     expect(conCono).toContain('<image');
   });
 
-  it('jugador conserva su escala y balón reduce otro 30 % en TODOS los campos', () => {
+  it('jugador reduce otro 15 % y balón conserva su reducción de 30 % en TODOS los campos', () => {
     // CAMBIO DE CONTRATO VISUAL (encargo del dueño, 23/09/2026, a partir del aviso de un
     // colaborador: «los jugadores muy gordos»):
     //   · jugador y balón se reducen un 10 % → miden 9/10 de un material que NO se reduce;
@@ -255,8 +255,8 @@ describe('FASE 4 — un PNG antiguo NO puede volver a pintar estos materiales', 
       const escalas = [...svg.matchAll(/scale\(([\d.]+)\)/g)].map((m) => Number(m[1]));
       expect(escalas, `tres elementos → tres escalas en ${campo}`).toHaveLength(3);
       const [jugador, balon, cono] = escalas;
-      expect(jugador, `jugador en ${campo}: 90 % del material de referencia`).toBeCloseTo(
-        cono * REFERENCIA,
+      expect(jugador, `jugador en ${campo}: 15 % adicional`).toBeCloseTo(
+        cono * REFERENCIA * 0.85,
         5,
       );
       // Nuevo encargo: el balón ya NO comparte el factor final del jugador.

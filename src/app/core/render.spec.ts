@@ -984,8 +984,9 @@ describe('render', () => {
 
   it('renderiza el chaleco lastrado (SVG nativo)', () => {
     const svg = renderBoardSvg('full', [{ id: 'v', t: 'chaleco', x: 0.5, y: 0.5 }], {});
-    expect(svg).toContain('M-1.6 2');
-    expect(svg).toContain('#e74c3c');
+    expect(svg).toContain('M-1.6 1.95');
+    expect(svg.match(/width="1" height="0.85"/g)).toHaveLength(4);
+    expect(svg).toContain('M0 -1.25V1.75');
   });
 
   it('renderiza el BOSU (SVG nativo)', () => {
@@ -2002,8 +2003,11 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       { id: 'p1', t: 'pica', x: 0.4, y: 0.6 },
     ];
 
-    it('cono, pica y maniquí ignoran la rotación antigua del objeto', () => {
-      for (const t of ['cone', 'pole', 'pica', 'mannequin', 'mannequin_row'] as const) {
+    it('cono y maniquí ignoran la rotación antigua del objeto; la pica permite girar', () => {
+      expect(
+        renderBoardSvg('full', [{ id: 'p', t: 'pica', x: 0.5, y: 0.5, rot: 90 }], {}),
+      ).toContain('rotate(90 ');
+      for (const t of ['cone', 'pole', 'mannequin', 'mannequin_row'] as const) {
         const el: CanvasElement = { id: t, t, x: 0.5, y: 0.5, rot: 90 };
         const horizontal = renderBoardSvg('full', [el], { orientation: 'horizontal' });
         expect(horizontal, `${t} no debe quedar tumbado`).not.toContain('rotate(90 ');

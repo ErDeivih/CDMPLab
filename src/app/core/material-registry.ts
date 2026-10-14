@@ -82,6 +82,8 @@ export const CANONICAL_MATERIALS: readonly CanonicalMaterial[] = [
     icon: 'change_history',
     help: 'Cono de señalización',
     point: true,
+    colorable: true,
+    colorDefault: '#f9ab00',
     scale: 1,
   },
   {
@@ -197,6 +199,8 @@ export const CANONICAL_MATERIALS: readonly CanonicalMaterial[] = [
     icon: 'checkroom',
     help: 'Peto',
     point: true,
+    colorable: true,
+    colorDefault: '#f6c945',
   },
   {
     id: 'chaleco',

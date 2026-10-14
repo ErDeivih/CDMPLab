@@ -355,6 +355,46 @@
         </div>
         @if (selectedElement()) {
           <div class="inspector">
+            @if (canRotateSelected()) {
+              <div class="field-row">
+                <button
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Girar selección 45 grados a la izquierda"
+                  (click)="rotateSelected(-45)"
+                >
+                  Girar −45°
+                </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Girar selección 45 grados a la derecha"
+                  (click)="rotateSelected(45)"
+                >
+                  Girar +45°
+                </button>
+              </div>
+            }
+            @if (selectedIds().length > 1) {
+              <div role="status">
+                {{ selectedIds().length }} objetos seleccionados. Los cambios se aplican a los
+                objetos compatibles y desbloqueados.
+              </div>
+              <div class="field-row">
+                <button
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Reducir selección 10%"
+                  (click)="scaleSelected(0.9)"
+                >
+                  Reducir 10%
+                </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Ampliar selección 10%"
+                  (click)="scaleSelected(1.1)"
+                >
+                  Ampliar 10%
+                </button>
+              </div>
+            }
             @if (selectedElement()!.locked) {
               <div class="locked-note" role="status">
                 <span class="msi">lock</span>
@@ -625,11 +665,11 @@
               <button
                 class="btn btn-ghost btn-sm"
                 title="Bloquear / desbloquear"
-                [attr.aria-label]="selectedElement()!.locked ? 'Desbloquear' : 'Bloquear'"
+                [attr.aria-label]="selectionLocked() ? 'Desbloquear' : 'Bloquear'"
                 (click)="toggleLock()"
               >
-                <span class="msi">{{ selectedElement()!.locked ? 'lock' : 'lock_open' }}</span>
-                {{ selectedElement()!.locked ? 'Desbloquear' : 'Bloquear' }}
+                <span class="msi">{{ selectionLocked() ? 'lock' : 'lock_open' }}</span>
+                {{ selectionLocked() ? 'Desbloquear' : 'Bloquear' }}
               </button>
               <button
                 class="btn btn-ghost btn-sm"
@@ -1112,7 +1152,13 @@
                           }
                         </div>
                       }
-                      @if (t.id === 'target' || t.id === 'pica') {
+                      @if (
+                        t.id === 'target' ||
+                        t.id === 'pica' ||
+                        t.id === 'cone' ||
+                        t.id === 'ring' ||
+                        t.id === 'peto'
+                      ) {
                         <div
                           class="tools-material-variants chino-colors"
                           role="group"

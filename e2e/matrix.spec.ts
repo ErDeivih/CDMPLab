@@ -656,7 +656,7 @@ const FAMILIES: Family[] = [
     draw: false,
     caps: {
       movable: true,
-      rotatable: false,
+      rotatable: true,
       resizable: false,
       colorable: true,
       editableEndpoints: false,
@@ -1410,7 +1410,7 @@ test('redimensión con asa: arrastrar br de una elipse cambia w/h', async ({ pag
 
 // La pica tiene un arriba físico; se mantiene estrecha y erguida pero sigue siendo seleccionable
 // desde su centro y se puede mover sin una caja táctil desproporcionada.
-test('pica erguida: se re-selecciona desde su centro y se mueve', async ({ page }) => {
+test('pica rotatable: gira, se re-selecciona desde su centro y se mueve', async ({ page }) => {
   await seed(page);
   await page.goto('/board');
   const box = (await page.locator('.board-host').boundingBox())!;
@@ -1420,14 +1420,14 @@ test('pica erguida: se re-selecciona desde su centro y se mueve', async ({ page 
   await save(page);
   const created = await singleEl(page);
 
-  // El contrato antiguo permitía tumbarla +90°; esa acción ya no aparece.
+  // Nuevo encargo: la pica vuelve a permitir rotación y conserva su centro de golpeo.
   await reopen(page);
   await page.locator('.rail-btn[title="Seleccionar y mover"]').click();
   await longPress(
     page,
     ...normToScreen(...elCenter(created), (await page.locator('.board-host').boundingBox())!),
   );
-  await expect(page.locator('.context-bar [aria-label="Girar 90° a la derecha"]')).toHaveCount(0);
+  await rotateViaBar(page, 90);
   await page.keyboard.press('Escape');
 
   // Seleccionar el objeto erguido desde su centro.
@@ -1444,6 +1444,7 @@ test('pica erguida: se re-selecciona desde su centro y se mueve', async ({ page 
   await page.mouse.up();
   await save(page);
   const moved = await singleEl(page);
+  expect(moved.rot).toBe(90);
   expect(Math.abs((moved.x ?? 0) - (created.x ?? 0))).toBeGreaterThan(0.02);
   expect(Math.abs((moved.y ?? 0) - (created.y ?? 0))).toBeGreaterThan(0.01);
 });
@@ -1750,7 +1751,7 @@ for (const fam of FAMILIES) {
       // La antigua manija de rotación continua ya NO debe existir (decisión del dueño).
       expect(await page.locator('.rot-handle').count(), 'sin manija de rotación continua').toBe(0);
       expect(await page.locator('.rot-line').count(), 'sin línea de conexión de rotación').toBe(0);
-    } else if (['cone', 'pole', 'pica', 'mannequin', 'mannequin_row'].includes(fam.name)) {
+    } else if (['cone', 'pole', 'mannequin', 'mannequin_row'].includes(fam.name)) {
       await longPress(
         page,
         ...normToScreen(cx, cy, (await page.locator('.board-host').boundingBox())!),

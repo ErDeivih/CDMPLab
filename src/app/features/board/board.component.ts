@@ -41,6 +41,7 @@ import {
 import {
   renderBoardSvg,
   materialPreviewSvg,
+  weightedVestDrawing,
   hitTestElement,
   textColor as textColorFn,
   svgZigzag,
@@ -109,6 +110,7 @@ import {
   moveElementsInFrame,
   updateElementInFrames,
   layerShiftFrames,
+  transformSelectionFrames,
   translateElement,
 } from './board-doc';
 // (CORRECCIÓN URGENTE: se retiran los imports de `field-transform` —
@@ -1184,6 +1186,20 @@ export class BoardComponent {
   private moveStart: { x: number; y: number } | null = null;
   private moveGestureBegun = false;
   private resizing = false;
+  private groupResize: {
+    frames: CanvasFrame[];
+    ids: string[];
+    origin: { x: number; y: number };
+    distance: number;
+  } | null = null;
+  private readonly marquee = signal<{
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+    base: string[];
+    pointerId: number;
+  } | null>(null);
   private resizeKey: string | null = null;
   /** Elemento que se está redimensionando, CAPTURADO al empezar el gesto. No se usa
    *  `selectedId` en vivo durante el arrastre: si entre medias el usuario deshace (Ctrl+Z), pega
@@ -1322,7 +1338,11 @@ export class BoardComponent {
     }
   }
   protected colorFor(tool: Tool): string {
-    return this.toolColor()[tool] ?? (tool === 'target' ? '#e74c3c' : DEFAULT_ELEMENT_COLOR);
+    return (
+      this.toolColor()[tool] ??
+      { target: '#e74c3c', cone: '#f9ab00', peto: '#f6c945' }[tool as string] ??
+      DEFAULT_ELEMENT_COLOR
+    );
   }
   protected readonly chinoColors = CHINO_COLORS;
   protected chinoColorName(color: string): string {
@@ -1401,7 +1421,12 @@ export class BoardComponent {
 
   protected readonly boardSafe = computed(() => {
     const d = this.drag();
-    const preview = d ? this.previewStr(d) : '';
+    const m = this.marquee();
+    const preview = m
+      ? `<rect class="selection-marquee" x="${this.px(Math.min(m.x0, m.x1))}" y="${this.py(Math.min(m.y0, m.y1))}" width="${Math.abs(m.x1 - m.x0) * this.geo().rect.w}" height="${Math.abs(m.y1 - m.y0) * this.geo().rect.h}" fill="#2563eb" fill-opacity="0.12" stroke="#60a5fa" stroke-width="0.18" stroke-dasharray="0.8 0.4"/>`
+      : d
+        ? this.previewStr(d)
+        : '';
     return this.sanitizer.bypassSecurityTrustHtml(
       renderBoardSvg(this.field(), this.view(), {
         selectedId: this.selectedId(),
@@ -1423,7 +1448,7 @@ export class BoardComponent {
    *  una selección normal NO lo abre. Se cierra al tocar fuera, con Escape o tras una acción. */
   protected readonly ctxMenuOpen = signal(false);
   protected openCtxMenu(): void {
-    if (this.selectedIds().length !== 1) return;
+    if (this.selectedIds().length === 0) return;
     this.ctxMenuOpen.set(true);
   }
   protected closeCtxMenu(): void {
@@ -1534,8 +1559,7 @@ export class BoardComponent {
    *  el suyo). Fuente única: `render.COLORABLE_ELEMENT_TYPES` (antes era una tercera lista
    *  escrita a mano que se dejaba fuera el Aro, coloreable según el registro canónico). */
   protected showInspectorColor(): boolean {
-    const el = this.selectedElement();
-    return !!el && COLORABLE_ELEMENT_TYPES.has(el.t);
+    return this.view().some((el) => this.isSelected(el.id) && COLORABLE_ELEMENT_TYPES.has(el.t));
   }
   protected setShapeFill(v: boolean): void {
     this.shapeFill.set(v);
@@ -2177,6 +2201,8 @@ export class BoardComponent {
    *  para que el pinch con dos dedos NO mueva nada. `endHistory` es un no-op si el gesto
    *  cancelado no había cambiado el documento (no crea entrada de undo ni marca sucio). */
   private cancelSinglePointerGestures(): void {
+    this.groupResize = null;
+    this.marquee.set(null);
     this.panGestureStart = null;
     this.panMoved = false;
     this.movingIds = [];
@@ -2602,6 +2628,7 @@ export class BoardComponent {
    *  La ruta es RELATIVA (sin `/` inicial) para ser compatible con el baseHref `/CDMPLab/`
    *  de GitHub Pages, sin tocar el render ni el inlining (que usa rutas absolutas). */
   protected materialThumbSrc(id: string): string | null {
+    if (id === 'cone' || id === 'ring') return null;
     const kind = this.selectedMaterialKind(id);
     if (kind === 'chino_photo') return null; // miniatura repintada con el render real
     const asset = tacticAsset(kind)?.asset;
@@ -2620,6 +2647,10 @@ export class BoardComponent {
       }
       return next;
     });
+    if (id === 'cone') {
+      this.pickMaterialColor('cone', tacticAsset(kind)?.color ?? '#f9ab00');
+      return;
+    }
     this.setTool(id as Tool);
     this.armForTool(id as Tool);
   }
@@ -2630,6 +2661,18 @@ export class BoardComponent {
    *  material tiene PNG (no debe llegar aquí). Los colores por defecto coinciden con
    *  los que usa el render cuando el elemento no lleva color explícito. */
   protected materialVectorThumb(id: string): string {
+    if (id === 'cone' || id === 'ring') {
+      const asset = tacticAsset(this.selectedMaterialKind(id));
+      return materialPreviewSvg({
+        id: `preview-${id}`,
+        t: id,
+        x: 0.5,
+        y: 0.5,
+        c: this.colorFor(id as Tool),
+        assetKind: asset?.kind,
+        asset: asset?.asset,
+      });
+    }
     if (id === 'target' && this.selectedMaterialKind(id) === 'chino_photo') {
       const asset = tacticAsset('chino_photo')!;
       return materialPreviewSvg({
@@ -2661,7 +2704,9 @@ export class BoardComponent {
       marker: '#3056d3',
       pica: '#ffffff',
     };
-    const c = id === 'target' || id === 'pica' ? this.colorFor(id) : (DEF[id] ?? '#e8edf2');
+    const c = ['target', 'pica', 'peto', 'ring', 'cone'].includes(id)
+      ? this.colorFor(id as Tool)
+      : (DEF[id] ?? '#e8edf2');
     let inner = '';
     switch (id) {
       case 'fitball':
@@ -2674,7 +2719,7 @@ export class BoardComponent {
         inner = `<path d="M-2 1.6 L-2.4 -1.4 L-1.2 -2.2 L-0.4 -1.2 L0.4 -1.2 L1.2 -2.2 L2.4 -1.4 L2 1.6 Z" fill="${c}" stroke="#20242a" stroke-width="0.2"/>`;
         break;
       case 'chaleco':
-        inner = `<path d="M-1.6 2 L-1.2 -1.8 L-0.2 -1.2 L0.2 -1.2 L1.2 -1.8 L1.6 2 Z" fill="${c}" stroke="#20242a" stroke-width="0.2"/><rect x="-0.7" y="-0.4" width="1.4" height="1" fill="#ffffff" opacity="0.3"/>`;
+        inner = weightedVestDrawing();
         break;
       case 'bosu':
         inner = `<path d="M-1.6 0 A1.6 1.6 0 0 1 1.6 0 Z" fill="${c}" stroke="#20242a" stroke-width="0.2"/><ellipse cx="0" cy="0" rx="1.6" ry="0.5" fill="#10151a" opacity="0.55"/>`;
@@ -2908,6 +2953,11 @@ export class BoardComponent {
       evt.preventDefault();
       this.removeSelected();
     } else if (evt.key === 'Escape') {
+      if (this.marquee()) {
+        this.marquee.set(null);
+        this.clearSelection();
+        return;
+      }
       // Si hay un gesto de UN puntero EN CURSO (mover/redimensionar con ratón o pluma, o el
       // gesto de un dedo), Escape lo CANCELA restaurando el estado previo al gesto: no basta
       // con limpiar la selección, porque el objeto seguiría al puntero hasta soltar y, si se
@@ -2953,36 +3003,47 @@ export class BoardComponent {
 
   // ---------- Copiar / pegar ----------
 
-  private clipboard: CanvasElement | null = null;
+  private clipboard: CanvasElement[] = [];
 
   protected copySelected(): void {
-    const el = this.selectedElement();
-    if (el) this.clipboard = { ...el };
+    this.clipboard = structuredClone(this.view().filter((e) => this.isSelected(e.id)));
   }
 
   protected paste(): void {
-    if (!this.clipboard) return;
-    const el = this.clipboard;
+    if (!this.clipboard.length) return;
     // Un jugador de Plantilla no puede duplicarse (ni como propio ni rival): se bloquea.
-    if (el.t === 'player' && el.playerId) {
+    if (this.clipboard.some((el) => el.t === 'player' && el.playerId)) {
       this.notify('No se puede pegar un jugador de la plantilla: ya está en el campo.');
       return;
     }
     this.beginHistory();
-    this.addElement({ ...translateElement(el, 0.06, 0.06), id: uid() });
+    const copies = this.clipboard.map((el) => ({
+      ...translateElement(structuredClone(el), 0.06, 0.06),
+      id: uid(),
+      locked: false,
+    }));
+    for (const copy of copies) this.addElement(copy);
     this.endHistory();
-    this.selectedId.set(this.frames()[this.current()]?.elements.at(-1)?.id ?? null);
+    this.selectedIds.set(copies.map((el) => el.id));
+    this.selectedId.set(copies.at(-1)?.id ?? null);
   }
 
   // ---------- Bloquear y capas ----------
 
   protected toggleLock(): void {
-    const id = this.selectedId();
-    if (!id) return;
-    const el = this.selectedElement();
+    const ids = this.selectedIds();
+    if (!ids.length) return;
+    const locked = !this.view()
+      .filter((el) => ids.includes(el.id))
+      .every((el) => el.locked);
     this.beginHistory();
-    this.updateElement(id, { locked: !el?.locked });
+    for (const id of ids) this.updateElement(id, { locked });
     this.endHistory();
+  }
+
+  protected selectionLocked(): boolean {
+    const selected = this.view().filter((el) => this.isSelected(el.id));
+    return selected.length > 0 && selected.every((el) => el.locked);
   }
 
   protected bringForward(): void {
@@ -2998,9 +3059,9 @@ export class BoardComponent {
     this.layerShift(-1, true);
   }
   private layerShift(dir: 1 | -1, step = false): void {
-    const id = this.selectedId();
-    if (!id) return;
-    const next = layerShiftFrames(this.frames(), id, dir, step);
+    const ids = this.unlockedSelectedIds();
+    if (!ids.length) return;
+    const next = layerShiftFrames(this.frames(), ids, dir, step);
     if (next === this.frames()) return;
     this.beginHistory();
     this.frames.set(next);
@@ -3632,10 +3693,54 @@ export class BoardComponent {
 
   /** Edita el elemento seleccionado como UNA acción de historial (deshacer/rehacer). */
   private editSelected(patch: Partial<CanvasElement>): void {
-    const id = this.selectedId();
-    if (!id) return;
+    const elements = this.view().filter((el) => this.isSelected(el.id) && !el.locked);
+    if (!elements.length) return;
     this.beginHistory();
-    this.updateElement(id, patch);
+    for (const el of elements) {
+      const own = { ...patch };
+      if (el.t !== 'text') delete own.v;
+      if (el.t !== 'text') delete own.autoH;
+      if (el.t !== 'player') {
+        delete own.n;
+        delete own.label;
+      }
+      if (!['rect', 'ellipse', 'zone', 'text'].includes(el.t)) {
+        delete own.w;
+        delete own.h;
+        delete own.autoH;
+      }
+      if (!['rect', 'ellipse', 'zone'].includes(el.t)) {
+        delete own.fill;
+        delete own.fillColor;
+        delete own.fillOpacity;
+      }
+      if (!COLORABLE_ELEMENT_TYPES.has(el.t) && el.t !== 'player') delete own.c;
+      if (!['arrow', 'doubleArrow', 'curve', 'dribble'].includes(el.t)) delete own.style;
+      if (
+        ![
+          'line',
+          'arrow',
+          'doubleArrow',
+          'curve',
+          'dribble',
+          'rect',
+          'ellipse',
+          'zone',
+          'freehand',
+        ].includes(el.t)
+      ) {
+        delete own.strokeWidth;
+        delete own.lineStyle;
+      }
+      if (own.size != null && el.t === 'text' && el.w && el.autoH !== false)
+        own.h = Math.max(el.h ?? DEFAULT_TEXT_H, this.autoHForText(el.v ?? '', own.size, el.w));
+      if (own.v != null && el.t === 'text' && el.w && el.autoH !== false)
+        own.h = Math.max(
+          el.h ?? DEFAULT_TEXT_H,
+          this.autoHForText(own.v, el.size ?? DEFAULT_TEXT_SIZE, el.w),
+        );
+      this.updateElement(el.id, own);
+    }
     this.endHistory();
   }
 
@@ -3652,8 +3757,13 @@ export class BoardComponent {
     const id = this.selectedId();
     if (!id) return;
     const v = (evt.target as HTMLInputElement).value;
+    if (this.selectedIds().length > 1) {
+      this.editSelected({ v });
+      return;
+    }
     const patch: Partial<CanvasElement> = { v };
     const el = this.view().find((e) => e.id === id);
+    if (el?.locked) return;
     // Auto-crece el alto del cuadro (solo crece, nunca encoge) para que ninguna
     // línea quede recortada, SIEMPRE que el usuario no haya fijado el cuadro a mano.
     if (el && el.t === 'text' && el.w && el.autoH !== false) {
@@ -3675,14 +3785,7 @@ export class BoardComponent {
   }
 
   protected setSelColor(c: string): void {
-    const t = this.selectedElement()?.t;
-    if (t === 'rect' || t === 'ellipse' || t === 'zone') {
-      // Fase 10: el relleno usa EXACTAMENTE el mismo color que el perímetro → se
-      // sincroniza al cambiar el color, para que el modelo guardado coincida.
-      this.editSelected({ c, fillColor: c });
-    } else {
-      this.editSelected({ c });
-    }
+    this.editSelected({ c, fillColor: c });
   }
 
   protected setSelFill(fill: boolean): void {
@@ -3709,6 +3812,14 @@ export class BoardComponent {
     const v = parseFloat((evt.target as HTMLInputElement).value);
     const size = Number.isNaN(v) ? 1 : Math.max(0.4, Math.min(6, v));
     const el = this.selectedElement();
+    if (this.selectedIds().length > 1 && el) {
+      this.scaleSelected(
+        size /
+          (el.size ??
+            (el.t === 'text' ? DEFAULT_TEXT_SIZE : materialBaseSize(el.assetKind ?? el.t))),
+      );
+      return;
+    }
     const patch: Partial<CanvasElement> = { size };
     // Si cambia el tamaño de fuente puede cambiar el número de líneas: auto-crece.
     if (el && el.t === 'text' && el.w && el.autoH !== false) {
@@ -3749,17 +3860,29 @@ export class BoardComponent {
   /** "Ajustar al contenido": recalcula w/h para que el texto quepa EXACTAMENTE
    *  (puede ENCOGER si se acortó) y vuelve a activar el auto-crecimiento. */
   protected fitTextToContentSelected(): void {
-    const el = this.selectedElement();
-    if (!el || el.t !== 'text') return;
-    // El cuadro no desborda el campo por la derecha (como el render): como mucho
-    // hasta el borde derecho desde la posición actual del cuadro.
-    const maxW = Math.max(0.02, 1 - (el.x ?? 0));
-    const fit = fitTextToContent(el.v ?? '', el.size ?? DEFAULT_TEXT_SIZE, maxW, this.geo().rect);
-    this.editSelected({ w: fit.w, h: fit.h, autoH: true });
+    const elements = this.view().filter(
+      (el) => this.isSelected(el.id) && el.t === 'text' && !el.locked,
+    );
+    if (!elements.length) return;
+    this.beginHistory();
+    for (const el of elements) {
+      // El cuadro no desborda el campo por la derecha (como el render): como mucho
+      // hasta el borde derecho desde la posición actual del cuadro.
+      const maxW = Math.max(0.02, 1 - (el.x ?? 0));
+      const fit = fitTextToContent(el.v ?? '', el.size ?? DEFAULT_TEXT_SIZE, maxW, this.geo().rect);
+      this.updateElement(el.id, { w: fit.w, h: fit.h, autoH: true });
+    }
+    this.endHistory();
   }
 
   protected straightenTextSelected(): void {
-    if (this.selectedElement()?.t === 'text') this.editSelected({ rot: 0 });
+    const elements = this.view().filter(
+      (el) => this.isSelected(el.id) && el.t === 'text' && !el.locked,
+    );
+    if (!elements.length) return;
+    this.beginHistory();
+    for (const el of elements) this.updateElement(el.id, { rot: 0 });
+    this.endHistory();
   }
 
   protected setSelOpacity(evt: Event): void {
@@ -3785,10 +3908,10 @@ export class BoardComponent {
   }
 
   protected duplicateSelected(): void {
-    const el = this.selectedElement();
-    if (!el) return;
+    const elements = this.view().filter((el) => this.isSelected(el.id));
+    if (!elements.length) return;
     // Un jugador de Plantilla nunca se duplica visualmente: se bloquea con aviso.
-    if (el.t === 'player' && el.playerId) {
+    if (elements.some((el) => el.t === 'player' && el.playerId)) {
       this.notify('No se puede duplicar un jugador de la plantilla: ya está en el campo.');
       return;
     }
@@ -3796,19 +3919,39 @@ export class BoardComponent {
     // inmóvil, así que «Duplicar» solo añadiría un objeto que no se puede mover ni editar. La
     // intención ya estaba escrita en `duplicateElementEl`, pero este camino —el único real— no la
     // cumplía; ahora se comparte el candado `canDuplicateElement`.
-    if (!this.canDuplicateElement(el)) {
+    if (elements.some((el) => !this.canDuplicateElement(el))) {
       this.notify('El elemento está bloqueado: desbloquéalo para poder duplicarlo.');
       return;
     }
     this.beginHistory();
-    this.addElement({ ...translateElement(el, 0.04, 0.04), id: uid() });
+    const copies = elements.map((el) => ({
+      ...translateElement(structuredClone(el), 0.04, 0.04),
+      id: uid(),
+    }));
+    for (const copy of copies) this.addElement(copy);
     this.endHistory();
+    this.selectedIds.set(copies.map((el) => el.id));
+    this.selectedId.set(copies.at(-1)?.id ?? null);
   }
 
   /** Gira el elemento seleccionado EXACTAMENTE ±90° (un paso) como UNA acción de
    *  historial. Se usa desde la barra de contexto (botones ±90°). */
   protected rotateSelected(deg: 90 | -90 | 45 | -45): void {
     const el = this.selectedElement();
+    if (this.selectedIds().length > 1) {
+      this.beginHistory();
+      this.frames.set(
+        transformSelectionFrames(
+          this.frames(),
+          this.unlockedSelectedIds(),
+          this.geo().rect,
+          1,
+          deg,
+        ),
+      );
+      this.endHistory();
+      return;
+    }
     if (!el || el.locked || FIXED_UPRIGHT_TYPES.has(el.t)) return;
     // BLOQUE D2: se admite ±45° además de ±90°. `normalizeRotation` normaliza a [0,360)
     // (un giro de -45 queda en 315, -90 en 270, etc.), de modo que el PNG y el modelo
@@ -3817,12 +3960,22 @@ export class BoardComponent {
   }
 
   protected canRotateSelected(): boolean {
+    if (this.selectedIds().length > 1) return this.unlockedSelectedIds().length > 0;
     const el = this.selectedElement();
     return !!el && !el.locked && !FIXED_UPRIGHT_TYPES.has(el.t);
   }
 
   private selCenter(el: CanvasElement): { x: number; y: number } {
     return selCenter(el);
+  }
+
+  protected scaleSelected(factor: number): void {
+    if (!Number.isFinite(factor) || factor <= 0) return;
+    this.beginHistory();
+    this.frames.set(
+      transformSelectionFrames(this.frames(), this.unlockedSelectedIds(), this.geo().rect, factor),
+    );
+    this.endHistory();
   }
 
   /** Asas/nasas de selección (SVG) del elemento seleccionado. Fase 6: se RETIRA la manija
@@ -3839,13 +3992,40 @@ export class BoardComponent {
       const el = this.view().find((e) => e.id === id);
       if (el) s += this.outlineSvg(el);
     }
-    const last = this.selectedElement();
+    if (ids.length > 1 && this.unlockedSelectedIds().length) {
+      for (const p of this.groupCorners())
+        s += `<rect class="group-resize-handle" x="${this.px(p.x) - 0.6}" y="${this.py(p.y) - 0.6}" width="1.2" height="1.2" fill="#ffffff" stroke="#2563eb" stroke-width="${SEL_HANDLE_STROKE}"/>`;
+    }
+    const last = ids.length === 1 ? this.selectedElement() : null;
     if (last) {
       for (const rh of resizeHandles(last, this.geo().rect, this.geo().vertical)) {
         s += `<rect class="reshandle" x="${this.px(rh.x) - 0.6}" y="${this.py(rh.y) - 0.6}" width="1.2" height="1.2" fill="#ffffff" stroke="#2563eb" stroke-width="${SEL_HANDLE_STROKE}"/>`;
       }
     }
     return `<g>${s}</g>`;
+  }
+
+  private groupCorners(): { x: number; y: number }[] {
+    const boxes = this.view()
+      .filter((el) => this.isSelected(el.id) && !el.locked)
+      .map((el) => this.elNormBBox(el));
+    if (!boxes.length) return [];
+    const x0 = Math.min(...boxes.map((b) => b.x0)),
+      x1 = Math.max(...boxes.map((b) => b.x1));
+    const y0 = Math.min(...boxes.map((b) => b.y0)),
+      y1 = Math.max(...boxes.map((b) => b.y1));
+    return [
+      { x: x0, y: y0 },
+      { x: x1, y: y0 },
+      { x: x1, y: y1 },
+      { x: x0, y: y1 },
+    ];
+  }
+
+  private groupResizeCornerAt(p: { x: number; y: number }, tolerance: number): number {
+    if (this.selectedIds().length < 2) return -1;
+    const tol = this.resizeTolNorm(tolerance);
+    return this.groupCorners().findIndex((h) => Math.hypot(h.x - p.x, h.y - p.y) < tol);
   }
 
   private resizeHandleAt(
@@ -4171,7 +4351,7 @@ export class BoardComponent {
       evt.clientX,
       evt.clientY,
       this.toNorm(evt),
-      evt.shiftKey,
+      evt.shiftKey || evt.ctrlKey || evt.metaKey,
       evt.pointerId,
       evt.timeStamp,
     );
@@ -4212,9 +4392,29 @@ export class BoardComponent {
       }
       case 'select': {
         const selEl = this.selectedElement();
+        const groupCorner = !shift ? this.groupResizeCornerAt(p, tolAsa) : -1;
+        if (groupCorner >= 0) {
+          const origin = this.groupCorners()[(groupCorner + 2) % 4];
+          const rect = this.geo().rect;
+          this.beginHistory();
+          this.resizing = true;
+          this.groupResize = {
+            frames: structuredClone(this.frames()),
+            ids: this.unlockedSelectedIds(),
+            origin,
+            distance: Math.max(
+              0.001,
+              Math.hypot((p.x - origin.x) * rect.w, (p.y - origin.y) * rect.h),
+            ),
+          };
+          break;
+        }
         // Asas de redimensionado del elemento seleccionado (la rotación continua se
         // retira en la Fase 6: ahora es ±90° desde la barra de contexto).
-        const rKey = selEl ? this.resizeHandleAt(selEl, p, tolAsa) : null;
+        const rKey =
+          selEl && !shift && this.selectedIds().length === 1
+            ? this.resizeHandleAt(selEl, p, tolAsa)
+            : null;
         if (selEl && rKey && !selEl.locked) {
           this.beginHistory();
           this.resizing = true;
@@ -4277,7 +4477,16 @@ export class BoardComponent {
           // Fase 7: pulsación larga sobre un objeto → DUPLICAR (si se mantiene sin
           // moverse). Se arma en el pointerdown para medir el tiempo desde la bajada.
           this.startLongPress(pointerId, clientX, clientY, hit);
-        } else if (!shift) {
+        } else {
+          if (!fromTouch)
+            this.marquee.set({
+              x0: p.x,
+              y0: p.y,
+              x1: p.x,
+              y1: p.y,
+              base: shift ? [...this.selectedIds()] : [],
+              pointerId,
+            });
           // Fase 5: vacío (ni objeto ni asa) en Seleccionar → DESELECCIONAR. NUNCA se
           // inicia paneo (panGestureStart NO se fija): arrastrar desde vacío no mueve
           // la vista, aunque el campo sea mayor que la pantalla o el zoom >100 %.
@@ -4296,7 +4505,7 @@ export class BoardComponent {
             this.setSingleSelection(pend.id);
             this.openCtxMenu();
           } else {
-            this.clearSelection();
+            if (!shift) this.clearSelection();
           }
         }
         break;
@@ -4395,7 +4604,7 @@ export class BoardComponent {
     const p = this.toNorm(evt);
     const tool = this.tool();
     const armed = this.armed();
-    const shift = evt.shiftKey;
+    const shift = evt.shiftKey || evt.ctrlKey || evt.metaKey;
 
     // Como en el comportamiento inmediato, tocar el campo con una herramienta (no
     // Seleccionar) cierra el menú contextual. Es un efecto de vista, no de modelo.
@@ -4444,7 +4653,12 @@ export class BoardComponent {
     switch (tool) {
       case 'select': {
         const selEl = this.selectedElement();
-        const rKey = selEl ? this.resizeHandleAt(selEl, p, 16) : null;
+        if (selEl && !shift && this.groupResizeCornerAt(p, 16) >= 0)
+          return { kind: 'resize', elId: selEl.id, key: 'group' };
+        const rKey =
+          selEl && !shift && this.selectedIds().length === 1
+            ? this.resizeHandleAt(selEl, p, 16)
+            : null;
         if (selEl && rKey && !selEl.locked) {
           return { kind: 'resize', elId: selEl.id, key: rKey };
         }
@@ -4737,6 +4951,38 @@ export class BoardComponent {
       return;
     }
     const p = this.toNorm(evt);
+    if (this.groupResize) {
+      const g = this.groupResize,
+        rect = this.geo().rect;
+      const factor = Math.max(
+        0.1,
+        Math.min(
+          5,
+          Math.hypot((p.x - g.origin.x) * rect.w, (p.y - g.origin.y) * rect.h) / g.distance,
+        ),
+      );
+      this.frames.set(transformSelectionFrames(g.frames, g.ids, rect, factor, 0, g.origin));
+      return;
+    }
+    const marquee = this.marquee();
+    if (marquee && marquee.pointerId === evt.pointerId) {
+      const m = { ...marquee, x1: p.x, y1: p.y };
+      this.marquee.set(m);
+      const loX = Math.min(m.x0, m.x1),
+        hiX = Math.max(m.x0, m.x1);
+      const loY = Math.min(m.y0, m.y1),
+        hiY = Math.max(m.y0, m.y1);
+      const ids = this.view()
+        .filter((el) => {
+          const b = this.elNormBBox(el);
+          return b.x0 >= loX && b.x1 <= hiX && b.y0 >= loY && b.y1 <= hiY;
+        })
+        .map((el) => el.id);
+      const selected = [...new Set([...m.base, ...ids])];
+      this.selectedIds.set(selected);
+      this.selectedId.set(selected.at(-1) ?? null);
+      return;
+    }
     // Fase 7: si el puntero de la pulsación larga se mueve más de la tolerancia, se cancela
     // (un arrastre antes del tiempo NO duplica; pasa a mover/panear con normalidad).
     if (this.lp && evt.pointerId === this.lp.pointerId) {
@@ -4919,6 +5165,7 @@ export class BoardComponent {
   }
 
   onPointerUp(evt?: PointerEvent): void {
+    if (!evt || this.marquee()?.pointerId === evt.pointerId) this.marquee.set(null);
     // Retirar el puntero liberado del mapa de activos.
     if (evt && evt.pointerId != null) {
       this.activePointers.delete(evt.pointerId);
@@ -4992,6 +5239,7 @@ export class BoardComponent {
     this.moveGestureBegun = false;
     this.moveStart = null;
     this.resizing = false;
+    this.groupResize = null;
     this.resizeKey = null;
     this.resizeId = null;
     this.resizeStartSize = null;
@@ -5100,7 +5348,10 @@ export class BoardComponent {
         el = withMaterial({ id: uid(), t: 'ball', x: p.x, y: p.y, c: '#ffffff' }, 'ball');
         break;
       case 'cone':
-        el = withMaterial({ id: uid(), t: 'cone', x: p.x, y: p.y, c: '#f9ab00' }, 'cone');
+        el = withMaterial(
+          { id: uid(), t: 'cone', x: p.x, y: p.y, c: this.colorFor('cone') },
+          'cone',
+        );
         break;
       case 'mannequin':
         el = withMaterial({ id: uid(), t: 'mannequin', x: p.x, y: p.y, c: '#e8edf2' }, 'mannequin');
@@ -5127,7 +5378,10 @@ export class BoardComponent {
         el = withMaterial({ id: uid(), t: 'hurdle', x: p.x, y: p.y, c: '#ffffff' }, 'hurdle');
         break;
       case 'ring':
-        el = withMaterial({ id: uid(), t: 'ring', x: p.x, y: p.y, c: '#ffffff' }, 'ring');
+        el = withMaterial(
+          { id: uid(), t: 'ring', x: p.x, y: p.y, c: this.colorFor('ring') },
+          'ring',
+        );
         break;
       case 'ladder':
         el = withMaterial({ id: uid(), t: 'ladder', x: p.x, y: p.y, c: '#ffffff' }, 'ladder');
@@ -5171,7 +5425,14 @@ export class BoardComponent {
         };
         break;
       case 'peto':
-        el = { id: uid(), t: 'peto', x: p.x, y: p.y, c: '#f6c945', size: materialBaseSize('peto') };
+        el = {
+          id: uid(),
+          t: 'peto',
+          x: p.x,
+          y: p.y,
+          c: this.colorFor('peto'),
+          size: materialBaseSize('peto'),
+        };
         break;
       case 'chaleco':
         el = {

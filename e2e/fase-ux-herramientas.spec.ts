@@ -235,8 +235,9 @@ test.describe('FASE 3 — herramientas de la pizarra (grupo flotante)', () => {
     await expect(page.locator('.field-count')).toHaveText('1');
 
     await page.locator('.studio-top button[aria-label="Exportar"]').click();
+    const download = page.waitForEvent('download', { timeout: 20_000 });
     await page.locator('.rail-btn', { hasText: 'PNG' }).first().click();
-    const dl = await page.waitForEvent('download', { timeout: 20_000 });
+    const dl = await download;
     const ruta = await dl.path();
     expect(ruta, 'el navegador entregó el PNG').toBeTruthy();
 

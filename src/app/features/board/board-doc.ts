@@ -1,8 +1,82 @@
 import { CanvasElement, CanvasFrame } from '../../core/models';
-import { elementCenter, MARGIN_STRIP } from '../../core/render';
+import { materialBaseSize } from '../../core/tactic-assets';
+import {
+  elementCenter,
+  MARGIN_STRIP,
+  FIXED_UPRIGHT_TYPES,
+  DEFAULT_TEXT_SIZE,
+} from '../../core/render';
 
 /** Reexporta el centro geométrico compartido (render + transformaciones). */
 export { elementCenter };
+
+/** Transforma una selección alrededor de su centro, en unidades físicas del campo.
+ * Las coordenadas de líneas/curvas se transforman directamente; las cajas conservan
+ * sus dimensiones y usan rot. No muta objetos bloqueados ni referencias de otros frames. */
+export function transformSelectionFrames(
+  frames: CanvasFrame[],
+  ids: readonly string[],
+  rect: { w: number; h: number },
+  factor = 1,
+  degrees = 0,
+  origin?: { x: number; y: number },
+): CanvasFrame[] {
+  const selected = new Set(ids);
+  const angle = (degrees * Math.PI) / 180;
+  return frames.map((frame) => {
+    const elements = frame.elements.filter((el) => selected.has(el.id) && !el.locked);
+    if (!elements.length) return frame;
+    const centers = elements.map(elementCenter);
+    const cx =
+      origin?.x ??
+      (Math.min(...centers.map((p) => p.x)) + Math.max(...centers.map((p) => p.x))) / 2;
+    const cy =
+      origin?.y ??
+      (Math.min(...centers.map((p) => p.y)) + Math.max(...centers.map((p) => p.y))) / 2;
+    const point = (x: number, y: number): [number, number] => {
+      const dx = (x - cx) * rect.w * factor,
+        dy = (y - cy) * rect.h * factor;
+      return [
+        cx + (dx * Math.cos(angle) - dy * Math.sin(angle)) / rect.w,
+        cy + (dx * Math.sin(angle) + dy * Math.cos(angle)) / rect.h,
+      ];
+    };
+    return {
+      ...frame,
+      elements: frame.elements.map((el) => {
+        if (!selected.has(el.id) || el.locked) return el;
+        const out = { ...el };
+        if (el.x1 != null && el.y1 != null && el.x2 != null && el.y2 != null) {
+          [out.x1, out.y1] = point(el.x1, el.y1);
+          [out.x2, out.y2] = point(el.x2, el.y2);
+          if (el.c1x != null && el.c1y != null) [out.c1x, out.c1y] = point(el.c1x, el.c1y);
+        } else if (el.t === 'freehand') {
+          out.points = (el.points ?? []).map(([x, y]) => point(x, y));
+        } else {
+          const center = elementCenter(el);
+          const [x, y] = point(center.x, center.y);
+          const box = el.w != null && el.h != null;
+          out.x = x - (box ? (el.w! * factor) / 2 : 0);
+          out.y = y - (box ? (el.h! * factor) / 2 : 0);
+          if (box) {
+            out.w = el.w! * factor;
+            out.h = el.h! * factor;
+          }
+          if (!FIXED_UPRIGHT_TYPES.has(el.t)) out.rot = ((el.rot ?? 0) + degrees + 360) % 360;
+        }
+        if (factor !== 1) {
+          if (el.t === 'text' || (el.x1 == null && el.t !== 'freehand' && el.w == null))
+            out.size =
+              (el.size ??
+                (el.t === 'text' ? DEFAULT_TEXT_SIZE : materialBaseSize(el.assetKind ?? el.t))) *
+              factor;
+          if (el.strokeWidth != null) out.strokeWidth = el.strokeWidth * factor;
+        }
+        return out;
+      }),
+    };
+  });
+}
 
 // =============================================================
 // EntrenoLab — Operaciones PURAS del documento de pizarra.
@@ -138,13 +212,32 @@ export function updateElementInFrames(
  * Conserva el orden relativo del resto; con step=true desplaza solo una capa. */
 export function layerShiftFrames(
   frames: CanvasFrame[],
-  id: string,
+  id: string | readonly string[],
   dir: -1 | 1,
   step = false,
 ): CanvasFrame[] {
   let changed = false;
+  const ids = new Set(typeof id === 'string' ? [id] : id);
   const next = frames.map((f) => {
     const els = [...f.elements];
+    if (Array.isArray(id)) {
+      if (step) {
+        const indices = dir === 1 ? [...els.keys()].reverse() : [...els.keys()];
+        for (const i of indices) {
+          const j = i + dir;
+          if (ids.has(els[i].id) && j >= 0 && j < els.length && !ids.has(els[j].id)) {
+            [els[i], els[j]] = [els[j], els[i]];
+          }
+        }
+      } else {
+        const selected = els.filter((e) => ids.has(e.id));
+        const rest = els.filter((e) => !ids.has(e.id));
+        els.splice(0, els.length, ...(dir === 1 ? [...rest, ...selected] : [...selected, ...rest]));
+      }
+      if (els.every((e, i) => e === f.elements[i])) return f;
+      changed = true;
+      return { ...f, elements: els };
+    }
     const idx = els.findIndex((e) => e.id === id);
     if (idx === -1) return f;
     const to = step

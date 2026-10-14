@@ -76,6 +76,8 @@ export function materialSize(el: CanvasElement): number {
  *   reabrir un ejercicio antiguo no lo modifica y el deslizador de tamaño sigue funcionando.
  */
 export const PLAYER_BALL_SIZE_FACTOR = 0.9;
+/** Reducción adicional de jugadores, sin modificar balones ni datos guardados. */
+export const PLAYER_SIZE_FACTOR = PLAYER_BALL_SIZE_FACTOR * 0.85;
 
 /** Semiejes (normalizados 0..1) de la hit-box de un material, en su espacio LOCAL
  *  (sin rotación). Usa el recuadro de contenido (bbox) escalado por `size` y lo
@@ -102,7 +104,7 @@ export function materialHitHalfExtents(
   const s =
     materialSize(el) *
     objectScale *
-    (tipo === 'player' || tipo === 'ball' ? PLAYER_BALL_SIZE_FACTOR : 1);
+    (tipo === 'player' ? PLAYER_SIZE_FACTOR : tipo === 'ball' ? PLAYER_BALL_SIZE_FACTOR : 1);
   const frac = materialHitFrac(tipo);
   const esPorteria = tipo === 'goal' && !!field;
   const cajaPorteria = esPorteria ? goalBoxUnits(field) : null;
@@ -157,7 +159,6 @@ const UPRIGHT_MATERIAL_TYPES: ReadonlySet<string> = new Set(CANONICAL_MATERIALS.
 export const FIXED_UPRIGHT_TYPES: ReadonlySet<string> = new Set([
   'cone',
   'pole',
-  'pica',
   'mannequin',
   'mannequin_row',
 ]);
@@ -237,6 +238,7 @@ export const COLORABLE_ELEMENT_TYPES: ReadonlySet<string> = new Set([
   'text',
   // Materiales de render vectorial que usan `el.c`.
   'peto',
+  'cone',
   'pica',
   'target',
   'ring',
@@ -875,6 +877,19 @@ function rotWrap(inner: string, rot: number | undefined, cx: number, cy: number)
  */
 const SIEMPRE_VECTOR = new Set(['ladder', 'ladder_yellow', 'minigoal', 'target', 'goal']);
 
+/** Chaleco de fuerza: hombros reforzados, cierre y bolsillos de lastre. Compartido con el menú. */
+export function weightedVestDrawing(): string {
+  const pockets = [-1.25, 0.25]
+    .flatMap((x) =>
+      [-0.55, 0.6].map(
+        (y) =>
+          `<rect x="${x}" y="${y}" width="1" height="0.85" rx="0.12" fill="#15191e" stroke="#68717b" stroke-width="0.12"/><path d="M${x + 0.15} ${y + 0.15}h0.7" stroke="#a3acb6" stroke-width="0.1"/>`,
+      ),
+    )
+    .join('');
+  return `<path d="M-1.6 1.95L-1.6 -0.65L-1.3 -2.05L-0.65 -2.05L-0.45 -1.3H0.45L0.65 -2.05H1.3L1.6 -0.65V1.95Z" fill="#343c45" stroke="#111820" stroke-width="0.18"/>${pockets}<path d="M0 -1.25V1.75" stroke="#a3acb6" stroke-width="0.12"/><rect x="-1.6" y="1.55" width="3.2" height="0.35" rx="0.08" fill="#111820"/><rect x="-0.25" y="1.55" width="0.5" height="0.35" fill="#69737e"/>`;
+}
+
 function elStr(
   el: CanvasElement,
   selected: boolean,
@@ -898,6 +913,8 @@ function elStr(
   // EXCEPCIÓN (FASE 4 del encargo de materiales): los materiales de `SIEMPRE_VECTOR` ignoran su PNG
   // y usan el dibujo vectorial, que es reconocible a cualquier tamaño.
   const photoChino = el.t === 'target' && el.assetKind === 'chino_photo';
+  const tintMaterial =
+    photoChino || (el.t === 'cone' && !!el.c && el.c !== '#f9ab00') || (el.t === 'ring' && !!el.c);
   if (
     el.asset &&
     (photoChino || (!SIEMPRE_VECTOR.has(el.t) && !SIEMPRE_VECTOR.has(el.assetKind ?? '')))
@@ -915,10 +932,10 @@ function elStr(
     const c = /^#[0-9a-f]{6}$/i.test(el.c ?? '') ? el.c! : '#22c55e';
     const filterId = `chino-photo-${el.id.replace(/[^a-z0-9_-]/gi, '')}`;
     const channels = [1, 3, 5].map((start) => parseInt(c.slice(start, start + 2), 16) / 255);
-    const tone = photoChino
+    const tone = tintMaterial
       ? `<defs><filter id="${filterId}" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values="0"/><feComponentTransfer>${channels.map((channel, i) => `<feFunc${['R', 'G', 'B'][i]} type="table" tableValues="${channel * 0.2} ${channel * 0.85} ${channel * 0.85 + 0.15}"/>`).join('')}</feComponentTransfer></filter></defs>`
       : '';
-    const img = `${tone}<image href="${assetHref}" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet"${photoChino ? ` filter="url(#${filterId})"` : ''} />`;
+    const img = `${tone}<image href="${assetHref}" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet"${tintMaterial ? ` filter="url(#${filterId})"` : ''} />`;
     return rotWrap(img, el.rot, x, y);
   }
   switch (el.t) {
@@ -928,7 +945,7 @@ function elStr(
       const y = gy(el.y ?? 0);
       // −10 % pedido por el dueño (23/09/2026). El número, el nombre y el «POR» viajan dentro de
       // este grupo, así que encogen en la misma proporción sin tocar sus tamaños por separado.
-      const s = materialSize(el) * objectScale * PLAYER_BALL_SIZE_FACTOR;
+      const s = materialSize(el) * objectScale * PLAYER_SIZE_FACTOR;
       // Fase 8: el nombre y el número se CONTRARROTAN para permanecer derechos y
       // legibles aunque el jugador esté girado (±90°). El círculo (invariante bajo
       // rotación) conserva la transformación del elemento; el texto se compensa con
@@ -991,7 +1008,7 @@ function elStr(
       const x = gx(el.x ?? 0);
       const y = gy(el.y ?? 0);
       const s = materialSize(el) * objectScale;
-      const g = `<g transform="translate(${x} ${y}) scale(${s})"><path d="M-1.6 2 L-1.2 -1.8 L-0.2 -1.2 L0.2 -1.2 L1.2 -1.8 L1.6 2 Z" fill="${el.c ?? '#e74c3c'}" stroke="#20242a" stroke-width="0.2"/><rect x="-0.7" y="-0.4" width="1.4" height="1" fill="#ffffff" opacity="0.3"/></g>`;
+      const g = `<g transform="translate(${x} ${y}) scale(${s})">${weightedVestDrawing()}</g>`;
       return rotWrap(g, el.rot, x, y);
     }
     case 'bosu': {

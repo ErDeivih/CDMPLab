@@ -1891,7 +1891,7 @@ test.describe('EntrenoLab funcionalidades', () => {
     await abrirHerramientas(page);
     await page.locator('.tools-cat', { hasText: 'Material' }).click();
     const card = page.locator('.tools-material-card', { hasText: 'Cono' });
-    const variants = card.locator('.tools-material-variants');
+    const variants = card.getByRole('group', { name: 'Variantes de Cono', exact: true });
     await expect(variants).toBeVisible();
     await variants.locator('.variant-swatch').nth(1).click(); // variante azul
     // Confirmar que quedó seleccionada.

@@ -248,9 +248,7 @@ test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
     expect(svg).toContain('stroke-width="0.3"');
   });
 
-  test('tamaño inicial: cono base 0.60 y jugador un 10 % menor que él (decisiones del dueño)', async ({
-    page,
-  }) => {
+  test('tamaño inicial: cono base 0.60 y jugador con otro 15 % de reducción', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await seed(page);
     await openBoard(page);
@@ -266,7 +264,12 @@ test.describe('Fase 3/4 — trazo fino y tamaño inicial ~75 %', () => {
     // («los jugadores muy gordos»). Antes el jugador se dibujaba con `scale(0.60)`; ahora es 0.60 ·
     // `PLAYER_BALL_SIZE_FACTOR` = 0.54. Los demás materiales (este cono) siguen igual: la prueba
     // compara contra el cono en vez de contra un número suelto, que es la relación que se pidió.
-    expect(svg).toMatch(/scale\(0\.54/);
+    // Nuevo contrato del dueño: otro 15 % solo para jugadores (0.54 × 0.85 = 0.459).
+    const transform = await page
+      .locator('.board-canvas [data-el-type="player"] > g')
+      .getAttribute('transform');
+    const scale = Number(/scale\(([^)]+)\)/.exec(transform!)?.[1]);
+    expect(scale).toBeCloseTo(0.459, 8);
     expect(svg).not.toMatch(/scale\(0\.6[^0-9]/);
 
     await page.waitForTimeout(250);
