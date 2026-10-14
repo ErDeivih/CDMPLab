@@ -4,11 +4,21 @@ import { expect, type Page } from '@playwright/test';
  *  las pruebas no deben esperar un botón «Propiedades» cuando ya muestra «Cerrar».
  *  Si una prueba ocultó un overlay para medir el lienzo, se reabre por la UI real. */
 export async function ensurePropsPanel(page: Page): Promise<void> {
+  // La URL cambia antes de que Angular monte la pizarra al volver desde Biblioteca.
+  // No decidir qué botón existe consultando todavía el DOM de la pantalla anterior.
+  await expect(page.locator('.board-host')).toBeVisible();
+  await expect(page.locator('.board-canvas svg')).toBeVisible();
+  const toggle = page.locator(
+    '.studio-top button[aria-label="Propiedades"], .studio-top button[aria-label="Cerrar propiedades"]',
+  );
+  await expect(toggle).toBeVisible();
   const panel = page.locator('.studio-panel');
   if (await panel.isVisible()) return;
-  const close = page.locator('.studio-top button[aria-label="Cerrar propiedades"]');
-  if (await close.isVisible()) await close.click();
-  await page.locator('.studio-top button[aria-label="Propiedades"]').click();
+  if ((await toggle.getAttribute('aria-label')) === 'Cerrar propiedades') {
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-label', 'Propiedades');
+  }
+  await toggle.click();
   await expect(panel).toBeVisible();
 }
 
