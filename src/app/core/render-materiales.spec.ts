@@ -142,7 +142,9 @@ describe('FASE 4 — PORTERÍA, MINIPORTERÍA y ESCALERA tienen siluetas distint
     // (medido: 0,42 de ancho y 0,50 de alto tras bajar su altura de 1,0 a 0,85 unidades en el cierre
     // del encargo de materiales).
     expect(anchoMini / anchoPort, 'anchura de miniportería vs portería').toBeLessThan(0.5);
-    expect(altoMini / altoPort, 'altura de miniportería vs portería').toBeLessThan(0.65);
+    // Nuevos PNG del dueño: la miniportería tiene perspectiva más alta (86/150),
+    // frente a 42/150 de la normal; no se aplasta para imitar la silueta antigua.
+    expect(altoMini / altoPort, 'altura de miniportería vs portería').toBeLessThan(1);
     // Y es más ANCHA que alta (portería), no alargada (escalera).
     expect(anchoMini / altoMini).toBeGreaterThan(1.5);
     expect(anchoMini / altoMini).toBeLessThan(2.6);
@@ -164,22 +166,15 @@ describe('FASE 4 — PORTERÍA, MINIPORTERÍA y ESCALERA tienen siluetas distint
       rects(p).filter((r) => r.h > 1.5 && r.h < 2.5 && r.w < 0.4).length,
       'la portería solo tiene sus dos postes con esa forma (peldaños: 6-8 en la escalera)',
     ).toBeLessThanOrEqual(2);
-    // La miniportería tiene una BARRA DE BASE que sobresale del marco; la portería no tiene ninguna
-    // pieza más ancha que su propio fondo de red.
-    const anchoDe = (g: string): number =>
-      Math.max(...rects(g).map((r) => r.x + r.w)) - Math.min(...rects(g).map((r) => r.x));
-    const anchoFondoMini = rects(m).filter((r) => r.h > 0.4)[0].w;
-    expect(anchoDe(m), 'la base sobresale del fondo de la miniportería').toBeGreaterThan(
-      anchoFondoMini,
-    );
-    expect(anchoDe(p), 'la portería no tiene base que sobresalga').toBeLessThanOrEqual(
-      rects(p).filter((r) => r.h > 1)[0].w + 0.001,
-    );
+    expect(p).toContain('href="assets/tactical/ladder.png"');
+    expect(m).toContain('href="assets/tactical/minigoal.png"');
+    expect(e).not.toContain('<image');
+    expect(rects(m)[0].w / rects(m)[0].h).toBeCloseTo(150 / 86, 5);
   });
 });
 
 describe('FASE 4 — un PNG antiguo NO puede volver a pintar estos materiales', () => {
-  it('escalera, miniportería, chino y portería se dibujan en vector aunque el documento traiga asset', () => {
+  it('los PNG antiguos no cambian la escalera ni el chino; miniportería usa su PNG solicitado', () => {
     // Compatibilidad: los documentos antiguos guardaron el PNG de estos materiales. El render los
     // pinta vectoriales igual (lista `SIEMPRE_VECTOR`), así que no reaparece el dibujo ilegible.
     const conAsset: CanvasElement[] = [
@@ -209,7 +204,10 @@ describe('FASE 4 — un PNG antiguo NO puede volver a pintar estos materiales', 
       },
     ];
     const svg = renderBoardSvg('full', conAsset, {});
-    expect(svg.includes('<image'), 'ningún material de estos usa <image>').toBe(false);
+    expect(svg.match(/<image /g)).toHaveLength(1);
+    expect(svg).toContain('href="assets/tactical/minigoal.png"');
+    expect(grupo('full', conAsset[0])).not.toContain('<image');
+    expect(grupo('full', conAsset[2])).not.toContain('<image');
     // Y el cono, que sí conserva su PNG, sigue usándolo (control: no se ha desactivado todo).
     const conCono = renderBoardSvg(
       'full',

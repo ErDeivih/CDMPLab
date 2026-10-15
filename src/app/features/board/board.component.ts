@@ -2628,7 +2628,7 @@ export class BoardComponent {
    *  La ruta es RELATIVA (sin `/` inicial) para ser compatible con el baseHref `/CDMPLab/`
    *  de GitHub Pages, sin tocar el render ni el inlining (que usa rutas absolutas). */
   protected materialThumbSrc(id: string): string | null {
-    if (id === 'cone' || id === 'ring') return null;
+    if (id === 'cone' || id === 'ring' || id === 'goal' || id === 'minigoal') return null;
     const kind = this.selectedMaterialKind(id);
     if (kind === 'chino_photo') return null; // miniatura repintada con el render real
     const asset = tacticAsset(kind)?.asset;

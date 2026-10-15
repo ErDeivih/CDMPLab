@@ -65,6 +65,17 @@ export function materialSize(el: CanvasElement): number {
   );
 }
 
+/** Caja del PNG y alto visible (alfa) de las porterías, compartida con el golpeo.
+ * Conserva las anchuras anteriores y los aumentos pedidos; no estira el recurso cuadrado. */
+export function goalMaterialImageBox(
+  el: CanvasElement,
+  field: FieldType = 'full',
+  objectScale = 1,
+): { w: number; h: number; visibleH: number } {
+  const w = el.t === 'goal' ? goalBoxUnits(field).w * 1.05 : 2.812 * materialSize(el) * objectScale;
+  return { w, h: w, visibleH: w * (el.t === 'goal' ? 42 / 150 : 86 / 150) };
+}
+
 /**
  * Reducción del tamaño de JUGADORES y BALÓN, igual en TODOS los campos (encargo del dueño,
  * 23/09/2026, a partir del aviso de un colaborador: «los jugadores muy gordos»).
@@ -106,14 +117,14 @@ export function materialHitHalfExtents(
     objectScale *
     (tipo === 'player' ? PLAYER_SIZE_FACTOR : tipo === 'ball' ? PLAYER_BALL_SIZE_FACTOR : 1);
   const frac = materialHitFrac(tipo);
-  const esPorteria = tipo === 'goal' && !!field;
-  const cajaPorteria = esPorteria ? goalBoxUnits(field) : null;
+  const esPorteria = el.t === 'goal' || el.t === 'minigoal';
+  const cajaPorteria = esPorteria ? goalMaterialImageBox(el, field ?? 'full', objectScale) : null;
   // Semiejes en UNIDADES del viewBox (sin normalizar todavía). El intercambio del caso vertical
   // se hace AQUÍ, en unidades: norm X y norm Y escalan distinto (92 vs 59,6 unidades), así que
   // intercambiar los valores ya normalizados dejaría el dibujo a medio cubrir (medido: una
   // escalera grande en vertical quedaba con el eje largo en el sitio equivocado).
-  let hwU = cajaPorteria ? (cajaPorteria.w * 1.05) / 2 : (MATERIAL_BOX * s * frac.w) / 2;
-  let hhU = cajaPorteria ? (cajaPorteria.h * 1.05) / 2 : (MATERIAL_BOX * s * frac.h) / 2;
+  let hwU = cajaPorteria ? cajaPorteria.w / 2 : (MATERIAL_BOX * s * frac.w) / 2;
+  let hhU = cajaPorteria ? cajaPorteria.visibleH / 2 : (MATERIAL_BOX * s * frac.h) / 2;
   // Hit-box = recuadro de contenido (bbox del material, con su proporción real via `frac`)
   // + margen EN PANTALLA por zoom. D1: la base es la caja REAL del objeto (así un poste
   // alto/estrecho conserva su caja vertical y un cono la suya), y el margen se convierte de
@@ -875,7 +886,7 @@ function rotWrap(inner: string, rot: number | undefined, cx: number, cy: number)
  * Se comprueba por TIPO de elemento y por `assetKind`, porque la variante amarilla de la escalera es
  * el mismo `t` (`ladder`) con otro `assetKind`.
  */
-const SIEMPRE_VECTOR = new Set(['ladder', 'ladder_yellow', 'minigoal', 'target', 'goal']);
+const SIEMPRE_VECTOR = new Set(['ladder', 'ladder_yellow', 'target']);
 
 /** Chaleco de fuerza: hombros reforzados, cierre y bolsillos de lastre. Compartido con el menú. */
 export function weightedVestDrawing(): string {
@@ -900,6 +911,23 @@ function elStr(
   // (FASE 3 del encargo de materiales) y aquí es donde se decide qué se dibuja.
   field: FieldType = 'full',
 ): string {
+  // También los documentos antiguos y los objetos sin asset usan los PNG solicitados.
+  // No se modifica el documento al abrirlo ni se permite que un asset antiguo diverja del menú.
+  if (el.t === 'goal' || el.t === 'minigoal') el = { ...el, asset: materialAsset(el.t)?.asset };
+  if ((el.t === 'goal' || el.t === 'minigoal') && el.asset) {
+    const box = goalMaterialImageBox(el, field, objectScale);
+    const x = px(el.x ?? 0, r),
+      y = py(el.y ?? 0, r);
+    const left = x - box.w / 2,
+      top = y - box.visibleH / 2;
+    const clipTop = el.t === 'goal' ? 54 : 32;
+    const href = el.asset.replace(/^\/assets\//, 'assets/');
+    const id = `goal-photo-${el.t}-${el.id.replace(/[^a-z0-9_-]/gi, '')}`;
+    // El patrón recorta solo el margen transparente del PNG, sin editarlo ni deformarlo.
+    // La caja visible (rect) coincide con selección, hit-test y miniatura.
+    const image = `<defs><pattern id="${id}" x="${left}" y="${top}" width="${box.w}" height="${box.visibleH}" patternUnits="userSpaceOnUse" patternContentUnits="userSpaceOnUse"><image href="${href}" x="0" y="${-(box.w * clipTop) / 150}" width="${box.w}" height="${box.h}" preserveAspectRatio="xMidYMid meet"/></pattern></defs><rect class="goal-photo" x="${left}" y="${top}" width="${box.w}" height="${box.visibleH}" fill="url(#${id})"/>`;
+    return rotWrap(image, el.rot, x, y);
+  }
   if (!el.asset && (el.t === 'medicine_ball' || el.t === 'resistance_band')) {
     el = { ...el, asset: materialAsset(el.t)?.asset };
   }
@@ -924,8 +952,10 @@ function elStr(
     const s = materialSize(el) * objectScale;
     const x = gx(el.x ?? 0);
     const y = gy(el.y ?? 0);
-    const w = MATERIAL_BOX * s;
-    const h = MATERIAL_BOX * s;
+    const goalImage =
+      el.t === 'goal' || el.t === 'minigoal' ? goalMaterialImageBox(el, field, objectScale) : null;
+    const w = goalImage?.w ?? MATERIAL_BOX * s;
+    const h = goalImage?.h ?? MATERIAL_BOX * s;
     // Compatibilidad con ejercicios antiguos que guardaron `/assets/...`:
     // se elimina la barra inicial para que el <base href> del despliegue mande.
     const assetHref = el.asset.replace(/^\/assets\//, 'assets/');
@@ -1789,8 +1819,8 @@ export function materialPreviewSvg(el: CanvasElement): string {
   const { hw, hh } = materialHitHalfExtents(centered, r, 1, { x: 0, y: 0 }, false, 'full');
   const cx = px(0.5, r),
     cy = py(0.5, r);
-  const w = el.t === 'minigoal' ? materialSize(el) * 3.4 : hw * r.w * 2.5,
-    h = el.t === 'minigoal' ? materialSize(el) * 1.5 : hh * r.h * 2.5;
+  const w = hw * r.w * 2.5,
+    h = hh * r.h * 2.5;
   return `<svg class="mat-thumb-svg" xmlns="http://www.w3.org/2000/svg" viewBox="${cx - w / 2} ${cy - h / 2} ${w} ${h}">${elStr(centered, false, r, false, 1, 'full')}</svg>`;
 }
 

@@ -83,12 +83,10 @@ export const TACTIC_ASSETS: TacticAsset[] = [
     label: 'Maniquí (fila)',
     color: '#f6c945',
   },
-  { kind: 'goal', asset: '', label: 'Portería grande', color: '#ffffff' },
+  // El nombre histórico ladder.png corresponde a la portería, NO a la escalera.
+  { kind: 'goal', asset: `${P}ladder.png`, label: 'Portería grande', color: '#ffffff' },
   { kind: 'flag', asset: `${P}flag.png`, label: 'Banderín', color: '#f6c945' },
-  // FASE 4 del encargo de materiales: estos cuatro se dibujan SIEMPRE en VECTOR (asset vacío) porque
-  // el PNG no era reconocible a tamaño pequeño (la escalera y la miniportería se confundían entre sí
-  // y con la portería). Los PNG siguen en el repositorio: los documentos antiguos conservan su
-  // `asset` guardado, pero el render los pinta vectoriales por la lista `SIEMPRE_VECTOR`.
+  // La escalera conserva su vector: ladder.png es el recurso de la PORTERÍA normal.
   { kind: 'ladder', asset: '', label: 'Escalera', color: '#f6c945' },
   {
     kind: 'ladder_yellow',
@@ -105,8 +103,8 @@ export const TACTIC_ASSETS: TacticAsset[] = [
   },
   { kind: 'hurdle_low', asset: '', label: 'Valla baja', color: '#f6c945' },
   { kind: 'hurdle_high', asset: '', label: 'Valla alta', color: '#e67e22' },
-  // FASE 4: miniportería VECTORIAL (ver nota de la escalera).
-  { kind: 'minigoal', asset: '', label: 'Miniportería', color: '#e8edf2' },
+  // Miniportería: PNG original solicitado por David.
+  { kind: 'minigoal', asset: `${P}minigoal.png`, label: 'Miniportería', color: '#e8edf2' },
   { kind: 'ring', asset: `${P}ring.png`, label: 'Aro', color: '#e8c3c9' },
   { kind: 'ring_flat', asset: `${P}ring-flat.png`, label: 'Aro plano', color: '#e67e22' },
   { kind: 'trampoline', asset: `${P}trampoline.png`, label: 'Minitrampolín', color: '#e8edf2' },
@@ -298,10 +296,8 @@ export const TACTICAL_BBOX: Record<string, BBoxFrac> = {
   cone_blue2: { w: 0.56, h: 1 },
   mannequin: { w: 0.28, h: 1 },
   mannequin_row: { w: 1, h: 0.733 },
-  // FASE 8C: la portería grande se dibuja FRONTAL con proporción real (7,32 × 2,44 ≈ 3:1), así que
-  // su caja visible es mucho más plana que antes (0.573 → 0.34). Sin este ajuste el área táctil
-  // seleccionaba césped vacío por encima y por debajo del marco.
-  goal: { w: 1, h: 0.34 },
+  // PNG de la portería normal: 150×150, contenido alfa visible de 150×42.
+  goal: { w: 1, h: 42 / 150 },
   flag: { w: 0.367, h: 1 },
   ladder: { w: 1.2, h: 0.44 },
   ladder_yellow: { w: 1.2, h: 0.44 },

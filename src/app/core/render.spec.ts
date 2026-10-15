@@ -940,11 +940,13 @@ describe('render', () => {
     expect(el![1], 'la pesa tiene barras/platos').toContain('<rect');
   });
 
-  it('B1: la Portería grande (goal) y la Barrera de maniquíes (mannequin_row) se renderizan como <g> vectorial', () => {
+  it('B1: la portería usa ladder.png y la barrera conserva su dibujo vectorial', () => {
     const g = renderBoardSvg('full', [{ id: 'g', t: 'goal', x: 0.5, y: 0.5 }], {});
     expect(g).toContain('data-el-type="goal"');
     expect(g).not.toContain('data-el-type="goal" image');
-    expect(g.match(/<g[^>]*data-el-type="goal"[^>]*>(.*?)<\/g>/)![1]).toContain('<rect');
+    expect(g.match(/<g[^>]*data-el-type="goal"[^>]*>(.*?)<\/g>/)![1]).toContain(
+      'href="assets/tactical/ladder.png"',
+    );
     const mr = renderBoardSvg('full', [{ id: 'm', t: 'mannequin_row', x: 0.5, y: 0.5 }], {});
     expect(mr).toContain('data-el-type="mannequin_row"');
     expect(mr.match(/<g[^>]*data-el-type="mannequin_row"[^>]*>(.*?)<\/g>/)![1]).toContain(
@@ -2091,7 +2093,7 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
     const caminos = (g: string) =>
       [...g.matchAll(/<path d="([^"]+)"([^>]*?)\/>/g)].map((m) => ({ d: m[1], attrs: m[2] }));
 
-    it('tiene larguero y dos postes GRUESOS y su anchura es la REGLAMENTARIA del campo', () => {
+    it('usa el PNG pedido y conserva su anchura reglamentaria', () => {
       const g = svgPorteria();
       expect(g, 'se dibuja la portería').not.toBe('');
       const rects = rectangulos(g);
@@ -2099,15 +2101,9 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       // heredada, sino la REGLAMENTARIA del campo activo (7,32 m × PX_PER_M ≈ 6,41 unidades en F11),
       // justo para que coincida con la portería dibujada en el campo. El marco es proporcionalmente
       // más grueso (antes 0,28 fijo).
-      const larguero = rects.find((r) => r.w > 6 && r.h < 0.6);
-      expect(larguero, 'larguero horizontal ancho y fino').toBeTruthy();
-      const grosor = larguero!.h;
-      const postes = rects.filter((r) => Math.abs(r.w - grosor) < 0.001 && r.h > 1.5);
-      expect(postes.length, 'dos postes verticales').toBe(2);
-      // Los postes bajan desde el larguero hasta la línea de suelo: mismo alto los dos.
-      expect(Math.abs(postes[0].h - postes[1].h)).toBeLessThan(0.001);
-      // Marco GRUESO respecto a la anchura (no una línea fina).
-      expect(grosor / larguero!.w, 'marco grueso').toBeGreaterThan(0.04);
+      expect(g).toContain('href="assets/tactical/ladder.png"');
+      expect(rects).toHaveLength(1);
+      expect(rects[0].w).toBeCloseTo((7.32 * 92 * 1.05) / 105, 5);
     });
 
     it('su anchura coincide con la portería del campo y cambia con el TIPO de campo', () => {
@@ -2116,7 +2112,7 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       const ancho = (campo: 'full' | 'f7' | 'futsal'): number => {
         const svg = renderBoardSvg(campo, [{ id: 'g', t: 'goal', x: 0.5, y: 0.5 }], {});
         const g = (svg.match(/<g [^>]*data-el-type="goal"[^>]*>[\s\S]*?<\/g>/) ?? [''])[0];
-        const fondo = rectangulos(g).find((r) => r.relleno.includes('#ffffff1f'));
+        const fondo = rectangulos(g).find((r) => r.relleno.includes('class="goal-photo"'));
         expect(fondo, `fondo de red en ${campo}`).toBeTruthy();
         // El rect va DENTRO del grupo escalado: la anchura DIBUJADA es atributo × escala del grupo.
         const escala = Number(/scale\(([\d.]+)\)/.exec(g)?.[1] ?? '1');
@@ -2137,47 +2133,26 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
       expect(ancho('futsal'), 'la de fútbol sala es la menor').toBeLessThan(anchoF11);
     });
 
-    it('tiene RED de malla legible (sin diagonales y sin masa de líneas)', () => {
+    it('conserva el recurso original sin añadir una malla vectorial distinta', () => {
       const g = svgPorteria();
-      // Las dos capas de red: dos <path> con trazo fino proporcional a la anchura.
-      const malla = caminos(g).filter((p) => /stroke-width="0\.1\d*"/.test(p.attrs));
-      expect(malla.length, 'dos capas de red (verticales y horizontales)').toBe(2);
-      const verticales = (malla[0].d.match(/M/g) ?? []).length;
-      const horizontales = (malla[1].d.match(/M/g) ?? []).length;
-      // Red LEGIBLE al reducirse: pocas líneas (antes 11 + 4 se convertían en una masa gris).
-      expect(verticales, 'entre 4 y 8 verticales de red').toBeGreaterThanOrEqual(4);
-      expect(verticales).toBeLessThanOrEqual(8);
-      expect(horizontales, 'entre 2 y 3 horizontales de red').toBeGreaterThanOrEqual(2);
-      expect(horizontales).toBeLessThanOrEqual(3);
-      // Las líneas de red son AXIS-ALINEADAS: una escalera o el antiguo aspa en X tendrían
-      // diagonales, que es justo lo que hacía que la portería se confundiera con una escalera.
-      const coords = [
-        ...malla
-          .map((p) => p.d)
-          .join(' ')
-          .matchAll(/M([-\d.]+) ([-\d.]+) L([-\d.]+) ([-\d.]+)/g),
-      ];
-      expect(coords.length, 'la red tiene todas sus líneas').toBe(verticales + horizontales);
-      for (const [, ax, ay, bx, by] of coords) {
-        expect(ax === bx || ay === by, `sin diagonales (${ax},${ay}→${bx},${by})`).toBe(true);
-      }
+      expect(caminos(g)).toHaveLength(0);
+      expect(g.match(/<image /g)).toHaveLength(1);
+      expect(g).toContain('preserveAspectRatio="xMidYMid meet"');
+      expect(g).toContain('<pattern');
     });
 
-    it('mantiene proporción realista (≈3:1), fondo transparente y sin relleno blanco grande', () => {
+    it('mantiene la proporción alfa 150:42 del PNG y no añade un fondo opaco', () => {
       const g = svgPorteria();
       const rects = rectangulos(g);
-      const fondoRed = rects.find((r) => r.relleno.includes('#ffffff1f'));
+      const fondoRed = rects.find((r) => r.relleno.includes('class="goal-photo"'));
       expect(fondoRed, 'fondo de red tenue').toBeTruthy();
-      expect(fondoRed!.w / fondoRed!.h, 'proporción 3:1 de portería reglamentaria').toBeGreaterThan(
-        2.8,
-      );
-      expect(fondoRed!.w / fondoRed!.h).toBeLessThan(3.2);
+      expect(fondoRed!.w / fondoRed!.h).toBeCloseTo(150 / 42, 5);
       // Ningún rectángulo blanco OPACO grande: los únicos blancos son larguero y postes.
       // CAMBIO DE CONTRATO (encargo de materiales, FASE 4): el marco es proporcionalmente más GRUESO
       // para que la portería no se confunda con una escalera al reducirse, así que el límite se mide
       // como fracción de la anchura (≤ 6 %) y no con la constante 0,28 de antes.
       const blancos = rects.filter((r) => /fill="#ffffff"/.test(r.relleno));
-      expect(blancos.length, 'larguero y dos postes').toBe(3);
+      expect(blancos.length, 'sin fondo blanco ni marco vectorial añadido').toBe(0);
       for (const r of blancos)
         expect(
           Math.min(r.w, r.h) / fondoRed!.w,
@@ -2204,7 +2179,7 @@ describe('Fase 4/6 — flecha normal, doble y zigzag (geometría de puntas)', ()
         5,
       );
       expect(conCampo.hh * 2 * R.h, 'alto de la caja = alto reglamentario').toBeCloseTo(
-        dibujo.h * 1.05,
+        (dibujo.w * 1.05 * 42) / 150,
         5,
       );
       // Y en fútbol sala la caja (y el dibujo) son más pequeños.
